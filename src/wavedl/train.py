@@ -86,6 +86,7 @@ _setup_per_rank_compile_cache()
 import argparse
 import json
 import logging
+import math
 import pickle
 import shutil
 import sys
@@ -202,6 +203,29 @@ def suppress_accelerate_logging():
         yield
     finally:
         accelerate_logger.setLevel(original_level)
+
+
+# ==============================================================================
+# STRUCTURED OUTPUT UTILITIES
+# ==============================================================================
+def _finite_or_none(value: Any) -> Any:
+    """Recursively replace non-finite floats with None for strict JSON output.
+
+    Python's json module emits bare ``Infinity``/``NaN`` tokens, which RFC 8259
+    forbids and strict parsers reject -- including browser ``JSON.parse``, which
+    consumes the structured metrics line. ``best_val_loss`` is infinity until the
+    first checkpoint is written, so every fresh run would otherwise emit invalid
+    JSON on epoch 1; diverged runs produce NaN in the losses and metrics.
+
+    Tuples are normalised to lists so the result is always JSON-serialisable.
+    """
+    if isinstance(value, (float, np.floating)):
+        return float(value) if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _finite_or_none(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite_or_none(item) for item in value]
+    return value
 
 
 # ==============================================================================
@@ -1736,7 +1760,12 @@ def main():
                     "patience_counter": patience_ctr,
                     "max_patience": args.patience,
                 }
-                print(f"##METRICS##{json.dumps(gui_metrics)}", flush=True)
+                # allow_nan=False turns any non-finite value that escapes the
+                # sanitiser into a loud failure rather than silent corruption.
+                print(
+                    f"##METRICS##{json.dumps(_finite_or_none(gui_metrics), allow_nan=False)}",
+                    flush=True,
+                )
 
                 # WandB logging
                 if args.wandb and WANDB_AVAILABLE:
