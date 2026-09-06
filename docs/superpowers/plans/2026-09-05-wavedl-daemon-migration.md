@@ -1835,10 +1835,15 @@ In `src/wavedl/launcher.py`, replace the launch block at lines 344–352:
 and add above `main`:
 
 ```python
-def _terminate_child(proc: subprocess.Popen, timeout: float = 30.0) -> None:
+_GRACE_SECONDS = 30
+_received_signal: int | None = None
+
+
+def _terminate_child(proc: subprocess.Popen, timeout: float = _GRACE_SECONDS) -> None:
     """Ask the accelerate child to stop, then insist.
 
-    Without this the workers keep GPU memory after the launcher exits.
+    Only safe to call from ordinary control flow, never from a signal handler
+    -- see _install_sigterm_handler.
     """
     if proc.poll() is not None:
         return
@@ -1851,19 +1856,48 @@ def _terminate_child(proc: subprocess.Popen, timeout: float = 30.0) -> None:
 
 
 def _install_sigterm_handler(proc: subprocess.Popen) -> None:
-    """Forward SIGTERM to the child.
+    """Forward SIGTERM to the child without waiting inside the handler.
 
     Python raises KeyboardInterrupt on SIGINT only; the default SIGTERM
     disposition terminates this process and abandons the child, orphaning
     ``accelerate`` and every training worker it started.
+
+    The handler must NOT call Popen.wait(): wait() is not reentrant, and the
+    handler runs having interrupted the main thread's own waitpid. A nested
+    wait then cannot reap the child and blocks until its timeout -- verified to
+    raise TimeoutExpired after the full grace period and exit 1 with a
+    traceback instead of terminating cleanly. Signal, then let the main
+    thread's wait() return on its own; SIGALRM escalates if the child ignores
+    SIGTERM.
     """
     import signal
 
     def _forward(signum, _frame):
-        _terminate_child(proc)
-        raise SystemExit(128 + signum)
+        global _received_signal
+        _received_signal = signum
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            return
+        signal.alarm(_GRACE_SECONDS)
+
+    def _escalate(_signum, _frame):
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
 
     signal.signal(signal.SIGTERM, _forward)
+    if hasattr(signal, "SIGALRM"):  # POSIX only; Windows uses a Job Object
+        signal.signal(signal.SIGALRM, _escalate)
+```
+
+and after the child is reaped, report the signal rather than the child's raw status:
+
+```python
+    if _received_signal is not None:
+        signal.alarm(0)
+        exit_code = 128 + _received_signal
 ```
 
 In `src/wavedl_daemon/backends/local.py`, add supervision. On POSIX use `start_new_session=True` and signal the group; on Windows use a Job Object with kill-on-job-close (spec §9.1):
@@ -2042,11 +2076,29 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'wavedl_daemon.backend
 
 - [ ] **Step 3: Write minimal implementation**
 
-`sbatch_template.sh` is a `string.Template` with `$`-substitution disabled inside `#SBATCH` directives (shell variables do **not** expand there):
+First define the job name in **one** place, since Task 10's restart reconciliation searches for it and any divergence makes that search silently fail:
+
+```python
+# src/wavedl_daemon/backends/slurm.py
+JOB_NAME_PREFIX = "wavedl-"
+REQUEST_ID_SHORT_LEN = 8
+
+
+def job_name(request_id: str) -> str:
+    """The scheduler-visible idempotency key.
+
+    Used both to render --job-name at submission and to find an orphaned job
+    after a restart. Both paths MUST call this function rather than slicing
+    request_id themselves.
+    """
+    return f"{JOB_NAME_PREFIX}{request_id[:REQUEST_ID_SHORT_LEN]}"
+```
+
+`sbatch_template.sh` is a `string.Template`. Note that shell variables do **not** expand inside `#SBATCH` directives, so `${job_name}` is substituted by Python before submission, never by the shell:
 
 ```bash
 #!/bin/bash
-#SBATCH --job-name=wavedl-${request_id_short}
+#SBATCH --job-name=${job_name}
 #SBATCH --output=${run_dir}/attempts/%j/slurm.out
 #SBATCH --error=${run_dir}/attempts/%j/slurm.err
 #SBATCH --nodes=${num_machines}
@@ -2174,6 +2226,20 @@ class TestSubmission:
 
         assert SlurmBackend().find_by_request_id("abc123") is None
 
+    def test_lookup_name_matches_the_name_the_template_renders(self, tmp_path):
+        """The submitted job name and the search key must be the same string.
+
+        If these diverge, squeue --name finds nothing, the daemon cannot
+        recover its own submission, and the run is stranded in
+        submission_unknown -- the failure find_by_request_id exists to prevent.
+        """
+        from wavedl_daemon.backends.slurm import SlurmBackend, job_name
+
+        manifest = _manifest()
+        plan = SlurmBackend().plan(manifest, tmp_path)
+
+        assert f"--job-name={job_name(manifest.request_id)}" in plan.script
+
 
 def _manifest():
     from wavedl_daemon.runs.manifest import build_manifest
@@ -2227,11 +2293,15 @@ class SlurmBackend:
         The job name embeds a short form of the request id, so a daemon that
         crashed between sbatch and recording the handle can recover instead of
         submitting a second expensive job.
+
+        job_name() is the SINGLE definition of that short form and is also what
+        Task 9's template renders into --job-name. Computing it independently
+        here would make the lookup silently miss its own job, leaving the run
+        stuck in submission_unknown -- the exact failure this method prevents.
         """
-        short = request_id[:8] if len(request_id) > 8 else request_id
         result = subprocess.run(
             ["squeue", "--noheader", "--format=%i|%j|%T", "--name",
-             f"wavedl-{short}"],
+             job_name(request_id)],
             capture_output=True, text=True, timeout=60,
         )
         for line in result.stdout.splitlines():
@@ -2248,7 +2318,7 @@ class SlurmBackend:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=src python3 -m pytest unit_tests/daemon/test_backend_slurm_submit.py -v`
-Expected: PASS, 5 tests
+Expected: PASS, 6 tests
 
 - [ ] **Step 5: Commit**
 
@@ -2760,17 +2830,31 @@ class DatasetInfo(BaseModel):
     error: str | None = None
 
 
+HEADER_READERS = {
+    (1, 0): np.lib.format.read_array_header_1_0,
+    (2, 0): np.lib.format.read_array_header_2_0,
+}
+
+
 def npz_member_headers(path: Path) -> dict[str, tuple[tuple[int, ...], str]]:
-    """Read every member's shape and dtype from its .npy header only."""
+    """Read every member's shape and dtype from its .npy header only.
+
+    Uses the PUBLIC read_array_header_N_0 functions dispatched on read_magic.
+    The private np.lib.format._read_array_header does not exist in numpy 2.x
+    and would raise AttributeError.
+    """
     headers: dict[str, tuple[tuple[int, ...], str]] = {}
     with zipfile.ZipFile(path) as archive:
         for name in archive.namelist():
             key = name[:-4] if name.endswith(".npy") else name
             with archive.open(name) as member:
                 version = np.lib.format.read_magic(member)
-                shape, _fortran, dtype = np.lib.format._read_array_header(
-                    member, version
-                )
+                reader = HEADER_READERS.get(version)
+                if reader is None:
+                    raise ValueError(
+                        f"unsupported .npy format version {version} in {name}"
+                    )
+                shape, _fortran, dtype = reader(member)
             headers[key] = (tuple(shape), str(dtype))
     return headers
 ```
