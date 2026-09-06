@@ -3022,7 +3022,7 @@ git commit -m "feat(daemon): read npz metadata from member headers instead of lo
 
 ---
 
-### Task 14: FastAPI app, authentication, and Origin/XSRF enforcement
+### Task 14: FastAPI app and header-only authentication
 
 **Files:**
 - Create: `src/wavedl_daemon/api/__init__.py`, `src/wavedl_daemon/api/app.py`, `src/wavedl_daemon/api/auth.py`
@@ -3030,18 +3030,38 @@ git commit -m "feat(daemon): read npz metadata from member headers instead of lo
 
 **Interfaces:**
 - Consumes: `Settings` from Task 5
-- Produces: `create_app(settings, registry) -> FastAPI`; `require_auth` dependency; `GET /api/health`; `POST /api/auth/exchange`
+- Produces: `create_app(settings, registry) -> FastAPI`; `require_auth(request)` dependency; `HostValidationMiddleware`; `GET /api/health`
 
-**Cookies are not port-scoped.** RFC 6265 §8.5 states the port is not part of a cookie's scope: another service on `localhost` shares the jar and can overwrite or receive an identically named cookie. `HttpOnly` prevents script access, not transmission. Therefore the API authenticates with the `Authorization` header; the bootstrap cookie exists only for navigation and is protected by Origin and XSRF checks (spec §6).
+**There are no cookies in this design.** An earlier draft exchanged the
+bootstrap token for a session cookie whose *value was the token itself*. RFC
+6265 §8.5 states the port is not part of a cookie's scope, so any other service
+on `localhost` could receive that cookie and replay it as a bearer token.
+Distinct cookie names prevent collisions, not disclosure — that draft
+reproduced the exact exposure it was written to prevent.
+
+Cookies turn out to be unnecessary. The SPA is served unauthenticated (it must
+load in order to prompt for a token), every API call is a `fetch` that can set
+`Authorization`, and the event stream is a `fetch` too rather than an
+`EventSource` (§5.4). With **no ambient credential, cross-site request forgery
+is structurally impossible**, so no XSRF token is required either. This is
+simpler *and* strictly safer than the cookie design.
+
+What remains is Host validation, which defends against DNS rebinding: a public
+page can point a name it controls at `127.0.0.1` and address this daemon.
+Without ambient credentials it cannot authenticate, but refusing unknown Host
+headers keeps it away from the API surface entirely.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # unit_tests/daemon/test_api_auth.py
-"""Auth, bootstrap exchange, and cross-service protections."""
+"""Header-only auth, Host validation, and the absence of ambient credentials."""
 
 import pytest
 from fastapi.testclient import TestClient
+
+
+TOKEN = "s3cret-token"
 
 
 @pytest.fixture
@@ -3050,81 +3070,88 @@ def client(tmp_path):
     from wavedl_daemon.runs.registry import Registry
     from wavedl_daemon.settings import Settings
 
-    settings = Settings(data_dir=tmp_path, token="test-token")
+    settings = Settings(data_dir=tmp_path, token=TOKEN)
     return TestClient(create_app(settings, Registry(tmp_path / "r.db")))
 
 
-class TestTokenAuth:
-    def test_health_requires_a_token(self, client):
+@pytest.fixture
+def auth():
+    return {"Authorization": f"Bearer {TOKEN}"}
+
+
+class TestBearerAuth:
+    def test_shell_loads_unauthenticated(self, client):
+        """The SPA must load so it can prompt for a token."""
+        assert client.get("/").status_code == 200
+
+    def test_api_requires_a_credential(self, client):
         assert client.get("/api/health").status_code == 401
 
-    def test_bearer_header_is_accepted(self, client):
-        response = client.get(
-            "/api/health", headers={"Authorization": "Bearer test-token"}
-        )
+    def test_correct_bearer_accepted(self, client, auth):
+        response = client.get("/api/health", headers=auth)
 
         assert response.status_code == 200
         assert response.json()["protocol_max"] == 1
 
-    def test_wrong_token_is_rejected(self, client):
+    def test_wrong_bearer_rejected(self, client):
         response = client.get("/api/health", headers={"Authorization": "Bearer nope"})
 
         assert response.status_code == 401
 
-    def test_rejection_leaks_nothing_about_runs(self, client):
-        response = client.get("/api/runs/some-id")
+
+class TestNoAmbientCredential:
+    """These are the regression tests for the cross-port cookie exposure."""
+
+    def test_no_set_cookie_is_ever_issued(self, client, auth):
+        response = client.get("/api/health", headers=auth)
+
+        assert "set-cookie" not in {key.lower() for key in response.headers}
+
+    def test_token_in_a_cookie_does_not_authenticate(self, client):
+        """A cookie planted by any other service on localhost must be inert,
+        even when it carries the correct token."""
+        response = client.get("/api/health", cookies={"wavedl_session": TOKEN})
 
         assert response.status_code == 401
-        assert "some-id" not in response.text
+
+    def test_cross_origin_post_without_bearer_is_rejected(self, client):
+        """With no ambient credential there is nothing for a forged request to
+        ride on, so no XSRF token is needed."""
+        response = client.post(
+            "/api/runs/abc/cancel", headers={"Origin": "http://evil.localhost:3000"}
+        )
+
+        assert response.status_code == 401
 
 
-class TestBootstrapExchange:
-    def test_exchange_sets_a_daemon_specific_cookie(self, client):
-        response = client.post("/api/auth/exchange", json={"token": "test-token"})
+class TestHostValidation:
+    def test_disallowed_host_rejected(self, client, auth):
+        response = client.get("/api/health", headers={**auth, "Host": "evil.com"})
+
+        assert response.status_code == 400
+
+    def test_allowed_host_accepted(self, client, auth):
+        response = client.get("/api/health", headers={**auth, "Host": "localhost"})
 
         assert response.status_code == 200
-        cookie_names = [c.split("=")[0] for c in response.headers.get_list("set-cookie")]
-        assert any(name.startswith("wavedl_session_") for name in cookie_names)
 
-    def test_cookie_name_is_instance_specific(self, tmp_path):
-        """Two daemons on one host share the cookie jar; names must not collide."""
-        from wavedl_daemon.api.app import create_app
-        from wavedl_daemon.runs.registry import Registry
-        from wavedl_daemon.settings import Settings
+    def test_missing_host_rejected(self, client, auth):
+        response = client.get("/api/health", headers={**auth, "Host": ""})
 
-        first = TestClient(create_app(
-            Settings(data_dir=tmp_path / "a", token="t", port=8420),
-            Registry(tmp_path / "a.db"),
-        ))
-        second = TestClient(create_app(
-            Settings(data_dir=tmp_path / "b", token="t", port=8421),
-            Registry(tmp_path / "b.db"),
-        ))
-        name_a = first.post("/api/auth/exchange", json={"token": "t"}) \
-            .headers["set-cookie"].split("=")[0]
-        name_b = second.post("/api/auth/exchange", json={"token": "t"}) \
-            .headers["set-cookie"].split("=")[0]
-
-        assert name_a != name_b
+        assert response.status_code == 400
 
 
-class TestXsrf:
-    def test_cookie_authenticated_mutation_needs_a_matching_origin(self, client):
-        """A bodyless POST is exactly what another localhost service could induce."""
-        client.post("/api/auth/exchange", json={"token": "test-token"})
-        response = client.post(
-            "/api/runs/abc/cancel", headers={"Origin": "http://localhost:3000"}
-        )
+class TestLeakage:
+    def test_rejection_leaks_nothing_about_runs(self, client):
+        response = client.get("/api/runs/secret-run-id")
 
-        assert response.status_code == 403
+        assert response.status_code == 401
+        assert "secret-run-id" not in response.text
 
-    def test_matching_origin_is_allowed(self, client):
-        client.post("/api/auth/exchange", json={"token": "test-token"})
-        response = client.post(
-            "/api/runs/abc/cancel", headers={"Origin": "http://testserver"}
-        )
+    def test_rejection_does_not_echo_the_token(self, client):
+        response = client.get("/api/runs/x", headers={"Authorization": f"Bearer {TOKEN}x"})
 
-        assert response.status_code != 403
+        assert TOKEN not in response.text
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -3136,64 +3163,56 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'wavedl_daemon.api'`
 
 ```python
 # src/wavedl_daemon/api/auth.py
-"""Authentication for a service on a shared host.
-
-The Authorization header is the primary credential. A session cookie exists
-only so browser navigation works after the bootstrap URL, and it is therefore
-paired with Origin/XSRF enforcement: RFC 6265 does not scope cookies by port,
-so every other service on localhost shares the jar (spec §6).
-"""
+"""Header-only authentication for a service on a shared host."""
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 
-from fastapi import Cookie, Header, HTTPException, Request
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 
-SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
+def make_host_middleware(allowed_hosts: set[str]):
+    async def validate_host(request: Request, call_next):
+        host = (request.headers.get("host") or "").split(":")[0]
+        if host not in allowed_hosts:
+            return JSONResponse({"detail": "host not allowed"}, status_code=400)
+        return await call_next(request)
 
-def cookie_name(settings) -> str:
-    """Instance-specific so two daemons on one host do not overwrite each other."""
-    digest = hashlib.sha256(f"{settings.port}:{settings.data_dir}".encode()).hexdigest()
-    return f"wavedl_session_{digest[:12]}"
+    return validate_host
 
 
 def make_dependency(settings):
     expected = settings.token
-    name = cookie_name(settings)
 
     async def require_auth(request: Request) -> None:
         header = request.headers.get("authorization", "")
-        if header.startswith("Bearer ") and hmac.compare_digest(
+        if not header.startswith("Bearer ") or not hmac.compare_digest(
             header[7:], expected
         ):
-            return
-        session = request.cookies.get(name)
-        if session and hmac.compare_digest(session, expected):
-            if request.method not in SAFE_METHODS:
-                origin = request.headers.get("origin")
-                if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
-                    raise HTTPException(403, "origin not allowed")
-            return
-        raise HTTPException(401, "authentication required")
+            # Identical response for every failure: absent, malformed, or wrong.
+            raise HTTPException(401, "authentication required")
 
     return require_auth
 ```
 
-`create_app` mounts the static client at `/`, registers `GET /api/health` returning daemon and wavedl versions plus `protocol_min`/`protocol_max` and available backends, and `POST /api/auth/exchange` which validates the token and sets the cookie `HttpOnly`, `SameSite=Strict`, `Path=/`.
+`create_app` registers the Host middleware, mounts the static client at `/`
+unauthenticated, and applies `require_auth` to every `/api/**` route. The
+daemon's access log must exclude query strings, because the bootstrap URL
+carries the token; the client strips it with `history.replaceState` immediately
+on load (Task 20).
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=src python3 -m pytest unit_tests/daemon/test_api_auth.py -v`
-Expected: PASS, 8 tests
+Expected: PASS, 12 tests
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/wavedl_daemon/api unit_tests/daemon/test_api_auth.py
-git commit -m "feat(daemon): add header auth with origin-checked bootstrap cookie"
+git commit -m "feat(daemon): add header-only auth with host validation and no cookies"
 ```
 
 ---
