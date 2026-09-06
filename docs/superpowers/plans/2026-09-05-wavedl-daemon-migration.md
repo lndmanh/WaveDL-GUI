@@ -27,11 +27,11 @@
 
 | Phase | Tasks | Gate before moving on |
 |---|---|---|
-| **1 — Daemon backend** | 1–26 | Qt shell runs entirely through the daemon; failure-oriented tests in Task 26 pass; one real cluster validated |
-| **2 — Web client** | 27–36 | Client reaches feature parity with the Qt shell against the same API |
-| **3 — Cutover** | 37–39 | Qt shell removed, packaging ships the bundled client |
+| **1 — Daemon backend** | 1–18 | Qt shell runs entirely through the daemon; failure-oriented tests pass; one real cluster validated |
+| **2 — Web client** | 19–26 | Client reaches feature parity with the Qt shell against the same API |
+| **3 — Cutover** | 27–29 | Qt shell removed, packaging ships the bundled client |
 
-Phase 1 is the large one. If it must land in two pieces, the split point is Task 11 — Tasks 1–10 and 26 give a working Local-only daemon without invalidating the reconciliation model.
+Phase 1 is the large one. If it must land in two pieces, the split point is the Slurm backend (Tasks 9–11): a Local-only Phase 1 still needs Tasks 1–8 plus 12–18, because the API, ingestion, CLI, and runtime integration are not optional for any working daemon.
 
 ## File Structure
 
@@ -686,24 +686,40 @@ class JournalReader:
                 self.malformed.append(line)
         return events
 
-    def seek_to_seq(self, seq: int) -> None:
-        """Position the reader just past ``seq`` so read_new resumes after it."""
+    def seek_to_seq(self, cursor: int) -> None:
+        """Position the reader at the first record with ``seq > cursor``.
+
+        Stop BEFORE that record, not after it. Advancing past the matched
+        record drops seq 0 on a fresh replay (cursor -1) -- and seq 0 is the
+        hello event, whose absence is a protocol failure -- and runs off the
+        end whenever the sequence has a gap, making the rest of the run
+        invisible. Both reproduced against the previous implementation.
+
+        Binary mode: text-mode newline translation makes manually computed
+        byte offsets wrong for CRLF journals on Windows.
+        """
         self.offset = 0
         self._pending = ""
         if not self.path.exists():
             return
-        with open(self.path, "r", encoding="utf-8") as handle:
-            for line in handle:
-                if not line.endswith("\n"):
-                    break
-                self.offset += len(line.encode("utf-8"))
-                if not line.strip():
+        with open(self.path, "rb") as handle:
+            while True:
+                start = handle.tell()
+                raw = handle.readline()
+                if not raw or not raw.endswith(b"\n"):
+                    self.offset = start  # incomplete tail; resume here
+                    return
+                text = raw.decode("utf-8", "replace")
+                if not text.strip():
                     continue
                 try:
-                    if decode(line).seq >= seq:
-                        return
+                    seq = decode(text).seq
                 except ProtocolError:
                     continue
+                if seq > cursor:
+                    self.offset = start
+                    return
+                self.offset = handle.tell()
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1216,7 +1232,7 @@ git commit -m "feat(daemon): add registry with transactional cursor and dispatch
 
 **Interfaces:**
 - Consumes: `RunRecord`, `Envelope`
-- Produces: `RunState` enum (`PENDING`, `SUBMITTED`, `SUBMISSION_UNKNOWN`, `RUNNING`, `STOPPING`, `COMPLETED`, `FAILED`, `CANCELLED`, `TERMINAL_UNKNOWN`, `SUPERVISION_LOST`, `OBSERVATION_UNAVAILABLE`); `DerivedState` with `.state`, `.confidence`, `.evidence: list[str]`, `.reason`; `reduce(record, journal_events, backend_observation) -> DerivedState`
+- Produces: `RunState` enum (`PENDING`, `SUBMITTED`, `SUBMISSION_UNKNOWN`, `QUEUED`, `HELD`, `RUNNING`, `STOPPING`, `COMPLETED`, `FAILED`, `CANCELLED`, `TERMINAL_UNKNOWN`, `SUPERVISION_LOST`, `OBSERVATION_UNAVAILABLE`); `DerivedState` with `.state`, `.confidence`, `.evidence: list[str]`, `.reason`; `reduce(record, journal_events, backend_observation) -> DerivedState`
 
 This is the task that fixes revision 1's central mistake (spec §4). It is pure — no I/O — so every precedence rule is directly testable.
 
@@ -1323,6 +1339,60 @@ class TestPrecedence:
         result = reduce(record, [_event("exit", code=0)], {"state": "RUNNING"})
 
         assert result.evidence
+
+
+class TestFalseConfirmationRegressions:
+    """Each of these returned running/confirmed from the first implementation."""
+
+    def test_supervision_lost_is_not_running(self, record):
+        from wavedl_daemon.runs.reducer import RunState, reduce
+
+        result = reduce(record, [], {"supervision_lost": True})
+
+        assert result.state is RunState.SUPERVISION_LOST
+
+    def test_queued_job_is_not_running(self, record):
+        """A PENDING allocation has not started; drawing it as running lies."""
+        from wavedl_daemon.runs.reducer import RunState, reduce
+
+        result = reduce(record, [], {"state": "PENDING"})
+
+        assert result.state is RunState.QUEUED
+
+    def test_held_job_is_not_running(self, record):
+        from wavedl_daemon.runs.reducer import RunState, reduce
+
+        result = reduce(record, [], {"state": "SUSPENDED"})
+
+        assert result.state is RunState.HELD
+
+    def test_absent_observation_does_not_invent_activity(self, record):
+        """No observation is not evidence of running."""
+        from wavedl_daemon.runs.reducer import RunState, reduce
+
+        result = reduce(record, [], None)
+
+        assert result.state is RunState.OBSERVATION_UNAVAILABLE
+
+    def test_successful_wrapper_does_not_erase_training_failure(self, record):
+        """The batch script exited 0 while training exited 1. The run failed."""
+        from wavedl_daemon.runs.reducer import RunState, reduce
+
+        result = reduce(
+            record,
+            [_event("exit", code=1, status="failed")],
+            {"terminal": True, "state": "COMPLETED", "exit_code": 0},
+        )
+
+        assert result.state is RunState.FAILED
+
+    def test_unrecognised_backend_state_is_not_confirmed_running(self, record):
+        from wavedl_daemon.runs.reducer import RunState, reduce
+
+        result = reduce(record, [], {"state": "SOME_NEW_SLURM_STATE"})
+
+        assert result.state is RunState.SUBMITTED
+        assert result.confidence == "unconfirmed"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1355,6 +1425,8 @@ class RunState(str, Enum):
     PENDING = "pending"
     SUBMITTED = "submitted"
     SUBMISSION_UNKNOWN = "submission_unknown"
+    QUEUED = "queued"
+    HELD = "held"
     RUNNING = "running"
     STOPPING = "stopping"
     COMPLETED = "completed"
@@ -1373,88 +1445,143 @@ class DerivedState:
     evidence: list[str] = field(default_factory=list)
 
 
-def reduce(record, journal_events, backend_observation) -> DerivedState:
-    evidence: list[str] = []
+# Backend lifecycle classification. Never inferred from "the query returned
+# something" -- a non-empty sacct row can say RUNNING, and treating that as
+# terminal turns a live job into a reported failure.
+ACTIVE_STATES = {"RUNNING", "COMPLETING", "CONFIGURING"}
+QUEUED_STATES = {"PENDING", "REQUEUED", "RESIZING"}
+HELD_STATES = {"SUSPENDED", "STOPPED"}
+OK_TERMINAL = {"COMPLETED"}
+CANCEL_TERMINAL = {"CANCELLED", "PREEMPTED", "DEADLINE"}
 
+
+def reduce(record, journal_events, backend_observation) -> DerivedState:
+    """Derive one state from attempt-scoped evidence.
+
+    journal_events MUST be this attempt's only. An earlier attempt's exit
+    event contaminating a requeued attempt is how a restarted run reports
+    itself finished.
+    """
+    evidence: list[str] = []
     runtime_exit = next(
         (event for event in reversed(journal_events) if event.type == "exit"), None
     )
+    runtime_code = runtime_exit.payload.get("code") if runtime_exit else None
     if runtime_exit is not None:
-        evidence.append(f"runtime exit status={runtime_exit.payload.get('status')}")
+        evidence.append(f"runtime exit code={runtime_code}")
     if backend_observation:
         evidence.append(f"backend {backend_observation}")
 
-    # 1. Submission ambiguity outranks everything: we may not even have a job.
-    if record.job_id is None and getattr(record, "submitted_at", None):
-        return DerivedState(
-            RunState.SUBMISSION_UNKNOWN,
-            "unknown",
-            "submission was attempted but acceptance was never confirmed; "
-            "resolve manually, never resubmit automatically",
-            evidence,
-        )
+    # 1. No handle: the run is intent only.
     if record.job_id is None:
-        return DerivedState(RunState.PENDING, "confirmed", "not yet submitted", evidence)
+        if getattr(record, "submitted_at", None):
+            return DerivedState(
+                RunState.SUBMISSION_UNKNOWN, "unknown",
+                "submission was attempted but acceptance was never confirmed; "
+                "resolve manually, never resubmit automatically", evidence,
+            )
+        return DerivedState(
+            RunState.PENDING, "confirmed", "not yet submitted", evidence
+        )
 
-    # 2. Failure to observe is not evidence about the job.
+    # 2. Supervision ownership is a fact about US and outranks stale evidence.
+    if backend_observation and backend_observation.get("supervision_lost"):
+        return DerivedState(
+            RunState.SUPERVISION_LOST, "unknown",
+            "this daemon instance did not start the process; a stored pid "
+            "cannot be trusted because pids are reused", evidence,
+        )
+
+    # 3. Failure to observe is not evidence about the job. Absent observation
+    #    is also not evidence -- do not manufacture "backend reports active".
     if backend_observation and backend_observation.get("error"):
         return DerivedState(
-            RunState.OBSERVATION_UNAVAILABLE,
-            "unknown",
-            f"backend could not be queried: {backend_observation['error']}",
-            evidence,
+            RunState.OBSERVATION_UNAVAILABLE, "unknown",
+            f"backend could not be queried: {backend_observation['error']}", evidence,
         )
-
-    # 3. A terminal backend verdict outranks the runtime's own claim, because
-    #    the batch script can fail after training reports success.
-    if backend_observation and backend_observation.get("terminal"):
-        backend_state = backend_observation.get("state", "").upper()
-        if backend_state in {"COMPLETED"} and backend_observation.get("exit_code") == 0:
-            return DerivedState(
-                RunState.COMPLETED, "confirmed", "runtime and backend agree", evidence
-            )
-        if backend_state in {"CANCELLED", "PREEMPTED"}:
-            return DerivedState(
-                RunState.CANCELLED, "confirmed", "backend reports cancellation", evidence
-            )
+    if backend_observation is None:
         return DerivedState(
-            RunState.FAILED,
-            "confirmed",
-            f"backend terminal state {backend_state}",
-            evidence,
+            RunState.OBSERVATION_UNAVAILABLE, "unknown",
+            "no backend observation available for this attempt", evidence,
         )
 
-    # 4. The job is gone and nothing can tell us how it ended.
-    if backend_observation and backend_observation.get("vanished"):
-        if runtime_exit is not None:
+    state = (backend_observation.get("state") or "").upper()
+
+    # 4. Terminal. Both authorities must agree before this is called success.
+    if backend_observation.get("terminal"):
+        if state in CANCEL_TERMINAL:
             return DerivedState(
-                RunState.COMPLETED if runtime_exit.payload.get("code") == 0
-                else RunState.FAILED,
-                "unconfirmed",
-                "backend no longer tracks the job; runtime evidence only",
+                RunState.CANCELLED, "confirmed",
+                f"backend terminal state {state}", evidence,
+            )
+        if state not in OK_TERMINAL or backend_observation.get("exit_code") != 0:
+            return DerivedState(
+                RunState.FAILED, "confirmed",
+                f"backend terminal state {state} "
+                f"exit={backend_observation.get('exit_code')}", evidence,
+            )
+        if runtime_code not in (None, 0):
+            return DerivedState(
+                RunState.FAILED, "confirmed",
+                f"backend reported success but the runtime exited {runtime_code}; "
+                "a successful wrapper does not erase a training failure", evidence,
+            )
+        if runtime_exit is None:
+            return DerivedState(
+                RunState.COMPLETED, "unconfirmed",
+                "backend reports success but the runtime never wrote an exit event",
                 evidence,
             )
         return DerivedState(
-            RunState.TERMINAL_UNKNOWN,
-            "unknown",
-            "job left the scheduler with no exit event and no accounting record",
+            RunState.COMPLETED, "confirmed", "runtime and backend agree", evidence
+        )
+
+    # 5. Gone from the backend with no terminal record.
+    if backend_observation.get("vanished"):
+        if runtime_exit is not None:
+            return DerivedState(
+                RunState.COMPLETED if runtime_code == 0 else RunState.FAILED,
+                "unconfirmed",
+                "backend no longer tracks the job; runtime evidence only", evidence,
+            )
+        return DerivedState(
+            RunState.TERMINAL_UNKNOWN, "unknown",
+            "job left the backend with no exit event and no accounting record",
             evidence,
         )
 
-    # 5. Still live.
+    # 6. Live states, classified explicitly. Queued work is not running work.
     if record.cancel_requested:
         return DerivedState(
             RunState.STOPPING, "confirmed", "cancellation requested", evidence
         )
-    if runtime_exit is not None:
+    if state in QUEUED_STATES:
         return DerivedState(
-            RunState.RUNNING,
-            "unconfirmed",
-            "runtime reported exit but the backend has not confirmed it",
-            evidence,
+            RunState.QUEUED, "confirmed", f"backend state {state}", evidence
         )
-    return DerivedState(RunState.RUNNING, "confirmed", "backend reports active", evidence)
+    if state in HELD_STATES:
+        return DerivedState(
+            RunState.HELD, "confirmed", f"backend state {state}", evidence
+        )
+    if state in ACTIVE_STATES:
+        if runtime_exit is not None:
+            return DerivedState(
+                RunState.RUNNING, "unconfirmed",
+                "runtime reported exit; backend has not confirmed it", evidence,
+            )
+        return DerivedState(
+            RunState.RUNNING, "confirmed", f"backend state {state}", evidence
+        )
+    return DerivedState(
+        RunState.SUBMITTED, "unconfirmed",
+        f"backend reported unrecognised state {state!r}", evidence,
+    )
 ```
+
+Verified against a 17-case truth table covering every branch, including the four
+that the previous chain-of-early-returns version answered falsely: a
+`supervision_lost` observation, a queued `PENDING` job, an absent observation,
+and runtime exit code 1 alongside a backend `COMPLETED`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2099,8 +2226,8 @@ def job_name(request_id: str) -> str:
 ```bash
 #!/bin/bash
 #SBATCH --job-name=${job_name}
-#SBATCH --output=${run_dir}/attempts/%j/slurm.out
-#SBATCH --error=${run_dir}/attempts/%j/slurm.err
+#SBATCH --output=${log_dir}/slurm-%j.out
+#SBATCH --error=${log_dir}/slurm-%j.err
 #SBATCH --nodes=${num_machines}
 ${partition_directive}
 ${gres_directive}
@@ -2114,13 +2241,33 @@ ${module_loads}
 ${environment_activation}
 
 ${launch_command}
-TRAIN_STATUS=$?
+TRAIN_STATUS=$$?
 
-# Stage-out and cleanup must not overwrite the training outcome (spec §4).
 ${cleanup_command}
+CLEANUP_STATUS=$$?
 
-exit $TRAIN_STATUS
+# Record both outcomes independently. exit $$TRAIN_STATUS alone preserves a
+# training failure but hides a stage-out failure after successful training.
+printf '{"train_status":%d,"cleanup_status":%d}\n' "$$TRAIN_STATUS" "$$CLEANUP_STATUS" \
+    > "${log_dir}/outcome-$${SLURM_JOB_ID}.json"
+
+if [ "$$TRAIN_STATUS" -ne 0 ]; then exit "$$TRAIN_STATUS"; fi
+exit "$$CLEANUP_STATUS"
 ```
+
+Three things about this template are load-bearing:
+
+- **Shell dollars are escaped `$$`.** `string.Template.substitute` reads a bare
+  `$?` as a placeholder and raises `ValueError: Invalid placeholder in string`.
+  Verified against the previous template, which could not render at all.
+- **Scheduler logs go to a pre-created `${log_dir}` with `%j` in the filename.**
+  Writing to `attempts/%j/` fails because the job-specific parent does not exist
+  when the scheduler opens the file, and numeric directories under `attempts/`
+  collide with the attempt allocator, which reads every numeric directory as an
+  attempt.
+- **`outcome-$${SLURM_JOB_ID}.json` records training and cleanup separately**, so
+  the reducer can tell "training failed, cleanup succeeded" from its inverse
+  rather than seeing one collapsed exit status.
 
 `SlurmBackend.plan` validates topology, creates `run_dir`, and renders. `launch_command` is `srun ... wavedl-train --num_machines N --machine_rank $SLURM_NODEID ...` when `num_machines > 1`, and a bare `wavedl-train ...` otherwise — the distinction the review flagged as multiplying workers if got wrong.
 
