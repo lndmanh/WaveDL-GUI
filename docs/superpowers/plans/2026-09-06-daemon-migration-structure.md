@@ -113,6 +113,13 @@ So the table is created on every user's disk, in a foreign schema, and has never
 held a row. Importing it would carry a downloader's fields into the new system
 for zero users. `T41d` deletes it instead.
 
+The same template left two more unreferenced remnants, found by simulating the
+deletion rather than reasoning about it: `service/speed_service.py` aggregates
+download throughput in KB/s and MB/s, and `common/speed_badge/` paints a
+per-platform dock badge for it. Neither is referenced anywhere. Deleting all
+four — 1,266 lines — leaves no dangling reference and no syntax error, verified
+against a scratch copy of `src/`.
+
 The daemon still uses SQLite, but as a **durable local index rebuildable from
 `events.jsonl`**, not a source of truth and not a cache. It earns its place on
 transactional uniqueness (`T22a` idempotency keys) and relational queries over
@@ -157,7 +164,7 @@ target cannot run a network service, and because the daemon is the only writer.
 | **T30a** Qt training adapter | `TrainingWorker` via daemon | T24, T22b | stream reconnect; daemon absent | 1C |
 | **T30b** Qt test/plot/data adapters | `TestWorker`, `PlotWorker`, inspection via daemon | T28a, T28b, T27 | **no subprocess spawning remains** | 1C |
 | **T30c** Cross-component failure harness + real-site gate | reusable harness | T30a, T30b | every §16 failure exercised; **one real cluster validated, filesystem and Slurm version recorded** | 1C |
-| **T41d** Delete the inert GUI database layer | `common/database/` and `service/download_task_service.py` removed; `main_window` decoupled | T30b | **no `QSqlDatabase` import remains**; app starts and no longer creates `database.db`; nothing references `sqlRequest`, `DatabaseThread`, or `Task` | 1C |
+| **T41d** Delete the inert downloader remnants | `common/database/`, `common/speed_badge/`, `service/download_task_service.py`, `service/speed_service.py` removed (1,266 lines); `main_window` decoupled in 6 edits | T30b | **no `QSqlDatabase` import remains**; app starts and no longer creates `database.db`; nothing references `sqlRequest`, `DatabaseThread`, `Task`, `speedService`, or `SpeedBadge` | 1C |
 
 ## Phase 2 — web client
 
