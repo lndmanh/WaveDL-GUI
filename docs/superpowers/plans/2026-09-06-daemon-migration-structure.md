@@ -72,10 +72,10 @@ its own review.
 
 | Task | Produces | Consumes | Failure cases | Gate |
 |---|---|---|---|---|
-| **T7a** Settings and storage validation | `Settings`, `default_data_dir`, `UnsupportedStorage`, **separate daemon-state root and shared run root** | — | network mount refused for SQLite; unwritable dir; run root not visible to compute nodes | 1A |
-| **T8a** Registry transactions and cursors | `Registry`, `RunRecord`, `apply_events`, `(attempt, seq)` cursors | T7a | crash between projection and cursor in both orders; duplicate apply; cursor per attempt not per run | 1A |
-| **T8b** Dispatch ownership | `acquire_dispatch_lock` with liveness, `require_dispatch` guard | T8a | **killed daemon releases the lock**; two daemons; every external mutation gated | 1A |
-| **T7b** Legacy migration and recovery | `migrate_legacy`, `schema_version`, `migration_id` | T8a | interrupted migration restores backup; read-only recovery start; **explicit disposition of the legacy `task` entity's download fields (`url`, `isLive`, `isBinaryMerge`)** | 1A |
+| **T7a** Settings and storage validation | `Settings`, `default_data_dir`, `UnsupportedStorage`, **separate daemon-state root and shared run root** | — | network mount refused for the daemon-state root; unwritable dir; run root not visible to compute nodes; **detection is stdlib-only — `psutil` is not a declared dependency** | 1A |
+| **T8a** Registry transactions and cursors | `Registry`, `RunRecord`, `apply_events`, `(attempt, seq)` cursors, `rebuild_from_journals` | T7a | **projection and cursor commit in ONE transaction — a crash leaves neither applied**; duplicate apply; cursor per attempt not per run; **registry deleted mid-flight rebuilds from `events.jsonl`** | 1A |
+| **T8b** Dispatch ownership | `acquire_dispatch_lock` on a kernel-released file lock, `require_dispatch` guard | T8a | **killed daemon releases the lock** (verified: `flock` is released on `SIGKILL`; a recorded pid is not liveness because pids are reused); two daemons; every external mutation gated | 1A |
+| **T7b** Schema versioning and recovery | `schema_version`, `migration_id`, forward-migration runner | T8a | interrupted migration restores backup; read-only recovery start; **a future schema change is applied exactly once**. No legacy import: see the note below | 1A |
 | **T13a** Backend and operation contracts | `Backend` protocol, `Plan`, `Handle`, `OperationKind` lifecycle/result contract, `UnsupportedPlan` | T5, T6 | unsupported topology refused not rendered; operation kinds declared here so T28 does not redesign the seam later | 1A |
 | **T22a** Persisted plan and idempotency | `PlanRecord`, `idempotency_key`, transactional uniqueness | T8a, T13a | concurrent identical submits collapse to one; key bound to payload; retry after lost response | 1A |
 | **T9** Reducer | `RunState`, `DerivedState`, `reduce` | T2, T8a, T13a | **17-case truth table**: supervision lost, queued, held, absent observation, observe error, wrapper-success-with-training-failure, vanished, requeue attempt isolation | 1A |
@@ -85,6 +85,39 @@ its own review.
 | **T12** Windows supervisor | same `Supervisor` contract via Job Object | T11 | **race-free assignment at spawn**; graceful phase distinct from kill-on-close; same failure set as T11 | 1A |
 | **T13b** Local planning | `LocalBackend.plan` | T13a | multi-machine refused; caller-supplied `--output_dir` refused | 1A |
 | **CI-1** Cross-platform CI matrix | Ubuntu/macOS/Windows job | T11, T12 | must exist **here**, not at T42 — a release task cannot retroactively validate intermediate Windows commits | 1A |
+
+### Why there is no legacy database migration
+
+`T7b` originally required an explicit disposition of the legacy `task` entity's
+download fields. Tracing the code shows there is nothing to migrate, so the task
+is recovery-only and the GUI's database layer is deleted rather than imported.
+
+The legacy SQLite layer is inert, and its schema belongs to a different
+application:
+
+- `tbl_task` carries `url`, `isLive`, `isBinaryMerge`, `isLiveRealTimeMerge`,
+  and a `status` of 0 downloading / 1 complete / 2 failed — a video downloader's
+  schema, reached via a music-player template whose `DatabaseThread` docstrings
+  still describe "audio directories".
+- `DBInitializer.init()` (`view/main_window.py:147`) creates the table on every
+  launch, and a `DatabaseThread` is started.
+- Its only consumer, `service/download_task_service.py`, is imported by nobody,
+  and would raise `AttributeError` if it were: it calls `task.availableVideoPath()`
+  and `task.videoPath`, neither of which exists on the `Task` entity. The only
+  two `sqlRequest` call sites in the repository are these dead ones.
+- No insert path exists anywhere in the repository.
+- `AppData/Log/database.log` is 0 bytes and no `database.db` exists on the
+  development machine.
+
+So the table is created on every user's disk, in a foreign schema, and has never
+held a row. Importing it would carry a downloader's fields into the new system
+for zero users. `T41d` deletes it instead.
+
+The daemon still uses SQLite, but as a **durable local index rebuildable from
+`events.jsonl`**, not a source of truth and not a cache. It earns its place on
+transactional uniqueness (`T22a` idempotency keys) and relational queries over
+runs; it stays on `sqlite3` from the standard library because the HPC login-node
+target cannot run a network service, and because the daemon is the only writer.
 
 ## Phase 1B — execution and runtime
 
@@ -124,6 +157,7 @@ its own review.
 | **T30a** Qt training adapter | `TrainingWorker` via daemon | T24, T22b | stream reconnect; daemon absent | 1C |
 | **T30b** Qt test/plot/data adapters | `TestWorker`, `PlotWorker`, inspection via daemon | T28a, T28b, T27 | **no subprocess spawning remains** | 1C |
 | **T30c** Cross-component failure harness + real-site gate | reusable harness | T30a, T30b | every §16 failure exercised; **one real cluster validated, filesystem and Slurm version recorded** | 1C |
+| **T41d** Delete the inert GUI database layer | `common/database/` and `service/download_task_service.py` removed; `main_window` decoupled | T30b | **no `QSqlDatabase` import remains**; app starts and no longer creates `database.db`; nothing references `sqlRequest`, `DatabaseThread`, or `Task` | 1C |
 
 ## Phase 2 — web client
 
@@ -163,7 +197,7 @@ Parity is enumerated **before** implementation; every row gets an owner.
 | F3 false reducer conclusions | T9 |
 | F4 scheduler observation | T17, T18b |
 | F5 idempotent submission | T22a, T16, T18a |
-| F6 dispatch ownership, storage, migration | T7a, T7b, T8b |
+| F6 dispatch ownership, storage, schema versioning | T7a, T7b, T8b, T41d |
 | F7 slurm script and outcomes | T15, T17 |
 | F8 shared manifest and identity | T6, T19, T22c |
 | F9 journal recovery | T3, T4 |
