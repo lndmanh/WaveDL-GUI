@@ -74,6 +74,8 @@ lazy attribute resolution. This is necessary because importing
 |---|---|
 | Unsupported version | `test_invalid_known_field[version-2]` and boolean-version case |
 | Non-finite in payload | `test_nonfinite_input_is_rejected` and `test_recursive_sanitizing_produces_strict_json` |
+| NumPy scalars sanitized | `test_numpy_scalars_are_sanitized_without_importing_numpy` covers `float32` (not a `float` subclass), `float64`, and `int32` |
+| Numeric conversion stays inside the boundary | `test_oversized_integer_stays_inside_the_error_boundary` exceeds `sys.get_int_max_str_digits()` |
 | Negative seq/attempt | `test_invalid_known_field`, including zero attempt and bool seq |
 | Malformed JSON | `test_malformed_or_missing_envelope` |
 | Unknown fields tolerated | `test_round_trip_and_unknown_fields` |
@@ -171,6 +173,44 @@ def test_recursive_sanitizing_produces_strict_json():
     assert decode(wire).payload == expected
     assert b"Infinity" not in wire and b"NaN" not in wire
     assert payload["best_val_loss"] == float("inf")
+
+
+def test_numpy_scalars_are_sanitized_without_importing_numpy():
+    """np.float32 is not a float subclass; an isinstance(float) test misses it."""
+    numpy = pytest.importorskip("numpy")
+
+    payload = {
+        "loss": numpy.float32("nan"),
+        "best": numpy.float64("inf"),
+        "lr": numpy.float32(0.5),
+        "epoch": numpy.int32(3),
+    }
+    sanitized = finite_or_none(payload)
+
+    assert sanitized == {"loss": None, "best": None, "lr": 0.5, "epoch": 3}
+    assert isinstance(sanitized["lr"], float)
+    assert isinstance(sanitized["epoch"], int)
+    assert decode(encode(event(payload=payload))).payload == sanitized
+
+
+def test_booleans_and_strings_survive_sanitizing():
+    """bool is an Integral subclass; it must not be widened to 0/1."""
+    assert finite_or_none({"ok": True, "name": "cnn", "n": 7, "z": None}) == {
+        "ok": True,
+        "name": "cnn",
+        "n": 7,
+        "z": None,
+    }
+
+
+def test_oversized_integer_stays_inside_the_error_boundary():
+    """int() past sys.get_int_max_str_digits() raises a bare ValueError."""
+    wire = encode(event(payload={"loss": 0})).replace(
+        b'"loss":0', b'"loss":' + b"9" * (sys.get_int_max_str_digits() + 1)
+    )
+
+    with pytest.raises(ProtocolError):
+        decode(wire)
 
 
 def test_shared_import_loads_no_ml_gui_or_daemon():
@@ -294,6 +334,7 @@ from __future__ import annotations
 
 import json
 import math
+import numbers
 import re
 from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timedelta
@@ -309,8 +350,24 @@ class MalformedJSON(ProtocolError):
 
 
 def finite_or_none(value: object) -> object:
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
+    """Replace non-finite reals with ``None`` so the payload is strict JSON.
+
+    Dispatch is on ``numbers``, not ``float``, because NumPy's scalar types are
+    not uniformly float subclasses: ``np.float64`` is one, ``np.float32`` is
+    not. An ``isinstance(value, float)`` test therefore passes
+    ``np.float32("nan")`` straight through to an encoder that then refuses it
+    with "Object of type float32 is not JSON serializable". NumPy registers its
+    scalar types in the ``numbers`` ABCs on import, so this catches them
+    without importing NumPy into the contracts package -- when NumPy is absent
+    there are no NumPy values for the check to miss.
+    """
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, numbers.Integral):
+        return int(value)  # np.int32 is Integral but not JSON-serialisable
+    if isinstance(value, numbers.Real):
+        number = float(value)
+        return number if math.isfinite(number) else None
     if isinstance(value, dict):
         return {key: finite_or_none(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -329,14 +386,37 @@ def _finite_float(token: str) -> float:
     return value
 
 
+def _bounded_int(token: str) -> int:
+    """Convert an integer literal, keeping the failure inside ProtocolError.
+
+    CPython caps int/str conversion at ``sys.get_int_max_str_digits()`` (4300
+    by default, CVE-2020-10735), and ``int()`` past that limit raises a bare
+    ``ValueError`` that is neither a ``JSONDecodeError`` nor a ``UnicodeError``
+    -- so an oversized literal on the wire would escape the decoder's error
+    boundary and reach the caller as an unclassified crash.
+    """
+    try:
+        return int(token)
+    except ValueError as exc:
+        raise MalformedJSON(f"JSON integer rejected: {exc}") from exc
+
+
 def strict_loads(data: bytes | str) -> object:
     try:
         if isinstance(data, bytes):
             data = data.decode("utf-8")
         return json.loads(
-            data, parse_constant=_reject_constant, parse_float=_finite_float
+            data,
+            parse_constant=_reject_constant,
+            parse_float=_finite_float,
+            parse_int=_bounded_int,
         )
+    except ProtocolError:
+        raise
     except (UnicodeError, json.JSONDecodeError) as exc:
+        raise MalformedJSON(str(exc)) from exc
+    except (ArithmeticError, ValueError) as exc:
+        # Any remaining numeric conversion failure stays inside the boundary.
         raise MalformedJSON(str(exc)) from exc
 
 
@@ -419,7 +499,7 @@ PYTHONPATH=src python3 -m pytest unit_tests/core/test_protocol.py \
   --confcutdir=unit_tests/core -v
 ```
 
-Expected: **23 passed**, no failures or skips.
+Expected: **26 passed**, no failures or skips.
 
 Run the focused style checks before committing:
 
@@ -1281,6 +1361,7 @@ temporary file; readers use only `manifest.json` and ignore these remnants.
 | Overwrite refused | `test_overwrite_refused_and_attempt_index_does_not_mutate_plan`; simultaneous publishers also race at `os.link` |
 | Interrupted write leaves no partial file | `test_partial_temporary_write_never_exposes_manifest` writes half the JSON before ENOSPC; file-fsync failure and process-death tests cover the next boundaries |
 | Relative paths resolved before submission | `test_relative_paths_resolve_before_execution_changes_cwd` changes cwd before asserting dataset/config/resume/interpreter paths |
+| Interpreter symlink preserved | `test_interpreter_symlink_is_not_dereferenced` builds a real venv-shaped symlink; `test_interpreter_is_still_absolute_and_mapped` keeps absoluteness and storage mapping |
 
 The concurrent test inspects both complete temporary files before releasing
 either link operation. The killed-process test uses `os._exit(73)` so cleanup
@@ -1348,6 +1429,36 @@ def test_relative_paths_resolve_before_execution_changes_cwd(tmp_path, monkeypat
     assert manifest.working_directory == str(layout.run_dir)
     assert manifest.resolved_config["output_dir"] == str(layout.run_dir)
     assert config["data_path"] == "data/train.npz"
+
+
+def test_interpreter_symlink_is_not_dereferenced(tmp_path):
+    """A venv's bin/python is a symlink; following it selects another runtime."""
+    base = tmp_path / "base" / "bin"
+    base.mkdir(parents=True)
+    (base / "python3").write_text("#!/bin/sh\n")
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").symlink_to(base / "python3")
+
+    _, manifest = plan(
+        tmp_path, runtime=RuntimeSelection("venv/bin/python", "existing", "cpu", {})
+    )
+
+    assert manifest.runtime.python == str(venv_bin / "python")
+
+
+def test_interpreter_is_still_absolute_and_mapped(tmp_path):
+    """Not dereferencing must not cost absoluteness or storage mapping."""
+    execution_root = str(tmp_path / "execution")
+    _, manifest = plan(
+        tmp_path,
+        runtime=RuntimeSelection("venv/bin/python", "existing", "cpu", {}),
+        storage_map=(StorageMapping(str(tmp_path), execution_root),),
+    )
+
+    assert manifest.runtime.python == str(
+        Path(execution_root) / "venv" / "bin" / "python"
+    )
 
 
 def test_storage_mapping_and_runtime_selection_are_persisted(tmp_path):
@@ -1590,6 +1701,7 @@ def write_once(path: Path, content: bytes) -> None:
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -1723,9 +1835,8 @@ def build_manifest(
     if len({item.host_root for item in mappings}) != len(mappings):
         raise ValueError("Duplicate storage mapping")
 
-    def resolve(value: str) -> str:
-        path = Path(value).expanduser()
-        host = (base / path).resolve()
+    def _mapped(host: Path) -> str:
+        """Rewrite a host path into its execution-side location."""
         for mapping in mappings:
             try:
                 relative = host.relative_to(Path(mapping.host_root).resolve())
@@ -1733,6 +1844,26 @@ def build_manifest(
                 continue
             return str(Path(mapping.execution_root) / relative)
         return str(host)
+
+    def resolve(value: str) -> str:
+        """Data paths: absolute, symlinks dereferenced, then mapped."""
+        return _mapped((base / Path(value).expanduser()).resolve())
+
+    def resolve_interpreter(value: str) -> str:
+        """The interpreter is made absolute and mapped, but never dereferenced.
+
+        A virtualenv's ``bin/python`` is a symlink to the base interpreter, so
+        ``Path.resolve()`` rewrites ``<venv>/bin/python`` to something like
+        ``/usr/.../python3.11``. Running that path yields a different
+        ``sys.prefix`` and therefore different ``site-packages``: the planned
+        environment -- torch, wavedl, every pinned dependency -- silently
+        disappears, and the manifest records a runtime that was never selected.
+        Lexical normalisation keeps the link intact.
+        """
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = base / path
+        return _mapped(Path(os.path.normpath(path)))
 
     config = json.loads(_json_bytes(resolved_config))
     for name in path_fields:
@@ -1743,7 +1874,7 @@ def build_manifest(
     working_directory = resolve(str(layout.run_dir))
     config["output_dir"] = working_directory
     runtime = RuntimeSelection(
-        python=resolve(runtime.python),
+        python=resolve_interpreter(runtime.python),
         mode=runtime.mode,
         device=runtime.device,
         environment=dict(runtime.environment),
@@ -1762,10 +1893,28 @@ def build_manifest(
     )
 
 
+def describes_layout(manifest: Manifest, layout: RunLayout) -> bool:
+    """Whether the manifest describes this layout, on EITHER side of a mapping.
+
+    Under a storage map the same run has two paths: ``run_directory`` is where
+    the daemon sees it, ``working_directory`` is where the compute node does.
+    Code that runs on the execution side -- checkpoint publication above all --
+    holds a layout rooted at the execution path, so an equality test against
+    ``run_directory`` alone rejects every mapped run. Both sides are normalised
+    because a mapping root and a layout root can spell the same directory
+    differently (``/var`` vs ``/private/var``, ``/home`` vs an autofs target).
+    """
+    if manifest.run_id != layout.run_id:
+        return False
+    sides = {
+        Path(manifest.run_directory).resolve(),
+        Path(manifest.working_directory).resolve(),
+    }
+    return layout.run_dir.resolve() in sides
+
+
 def write_manifest(layout: RunLayout, manifest: Manifest) -> None:
-    if manifest.run_id != layout.run_id or manifest.run_directory != str(
-        layout.run_dir
-    ):
+    if not describes_layout(manifest, layout):
         raise ValueError("Manifest/layout identity mismatch")
     Manifest(
         **asdict(manifest)
@@ -1802,7 +1951,7 @@ PYTHONPATH=src python3 -m pytest unit_tests/core/test_manifest.py \
   --confcutdir=unit_tests/core -v
 ```
 
-Expected: **8 passed**, no failures or skips.
+Expected: **10 passed**, no failures or skips.
 
 Run the focused style checks before committing:
 
@@ -2277,6 +2426,7 @@ but makes no bound on an actual site's visibility delay.
 |---|---|
 | Incomplete tail buffered | Five parameterized `test_newline_commit_cases` plus `test_pending_completes_on_later_reopened_poll` cover the six verified cases |
 | Cursor -1 replays seq 0 | `test_cursor_minus_one_replays_hello_seq_zero` checks that the replayed type is `hello` |
+| Seek past the visible end keeps its floor | `test_seek_past_the_visible_end_keeps_the_replay_floor` appends records *after* the seek; `test_seek_within_the_journal_resumes_above_the_cursor` covers the ordinary resume and live tail |
 | Gap still replays rest | `test_missing_cursor_sequence_keeps_later_records` asserts seq 2 and 5 after cursor 1 |
 | Schema-invalid line raises ProtocolError | `test_schema_invalid_line_raises_shared_error_and_cannot_be_skipped` |
 | CRLF offsets | `test_crlf_offsets_are_bytes_with_multibyte_utf8` combines CRLF with café's multi-byte UTF-8 |
@@ -2320,6 +2470,38 @@ def reader_for(tmp_path, data, **options):
     path = tmp_path / "events.jsonl"
     path.write_bytes(data)
     return JournalReader(path, run_id=RUN_ID, attempt=1, **options)
+
+
+def test_seek_past_the_visible_end_keeps_the_replay_floor(tmp_path):
+    """Records appended after a seek must still be measured against the cursor.
+
+    Seeking to a cursor beyond the last visible record is the live-tailing case:
+    a client resumes while the writer is still catching up. Resetting the floor
+    to -1 there would replay everything the client already holds.
+    """
+    path = tmp_path / "events.jsonl"
+    path.write_bytes(record(0))
+    reader = JournalReader(path, run_id=RUN_ID, attempt=1)
+
+    reader.seek_to_seq(5)
+    path.write_bytes(record(0) + record(2) + record(5) + record(6))
+
+    with pytest.raises(ProtocolError, match="Sequence must increase"):
+        reader.read()
+
+
+def test_seek_within_the_journal_resumes_above_the_cursor(tmp_path):
+    """The ordinary resume, and the live tail that follows it."""
+    path = tmp_path / "events.jsonl"
+    path.write_bytes(record(0) + record(1) + record(2) + record(3))
+    reader = JournalReader(path, run_id=RUN_ID, attempt=1)
+
+    reader.seek_to_seq(1)
+
+    assert [event.seq for event in reader.read()] == [2, 3]
+    with path.open("ab") as stream:
+        stream.write(record(4) + record(5))
+    assert [event.seq for event in reader.read()] == [4, 5]
 
 
 @pytest.mark.parametrize(
@@ -2526,13 +2708,19 @@ class JournalReader:
         self.malformed_count = 0
         self._reset(0)
 
-    def _reset(self, offset: int) -> None:
+    def _reset(self, offset: int, last_seq: int = -1) -> None:
+        """Reposition the cursor. ``last_seq`` carries the replay floor across.
+
+        Seeking must not forget which sequence numbers the client already holds:
+        dropping the floor back to -1 lets records at or below the cursor be
+        delivered again as if they were new.
+        """
         self.offset = offset
         self._pending = b""
         self._ready: deque[tuple[int, bytes]] = deque()
         self._error: ProtocolError | None = None
         self.last_record_start = offset
-        self._last_seq = -1
+        self._last_seq = last_seq
 
     def _fill(self) -> None:
         # Reopening on every poll also serves close-to-open shared filesystems.
@@ -2613,11 +2801,14 @@ class JournalReader:
                 before = self.offset
                 events = self.read(max_records=1)
                 if events and events[0].seq > cursor:
-                    self._reset(self.last_record_start)
+                    self._reset(self.last_record_start, last_seq=cursor)
                     return
                 if not events and self.offset == before:
-                    # Preserve the incomplete record for the next poll.
-                    self._reset(self.offset - len(self._pending))
+                    # Preserve the incomplete record for the next poll. The
+                    # floor is retained here too: a cursor past the visible end
+                    # of the journal is the live-tailing case, and records that
+                    # arrive afterwards must still be measured against it.
+                    self._reset(self.offset - len(self._pending), last_seq=cursor)
                     return
         finally:
             self.read_bytes = original_read_bytes
@@ -2636,7 +2827,7 @@ PYTHONPATH=src python3 -m pytest unit_tests/core/test_journal_reader.py \
   --confcutdir=unit_tests/core -v
 ```
 
-Expected: **17 passed**, no failures or skips.
+Expected: **19 passed**, no failures or skips.
 
 Run the focused style checks before committing:
 
@@ -2728,6 +2919,7 @@ compatibility before T20c/T20d change producers.
 | Interrupted mid-copy leaves prior generation published | `test_failure_during_real_copy_keeps_previous_generation` writes a real fragment into the second file, injects ENOSPC, and checks discovery |
 | Contents fsync precedes completion manifest | `test_contents_sync_before_marker_and_directory_sync_after_link` traces real content/marker fsync and final directory sync; the pre-marker sync-failure test checks invisibility |
 | Works with no daemon installed | `test_standalone_process_publishes_without_daemon_or_ml` runs Python with `-S`, blocks daemon/ML imports, and builds a real manifest and generation |
+| Publication under a storage map | `test_publication_works_on_the_execution_side_of_a_storage_map` publishes from an execution-rooted layout; `test_publication_still_rejects_a_foreign_manifest` keeps the identity check strict |
 
 The post-link failure test distinguishes visibility from confirmed durability.
 These local fault-injection tests establish ordering and behavior; actual
@@ -2750,7 +2942,12 @@ import pytest
 from wavedl.core import generations, persistence
 from wavedl.core.generations import publish_generation, published_generations
 from wavedl.core.layout import OperationKind, RunLayout, allocate_attempt
-from wavedl.core.manifest import RuntimeSelection, build_manifest, write_manifest
+from wavedl.core.manifest import (
+    RuntimeSelection,
+    StorageMapping,
+    build_manifest,
+    write_manifest,
+)
 
 
 RUN_ID = "00000000-0000-4000-8000-000000000001"
@@ -2773,6 +2970,58 @@ def setup_run(tmp_path):
     (source / "rank").mkdir()
     (source / "rank" / "state.bin").write_bytes(b"optimizer")
     return layout, attempt, source
+
+
+def test_publication_works_on_the_execution_side_of_a_storage_map(tmp_path):
+    """The compute node's layout is rooted at working_directory, not run_directory."""
+    host_root = tmp_path / "home" / "runs"
+    execution_root = tmp_path / "scratch" / "runs"
+    host_root.mkdir(parents=True)
+    execution_root.mkdir(parents=True)
+
+    host = RunLayout.create(host_root, RUN_ID)
+    manifest = build_manifest(
+        host,
+        operation=OperationKind.TRAIN,
+        resolved_config={},
+        runtime=RuntimeSelection(sys.executable, "existing", "cpu", {}),
+        submission_cwd=tmp_path,
+        storage_map=(StorageMapping(str(host_root), str(execution_root)),),
+    )
+    write_manifest(host, manifest)
+    assert manifest.run_directory != manifest.working_directory
+
+    # The run travels to the compute node, where the same manifest is read back
+    # from a layout rooted at the execution path.
+    execution = RunLayout.create(execution_root, RUN_ID)
+    execution.manifest.write_bytes(host.manifest.read_bytes())
+    attempt = allocate_attempt(execution)
+    source = tmp_path / "staging"
+    source.mkdir()
+    (source / "model.bin").write_bytes(b"weights")
+
+    published = publish_generation(execution, source, attempt=attempt, step=10)
+
+    assert published.path.is_relative_to(execution.checkpoints)
+    assert [item.step for item in published_generations(execution)] == [10]
+
+
+def test_publication_still_rejects_a_foreign_manifest(tmp_path):
+    """Accepting both sides of a mapping must not accept an unrelated run."""
+    layout, attempt, source = setup_run(tmp_path)
+    other = RunLayout.create(tmp_path / "other", "00000000-0000-4000-8000-000000000002")
+    foreign = build_manifest(
+        other,
+        operation=OperationKind.TRAIN,
+        resolved_config={},
+        runtime=RuntimeSelection(sys.executable, "existing", "cpu", {}),
+        submission_cwd=tmp_path,
+    )
+    write_manifest(other, foreign)
+    other.manifest.replace(layout.manifest)  # a manifest for a different run
+
+    with pytest.raises(ValueError, match="identity mismatch"):
+        publish_generation(layout, source, attempt=attempt, step=10)
 
 
 def test_publication_is_immutable_and_records_step(tmp_path):
@@ -2999,7 +3248,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from wavedl.core.manifest import read_manifest
+from wavedl.core.manifest import describes_layout, read_manifest
 from wavedl.core.persistence import sync_directory, write_once
 
 
@@ -3068,9 +3317,7 @@ def _allocate_generation(layout: RunLayout) -> Path:
 
 def _manifest_digest(layout: RunLayout) -> str:
     manifest = read_manifest(layout.manifest)
-    if manifest.run_id != layout.run_id or manifest.run_directory != str(
-        layout.run_dir
-    ):
+    if not describes_layout(manifest, layout):
         raise ValueError("Manifest/layout identity mismatch")
     return _digest(layout.manifest).sha256
 
@@ -3225,7 +3472,7 @@ PYTHONPATH=src python3 -m pytest unit_tests/core/test_generations.py \
   --confcutdir=unit_tests/core -v
 ```
 
-Expected: **9 passed**, no failures or skips.
+Expected: **11 passed**, no failures or skips.
 
 Run the focused style checks before committing:
 
@@ -3265,7 +3512,7 @@ PYTHONPATH=src ruff format --config pyproject.toml --check \
   src/wavedl/__init__.py src/wavedl/core unit_tests/core
 ```
 
-Expected: **109 passed**, no failures or skips; Ruff check and format check pass.
+Expected: **118 passed**, no failures or skips; Ruff check and format check pass.
 This is the shared-contracts gate only. It does not claim the project-wide test
 suite, runtime instrumentation, installed-wheel entry points, Windows storage,
 process supervision, scheduler integration, or a real cluster were exercised.
