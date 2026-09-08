@@ -27,7 +27,7 @@ confirmed failing — before being accepted as done.
 
 ## Findings
 
-### 1. Shared package boundary — OPEN, needs a decision
+### 1. Shared package boundary — RESOLVED by splitting the task
 
 The reviewer reads the corrected boundary as a separate top-level `src/wavedl_core/`
 and treats the delivered `wavedl.core` plus a lazy `wavedl/__init__.py` as a
@@ -42,9 +42,15 @@ Measured, the lazy-export approach works and is faster:
 
 422 existing tests still pass under it. The technical objection does not hold;
 the *scope* objection does — a task delivering the protocol envelope should not
-quietly rewrite the shipping package's `__init__`. Resolution is to split that
-change into its own task with its own review, not to add a second package.
-**Deferred to the user.**
+quietly rewrite the shipping package's `__init__`.
+
+**Decision:** contracts stay at `wavedl.core`; the lazy `__init__` becomes its
+own task, **T0**, ahead of T1. No second top-level package is added.
+
+T0 also closes a gap nobody had covered: the acceptance test for the boundary is
+that `import wavedl` does not load the ML stack, and T1's subprocess test imports
+`wavedl.core.protocol`, not `wavedl`. Both T0 tests were confirmed red against
+the repository's actual current `__init__.py` and green against the lazy one.
 
 ### 2. Interpreter symlink dereferenced — CONFIRMED, fixed
 
@@ -145,6 +151,7 @@ is not widened to `0`/`1`.
 
 | | before | after |
 |---|---|---|
-| tests in the detail | 109 | 118 |
+| tasks in the chunk | 7 | 8 (T0 split out of T1) |
+| tests in the detail | 109 | 119 |
 | ruff check / format | pass | pass |
-| findings open | 6 | 1 (the package-boundary decision) |
+| findings open | 6 | 0 |

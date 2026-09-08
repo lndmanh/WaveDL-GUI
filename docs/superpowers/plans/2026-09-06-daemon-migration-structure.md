@@ -59,7 +59,8 @@ its own review.
 
 | Task | Produces | Consumes | Failure cases | Gate |
 |---|---|---|---|---|
-| **T1** Protocol envelope | `Envelope`, `encode`, `decode`, `finite_or_none`, `ProtocolError` | — | unsupported version; non-finite in payload; negative seq/attempt; malformed JSON; unknown fields tolerated | 1A |
+| **T0** Lazy public exports | `wavedl.__getattr__` (PEP 562); unchanged export names and version metadata | — | `import wavedl` loads the ML stack; a public name stops resolving | 1A |
+| **T1** Protocol envelope | `Envelope`, `encode`, `decode`, `finite_or_none`, `ProtocolError` | T0 | unsupported version; non-finite in payload; negative seq/attempt; malformed JSON; unknown fields tolerated; NumPy scalars sanitized; numeric conversion stays inside the error boundary | 1A |
 | **T2** Per-type payload schemas + supersession event | `HelloPayload`, `StatePayload`, `MetricPayload`, `ArtifactPayload`, `ExitPayload`, `SupersedePayload` | T1 | wrong type for a known field; unknown event type warns not fatal; supersession referencing an absent step | 1A |
 | **T5** Run layout, attempt allocation, operation identity | `RunLayout`, `OperationKind{train,test,plot}`, `allocate_attempt` | — | concurrent allocation race; existing numeric dirs; requeue creating attempt 2 | 1A |
 | **T6** Resolved manifest in `wavedl.core` | `Manifest` (resolved config, runtime selection, cwd, storage map), `build_manifest`, `write_manifest`, `read_manifest` | T5 | overwrite refused; interrupted write leaves no partial file; relative paths resolved before submission | 1A |

@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-06  
 **Status:** implementation instructions; source changes have not been applied  
-**Scope:** T1, T2, T5, T6, T3, T4, T20a, in that order  
+**Scope:** T0, T1, T2, T5, T6, T3, T4, T20a, in that order  
 **Gate contribution:** shared-contracts portion of milestone 1A, not the complete
 1A storage/supervision milestone and not a functioning daemon.
 
@@ -36,11 +36,206 @@ manifest construction, or publication. `wavedl` must never import
 `wavedl_daemon`. The T1 lazy-export change preserves existing public names while
 making that package boundary useful without loading ML/GUI dependencies.
 
-### Task T1: Protocol envelope
+### Task T0: Lazy public exports
 
 **Files:**
 
 - Modify: `src/wavedl/__init__.py`
+- Test (create): `unit_tests/core/test_public_api.py`
+
+**Interfaces:**
+
+Consumes: no earlier task. Uses Python 3.11 standard-library modules only.
+
+Produces: `wavedl.__init__` resolves its public names through PEP 562
+`__getattr__` instead of importing them eagerly. The exported names, version
+metadata, and `dir(wavedl)` are unchanged; only the import cost moves.
+
+This is a change to a shipping package's public surface, so it is its own task
+with its own review rather than a side effect of adding the protocol envelope.
+Everything downstream depends on it: `wavedl.core` is only worth having as a
+dependency-light boundary if importing `wavedl` does not defeat it. Measured on
+the current tree, eager import costs 4.31 s and pulls seven heavy packages;
+lazy resolution costs 0.023 s and pulls none.
+
+**Acceptance and gate (1A):**
+
+| Structure failure case | Test |
+|---|---|
+| Importing `wavedl` loads the ML stack | `test_import_does_not_load_the_ml_stack` blocks torch/NumPy/PySide6 in a fresh `-S` interpreter |
+| A public name stops resolving | `test_public_exports_remain_lazy` asserts the owning module is imported once, cached, and that unknown names still raise `AttributeError` |
+
+The first test is the reason the task exists and nothing else covers it: T1's
+subprocess test imports `wavedl.core.protocol`, not `wavedl` itself.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# unit_tests/core/test_public_api.py
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+
+def test_import_does_not_load_the_ml_stack():
+    """`import wavedl` must not cost the ML stack; the whole boundary rests on it."""
+    script = """
+import importlib.abc
+import sys
+class Block(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in {
+            "torch", "numpy", "PySide6", "wavedl_daemon", "wavedl_gui"
+        }:
+            raise AssertionError(fullname)
+sys.meta_path.insert(0, Block())
+import wavedl
+assert wavedl.__version__
+assert "build_model" in dir(wavedl)
+"""
+    result = subprocess.run(
+        [sys.executable, "-S", "-c", script],
+        env=os.environ | {"PYTHONPATH": str(Path("src").resolve())},
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_public_exports_remain_lazy(monkeypatch):
+    """The existing top-level export names still resolve to their owner."""
+    import wavedl
+
+    calls = []
+    sentinel = object()
+
+    class Module:
+        build_model = sentinel
+
+    def load(name):
+        calls.append(name)
+        return Module()
+
+    monkeypatch.setattr(wavedl, "import_module", load)
+    wavedl.__dict__.pop("build_model", None)
+    assert wavedl.build_model is sentinel
+    assert wavedl.build_model is sentinel
+    assert calls == ["wavedl.models"]
+    monkeypatch.delattr(wavedl, "build_model")
+    with pytest.raises(AttributeError):
+        wavedl.__getattr__("missing")
+```
+
+- [ ] **Step 2: Run the tests and verify the failure**
+
+```bash
+PYTHONPATH=src python3 -m pytest unit_tests/core/test_public_api.py \
+  --confcutdir=unit_tests/core -v
+```
+
+Expected: both fail against the current eager `__init__.py` — the subprocess
+test with `AssertionError: torch` from the blocking finder, and the lazy test
+with `AttributeError` because `wavedl.import_module` does not exist yet. An
+unrelated dependency/import error is not the intended red result; resolve the
+interpreter/PYTHONPATH setup first.
+
+- [ ] **Step 3: Write the minimal implementation**
+
+```python
+# src/wavedl/__init__.py
+"""WaveDL public API; importing shared contracts does not load the ML stack."""
+
+from importlib import import_module
+
+
+__version__ = "1.8.1"
+__author__ = "Ductho Le"
+__email__ = "ductho.le@outlook.com"
+__all__ = [
+    "__version__",
+    "build_model",
+    "get_model",
+    "list_models",
+    "load_test_data",
+    "load_training_data",
+    "prepare_data",
+    "register_model",
+]
+_EXPORTS = {
+    "build_model": "wavedl.models",
+    "get_model": "wavedl.models",
+    "list_models": "wavedl.models",
+    "register_model": "wavedl.models",
+    "load_test_data": "wavedl.utils",
+    "load_training_data": "wavedl.utils",
+    "prepare_data": "wavedl.utils",
+}
+
+
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(_EXPORTS[name]), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))
+```
+
+- [ ] **Step 4: Run the tests and verify the pass count**
+
+```bash
+PYTHONPATH=src python3 -m pytest unit_tests/core/test_public_api.py \
+  --confcutdir=unit_tests/core -v
+```
+
+Expected: **2 passed**, no failures or skips.
+
+The existing suite must be unaffected, because the exported names have not
+changed:
+
+```bash
+PYTHONPATH=src python3 -m pytest unit_tests -q
+```
+
+Expected: the full pre-existing pass count, no new failures, no new skips.
+
+Run the focused style checks before committing:
+
+```bash
+PYTHONPATH=src ruff check --config pyproject.toml \
+  src/wavedl/__init__.py \
+  unit_tests/core/test_public_api.py
+PYTHONPATH=src ruff format --config pyproject.toml --check \
+  src/wavedl/__init__.py \
+  unit_tests/core/test_public_api.py
+```
+
+Expected: Ruff reports no violations and all listed Python files are
+already formatted. The implementation blocks use 88-column formatting.
+
+- [ ] **Step 5: Commit this task only**
+
+```bash
+git add -- \
+  src/wavedl/__init__.py \
+  unit_tests/core/test_public_api.py
+git commit --only -m "perf(wavedl): resolve public exports lazily" -- \
+  src/wavedl/__init__.py \
+  unit_tests/core/test_public_api.py
+```
+
+### Task T1: Protocol envelope
+
+**Files:**
+
 - Create: `src/wavedl/core/__init__.py`
 - Create: `src/wavedl/core/protocol.py`
 - Test (create): `unit_tests/core/test_protocol.py`
@@ -64,9 +259,9 @@ T2 supplies payload validation. Direct construction can contain non-finite
 payload floats so that `encode` can sanitize them recursively. Decoding rejects
 non-finite wire constants and exponent overflow instead of sanitizing input.
 
-`wavedl.__init__` retains its public export names and version metadata through
-lazy attribute resolution. This is necessary because importing
-`wavedl.core.protocol` otherwise imports the package's ML stack first.
+T0 has already made `wavedl.__init__` lazy, so importing `wavedl.core.protocol`
+does not drag in the package's ML stack. T1 depends on that boundary but does
+not change it.
 
 **Acceptance and gate (1A):**
 
@@ -80,8 +275,8 @@ lazy attribute resolution. This is necessary because importing
 | Malformed JSON | `test_malformed_or_missing_envelope` |
 | Unknown fields tolerated | `test_round_trip_and_unknown_fields` |
 
-The subprocess test blocks heavy imports in a fresh interpreter; the lazy-export
-test separately checks that the existing public import remains usable.
+The subprocess test blocks heavy imports in a fresh interpreter, confirming
+that the contracts stay reachable across the boundary T0 established.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -239,30 +434,6 @@ assert "build_model" in dir(wavedl)
         timeout=15,
     )
     assert result.returncode == 0, result.stderr
-
-
-def test_public_exports_remain_lazy(monkeypatch):
-    """The existing top-level export names still resolve to their owner."""
-    import wavedl
-
-    calls = []
-    sentinel = object()
-
-    class Module:
-        build_model = sentinel
-
-    def load(name):
-        calls.append(name)
-        return Module()
-
-    monkeypatch.setattr(wavedl, "import_module", load)
-    wavedl.__dict__.pop("build_model", None)
-    assert wavedl.build_model is sentinel
-    assert wavedl.build_model is sentinel
-    assert calls == ["wavedl.models"]
-    monkeypatch.delattr(wavedl, "build_model")
-    with pytest.raises(AttributeError):
-        wavedl.__getattr__("missing")
 ```
 
 - [ ] **Step 2: Run the tests and verify the failure**
@@ -277,49 +448,6 @@ has not introduced its implementation. An unrelated dependency/import error
 is not the intended red result; resolve the interpreter/PYTHONPATH setup first.
 
 - [ ] **Step 3: Write the minimal implementation**
-
-```python
-# src/wavedl/__init__.py
-"""WaveDL public API; importing shared contracts does not load the ML stack."""
-
-from importlib import import_module
-
-
-__version__ = "1.8.1"
-__author__ = "Ductho Le"
-__email__ = "ductho.le@outlook.com"
-__all__ = [
-    "__version__",
-    "build_model",
-    "get_model",
-    "list_models",
-    "load_test_data",
-    "load_training_data",
-    "prepare_data",
-    "register_model",
-]
-_EXPORTS = {
-    "build_model": "wavedl.models",
-    "get_model": "wavedl.models",
-    "list_models": "wavedl.models",
-    "register_model": "wavedl.models",
-    "load_test_data": "wavedl.utils",
-    "load_training_data": "wavedl.utils",
-    "prepare_data": "wavedl.utils",
-}
-
-
-def __getattr__(name: str):
-    if name not in _EXPORTS:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    value = getattr(import_module(_EXPORTS[name]), name)
-    globals()[name] = value
-    return value
-
-
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(__all__))
-```
 
 ```python
 # src/wavedl/core/__init__.py
@@ -499,18 +627,16 @@ PYTHONPATH=src python3 -m pytest unit_tests/core/test_protocol.py \
   --confcutdir=unit_tests/core -v
 ```
 
-Expected: **26 passed**, no failures or skips.
+Expected: **25 passed**, no failures or skips.
 
 Run the focused style checks before committing:
 
 ```bash
 PYTHONPATH=src ruff check --config pyproject.toml \
-  src/wavedl/__init__.py \
   src/wavedl/core/__init__.py \
   src/wavedl/core/protocol.py \
   unit_tests/core/test_protocol.py
 PYTHONPATH=src ruff format --config pyproject.toml --check \
-  src/wavedl/__init__.py \
   src/wavedl/core/__init__.py \
   src/wavedl/core/protocol.py \
   unit_tests/core/test_protocol.py
@@ -523,12 +649,10 @@ already formatted. The implementation blocks use 88-column formatting.
 
 ```bash
 git add -- \
-  src/wavedl/__init__.py \
   src/wavedl/core/__init__.py \
   src/wavedl/core/protocol.py \
   unit_tests/core/test_protocol.py
 git commit --only -m "feat(core): define strict daemon-independent event envelopes" -- \
-  src/wavedl/__init__.py \
   src/wavedl/core/__init__.py \
   src/wavedl/core/protocol.py \
   unit_tests/core/test_protocol.py
@@ -3501,7 +3625,7 @@ git commit --only -m "feat(core): publish durable standalone checkpoint generati
 
 ## Shared-contracts completion check
 
-After all seven task commits, run this focused combined gate:
+After all eight task commits, run this focused combined gate:
 
 ```bash
 PYTHONPATH=src python3 -m pytest unit_tests/core \
@@ -3512,7 +3636,7 @@ PYTHONPATH=src ruff format --config pyproject.toml --check \
   src/wavedl/__init__.py src/wavedl/core unit_tests/core
 ```
 
-Expected: **118 passed**, no failures or skips; Ruff check and format check pass.
+Expected: **119 passed**, no failures or skips; Ruff check and format check pass.
 This is the shared-contracts gate only. It does not claim the project-wide test
 suite, runtime instrumentation, installed-wheel entry points, Windows storage,
 process supervision, scheduler integration, or a real cluster were exercised.
