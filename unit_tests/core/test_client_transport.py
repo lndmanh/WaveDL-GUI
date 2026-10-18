@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import os
 from contextlib import asynccontextmanager, suppress
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,41 @@ from wavedl.core.protocol import Envelope, encode
 
 RUN = "00000000-0000-4000-8000-000000000001"
 TOKEN = "private-transport-test-token"
+
+
+def transport_failure_detail(error):
+    cause = error.__context__
+    return (
+        f"{type(cause).__name__}, errno={getattr(cause, 'errno', None)}, "
+        f"winerror={getattr(cause, 'winerror', None)}"
+    )
+
+
+async def ready_or_task_failure(ready, task):
+    """A pre-request failure must fail the test, not strand its readiness wait."""
+    readiness = asyncio.create_task(ready.wait())
+    observed = False
+    try:
+        done, _ = await asyncio.wait(
+            {readiness, task}, timeout=5, return_when=asyncio.FIRST_COMPLETED
+        )
+        if task in done:
+            try:
+                await task
+            except ClientTransportError as error:
+                pytest.fail(
+                    "Transport failed before readiness: "
+                    + transport_failure_detail(error)
+                )
+            pytest.fail("Transport finished before readiness")
+        assert readiness in done, "Loopback readiness deadline exceeded"
+        observed = True
+    finally:
+        readiness.cancel()
+        await asyncio.gather(readiness, return_exceptions=True)
+        if not observed:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 @asynccontextmanager
@@ -228,7 +264,7 @@ def test_stream_cancellation_closes_actual_socket():
         async with server(handler) as url:
             stream = HttpTransport(url, TOKEN).events(RUN)
             task = asyncio.create_task(anext(stream))
-            await ready.wait()
+            await ready_or_task_failure(ready, task)
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
@@ -237,7 +273,36 @@ def test_stream_cancellation_closes_actual_socket():
     asyncio.run(run())
 
 
-def test_binary_download_verified_exclusive_and_partial_cleanup(tmp_path):
+@pytest.mark.parametrize("windows_path_branch", [False, True])
+def test_binary_download_verified_exclusive_and_partial_cleanup(
+    tmp_path, monkeypatch, windows_path_branch
+):
+    from wavedl.core import client_transport
+
+    if windows_path_branch:
+        # Exercise Windows pathname publication on POSIX too, while retaining
+        # genuine loopback bytes and an actually held writable directory.
+        monkeypatch.setattr(
+            client_transport, "os", SimpleNamespace(**(vars(os) | {"name": "nt"}))
+        )
+    original_open = client_transport.open_directory
+    opened = []
+    synced = []
+
+    def held_parent(path, *, writable=False):
+        assert writable, "Download publication requires a writable capability"
+        parent = original_open(path, writable=writable)
+        original_sync = parent.sync
+
+        def sync():
+            synced.append(parent)
+            original_sync()
+
+        parent.sync = sync
+        opened.append(parent)
+        return parent
+
+    monkeypatch.setattr(client_transport, "open_directory", held_parent)
     data = b"binary-content" * 30000
 
     async def run():
@@ -262,10 +327,13 @@ def test_binary_download_verified_exclusive_and_partial_cleanup(tmp_path):
         async with server(handler) as url:
             transport = HttpTransport(url, TOKEN)
             destination = tmp_path / "download.bin"
-            assert (
-                await transport.download(ref, destination, max_bytes=len(data))
-                == destination
-            )
+            try:
+                actual = await transport.download(ref, destination, max_bytes=len(data))
+            except ClientTransportError as error:
+                pytest.fail(
+                    "Binary download failed: " + transport_failure_detail(error)
+                )
+            assert actual == destination
             assert destination.read_bytes() == data
             with pytest.raises(ClientTransportError):
                 await transport.download(ref, destination, max_bytes=len(data))
@@ -276,11 +344,35 @@ def test_binary_download_verified_exclusive_and_partial_cleanup(tmp_path):
             assert not list(tmp_path.glob(".wavedl-download-*"))
 
     asyncio.run(run())
+    assert len(opened) == 3
+    assert synced == [opened[0], opened[0]]
+    assert all(parent.handle is None for parent in opened)
 
 
 def test_plain_http_external_host_is_refused_before_connection():
     with pytest.raises(ValueError):
         HttpTransport("http://example.com", TOKEN)
+
+
+def test_failed_download_before_readiness_surfaces_sanitized_context_without_hanging():
+    async def run():
+        async def failed():
+            try:
+                cause = PermissionError(13, "private path must not enter diagnostics")
+                cause.winerror = 32
+                raise cause
+            except PermissionError:
+                raise ClientTransportError("Artifact download unavailable") from None
+
+        task = asyncio.create_task(failed())
+        with pytest.raises(pytest.fail.Exception) as failure:
+            await ready_or_task_failure(asyncio.Event(), task)
+        assert str(failure.value) == (
+            "Transport failed before readiness: PermissionError, errno=13, winerror=32"
+        )
+        assert task.done()
+
+    asyncio.run(run())
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX directory-rename race")
@@ -407,7 +499,7 @@ def test_idle_timeout_and_cancelled_download_close_socket_and_remove_temp(tmp_pa
             downloading = asyncio.create_task(
                 transport.download(ref, tmp_path / "cancel.bin", max_bytes=100)
             )
-            await ready.wait()
+            await ready_or_task_failure(ready, downloading)
             await asyncio.sleep(0.01)
             downloading.cancel()
             with pytest.raises(asyncio.CancelledError):

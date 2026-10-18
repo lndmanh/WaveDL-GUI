@@ -250,13 +250,22 @@ def test_inventory_directory_swap_cannot_traverse_outside_generation(
     (outside / "unverified.bin").write_bytes(b"outside")
     real_open = SafeDirectory.open_directory
     swapped = []
+    denied = []
 
     def swapping_open(directory, name):
         if name != "nested":
             return real_open(directory, name)
         if not swap_before_open:
             anchor = real_open(directory, name)
-        (generation.path / "nested").rename(tmp_path / "original-nested")
+        try:
+            (generation.path / "nested").rename(tmp_path / "original-nested")
+        except PermissionError as error:
+            if os.name != "nt" or getattr(error, "winerror", None) != 32:
+                raise
+            denied.append(True)
+            if not swap_before_open:
+                anchor.close()
+            raise
         (generation.path / "nested").symlink_to(outside, target_is_directory=True)
         swapped.append(True)
         if swap_before_open:
@@ -264,8 +273,22 @@ def test_inventory_directory_swap_cannot_traverse_outside_generation(
         return anchor
 
     monkeypatch.setattr(SafeDirectory, "open_directory", swapping_open)
-    assert checkpoint_selection._covered_inventory(generation) is not swap_before_open
-    assert swapped == [True]
+    if os.name == "nt":
+        with pytest.raises(PermissionError) as refusal:
+            checkpoint_selection._covered_inventory(generation)
+        assert refusal.value.winerror == 32
+        assert denied == [True] and swapped == []
+        assert not (generation.path / "nested").is_symlink()
+        assert (generation.path / "nested/state.bin").read_bytes() == b"optimizer"
+        assert (outside / "unverified.bin").read_bytes() == b"outside"
+        assert not (tmp_path / "original-nested").exists()
+        monkeypatch.setattr(SafeDirectory, "open_directory", real_open)
+        assert checkpoint_selection._covered_inventory(generation)
+    else:
+        assert (
+            checkpoint_selection._covered_inventory(generation) is not swap_before_open
+        )
+        assert swapped == [True] and denied == []
 
 
 def test_checkpoint_io_errors_propagate_not_hidden_as_ineligible(run, monkeypatch):

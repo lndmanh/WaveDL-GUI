@@ -18,7 +18,6 @@ from uuid import UUID, uuid4
 
 from wavedl.core.credentials import credential_bytes
 from wavedl.core.live_push import LivePushConfig
-from wavedl.core.persistence import sync_directory
 from wavedl.core.protocol import decode, strict_loads
 from wavedl.core.safe_files import open_directory
 
@@ -458,7 +457,7 @@ class HttpTransport:
             name = destination.name
             if not name or name in {".", ".."} or any(c in name for c in "/\\:\0"):
                 raise ClientTransportError("Invalid download destination member")
-            parent = open_directory(destination.parent)
+            parent = open_directory(destination.parent, writable=True)
             parent.verify_private_owner()
             parent.guard()
             try:
@@ -534,18 +533,18 @@ class HttpTransport:
                     dst_dir_fd=parent.handle,
                     follow_symlinks=False,
                 )
-                os.fsync(parent.handle)
+                parent.sync()
                 parent.guard()
                 os.unlink(temporary, dir_fd=parent.handle)
-                os.fsync(parent.handle)
+                parent.sync()
             else:
                 os.link(
                     parent.path / temporary, parent.path / name, follow_symlinks=False
                 )
-                sync_directory(parent.path)
+                parent.sync()
                 parent.guard()
                 (parent.path / temporary).unlink()
-                sync_directory(parent.path)
+                parent.sync()
             temporary = None
             parent.guard()
             return destination

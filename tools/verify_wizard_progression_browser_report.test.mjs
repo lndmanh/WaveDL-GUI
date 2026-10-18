@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, symlink, rm, mkdir, readFile, unlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, symlink, rm, mkdir, readFile, unlink, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { verifyWizardProgression } from './browser_wizard_progression.mjs';
@@ -34,7 +35,7 @@ for (const [name,mutate] of [
   ['nonboolean validation',r=>r.wizardInvalidDataset.message='true'],
 ]) test(`rejects ${name}`,()=>{const value=structuredClone(fixture());mutate(value);assert.throws(()=>verifyWizardProgression(value));});
 test('bounded reader rejects oversized, invalid UTF8, file and ancestor symlinks',async()=>{
-  const root=await mkdtemp(join('/private/tmp','wavedl-wizard-reader-'));
+  const root=await mkdtemp(join(await realpath(tmpdir()),'wavedl-wizard-reader-'));
   try {
     const file=join(root,'record');
     await writeFile(file,Buffer.alloc(256*1024+1)); await assert.rejects(readWizardEvidence(file));
@@ -46,7 +47,7 @@ test('bounded reader rejects oversized, invalid UTF8, file and ancestor symlinks
   } finally { await rm(root,{recursive:true,force:true}); }
 });
 test('full report verifies current assets and rejects stale hash, malformed bytes and extra files',async()=>{
-  const root=await mkdtemp(join('/private/tmp','wavedl-wizard-file-'));
+  const root=await mkdtemp(join(await realpath(tmpdir()),'wavedl-wizard-file-'));
   try {
     const value=fixture(),path=join(root,REPORT_NAME);
     value.assetManifestSha256=createHash('sha256').update(await readFile(new URL('../src/wavedl_daemon/web_assets/.wavedl-assets.json',import.meta.url))).digest('hex');
