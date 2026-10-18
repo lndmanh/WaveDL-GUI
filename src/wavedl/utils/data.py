@@ -31,6 +31,9 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
+from wavedl.core.data_keys import INPUT_KEYS, OUTPUT_KEYS
+from wavedl.runtime import wait_for_workers
+
 
 # Optional scipy.io for MATLAB files
 try:
@@ -44,10 +47,6 @@ except ImportError:
 # ==============================================================================
 # DATA SOURCE ABSTRACTION
 # ==============================================================================
-
-# Supported key names for input/output arrays (priority order, pairwise aligned)
-INPUT_KEYS = ["input_train", "input_test", "X", "data", "inputs", "features", "x"]
-OUTPUT_KEYS = ["output_train", "output_test", "Y", "labels", "outputs", "targets", "y"]
 
 
 def _compute_file_hash(
@@ -1612,7 +1611,7 @@ def prepare_data(
     # ==========================================================================
     # PHASE 2: SYNCHRONIZED LOADING (All Ranks)
     # ==========================================================================
-    accelerator.wait_for_everyone()
+    wait_for_workers(accelerator)
 
     # Load metadata
     with open(META_FILE, "rb") as f:

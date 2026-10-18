@@ -6,6 +6,8 @@
 **Verdict:** Not approved for implementation as written.
 **Note:** Verbatim output. Offline review: repository and installed dependency source plus in-memory probes; the project suite, client build, and SLURM were not exercised.
 
+> **Scope note (2026-10-16):** This review is historical evidence about the Qt migration plan. The current product scope is the new daemon/browser application; references below to Qt parity, retirement or migration sequencing do not define current acceptance.
+
 ---
 
 **I would not approve this plan for implementation yet.** The revised architecture is substantially better, but the plan still contains failures in process supervision, submission recovery, event delivery, checkpoint integration, and authentication. Several tests would pass without establishing the guarantees named in their docstrings.

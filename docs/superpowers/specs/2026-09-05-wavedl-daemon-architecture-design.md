@@ -9,11 +9,27 @@
 
 ---
 
+## Current product decision — 2026-10-15
+
+Finish a brand-new daemon/browser application with a daemon-free training CLI.
+The original Qt migration rollout is superseded: no Qt compatibility,
+old-user-data migration, deprecation period or intermediate Qt-retaining release
+is required. Qt sources temporarily retained in the dirty checkout are unshipped
+historical material, not active product code; physical deletion is not claimed.
+Preserve existing user files.
+
+The 24 workstation capabilities remain functional product requirements, not a Qt
+backward-compatibility matrix. API/protocol, durable-state, crash/replay recovery,
+security and ownership safeguards below remain normative. Real-site filesystem/
+Slurm validation is required before declaring HPC support. Final package/browser/
+supported-platform validation remains required; tagging/publishing needs explicit
+approval. Dated evidence records its original scope, not fresh cutover acceptance.
+
 ## 1. Goals and constraints
 
 WaveDL users run training in four places: the workstation the GUI is on, a remote lab box, an HPC login node under SLURM, and hosted notebooks. A native desktop application serves only the first. Every remaining target requires the interface to be reachable over a network, which makes the client's delivery mechanism — not its widget toolkit — the load-bearing design decision.
 
-The current shell is ~15,400 hand-written lines of PySide6 plus a 43,324-line generated `resource.py`. `TrainingWorker`, `TestWorker`, and `PlotWorker` in `src/wavedl_gui/service/training_service.py` spawn subprocesses and scrape merged stdout. That design cannot observe a job the GUI did not launch, which is precisely the SLURM case.
+Historical motivation (2026-09-05): the original shell was ~15,400 hand-written lines of PySide6 plus a 43,324-line generated `resource.py`. `TrainingWorker`, `TestWorker`, and `PlotWorker` in `src/wavedl_gui/service/training_service.py` spawned subprocesses and scraped merged stdout. That design could not observe a job the GUI did not launch, which is precisely the SLURM case. This describes the original design, not the current daemon/browser architecture.
 
 Constraints that hold across the whole design:
 
@@ -207,9 +223,9 @@ Resumption: the client sends its last applied `seq`; the daemon replays from the
 The daemon is a network service the moment it binds a port, and HPC login nodes are shared.
 
 - **Bind `127.0.0.1` by default.** `--host 0.0.0.0` is an explicit opt-in and still requires a token.
-- **A bearer token is always required**, generated per daemon start and printed in the startup URL. `--token` may pin a stable value; the spec notes that a value passed as a process argument may be visible to other users on systems that expose process arguments, so a file-based form is preferred for long-lived deployments.
-- **Cookies are not port-scoped.** RFC 6265 §8.5 is explicit that the port is not part of a cookie's scope: any other service on `localhost` shares the jar and can overwrite or receive an identically named cookie. `HttpOnly` prevents script access, not transmission, and `SameSite=Strict` does not separate two localhost ports. Therefore the API authenticates with the `Authorization` header, and the bootstrap `?token=` is exchanged for a session **only** as a convenience for navigation requests, under a daemon-instance-specific cookie name, with **Origin and Host validation and XSRF protection on every mutating request**. A bodyless `POST /cancel` is exactly the shape that a same-site service could otherwise induce.
-- **The bootstrap token is stripped from the URL** via `history.replaceState` immediately after exchange, treated as single-use, and excluded from access logs.
+- **A bearer token is required on every protected API endpoint.** The serve lifecycle generates a fresh access token unless an explicitly configured credential file supplies it; access tokens are not printed in startup URLs or logs. Process arguments are not the preferred transport for long-lived secrets.
+- **No authentication cookie is ever set or accepted.** Cookies are not port-scoped: other services on `localhost` share the cookie jar. API and stream clients send `Authorization: Bearer` explicitly. Host validation applies to all HTTP paths, and requests with an Origin must match the daemon origin, including port. A same-site bodyless cancellation request without a bearer header does not authenticate.
+- **Bootstrap is a separate short-lived capability, not an access token or cookie session.** When enabled, `POST /api/bootstrap` is the only unauthenticated API exception. It consumes a same-origin, single-use code and returns the bearer token in a non-cacheable JSON response. Only code hashes are retained while pending; replay and expiry are refused atomically. The client strips the bootstrap code from its navigation URL immediately. Access logs redact credentials, including encoded query values. The corrected migration plan's T21/T21b decisions supersede the earlier cookie/session description.
 - **Artifact access is validated at open time, not only at event time.** A symlink that resolved inside the run directory when the event was accepted can be replaced before the daemon opens it. Containment is enforced on every read, with an explicit symlink policy and verified ownership when adopting runs.
 - **Artifacts are never served inline as active content.** An HTML or SVG artifact rendered at the authenticated daemon origin would become an API-capable page. Downloads are served with a non-renderable content type and a restrictive `Content-Security-Policy`.
 
@@ -234,7 +250,7 @@ The daemon owns the run registry; clients never touch it directly. This supersed
 - **A private per-user data directory**, not a path relative to a shared checkout. The legacy `AppData` resolution in `src/wavedl_gui/common/setting.py` resolves relative to the working directory outside the packaged-Windows branch; migration must not infer ownership from a shared location.
 - **SQLite placement is constrained.** WAL depends on shared-memory coordination and is not supported across hosts on a network filesystem; other journal modes still require reliable locking. The supported placement is local disk, and the daemon refuses to start rather than corrupting a database on an unsupported mount.
 - **One active dispatch owner.** The same user starting daemons on two login nodes must not produce two dispatchers acting on the same pending submission. SQLite serialising individual transactions does not prevent duplicate external side effects. A lock with a recorded owner and liveness gates dispatch; a daemon without it runs read-only.
-- Migration from legacy `config.json` and `database.db`: back up, migrate in a transaction, record `schema_version` and `migration_id`, and on failure restore and start in read-only recovery mode. Legacy files are not deleted until a later release confirms a successful start.
+- **No legacy downloader database import.** The corrected plan's T7b decision supersedes the earlier import proposal: foreign/unversioned databases are refused and configured user data is not deleted. Daemon schema upgrades use SQLite-consistent backups, transactions, a migration ledger and read-only recovery. Runtime journals rebuild telemetry only; they cannot recover lost idempotency, submission claims, handles, or authoritative request intent.
 
 Client-side presentation state (theme, layout, last-used paths) stays in the browser and is **namespaced per backend identity**, so reusing a forwarding port for a different daemon does not carry preferences across.
 
@@ -316,15 +332,21 @@ A multi-endpoint connection manager remains out of scope; it is the only feature
 
 ## 15. Migration
 
-Three phases. The application is never broken between them.
+### Current delivery contract — 2026-10-15
 
-**Phase 1 — extract the daemon beneath the existing Qt app.** The Qt shell keeps running but talks HTTP to the daemon instead of spawning subprocesses. This proves the reconciliation model, the backend seam, the journal contract, and the run-directory layout with zero UI risk. **This phase is larger than revision 1 assumed**: §4 (reconciliation), §4.1 (submission identity), §8 (storage ownership), §9 (supervision), and §10 (scheduler) all land here. It is worth completing even if the client decision were later reversed.
+1. Complete the daemon/runtime contracts and failure-oriented reliability gates.
+2. Complete the browser's 24 functional capabilities against those contracts.
+3. Verify new-app wheel/sdist, entry points, vendored static assets, daemon-free
+   CLI and supported deployments. Exclude Qt from shipped artifacts; no
+   intermediate Qt-retaining release is required. Publish only with approval.
 
-**Phase 2 — build the web client against the proven API.** Qt continues to ship throughout.
+Historical rollout (superseded 2026-10-15): the original three phases extracted
+the daemon beneath Qt, kept Qt shipping while the browser was built, then retired
+Qt after a deprecation release. T30a/T30b and T40/R1/T41 record that former plan,
+not dependencies of this new application. T30c reliability and real-site evidence
+before claiming HPC support are not waived by this scope change.
 
-**Phase 3 — cut over and retire the Qt shell.**
-
-### 15.1 Disposition of existing code
+### 15.1 Original code disposition estimate (historical, not a deletion certificate)
 
 | Code | Lines | Fate |
 |---|---|---|

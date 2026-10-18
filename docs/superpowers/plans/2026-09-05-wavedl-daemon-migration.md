@@ -11,6 +11,8 @@
 **Spec:** `docs/superpowers/specs/2026-09-05-wavedl-daemon-architecture-design.md`
 **Review:** `docs/superpowers/specs/2026-09-05-codex-review-daemon-architecture.md`
 
+> **Scope note (2026-10-16):** This dated plan records the historical Qt-to-daemon migration design. The current product is a new daemon/browser application; Qt parity, retirement sequencing and cutover gates below are historical, not current acceptance requirements. See the current acceptance ledger for the normative scope and 07e bundle identity.
+
 ## Global Constraints
 
 - Python **3.11+**. Line length **88**. Double quotes. Ruff is the sole linter and formatter; CI pins `ruff==0.14.10` and runs `ruff check` and `ruff format --check`.

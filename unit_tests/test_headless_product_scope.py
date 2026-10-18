@@ -1,0 +1,106 @@
+"""The supported product ships the daemon/browser app, not the retired Qt client."""
+
+import ast
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RETIRED_TESTS = ["test_gui_*.py", "daemon/test_installed_gui_http.py"]
+
+
+def test_distribution_declares_only_supported_packages_and_entrypoints():
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    assert set(config["tool"]["setuptools"]["packages"]["find"]["include"]) == {
+        "wavedl",
+        "wavedl.*",
+        "wavedl_daemon",
+        "wavedl_daemon.*",
+    }
+    assert "gui" not in config["project"]["optional-dependencies"]
+    scripts = config["project"]["scripts"]
+    assert "wavedl-gui" not in scripts
+    assert scripts["wavedl-daemon"] == "wavedl_daemon.cli:main"
+    assert scripts["wavedl"] == "wavedl.client:main"
+
+
+def test_only_retired_desktop_test_modules_are_excluded_from_collection():
+    module = ast.parse((ROOT / "unit_tests/conftest.py").read_text())
+    values = [
+        ast.literal_eval(node.value)
+        for node in module.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "collect_ignore_glob"
+            for target in node.targets
+        )
+    ]
+    assert values == [RETIRED_TESTS]
+
+
+def test_daemon_only_collection_excludes_retired_desktop_smoke():
+    """The dependency-light daemon invocation must not need the parent conftest."""
+    module = ast.parse((ROOT / "unit_tests/daemon/conftest.py").read_text())
+    values = [
+        ast.literal_eval(node.value)
+        for node in module.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "collect_ignore"
+            for target in node.targets
+        )
+    ]
+    assert values == [["test_installed_gui_http.py"]]
+
+
+def test_supported_runtime_has_no_desktop_imports():
+    forbidden = {"wavedl_gui", "PySide6", "qfluentwidgets", "pyqtgraph"}
+    for package in ("wavedl", "wavedl_daemon"):
+        for path in (ROOT / "src" / package).rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    names = [node.module or ""]
+                else:
+                    continue
+                assert not forbidden.intersection(
+                    name.split(".")[0] for name in names
+                ), path
+
+
+def test_model_catalog_loads_without_desktop_or_ml_dependencies(tmp_path):
+    script = """
+import importlib.abc
+import sys
+
+sys.path.insert(0, sys.argv[1])
+blocked = {"wavedl_gui", "PySide6", "qfluentwidgets", "pyqtgraph", "numpy", "torch"}
+
+class NoOptionalStack(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        assert fullname.split(".")[0] not in blocked, fullname
+
+sys.meta_path.insert(0, NoOptionalStack())
+from wavedl_daemon.runs.catalog import CatalogService
+
+service = CatalogService({})
+assert service._metadata_path.parent.name == "runs"
+catalog = service.models()
+assert catalog["source"] == "bundled_metadata"
+assert catalog["runtime_verified"] is False
+assert len(catalog["models"]) == 71
+assert blocked.isdisjoint(sys.modules)
+"""
+    result = subprocess.run(
+        [sys.executable, "-S", "-c", script, str(ROOT / "src")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""

@@ -1,0 +1,1455 @@
+name: Daemon browser integration
+
+on:
+  push:
+    paths:
+      - "src/wavedl/**"
+      - "src/wavedl_daemon/**"
+      - "web/**"
+      - "tools/run_web_acceptance.mjs"
+      - "tools/browser_build_replacement_fixture.py"
+      - "tools/browser_controller_identity.mjs"
+      - "tools/browser_controller_identity.test.mjs"
+      - "tools/run_cached_build_replacement_browser_acceptance.test.mjs"
+      - "tools/verify_cached_build_replacement_report.mjs"
+      - "tools/verify_cached_build_replacement_report.test.mjs"
+      - "unit_tests/test_browser_build_replacement_fixture.py"
+      - "unit_tests/test_cached_build_replacement_workflow.py"
+      - "tools/native_sse_split_fixture.py"
+      - "tools/run_native_sse_split_browser_acceptance.mjs"
+      - "tools/verify_native_sse_split_report.mjs"
+      - "tools/verify_native_sse_split_report.test.mjs"
+      - "tools/browser_native_sse_probe.mjs"
+      - "tools/browser_native_sse_probe.test.mjs"
+      - "unit_tests/test_native_sse_split_fixture.py"
+      - "unit_tests/test_native_sse_split_workflow.py"
+      - "tools/browser_header_deadline_fixture.py"
+      - "tools/run_header_deadline_browser_acceptance.mjs"
+      - "tools/verify_header_deadline_browser_report.mjs"
+      - "tools/verify_header_deadline_browser_report.test.mjs"
+      - "unit_tests/test_header_deadline_fixture.py"
+      - "unit_tests/test_header_deadline_workflow.py"
+      - "tools/browser_preview_budget_fixture.py"
+      - "tools/run_preview_budget_browser_acceptance.mjs"
+      - "tools/verify_preview_budget_browser_report.mjs"
+      - "tools/verify_preview_budget_browser_report.test.mjs"
+      - "unit_tests/daemon/test_preview_budget_acceptance.py"
+      - "unit_tests/test_preview_budget_workflow.py"
+      - "tools/run_partial_best_browser_acceptance.test.mjs"
+      - "tools/verify_partial_best_browser_report.mjs"
+      - "tools/verify_partial_best_browser_report.test.mjs"
+      - "unit_tests/test_browser_partial_best_fixture.py"
+      - "unit_tests/test_partial_best_browser_workflow.py"
+      - "tools/run_autoplot_metadata_integrity_browser_acceptance.test.mjs"
+      - "tools/verify_autoplot_metadata_integrity_report.mjs"
+      - "tools/verify_autoplot_metadata_integrity_report.test.mjs"
+      - "unit_tests/test_browser_autoplot_metadata_integrity_fixture.py"
+      - "unit_tests/test_autoplot_metadata_integrity_workflow.py"
+      - "tools/browser_preview_fault_fixture.py"
+      - "tools/run_preview_fault_browser_acceptance.mjs"
+      - "tools/verify_preview_fault_browser_report.mjs"
+      - "tools/verify_preview_fault_browser_report.test.mjs"
+      - "unit_tests/daemon/test_browser_preview_fault_fixture.py"
+      - "tools/run_cold_offline_browser_acceptance.mjs"
+      - "tools/verify_cold_offline_browser_report.mjs"
+      - "tools/verify_cold_offline_browser_report.test.mjs"
+      - "tools/browser_catalogue_fault_fixture.py"
+      - "tools/run_catalogue_fault_browser_acceptance.mjs"
+      - "tools/verify_catalogue_fault_browser_report.mjs"
+      - "tools/verify_catalogue_fault_browser_report.test.mjs"
+      - "tools/browser_pending_cancel_fixture.py"
+      - "tools/run_pending_cancel_browser_acceptance.mjs"
+      - "tools/verify_pending_cancel_browser_report.mjs"
+      - "tools/verify_pending_cancel_browser_report.test.mjs"
+      - "unit_tests/test_browser_catalogue_fault_fixture.py"
+      - "unit_tests/test_browser_pending_cancel_fixture.py"
+      - "tools/browser_journal_fault_fixture.py"
+      - "tools/run_journal_fault_browser_acceptance.mjs"
+      - "tools/run_journal_fault_browser_acceptance.test.mjs"
+      - "tools/verify_journal_fault_browser_report.mjs"
+      - "tools/verify_journal_fault_browser_report.test.mjs"
+      - "unit_tests/daemon/test_browser_journal_fault_fixture.py"
+      - "unit_tests/daemon/test_submission_http_crash_recovery.py"
+      - "tools/storage_fault_browser_fixture.py"
+      - "tools/run_storage_fault_browser_acceptance.mjs"
+      - "tools/verify_storage_fault_browser_report.mjs"
+      - "tools/verify_storage_fault_browser_report.test.mjs"
+      - "unit_tests/daemon/test_storage_fault_browser_fixture.py"
+      - "tools/hostile_origin_browser_fixture.py"
+      - "unit_tests/test_hostile_origin_browser_fixture.py"
+      - "tools/run_hostile_origin_browser_acceptance.mjs"
+      - "tools/run_hostile_origin_browser_acceptance.test.mjs"
+      - "tools/verify_hostile_origin_browser_report.mjs"
+      - "tools/verify_hostile_origin_browser_report.test.mjs"
+      - "tools/genuine_broker_overflow_browser_fixture.py"
+      - "unit_tests/test_genuine_broker_overflow_browser_fixture.py"
+      - "tools/run_genuine_broker_overflow_browser_acceptance.mjs"
+      - "tools/run_genuine_broker_overflow_browser_acceptance.test.mjs"
+      - "tools/verify_genuine_broker_overflow_browser_report.mjs"
+      - "tools/verify_genuine_broker_overflow_browser_report.test.mjs"
+      - "tools/history_browser_fixture.py"
+      - "tools/run_history_browser_acceptance.mjs"
+      - "tools/verify_history_browser_report.mjs"
+      - "tools/verify_history_browser_report.test.mjs"
+      - "unit_tests/test_history_browser_fixture.py"
+      - "tools/browser_retained_active_draft.mjs"
+      - "tools/browser_retained_active_draft.test.mjs"
+      - "tools/verify_retained_active_draft_report.mjs"
+      - "tools/verify_retained_active_draft_report.test.mjs"
+      - "tools/run_retained_browser_acceptance.mjs"
+      - "tools/run_retained_browser_acceptance.test.mjs"
+      - "tools/build_retained_browser_fixtures.mjs"
+      - "tools/build_retained_browser_fixtures.test.mjs"
+      - "tools/verify_retained_browser_report.mjs"
+      - "tools/verify_retained_browser_report.test.mjs"
+      - "tools/browser_actions.mjs"
+      - "tools/browser_reconnect_fixture.py"
+      - "tools/run_reconnect_browser_acceptance.mjs"
+      - "tools/verify_reconnect_browser_report.mjs"
+      - "tools/verify_reconnect_browser_report.test.mjs"
+      - "unit_tests/test_reconnect_browser_fixture.py"
+      - "tools/daemon_restart_browser_fixture.py"
+      - "tools/run_daemon_restart_browser_acceptance.mjs"
+      - "tools/verify_daemon_restart_browser_report.mjs"
+      - "tools/verify_daemon_restart_browser_report.test.mjs"
+      - "unit_tests/test_daemon_restart_browser_fixture.py"
+      - "tools/run_cancellation_lost_ack_browser_acceptance.mjs"
+      - "tools/verify_cancellation_lost_ack_browser_report.mjs"
+      - "tools/verify_cancellation_lost_ack_browser_report.test.mjs"
+      - "unit_tests/test_cancellation_ack_fault.py"
+      - "unit_tests/test_runtime_operations.py"
+      - "unit_tests/test_hosted_operation_result_quality.py"
+      - "unit_tests/test_cv_option_fidelity.py"
+      - "unit_tests/test_cv_training_semantics.py"
+      - "unit_tests/test_cv_physical_components.py"
+      - "unit_tests/test_cv_deterministic.py"
+      - "unit_tests/test_cv_workflow.py"
+      - "unit_tests/test_cv_workers.py"
+      - "unit_tests/test_training_onecycle_accumulation.py"
+      - "unit_tests/test_data_cv.py"
+      - "src/wavedl/utils/cv_components.py"
+      - "unit_tests/daemon/test_pending_cancellation_http.py"
+      - "tools/browser_numerical_failure_fixture.py"
+      - "tools/run_numerical_failure_browser_acceptance.mjs"
+      - "tools/verify_numerical_failure_browser_report.mjs"
+      - "tools/verify_numerical_failure_browser_report.test.mjs"
+      - "tools/epoch_metric_plateau_model.py"
+      - "tools/epoch_metric_browser_fixture.py"
+      - "tools/epoch_metric_browser_evidence.py"
+      - "tools/run_epoch_metric_browser_acceptance.mjs"
+      - "tools/verify_epoch_metric_browser_report.mjs"
+      - "tools/verify_epoch_metric_browser_report.test.mjs"
+      - "unit_tests/test_epoch_browser_workflow.py"
+      - "tools/supersession_browser_fixture.py"
+      - "tools/run_supersession_browser_acceptance.mjs"
+      - "tools/verify_supersession_browser_report.mjs"
+      - "tools/verify_supersession_browser_report.test.mjs"
+      - "unit_tests/test_supersession_browser_fixture.py"
+      - "tools/browser_actions.test.mjs"
+      - "tools/browser_training_editor.mjs"
+      - "tools/browser_training_editor.test.mjs"
+      - "tools/browser_authoring_parity.mjs"
+      - "tools/browser_training_fields_full.mjs"
+      - "tools/run_training_fields_browser_acceptance.mjs"
+      - "tools/run_training_fields_browser_acceptance.test.mjs"
+      - "tools/verify_training_fields_browser_report.mjs"
+      - "tools/verify_training_fields_browser_report.test.mjs"
+      - "tools/browser_training_validation.mjs"
+      - "tools/run_training_validation_browser_acceptance.mjs"
+      - "tools/run_training_validation_browser_acceptance.test.mjs"
+      - "tools/verify_training_validation_browser_report.mjs"
+      - "tools/verify_training_validation_browser_report.test.mjs"
+      - "tools/browser_preset_import.mjs"
+      - "tools/browser_preset_import.test.mjs"
+      - "tools/run_preset_import_browser_acceptance.mjs"
+      - "tools/verify_preset_import_browser_report.mjs"
+      - "tools/verify_preset_import_browser_report.test.mjs"
+      - "unit_tests/daemon/test_registry_http_recovery.py"
+      - "tools/verify_registry_http_recovery_report.py"
+      - "unit_tests/daemon/test_registry_metric_http_recovery.py"
+      - "tools/verify_registry_metric_http_recovery_report.py"
+      - "unit_tests/test_registry_metric_recovery_workflow.py"
+      - "web/test/workstation/project-plan-refusal.test.ts"
+      - "unit_tests/test_migration_acceptance_workflow.py"
+      - "tools/browser_download_names.mjs"
+      - "tools/browser_dataset_parity.mjs"
+      - "tools/browser_dataset_parity.test.mjs"
+      - "tools/browser_failure_evidence.mjs"
+      - "tools/browser_failure_evidence.test.mjs"
+      - "tools/browser_launch_policy.mjs"
+      - "tools/browser_launch_policy.test.mjs"
+      - "tools/run_adoption_browser_acceptance.mjs"
+      - "tools/browser_adoption_fixture.py"
+      - "tools/browser_adoption_negative_fixture.py"
+      - "tools/browser_mapped_autoplot_fixture.py"
+      - "tools/run_mapped_autoplot_browser_acceptance.mjs"
+      - "tools/verify_mapped_autoplot_browser_report.mjs"
+      - "tools/verify_mapped_autoplot_browser_report.test.mjs"
+      - "tools/verify_mapped_autoplot_negative_report.mjs"
+      - "tools/verify_mapped_autoplot_negative_report.test.mjs"
+      - "unit_tests/daemon/test_browser_mapped_autoplot_fixture.py"
+      - "tools/run_adoption_negative_browser_acceptance.mjs"
+      - "tools/verify_adoption_negative_browser_report.mjs"
+      - "tools/verify_adoption_negative_browser_report.test.mjs"
+      - "unit_tests/daemon/test_browser_adoption_negative_fixture.py"
+      - "tools/verify_adoption_browser_report.mjs"
+      - "tools/verify_adoption_browser_report.test.mjs"
+      - "tools/browser_auth_skew_fixture.py"
+      - "tools/run_auth_skew_browser_acceptance.mjs"
+      - "tools/run_auth_skew_browser_acceptance.test.mjs"
+      - "tools/browser_cursor_storage.mjs"
+      - "tools/verify_auth_skew_browser_report.mjs"
+      - "tools/verify_auth_skew_browser_report.test.mjs"
+      - "tools/browser_stream_fixture.py"
+      - "tools/run_stream_browser_acceptance.mjs"
+      - "tools/verify_stream_browser_report.mjs"
+      - "tools/verify_stream_browser_report.test.mjs"
+      - "tools/stream_sparse_browser_fixture.py"
+      - "tools/run_stream_sparse_browser_acceptance.mjs"
+      - "tools/verify_stream_sparse_browser_report.mjs"
+      - "tools/verify_stream_sparse_browser_report.test.mjs"
+      - "unit_tests/daemon/test_stream_sparse_browser_fixture.py"
+      - "tools/stream_malformed_browser_fixture.py"
+      - "tools/run_stream_malformed_browser_acceptance.mjs"
+      - "tools/verify_stream_malformed_browser_report.mjs"
+      - "tools/verify_stream_malformed_browser_report.test.mjs"
+      - "unit_tests/daemon/test_stream_malformed_browser_fixture.py"
+      - "tools/run_retained_rollback_browser_acceptance.mjs"
+      - "tools/verify_retained_rollback_browser_report.mjs"
+      - "tools/verify_retained_rollback_browser_report.test.mjs"
+      - "tools/run_retained_concurrency_acceptance.mjs"
+      - "tools/retained_concurrency_fixture.py"
+      - "tools/verify_retained_concurrency_report.mjs"
+      - "tools/verify_retained_concurrency_report.test.mjs"
+      - "tools/run_retained_synthetic_concurrency.mjs"
+      - "tools/verify_retained_concurrency_stage.mjs"
+      - "tools/verify_retained_concurrency_stage.test.mjs"
+      - "tools/run_retained_rollback_gate.mjs"
+      - "tools/verify_retained_rollback_report.mjs"
+      - "tools/verify_retained_rollback_report.test.mjs"
+      - "unit_tests/daemon/test_browser_stream_fixture.py"
+      - "unit_tests/daemon/test_event_stream_live_boundaries.py"
+      - "unit_tests/test_browser_auth_skew_fixture.py"
+      - "tools/browser_adoption_rollover_fixture.py"
+      - "tools/run_adoption_rollover_browser_acceptance.mjs"
+      - "tools/verify_adoption_rollover_browser_report.mjs"
+      - "tools/verify_adoption_rollover_browser_report.test.mjs"
+      - "tools/run_preferences_browser_acceptance.mjs"
+      - "tools/verify_preferences_browser_report.mjs"
+      - "tools/verify_preferences_browser_report.test.mjs"
+      - "tools/run_artifact_publication_browser_acceptance.mjs"
+      - "tools/run_artifact_publication_browser_acceptance.test.mjs"
+      - "tools/verify_artifact_publication_browser_report.mjs"
+      - "tools/verify_artifact_publication_browser_report.test.mjs"
+      - "tools/browser_submitted_plan_protection.mjs"
+      - "tools/run_submitted_plan_browser_acceptance.mjs"
+      - "tools/run_submitted_plan_browser_acceptance.test.mjs"
+      - "tools/verify_submitted_plan_browser_report.mjs"
+      - "tools/verify_submitted_plan_browser_report.test.mjs"
+      - "tools/browser_result_operations.mjs"
+      - "tools/run_result_operations_browser_acceptance.mjs"
+      - "tools/run_result_operations_browser_acceptance.test.mjs"
+      - "tools/verify_result_operations_browser_report.mjs"
+      - "tools/verify_result_operations_browser_report.test.mjs"
+      - "tools/browser_onnx_export.mjs"
+      - "tools/browser_onnx_export.test.mjs"
+      - "tools/browser_onnx_export_evidence.py"
+      - "tools/run_onnx_export_browser_acceptance.mjs"
+      - "tools/run_onnx_export_browser_acceptance.test.mjs"
+      - "tools/verify_onnx_export_browser_report.mjs"
+      - "tools/verify_onnx_export_browser_report.test.mjs"
+      - "tools/browser_inference_cancellation.mjs"
+      - "tools/run_inference_cancellation_browser_acceptance.mjs"
+      - "tools/run_inference_cancellation_browser_acceptance.test.mjs"
+      - "tools/verify_inference_cancellation_browser_report.mjs"
+      - "tools/verify_inference_cancellation_browser_report.test.mjs"
+      - "tools/browser_cv_parity.mjs"
+      - "tools/browser_cv_parity_evidence.py"
+      - "tools/run_cv_parity_browser_acceptance.mjs"
+      - "tools/run_cv_parity_browser_acceptance.test.mjs"
+      - "tools/verify_cv_parity_browser_report.mjs"
+      - "tools/verify_cv_parity_browser_report.test.mjs"
+      - "tools/browser_wizard_progression.mjs"
+      - "tools/run_wizard_progression_browser_acceptance.mjs"
+      - "tools/run_wizard_progression_browser_acceptance.test.mjs"
+      - "tools/verify_wizard_progression_browser_report.mjs"
+      - "tools/verify_wizard_progression_browser_report.test.mjs"
+      - "tools/dashboard_state_browser_fixture.py"
+      - "tools/verify_training_exports.py"
+      - "tools/run_dashboard_state_browser_acceptance.mjs"
+      - "tools/verify_dashboard_state_browser_report.mjs"
+      - "tools/verify_dashboard_state_browser_report.test.mjs"
+      - "unit_tests/test_dashboard_state_browser_fixture.py"
+      - "unit_tests/test_retained_concurrency_fixture.py"
+      - "tools/browser_daemon_fixture.py"
+      - "tools/stream_asgi_boundary.py"
+      - "unit_tests/daemon/test_stream_asgi_boundary.py"
+      - "tools/vendor_web_assets.py"
+      - "tools/verify_browser_ci_report.mjs"
+      - "tools/test_verify_browser_ci_report.mjs"
+      - "pyproject.toml"
+      - ".github/workflows/daemon-browser-integration.yml"
+  pull_request:
+    paths:
+      - "src/wavedl/**"
+      - "src/wavedl_daemon/**"
+      - "web/**"
+      - "tools/run_web_acceptance.mjs"
+      - "tools/browser_build_replacement_fixture.py"
+      - "tools/browser_controller_identity.mjs"
+      - "tools/browser_controller_identity.test.mjs"
+      - "tools/run_cached_build_replacement_browser_acceptance.test.mjs"
+      - "tools/verify_cached_build_replacement_report.mjs"
+      - "tools/verify_cached_build_replacement_report.test.mjs"
+      - "unit_tests/test_browser_build_replacement_fixture.py"
+      - "unit_tests/test_cached_build_replacement_workflow.py"
+      - "tools/native_sse_split_fixture.py"
+      - "tools/run_native_sse_split_browser_acceptance.mjs"
+      - "tools/verify_native_sse_split_report.mjs"
+      - "tools/verify_native_sse_split_report.test.mjs"
+      - "tools/browser_native_sse_probe.mjs"
+      - "tools/browser_native_sse_probe.test.mjs"
+      - "unit_tests/test_native_sse_split_fixture.py"
+      - "unit_tests/test_native_sse_split_workflow.py"
+      - "tools/browser_header_deadline_fixture.py"
+      - "tools/run_header_deadline_browser_acceptance.mjs"
+      - "tools/verify_header_deadline_browser_report.mjs"
+      - "tools/verify_header_deadline_browser_report.test.mjs"
+      - "unit_tests/test_header_deadline_fixture.py"
+      - "unit_tests/test_header_deadline_workflow.py"
+      - "tools/browser_preview_budget_fixture.py"
+      - "tools/run_preview_budget_browser_acceptance.mjs"
+      - "tools/verify_preview_budget_browser_report.mjs"
+      - "tools/verify_preview_budget_browser_report.test.mjs"
+      - "unit_tests/daemon/test_preview_budget_acceptance.py"
+      - "unit_tests/test_preview_budget_workflow.py"
+      - "tools/run_partial_best_browser_acceptance.test.mjs"
+      - "tools/verify_partial_best_browser_report.mjs"
+      - "tools/verify_partial_best_browser_report.test.mjs"
+      - "unit_tests/test_browser_partial_best_fixture.py"
+      - "unit_tests/test_partial_best_browser_workflow.py"
+      - "tools/run_autoplot_metadata_integrity_browser_acceptance.test.mjs"
+      - "tools/verify_autoplot_metadata_integrity_report.mjs"
+      - "tools/verify_autoplot_metadata_integrity_report.test.mjs"
+      - "unit_tests/test_browser_autoplot_metadata_integrity_fixture.py"
+      - "unit_tests/test_autoplot_metadata_integrity_workflow.py"
+      - "tools/browser_preview_fault_fixture.py"
+      - "tools/run_preview_fault_browser_acceptance.mjs"
+      - "tools/verify_preview_fault_browser_report.mjs"
+      - "tools/verify_preview_fault_browser_report.test.mjs"
+      - "unit_tests/daemon/test_browser_preview_fault_fixture.py"
+      - "tools/run_cold_offline_browser_acceptance.mjs"
+      - "tools/verify_cold_offline_browser_report.mjs"
+      - "tools/verify_cold_offline_browser_report.test.mjs"
+      - "tools/browser_catalogue_fault_fixture.py"
+      - "tools/run_catalogue_fault_browser_acceptance.mjs"
+      - "tools/verify_catalogue_fault_browser_report.mjs"
+      - "tools/verify_catalogue_fault_browser_report.test.mjs"
+      - "tools/browser_pending_cancel_fixture.py"
+      - "tools/run_pending_cancel_browser_acceptance.mjs"
+      - "tools/verify_pending_cancel_browser_report.mjs"
+      - "tools/verify_pending_cancel_browser_report.test.mjs"
+      - "unit_tests/test_browser_catalogue_fault_fixture.py"
+      - "unit_tests/test_browser_pending_cancel_fixture.py"
+      - "tools/browser_journal_fault_fixture.py"
+      - "tools/run_journal_fault_browser_acceptance.mjs"
+      - "tools/run_journal_fault_browser_acceptance.test.mjs"
+      - "tools/verify_journal_fault_browser_report.mjs"
+      - "tools/verify_journal_fault_browser_report.test.mjs"
+      - "unit_tests/daemon/test_browser_journal_fault_fixture.py"
+      - "unit_tests/daemon/test_submission_http_crash_recovery.py"
+      - "tools/storage_fault_browser_fixture.py"
+      - "tools/run_storage_fault_browser_acceptance.mjs"
+      - "tools/verify_storage_fault_browser_report.mjs"
+      - "tools/verify_storage_fault_browser_report.test.mjs"
+      - "unit_tests/daemon/test_storage_fault_browser_fixture.py"
+      - "tools/hostile_origin_browser_fixture.py"
+      - "unit_tests/test_hostile_origin_browser_fixture.py"
+      - "tools/run_hostile_origin_browser_acceptance.mjs"
+      - "tools/run_hostile_origin_browser_acceptance.test.mjs"
+      - "tools/verify_hostile_origin_browser_report.mjs"
+      - "tools/verify_hostile_origin_browser_report.test.mjs"
+      - "tools/genuine_broker_overflow_browser_fixture.py"
+      - "unit_tests/test_genuine_broker_overflow_browser_fixture.py"
+      - "tools/run_genuine_broker_overflow_browser_acceptance.mjs"
+      - "tools/run_genuine_broker_overflow_browser_acceptance.test.mjs"
+      - "tools/verify_genuine_broker_overflow_browser_report.mjs"
+      - "tools/verify_genuine_broker_overflow_browser_report.test.mjs"
+      - "tools/history_browser_fixture.py"
+      - "tools/run_history_browser_acceptance.mjs"
+      - "tools/verify_history_browser_report.mjs"
+      - "tools/verify_history_browser_report.test.mjs"
+      - "unit_tests/test_history_browser_fixture.py"
+      - "tools/browser_retained_active_draft.mjs"
+      - "tools/browser_retained_active_draft.test.mjs"
+      - "tools/verify_retained_active_draft_report.mjs"
+      - "tools/verify_retained_active_draft_report.test.mjs"
+      - "tools/run_retained_browser_acceptance.mjs"
+      - "tools/run_retained_browser_acceptance.test.mjs"
+      - "tools/build_retained_browser_fixtures.mjs"
+      - "tools/build_retained_browser_fixtures.test.mjs"
+      - "tools/verify_retained_browser_report.mjs"
+      - "tools/verify_retained_browser_report.test.mjs"
+      - "tools/browser_actions.mjs"
+      - "tools/browser_reconnect_fixture.py"
+      - "tools/run_reconnect_browser_acceptance.mjs"
+      - "tools/verify_reconnect_browser_report.mjs"
+      - "tools/verify_reconnect_browser_report.test.mjs"
+      - "unit_tests/test_reconnect_browser_fixture.py"
+      - "tools/daemon_restart_browser_fixture.py"
+      - "tools/run_daemon_restart_browser_acceptance.mjs"
+      - "tools/verify_daemon_restart_browser_report.mjs"
+      - "tools/verify_daemon_restart_browser_report.test.mjs"
+      - "unit_tests/test_daemon_restart_browser_fixture.py"
+      - "tools/run_cancellation_lost_ack_browser_acceptance.mjs"
+      - "tools/verify_cancellation_lost_ack_browser_report.mjs"
+      - "tools/verify_cancellation_lost_ack_browser_report.test.mjs"
+      - "unit_tests/test_cancellation_ack_fault.py"
+      - "unit_tests/test_runtime_operations.py"
+      - "unit_tests/test_hosted_operation_result_quality.py"
+      - "unit_tests/test_cv_option_fidelity.py"
+      - "unit_tests/test_cv_training_semantics.py"
+      - "unit_tests/test_cv_physical_components.py"
+      - "unit_tests/test_cv_deterministic.py"
+      - "unit_tests/test_cv_workflow.py"
+      - "unit_tests/test_cv_workers.py"
+      - "unit_tests/test_training_onecycle_accumulation.py"
+      - "unit_tests/test_data_cv.py"
+      - "src/wavedl/utils/cv_components.py"
+      - "unit_tests/daemon/test_pending_cancellation_http.py"
+      - "tools/browser_numerical_failure_fixture.py"
+      - "tools/run_numerical_failure_browser_acceptance.mjs"
+      - "tools/verify_numerical_failure_browser_report.mjs"
+      - "tools/verify_numerical_failure_browser_report.test.mjs"
+      - "tools/epoch_metric_plateau_model.py"
+      - "tools/epoch_metric_browser_fixture.py"
+      - "tools/epoch_metric_browser_evidence.py"
+      - "tools/run_epoch_metric_browser_acceptance.mjs"
+      - "tools/verify_epoch_metric_browser_report.mjs"
+      - "tools/verify_epoch_metric_browser_report.test.mjs"
+      - "unit_tests/test_epoch_browser_workflow.py"
+      - "tools/supersession_browser_fixture.py"
+      - "tools/run_supersession_browser_acceptance.mjs"
+      - "tools/verify_supersession_browser_report.mjs"
+      - "tools/verify_supersession_browser_report.test.mjs"
+      - "unit_tests/test_supersession_browser_fixture.py"
+      - "tools/browser_actions.test.mjs"
+      - "tools/browser_training_editor.mjs"
+      - "tools/browser_training_editor.test.mjs"
+      - "tools/browser_authoring_parity.mjs"
+      - "tools/browser_training_fields_full.mjs"
+      - "tools/run_training_fields_browser_acceptance.mjs"
+      - "tools/run_training_fields_browser_acceptance.test.mjs"
+      - "tools/verify_training_fields_browser_report.mjs"
+      - "tools/verify_training_fields_browser_report.test.mjs"
+      - "tools/browser_training_validation.mjs"
+      - "tools/run_training_validation_browser_acceptance.mjs"
+      - "tools/run_training_validation_browser_acceptance.test.mjs"
+      - "tools/verify_training_validation_browser_report.mjs"
+      - "tools/verify_training_validation_browser_report.test.mjs"
+      - "tools/browser_preset_import.mjs"
+      - "tools/browser_preset_import.test.mjs"
+      - "tools/run_preset_import_browser_acceptance.mjs"
+      - "tools/verify_preset_import_browser_report.mjs"
+      - "tools/verify_preset_import_browser_report.test.mjs"
+      - "unit_tests/daemon/test_registry_http_recovery.py"
+      - "tools/verify_registry_http_recovery_report.py"
+      - "unit_tests/daemon/test_registry_metric_http_recovery.py"
+      - "tools/verify_registry_metric_http_recovery_report.py"
+      - "unit_tests/test_registry_metric_recovery_workflow.py"
+      - "web/test/workstation/project-plan-refusal.test.ts"
+      - "unit_tests/test_migration_acceptance_workflow.py"
+      - "tools/browser_download_names.mjs"
+      - "tools/browser_dataset_parity.mjs"
+      - "tools/browser_dataset_parity.test.mjs"
+      - "tools/browser_failure_evidence.mjs"
+      - "tools/browser_failure_evidence.test.mjs"
+      - "tools/browser_launch_policy.mjs"
+      - "tools/browser_launch_policy.test.mjs"
+      - "tools/run_adoption_browser_acceptance.mjs"
+      - "tools/browser_adoption_fixture.py"
+      - "tools/browser_adoption_negative_fixture.py"
+      - "tools/browser_mapped_autoplot_fixture.py"
+      - "tools/run_mapped_autoplot_browser_acceptance.mjs"
+      - "tools/verify_mapped_autoplot_browser_report.mjs"
+      - "tools/verify_mapped_autoplot_browser_report.test.mjs"
+      - "tools/verify_mapped_autoplot_negative_report.mjs"
+      - "tools/verify_mapped_autoplot_negative_report.test.mjs"
+      - "unit_tests/daemon/test_browser_mapped_autoplot_fixture.py"
+      - "tools/run_adoption_negative_browser_acceptance.mjs"
+      - "tools/verify_adoption_negative_browser_report.mjs"
+      - "tools/verify_adoption_negative_browser_report.test.mjs"
+      - "unit_tests/daemon/test_browser_adoption_negative_fixture.py"
+      - "tools/verify_adoption_browser_report.mjs"
+      - "tools/verify_adoption_browser_report.test.mjs"
+      - "tools/browser_auth_skew_fixture.py"
+      - "tools/run_auth_skew_browser_acceptance.mjs"
+      - "tools/run_auth_skew_browser_acceptance.test.mjs"
+      - "tools/browser_cursor_storage.mjs"
+      - "tools/verify_auth_skew_browser_report.mjs"
+      - "tools/verify_auth_skew_browser_report.test.mjs"
+      - "tools/browser_stream_fixture.py"
+      - "tools/run_stream_browser_acceptance.mjs"
+      - "tools/verify_stream_browser_report.mjs"
+      - "tools/verify_stream_browser_report.test.mjs"
+      - "tools/stream_sparse_browser_fixture.py"
+      - "tools/run_stream_sparse_browser_acceptance.mjs"
+      - "tools/verify_stream_sparse_browser_report.mjs"
+      - "tools/verify_stream_sparse_browser_report.test.mjs"
+      - "unit_tests/daemon/test_stream_sparse_browser_fixture.py"
+      - "tools/stream_malformed_browser_fixture.py"
+      - "tools/run_stream_malformed_browser_acceptance.mjs"
+      - "tools/verify_stream_malformed_browser_report.mjs"
+      - "tools/verify_stream_malformed_browser_report.test.mjs"
+      - "unit_tests/daemon/test_stream_malformed_browser_fixture.py"
+      - "tools/run_retained_rollback_browser_acceptance.mjs"
+      - "tools/verify_retained_rollback_browser_report.mjs"
+      - "tools/verify_retained_rollback_browser_report.test.mjs"
+      - "tools/run_retained_concurrency_acceptance.mjs"
+      - "tools/retained_concurrency_fixture.py"
+      - "tools/verify_retained_concurrency_report.mjs"
+      - "tools/verify_retained_concurrency_report.test.mjs"
+      - "tools/run_retained_synthetic_concurrency.mjs"
+      - "tools/verify_retained_concurrency_stage.mjs"
+      - "tools/verify_retained_concurrency_stage.test.mjs"
+      - "tools/run_retained_rollback_gate.mjs"
+      - "tools/verify_retained_rollback_report.mjs"
+      - "tools/verify_retained_rollback_report.test.mjs"
+      - "unit_tests/daemon/test_browser_stream_fixture.py"
+      - "unit_tests/daemon/test_event_stream_live_boundaries.py"
+      - "unit_tests/test_browser_auth_skew_fixture.py"
+      - "tools/browser_adoption_rollover_fixture.py"
+      - "tools/run_adoption_rollover_browser_acceptance.mjs"
+      - "tools/verify_adoption_rollover_browser_report.mjs"
+      - "tools/verify_adoption_rollover_browser_report.test.mjs"
+      - "tools/run_preferences_browser_acceptance.mjs"
+      - "tools/verify_preferences_browser_report.mjs"
+      - "tools/verify_preferences_browser_report.test.mjs"
+      - "tools/run_artifact_publication_browser_acceptance.mjs"
+      - "tools/run_artifact_publication_browser_acceptance.test.mjs"
+      - "tools/verify_artifact_publication_browser_report.mjs"
+      - "tools/verify_artifact_publication_browser_report.test.mjs"
+      - "tools/browser_submitted_plan_protection.mjs"
+      - "tools/run_submitted_plan_browser_acceptance.mjs"
+      - "tools/run_submitted_plan_browser_acceptance.test.mjs"
+      - "tools/verify_submitted_plan_browser_report.mjs"
+      - "tools/verify_submitted_plan_browser_report.test.mjs"
+      - "tools/browser_result_operations.mjs"
+      - "tools/run_result_operations_browser_acceptance.mjs"
+      - "tools/run_result_operations_browser_acceptance.test.mjs"
+      - "tools/verify_result_operations_browser_report.mjs"
+      - "tools/verify_result_operations_browser_report.test.mjs"
+      - "tools/browser_onnx_export.mjs"
+      - "tools/browser_onnx_export.test.mjs"
+      - "tools/browser_onnx_export_evidence.py"
+      - "tools/run_onnx_export_browser_acceptance.mjs"
+      - "tools/run_onnx_export_browser_acceptance.test.mjs"
+      - "tools/verify_onnx_export_browser_report.mjs"
+      - "tools/verify_onnx_export_browser_report.test.mjs"
+      - "tools/browser_inference_cancellation.mjs"
+      - "tools/run_inference_cancellation_browser_acceptance.mjs"
+      - "tools/run_inference_cancellation_browser_acceptance.test.mjs"
+      - "tools/verify_inference_cancellation_browser_report.mjs"
+      - "tools/verify_inference_cancellation_browser_report.test.mjs"
+      - "tools/browser_cv_parity.mjs"
+      - "tools/browser_cv_parity_evidence.py"
+      - "tools/run_cv_parity_browser_acceptance.mjs"
+      - "tools/run_cv_parity_browser_acceptance.test.mjs"
+      - "tools/verify_cv_parity_browser_report.mjs"
+      - "tools/verify_cv_parity_browser_report.test.mjs"
+      - "tools/browser_wizard_progression.mjs"
+      - "tools/run_wizard_progression_browser_acceptance.mjs"
+      - "tools/run_wizard_progression_browser_acceptance.test.mjs"
+      - "tools/verify_wizard_progression_browser_report.mjs"
+      - "tools/verify_wizard_progression_browser_report.test.mjs"
+      - "tools/dashboard_state_browser_fixture.py"
+      - "tools/verify_training_exports.py"
+      - "tools/run_dashboard_state_browser_acceptance.mjs"
+      - "tools/verify_dashboard_state_browser_report.mjs"
+      - "tools/verify_dashboard_state_browser_report.test.mjs"
+      - "unit_tests/test_dashboard_state_browser_fixture.py"
+      - "unit_tests/test_retained_concurrency_fixture.py"
+      - "tools/browser_daemon_fixture.py"
+      - "tools/stream_asgi_boundary.py"
+      - "unit_tests/daemon/test_stream_asgi_boundary.py"
+      - "tools/vendor_web_assets.py"
+      - "tools/verify_browser_ci_report.mjs"
+      - "tools/test_verify_browser_ci_report.mjs"
+      - "pyproject.toml"
+      - ".github/workflows/daemon-browser-integration.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A release caller must not cancel (or be cancelled by) the standalone lane.
+  group: daemon-browser-integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromium-cpu:
+    name: Chromium + vendored app + real CPU daemon
+    runs-on: ubuntu-latest
+    # The measured local twelve-case baseline takes 11m53s. This lane already
+    # has 49 sequential acceptance runners plus setup/build and Python cohorts;
+    # the additive native SSE gate also needs headroom. Keep a bounded 120m
+    # budget; this is not a claim that hosted timing has been certified.
+    timeout-minutes: 120
+    env:
+      MPLBACKEND: Agg
+      CUDA_VISIBLE_DEVICES: ""
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      PYTHONFAULTHANDLER: "1"
+      PYTHONUNBUFFERED: "1"
+      WANDB_MODE: disabled
+      WAVEDL_PYTHON: python
+      # Node os.tmpdir() honors TMPDIR. No arbitrary /tmp artifact collection.
+      TMPDIR: ${{ runner.temp }}/wavedl-browser-ci
+    steps:
+      - name: Create dedicated job temporary directory
+        run: mkdir -m 700 -p "$TMPDIR"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install CPU PyTorch before project dependencies
+        run: python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      - name: Install real daemon and ML dependencies
+        run: python -m pip install -e ".[dev,daemon]"
+      - name: Verify installed dependency and CPU data contracts
+        run: |
+          python -m pip check
+          python -c 'import torch, torchvision, numpy, scipy, h5py, starlette, uvicorn; assert torch.version.cuda is None, "CPU PyTorch required"'
+      - name: Install locked web dependencies
+        working-directory: web
+        run: npm ci
+      - name: Require exhaustive field and effective Python export round trips
+        working-directory: web
+        env:
+          WAVEDL_TRAINING_EXPORT_PYTHON: python
+        run: npm test -- test/workstation/training-fields-acceptance.test.ts
+      - name: Generate the static app used by the daemon
+        working-directory: web
+        run: npm run generate
+      - name: Vendor verified generated assets into the daemon
+        run: python tools/vendor_web_assets.py
+      - name: Install tested browser CLI and Chromium runtime
+        run: |
+          npm install --global agent-browser@0.26.0
+          agent-browser skills get core
+          agent-browser install --with-deps
+      - name: Test the fail-closed evidence guard
+        run: node --test tools/test_verify_browser_ci_report.mjs
+      - name: Test native browser target-selection contracts
+        run: node --test tools/browser_actions.test.mjs
+      - name: Test bounded dataset PNG evidence decoding
+        run: node --test tools/browser_dataset_parity.test.mjs
+      - name: Test private bounded failure-prefix retention
+        run: node --test tools/browser_failure_evidence.test.mjs
+      - name: Test browser QA launch policy
+        run: node --test tools/browser_launch_policy.test.mjs
+      - name: Test standalone adoption, auth/skew and stream report contracts
+        run: node --test tools/verify_adoption_browser_report.test.mjs tools/run_auth_skew_browser_acceptance.test.mjs tools/verify_auth_skew_browser_report.test.mjs tools/verify_stream_browser_report.test.mjs
+      - name: Test historical-attempt rollover report contract
+        run: node --test tools/verify_adoption_rollover_browser_report.test.mjs
+      - name: Test negative adoption evidence and targeted source faults
+        run: |
+          node --test tools/verify_adoption_negative_browser_report.test.mjs
+          python -m pytest unit_tests/daemon/test_browser_adoption_negative_fixture.py -q
+      - name: Test mapped automatic-plot evidence and fixture execution
+        run: |
+          node --test tools/verify_mapped_autoplot_browser_report.test.mjs
+          node --test tools/verify_mapped_autoplot_negative_report.test.mjs
+          python -m pytest unit_tests/daemon/test_browser_mapped_autoplot_fixture.py -q
+      - name: Test malformed preference recovery evidence contract
+        run: node --test tools/verify_preferences_browser_report.test.mjs
+      - name: Test oversized artifact publication evidence contract
+        run: node --test tools/run_artifact_publication_browser_acceptance.test.mjs tools/verify_artifact_publication_browser_report.test.mjs
+      - name: Test partial-best publication and strict browser evidence contracts
+        run: |
+          node --test tools/run_partial_best_browser_acceptance.test.mjs tools/verify_partial_best_browser_report.test.mjs
+          python -m pytest unit_tests/test_browser_partial_best_fixture.py unit_tests/test_partial_best_browser_workflow.py -q
+      - name: Test automatic-plot metadata integrity evidence contracts
+        run: |
+          node --test tools/run_autoplot_metadata_integrity_browser_acceptance.test.mjs tools/verify_autoplot_metadata_integrity_report.test.mjs
+          python -m pytest unit_tests/test_browser_autoplot_metadata_integrity_fixture.py unit_tests/test_autoplot_metadata_integrity_workflow.py -q
+      - name: Test controlled build replacement evidence and workflow contracts
+        run: |
+          node --test tools/run_cached_build_replacement_browser_acceptance.test.mjs tools/verify_cached_build_replacement_report.test.mjs tools/browser_controller_identity.test.mjs
+          python -m pytest --noconftest unit_tests/test_browser_build_replacement_fixture.py unit_tests/test_cached_build_replacement_workflow.py -q
+      - name: Test supervised HEADER deadline fixture and evidence contracts
+        run: |
+          node --test tools/verify_header_deadline_browser_report.test.mjs
+          python -m pytest unit_tests/test_header_deadline_fixture.py unit_tests/test_header_deadline_workflow.py -q
+      - name: Test instrumented native SSE split evidence and workflow contracts
+        run: |
+          node --test tools/browser_native_sse_probe.test.mjs tools/verify_native_sse_split_report.test.mjs
+          python -m pytest --noconftest unit_tests/test_native_sse_split_fixture.py unit_tests/test_native_sse_split_workflow.py -q
+      - name: Test preview resource-budget fixture and evidence contracts
+        run: |
+          node --test tools/verify_preview_budget_browser_report.test.mjs
+          python -m pytest unit_tests/daemon/test_preview_budget_acceptance.py unit_tests/test_preview_budget_workflow.py -q
+      - name: Test submitted-plan authoring protection contracts
+        run: node --test tools/run_submitted_plan_browser_acceptance.test.mjs tools/verify_submitted_plan_browser_report.test.mjs
+      - name: Test result-operation evidence contracts (not browser acceptance)
+        run: node --test tools/run_result_operations_browser_acceptance.test.mjs tools/verify_result_operations_browser_report.test.mjs
+      - name: Test supported export and inference cancellation evidence contracts
+        run: >-
+          node --test tools/browser_onnx_export.test.mjs
+          tools/run_onnx_export_browser_acceptance.test.mjs
+          tools/verify_onnx_export_browser_report.test.mjs
+          tools/run_inference_cancellation_browser_acceptance.test.mjs
+          tools/verify_inference_cancellation_browser_report.test.mjs
+      - name: Test cross-validation publication and explicit-fold evidence contracts
+        run: node --test tools/run_cv_parity_browser_acceptance.test.mjs tools/verify_cv_parity_browser_report.test.mjs
+      - name: Test guided authoring and acknowledgement evidence contracts
+        run: node --test tools/run_wizard_progression_browser_acceptance.test.mjs tools/verify_wizard_progression_browser_report.test.mjs
+      - name: Test imported preset authority evidence contracts
+        run: >-
+          node --test tools/browser_preset_import.test.mjs
+          tools/verify_preset_import_browser_report.test.mjs
+      - name: Test full training field browser evidence contracts
+        run: node --test tools/run_training_fields_browser_acceptance.test.mjs tools/verify_training_fields_browser_report.test.mjs
+      - name: Test invalid authoring and runtime refusal evidence contracts
+        run: |
+          node --test tools/run_training_validation_browser_acceptance.test.mjs tools/verify_training_validation_browser_report.test.mjs
+          python -m pytest --noconftest unit_tests/test_migration_acceptance_workflow.py
+      - name: Exercise both POSIX registry crash orders and recovery paths
+        env:
+          WAVEDL_REGISTRY_RECOVERY_REPORT_DIR: ${{ runner.temp }}/wavedl-browser-ci/registry-http-recovery
+        run: python -m pytest unit_tests/daemon/test_registry_http_recovery.py --junitxml="$TMPDIR/registry-http-recovery.xml"
+      - name: Require real registry rollback, recovery, auth and cleanup evidence
+        if: always()
+        run: |
+          python tools/verify_registry_http_recovery_report.py "$TMPDIR/registry-http-recovery/registry-http-recovery-projection-cursor-rebuild.json" "$TMPDIR/registry-http-recovery/registry-http-recovery-projection-cursor-ingest.json" "$TMPDIR/registry-http-recovery/registry-http-recovery-cursor-projection-rebuild.json" "$TMPDIR/registry-http-recovery/registry-http-recovery-cursor-projection-ingest.json"
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse(Path(os.environ["TMPDIR"]) / "registry-http-recovery.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert len(cases) == 33
+          assert len({(case.get("classname"), case.get("name")) for case in cases}) == 33
+          assert all(case.get("classname") == "unit_tests.daemon.test_registry_http_recovery" for case in cases)
+          assert not any(list(root.iter(kind)) for kind in ("skipped", "failure", "error"))
+          PY
+      - name: Exercise metric-bearing POSIX registry crash and recovery matrix
+        if: always()
+        env:
+          WAVEDL_REGISTRY_METRIC_RECOVERY_REPORT_DIR: ${{ runner.temp }}/wavedl-browser-ci/registry-metric-http-recovery
+        run: python -m pytest unit_tests/daemon/test_registry_metric_http_recovery.py --junitxml="$TMPDIR/registry-metric-http-recovery.xml"
+      - name: Require exact metric rollback, replay, HTTP values and cleanup evidence
+        if: always()
+        run: |
+          python tools/verify_registry_metric_http_recovery_report.py "$TMPDIR/registry-metric-http-recovery/registry-metric-http-recovery-projection-cursor-rebuild.json" "$TMPDIR/registry-metric-http-recovery/registry-metric-http-recovery-projection-cursor-ingest.json" "$TMPDIR/registry-metric-http-recovery/registry-metric-http-recovery-cursor-projection-rebuild.json" "$TMPDIR/registry-metric-http-recovery/registry-metric-http-recovery-cursor-projection-ingest.json"
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse(Path(os.environ["TMPDIR"]) / "registry-metric-http-recovery.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert len(cases) == 33
+          assert len({(case.get("classname"), case.get("name")) for case in cases}) == 33
+          assert all(case.get("classname") == "unit_tests.daemon.test_registry_metric_http_recovery" for case in cases)
+          matrix = {f"test_metric_transaction_sigkill_preserves_prefix_and_recovers_once[{recovery}-{order}]" for recovery in ("rebuild", "ingest") for order in ("projection-cursor", "cursor-projection")}
+          assert {case.get("name") for case in cases if case.get("name", "").startswith("test_metric_transaction_")} == matrix
+          assert not any(list(root.iter(kind)) for kind in ("skipped", "failure", "error"))
+          PY
+      - name: Test metric recovery mandatory workflow contracts
+        run: python -m pytest --noconftest unit_tests/test_registry_metric_recovery_workflow.py -q
+      - name: Test reducer-derived dashboard state evidence contracts
+        run: |
+          node --test tools/verify_dashboard_state_browser_report.test.mjs
+          python -m pytest unit_tests/test_dashboard_state_browser_fixture.py -q
+      - name: Test preview-fault evidence and real fixture barriers
+        run: |
+          node --test tools/verify_preview_fault_browser_report.test.mjs
+          python -m pytest unit_tests/daemon/test_browser_preview_fault_fixture.py -q
+      - name: Test cold-offline and pending-cancellation evidence contracts
+        run: |
+          node --test tools/verify_cold_offline_browser_report.test.mjs tools/verify_pending_cancel_browser_report.test.mjs tools/verify_catalogue_fault_browser_report.test.mjs
+          python -m pytest unit_tests/test_browser_catalogue_fault_fixture.py unit_tests/test_browser_pending_cancel_fixture.py unit_tests/test_browser_fixture_metadata.py -q
+      - name: Test 100k-history evidence and numerical journal fixture
+        run: |
+          node --test tools/verify_history_browser_report.test.mjs
+          python -m pytest unit_tests/test_history_browser_fixture.py -q
+      - name: Test F02 journal-byte fixture boundaries
+        run: python -m pytest unit_tests/daemon/test_browser_journal_fault_fixture.py -q
+      - name: Test F01 submission crash recovery with exact JUnit contract
+        run: python -m pytest unit_tests/daemon/test_submission_http_crash_recovery.py --junitxml="$TMPDIR/submission-http-crash-recovery.xml"
+      - name: Require all six F01 crash-recovery boundaries with no skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse(Path(os.environ["TMPDIR"]) / "submission-http-crash-recovery.xml").getroot()
+          cases = list(root.iter("testcase"))
+          expected = {
+              f"test_http_acceptance_crash_same_db_recovery[{boundary}-{recovery}]"
+              for boundary, recovery in (
+                  ("intent", "unique"), ("claim", "missing"),
+                  ("acceptance", "unique"), ("acceptance", "missing"),
+                  ("acceptance", "ambiguous"), ("receipt", "unique"),
+              )
+          }
+          assert len(cases) == 6
+          assert {case.get("name") for case in cases} == expected
+          assert all(case.get("classname") == "unit_tests.daemon.test_submission_http_crash_recovery" for case in cases)
+          assert not any(list(root.iter(kind)) for kind in ("skipped", "failure", "error"))
+          PY
+      - name: Test F02 journal-byte runner and strict evidence contracts
+        run: node --test tools/run_journal_fault_browser_acceptance.test.mjs tools/verify_journal_fault_browser_report.test.mjs
+      - name: Test F06 storage-fault fixture and report contracts
+        run: |
+          node --test tools/verify_storage_fault_browser_report.test.mjs
+          python -m pytest unit_tests/daemon/test_storage_fault_browser_fixture.py -q
+      - name: Run F06 read-only storage-fault browser acceptance
+        if: always()
+        run: node tools/run_storage_fault_browser_acceptance.mjs --report="$TMPDIR/storage-fault-query-only.json" query_only
+      - name: Require F06 read-only storage-fault evidence
+        if: always()
+        run: node tools/verify_storage_fault_browser_report.mjs "$TMPDIR/storage-fault-query-only.json" query_only
+      - name: Run F06 quota storage-fault browser acceptance
+        if: always()
+        run: node tools/run_storage_fault_browser_acceptance.mjs --report="$TMPDIR/storage-fault-page-quota.json" page_quota
+      - name: Require F06 quota storage-fault evidence
+        if: always()
+        run: node tools/verify_storage_fault_browser_report.mjs "$TMPDIR/storage-fault-page-quota.json" page_quota
+      - name: Test F13 hostile-origin fixture boundaries
+        run: python -m pytest unit_tests/test_hostile_origin_browser_fixture.py -q
+      - name: Test F13 hostile-origin runner and strict evidence contracts
+        run: node --test tools/run_hostile_origin_browser_acceptance.test.mjs tools/verify_hostile_origin_browser_report.test.mjs
+      - name: Test retained active-run and draft evidence contracts
+        run: node --test tools/browser_retained_active_draft.test.mjs tools/verify_retained_active_draft_report.test.mjs
+      - name: Test same-daemon reconnect evidence and committed-prefix fixture
+        run: |
+          node --test tools/verify_reconnect_browser_report.test.mjs
+          python -m pytest unit_tests/test_reconnect_browser_fixture.py -q
+      - name: Test genuine supersession fixture and evidence contracts
+        run: |
+          node --test tools/verify_supersession_browser_report.test.mjs
+          python -m pytest unit_tests/test_supersession_browser_fixture.py -q
+      - name: Test owned abrupt-restart fixture and fail-closed evidence
+        run: |
+          node --test tools/verify_daemon_restart_browser_report.test.mjs
+          python -m pytest unit_tests/test_daemon_restart_browser_fixture.py -q
+      - name: Test after-commit cancellation fault and evidence contracts
+        run: |
+          node --test tools/verify_cancellation_lost_ack_browser_report.test.mjs
+          python -m pytest unit_tests/test_cancellation_ack_fault.py -q
+      - name: Test numerical publication failures and pending cancellation
+        run: >-
+          python -m pytest unit_tests/test_runtime_operations.py
+          unit_tests/test_hosted_operation_result_quality.py
+          unit_tests/daemon/test_pending_cancellation_http.py
+          --junitxml="$TMPDIR/numerical-runtime.xml" -q
+      - name: Test mounted numerical failure evidence contracts
+        run: node --test tools/verify_numerical_failure_browser_report.test.mjs
+      - name: Test CV mandatory acceptance workflow contracts
+        run: python -m pytest --noconftest unit_tests/test_cv_workflow.py
+      - name: Test optimizer-update OneCycle schedules and checkpoint resume
+        run: python -m pytest unit_tests/test_training_onecycle_accumulation.py --junitxml="$TMPDIR/onecycle-updates.xml"
+      - name: Require CPU and native DDP OneCycle acceptance with zero skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse(Path(os.environ["TMPDIR"]) / "onecycle-updates.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert len(cases) == 7
+          assert all(case.get("classname") == "unit_tests.test_training_onecycle_accumulation" for case in cases)
+          assert len({case.get("name") for case in cases}) == 7
+          assert not any(list(root.iter(kind)) for kind in ("skipped", "failure", "error"))
+          PY
+      - name: Test real CPU cross-validation options, constraints, precision and determinism
+        run: python -m pytest unit_tests/test_cv_option_fidelity.py unit_tests/test_cv_training_semantics.py unit_tests/test_cv_physical_components.py unit_tests/test_cv_deterministic.py unit_tests/test_cv_workers.py unit_tests/test_data_cv.py --junitxml="$TMPDIR/cv-option-fidelity.xml"
+      - name: Require all CV semantics cases with zero skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from collections import Counter
+          from pathlib import Path
+          root = ET.parse(Path(os.environ["TMPDIR"]) / "cv-option-fidelity.xml").getroot()
+          cases = list(root.iter("testcase"))
+          assert len(cases) == 98
+          families = ["unit_tests.test_data_cv" if case.get("classname", "").startswith("unit_tests.test_data_cv.") else case.get("classname") for case in cases]
+          assert all(family in {"unit_tests.test_cv_option_fidelity", "unit_tests.test_cv_training_semantics", "unit_tests.test_cv_physical_components", "unit_tests.test_cv_deterministic", "unit_tests.test_cv_workers", "unit_tests.test_data_cv"} for family in families)
+          assert len({(case.get("classname"), case.get("name")) for case in cases}) == 98
+          assert Counter(families) == Counter({"unit_tests.test_cv_option_fidelity": 21, "unit_tests.test_cv_training_semantics": 20, "unit_tests.test_cv_physical_components": 11, "unit_tests.test_cv_deterministic": 6, "unit_tests.test_cv_workers": 7, "unit_tests.test_data_cv": 33})
+          assert not any(list(root.iter(kind)) for kind in ("skipped", "failure", "error"))
+          PY
+      - name: Test epoch metric evidence contracts
+        run: |
+          node --test tools/verify_epoch_metric_browser_report.test.mjs
+          python -m pytest --noconftest unit_tests/test_epoch_browser_workflow.py
+      - name: Require three real hosted numerical failures with zero skips
+        if: always()
+        run: |
+          python -c 'import os, xml.etree.ElementTree as ET; from pathlib import Path; root = ET.parse(Path(os.environ["TMPDIR"]) / "numerical-runtime.xml").getroot(); cases = list(root.iter("testcase")); assert cases and not any(list(root.iter(kind)) for kind in ("failure", "error", "skipped")); expected = {"test_public_http_evaluation_failure_preserves_training_publication[nan]", "test_public_http_evaluation_failure_preserves_training_publication[inf]", "test_public_http_evaluation_failure_preserves_training_publication[empty]"}; actual = [case.attrib["name"] for case in cases if case.attrib.get("classname", "").endswith("test_hosted_operation_result_quality")]; assert len(actual) == len(expected) and set(actual) == expected'
+      - name: Test authenticated stream and auth fixture boundaries
+        run: python -m pytest unit_tests/daemon/test_event_stream_live_boundaries.py unit_tests/daemon/test_stream_asgi_boundary.py unit_tests/daemon/test_browser_stream_fixture.py unit_tests/test_browser_auth_skew_fixture.py unit_tests/test_retained_concurrency_fixture.py -q
+      - name: Training editor readiness contracts
+        run: node --test tools/browser_training_editor.test.mjs
+      - name: Retained-generation producer and evidence contracts
+        run: node --test tools/build_retained_browser_fixtures.test.mjs tools/verify_retained_browser_report.test.mjs tools/run_retained_browser_acceptance.test.mjs
+      - name: Test native retained-concurrency evidence contracts
+        run: node --test tools/verify_retained_concurrency_report.test.mjs
+      - name: Test native rollback and sparse-stream evidence contracts
+        run: node --test tools/verify_retained_rollback_browser_report.test.mjs tools/verify_stream_sparse_browser_report.test.mjs
+      - name: Test sparse-stream real fixture boundaries
+        run: python -m pytest unit_tests/daemon/test_stream_sparse_browser_fixture.py -q
+      - name: Test malformed-control refusal evidence contracts
+        run: node --test tools/verify_stream_malformed_browser_report.test.mjs
+      - name: Test malformed-control real fixture boundaries
+        run: python -m pytest unit_tests/daemon/test_stream_malformed_browser_fixture.py -q
+      # These model/evidence tests are not native browser admission or rollback
+      # proof. The actual Chromium concurrency gate remains mandatory below.
+      - name: Test synthetic concurrency and rollback contracts (not native proof)
+        run: node --test tools/verify_retained_concurrency_stage.test.mjs tools/verify_retained_rollback_report.test.mjs
+      # This unreleased app has no legacy-worker migration gate. Normal
+      # retained-build updates, rollback and multi-tab safety remain required.
+      - name: Generate four genuine isolated workstation builds
+        run: node tools/build_retained_browser_fixtures.mjs --output "$TMPDIR/retained-builds"
+      - name: Verify native retained generations and refused fourth update
+        run: node tools/run_retained_browser_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-browser.json"
+      - name: Require complete retained-generation evidence and cleanup
+        if: always()
+        run: node tools/verify_retained_browser_report.mjs "$TMPDIR/retained-browser.json" "$TMPDIR/retained-builds/summary.json"
+      - name: Run retained native browser rollback acceptance
+        if: always()
+        run: node tools/run_retained_rollback_browser_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-rollback-browser.json"
+      - name: Require native rollback evidence and cleanup
+        if: always()
+        run: node tools/verify_retained_rollback_browser_report.mjs "$TMPDIR/retained-rollback-browser.json" "$TMPDIR/retained-builds/summary.json"
+      # This additive two-tab case reuses the four isolated builds without
+      # changing the original eleven retained-generation stages.
+      - name: Run retained active-run and draft browser acceptance
+        if: always()
+        run: node tools/run_retained_browser_acceptance.mjs --active-draft --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-active-draft.json"
+      - name: Require retained active-run, draft and cleanup evidence
+        if: always()
+        run: node tools/verify_retained_active_draft_report.mjs "$TMPDIR/retained-active-draft.json" "$TMPDIR/retained-builds/summary.json"
+      # This is the checked-in runner, not an HTTP mock or a static-client test.
+      # No --case selection: all twelve real Chromium/CPU scenarios are mandatory.
+      - name: Run all twelve mandatory browser acceptance cases
+        run: node tools/run_web_acceptance.mjs
+      # These are additive real-browser gates. Their disposable bearer tokens,
+      # profiles, fixture roots and logs remain under TMPDIR and are never
+      # uploaded; only the explicit JSON reports below are retained.
+      # Native browser bootstrap/fill commands expose these test-only tokens
+      # briefly to local process arguments. Never supply a user/production token.
+      - name: Run standalone adoption browser acceptance
+        if: always()
+        run: node tools/run_adoption_browser_acceptance.mjs "$TMPDIR/adoption-browser"
+      - name: Verify standalone adoption evidence
+        if: always()
+        run: node tools/verify_adoption_browser_report.mjs "$TMPDIR/adoption-browser"
+      # These current-package gates fail closed; adding them does not certify
+      # hosted CI, remote sites or the already separate default twelve cases.
+      - name: Run supervised preview-fault browser refusal acceptance
+        if: always()
+        run: node tools/run_preview_fault_browser_acceptance.mjs "$TMPDIR/preview-fault-browser"
+      - name: Require preview-fault refusal and cleanup evidence
+        if: always()
+        run: node tools/verify_preview_fault_browser_report.mjs "$TMPDIR/preview-fault-browser/preview-fault.json"
+      - name: Run cold-process offline shell and authority acceptance
+        if: always()
+        run: WAVEDL_PYTHON="$(python -c 'import sys; print(sys.executable)')" node tools/run_cold_offline_browser_acceptance.mjs "$TMPDIR/cold-offline-browser.json"
+      - name: Require cold offline shell and authority evidence
+        if: always()
+        run: node tools/verify_cold_offline_browser_report.mjs "$TMPDIR/cold-offline-browser.json"
+      - name: Run pending cancellation browser acceptance
+        if: always()
+        run: node tools/run_pending_cancel_browser_acceptance.mjs --report="$TMPDIR/pending-cancel-browser.json"
+      - name: Require pending cancellation and lost-ACK evidence
+        if: always()
+        run: node tools/verify_pending_cancel_browser_report.mjs "$TMPDIR/pending-cancel-browser.json"
+      - name: Run catalogue and header refusal and recovery acceptance
+        if: always()
+        run: node tools/run_catalogue_fault_browser_acceptance.mjs "$TMPDIR/catalogue-fault-browser"
+      - name: Require catalogue and header refusal and recovery evidence
+        if: always()
+        run: node tools/verify_catalogue_fault_browser_report.mjs "$TMPDIR/catalogue-fault-browser/catalogue-fault.json"
+      - name: Run real supervised HEADER deadline and public retry acceptance
+        if: always()
+        run: |
+          mkdir -m 700 "$TMPDIR/header-deadline-browser"
+          TMPDIR="$TMPDIR/header-deadline-browser" node tools/run_header_deadline_browser_acceptance.mjs
+      - name: Require exact HEADER deadline, genuine retry and cleanup evidence
+        if: always()
+        run: |
+          node --input-type=module - "$TMPDIR/header-deadline-browser" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdir, lstat } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { verifyHeaderDeadlineFile } from './tools/verify_header_deadline_browser_report.mjs';
+          const root = process.argv[2], entries = await readdir(root);
+          assert.equal(entries.length, 1, 'Exactly one owned HEADER workspace required');
+          assert(/^wavedl-header-deadline-[A-Za-z0-9]+$/.test(entries[0]));
+          const workspace = join(root, entries[0]), info = await lstat(workspace);
+          assert(info.isDirectory() && !info.isSymbolicLink());
+          assert.deepEqual(await readdir(workspace), ['header-deadline.json']);
+          const record = await verifyHeaderDeadlineFile(join(workspace, 'header-deadline.json'));
+          assert.equal(record.name, 'header-deadline');
+          JS
+      - name: Run 100k-history numerical browser replay acceptance
+        if: always()
+        run: node tools/run_history_browser_acceptance.mjs --report="$TMPDIR/history-browser.json"
+      - name: Run real preview resource-budget refusal and recovery acceptance
+        if: always()
+        run: |
+          mkdir -m 700 "$TMPDIR/preview-budget-browser"
+          TMPDIR="$TMPDIR/preview-budget-browser" node tools/run_preview_budget_browser_acceptance.mjs
+      - name: Require exact preview budget, genuine recovery and cleanup evidence
+        if: always()
+        run: |
+          node --input-type=module - "$TMPDIR/preview-budget-browser" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdir, lstat } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { verifyPreviewBudgetFile } from './tools/verify_preview_budget_browser_report.mjs';
+          const root = process.argv[2], entries = await readdir(root);
+          assert.equal(entries.length, 1, 'Exactly one owned preview-budget workspace required');
+          assert(/^wavedl-preview-budget-[A-Za-z0-9]+$/.test(entries[0]));
+          const workspace = join(root, entries[0]), info = await lstat(workspace);
+          assert(info.isDirectory() && !info.isSymbolicLink());
+          assert.deepEqual(await readdir(workspace), ['preview-budget.json']);
+          const record = await verifyPreviewBudgetFile(join(workspace, 'preview-budget.json'));
+          assert.equal(record.name, 'dataset-preview-budget');
+          JS
+      - name: Require 100k-history numerical replay and cleanup evidence
+        if: always()
+        run: node tools/verify_history_browser_report.mjs "$TMPDIR/history-browser.json"
+      - name: Run same-daemon detach and fresh-replay browser acceptance
+        if: always()
+        run: node tools/run_reconnect_browser_acceptance.mjs "$TMPDIR/reconnect-browser"
+      - name: Require same-daemon fresh replay and cleanup evidence
+        if: always()
+        run: node tools/verify_reconnect_browser_report.mjs "$TMPDIR/reconnect-browser/reconnect.json"
+      - name: Run owned daemon abrupt-restart browser acceptance
+        if: always()
+        run: node tools/run_daemon_restart_browser_acceptance.mjs "$TMPDIR/daemon-restart-browser"
+      - name: Require durable restart identity and owned cleanup evidence
+        if: always()
+        run: node tools/verify_daemon_restart_browser_report.mjs "$TMPDIR/daemon-restart-browser/daemon-restart.json"
+      # One fresh owned workspace only; stale retries cannot hide a failed run.
+      # The original twelve-case aggregate remains a separate mandatory gate.
+      - name: Run real cancellation lost-acknowledgement browser acceptance
+        if: always()
+        run: node tools/run_cancellation_lost_ack_browser_acceptance.mjs
+      - name: Require unique current cancellation evidence and cleanup
+        if: always()
+        run: |
+          node --input-type=module -e '
+          import assert from "node:assert/strict";
+          import { readdir } from "node:fs/promises";
+          import { join } from "node:path";
+          import { verifyCancellationLostAckFile } from "./tools/verify_cancellation_lost_ack_browser_report.mjs";
+          const entries = (await readdir(process.env.TMPDIR, { withFileTypes: true })).filter(entry => entry.name.startsWith("wavedl-cancel-ack-"));
+          assert.equal(entries.length, 1, "Exactly one fresh cancellation workspace required");
+          assert(entries[0].isDirectory() && !entries[0].isSymbolicLink());
+          await verifyCancellationLostAckFile(join(process.env.TMPDIR, entries[0].name, "cancellation-lost-ack.json"));
+          '
+      - name: Run mounted numerical failure browser acceptance
+        if: always()
+        run: |
+          WAVEDL_PYTHON="$(python -c 'import sys; print(sys.executable)')" node tools/run_numerical_failure_browser_acceptance.mjs "$TMPDIR/numerical-failure-browser"
+      - name: Require mounted numerical failure evidence and cleanup
+        if: always()
+        run: node tools/verify_numerical_failure_browser_report.mjs "$TMPDIR/numerical-failure-browser/numerical-failure.json"
+      - name: Run real same-epoch best loss and patience browser acceptance
+        if: always()
+        run: |
+          WAVEDL_PYTHON="$(python -c 'import sys; print(sys.executable)')" node tools/run_epoch_metric_browser_acceptance.mjs --report="$TMPDIR/epoch-metrics.json"
+      - name: Require current epoch metrics, publication, screenshots and cleanup
+        if: always()
+        run: node tools/verify_epoch_metric_browser_report.mjs "$TMPDIR/epoch-metrics.json"
+      - name: Run genuine staged supersession browser acceptance
+        if: always()
+        run: node tools/run_supersession_browser_acceptance.mjs --report="$TMPDIR/supersession-browser.json"
+      - name: Require genuine supersession, projection, canvas and cleanup evidence
+        if: always()
+        run: node tools/verify_supersession_browser_report.mjs "$TMPDIR/supersession-browser.json"
+      - name: Run standalone adoption fault refusal acceptance
+        if: always()
+        run: node tools/run_adoption_negative_browser_acceptance.mjs "$TMPDIR/adoption-negative-browser"
+      - name: Require unchanged source and durable state after adoption faults
+        if: always()
+        run: node tools/verify_adoption_negative_browser_report.mjs "$TMPDIR/adoption-negative-browser/standalone-adoption-negative.json"
+      - name: Run mapped automatic plotting through the public browser
+        if: always()
+        run: node tools/run_mapped_autoplot_browser_acceptance.mjs "$TMPDIR/mapped-autoplot-browser"
+      - name: Require pinned mapped source, displayed pixels and cleanup
+        if: always()
+        run: node tools/verify_mapped_autoplot_browser_report.mjs "$TMPDIR/mapped-autoplot-browser/mapped-autoplot.json"
+      - name: Run failed-state automatic-plot refusal acceptance
+        if: always()
+        run: node tools/run_mapped_autoplot_browser_acceptance.mjs "$TMPDIR/mapped-autoplot-failed-browser" failed
+      - name: Require failed-state automatic-plot refusal and cleanup
+        if: always()
+        run: node tools/verify_mapped_autoplot_negative_report.mjs "$TMPDIR/mapped-autoplot-failed-browser/mapped-autoplot.json" failed
+      - name: Run uncertain-state automatic-plot refusal acceptance
+        if: always()
+        run: node tools/run_mapped_autoplot_browser_acceptance.mjs "$TMPDIR/mapped-autoplot-uncertain-browser" uncertain
+      - name: Require uncertain-state automatic-plot refusal and cleanup
+        if: always()
+        run: node tools/verify_mapped_autoplot_negative_report.mjs "$TMPDIR/mapped-autoplot-uncertain-browser/mapped-autoplot.json" uncertain
+      - name: Run standalone historical-attempt rollover browser acceptance
+        if: always()
+        run: node tools/run_adoption_rollover_browser_acceptance.mjs "$TMPDIR/adoption-rollover"
+      - name: Require current-package historical-attempt rollover evidence
+        if: always()
+        run: node tools/verify_adoption_rollover_browser_report.mjs "$TMPDIR/adoption-rollover"
+      - name: Run malformed and oversized preference recovery acceptance
+        if: always()
+        run: node tools/run_preferences_browser_acceptance.mjs "$TMPDIR/preferences-browser"
+      - name: Require current-package preference recovery and cleanup evidence
+        if: always()
+        run: node tools/verify_preferences_browser_report.mjs "$TMPDIR/preferences-browser"
+      - name: Run submitted-plan authoring protection acceptance
+        if: always()
+        run: node tools/run_submitted_plan_browser_acceptance.mjs "$TMPDIR/submitted-plan-browser"
+      - name: Require submitted-plan protection and cleanup evidence
+        if: always()
+        run: node tools/verify_submitted_plan_browser_report.mjs "$TMPDIR/submitted-plan-browser"
+      - name: Run result-operation browser acceptance
+        if: always()
+        run: node tools/run_result_operations_browser_acceptance.mjs "$TMPDIR/result-operations-browser"
+      - name: Require result-operation identity and publication evidence
+        if: always()
+        run: node tools/verify_result_operations_browser_report.mjs "$TMPDIR/result-operations-browser/result-operations.json"
+      - name: Run supported ONNX export browser acceptance
+        if: always()
+        run: node tools/run_onnx_export_browser_acceptance.mjs "$TMPDIR/onnx-export-browser"
+      - name: Require actual opset and independently runnable publication evidence
+        if: always()
+        run: node tools/verify_onnx_export_browser_report.mjs "$TMPDIR/onnx-export-browser/onnx-export.json"
+      - name: Run actual inference cancellation browser acceptance
+        if: always()
+        run: node tools/run_inference_cancellation_browser_acceptance.mjs "$TMPDIR/inference-cancellation-browser"
+      - name: Require cancelled runtime and owned process cleanup evidence
+        if: always()
+        run: node tools/verify_inference_cancellation_browser_report.mjs "$TMPDIR/inference-cancellation-browser/inference-cancellation.json"
+      - name: Run real cross-validation and explicit-fold evaluation acceptance
+        if: always()
+        run: node tools/run_cv_parity_browser_acceptance.mjs "$TMPDIR/cv-parity-browser"
+      - name: Require classified-fold source, prediction publication and cleanup
+        if: always()
+        run: node tools/verify_cv_parity_browser_report.mjs "$TMPDIR/cv-parity-browser/cv-parity.json"
+      - name: Run guided authoring progression browser acceptance
+        if: always()
+        run: node tools/run_wizard_progression_browser_acceptance.mjs "$TMPDIR/wizard-progression-browser"
+      - name: Require guided progression and single acknowledged execution
+        if: always()
+        run: node tools/verify_wizard_progression_browser_report.mjs "$TMPDIR/wizard-progression-browser"
+      - name: Run full training field browser authoring acceptance
+        if: always()
+        run: node tools/run_training_fields_browser_acceptance.mjs "$TMPDIR/training-fields-browser"
+      - name: Require exact browser authoring, exports and persisted preview
+        if: always()
+        run: node tools/verify_training_fields_browser_report.mjs "$TMPDIR/training-fields-browser/training-fields-full.json"
+      - name: Run visible invalid authoring and real runtime refusal acceptance
+        if: always()
+        run: node tools/run_training_validation_browser_acceptance.mjs "$TMPDIR/training-validation-browser"
+      - name: Require invalid field corrections, refusal boundaries and cleanup
+        if: always()
+        run: node tools/verify_training_validation_browser_report.mjs "$TMPDIR/training-validation-browser/training-validation.json"
+      - name: Run imported preset browser authority acceptance
+        if: always()
+        run: node tools/run_preset_import_browser_acceptance.mjs "$TMPDIR/preset-import-browser"
+      - name: Require imported preset refusal and immutable-plan evidence
+        if: always()
+        run: node tools/verify_preset_import_browser_report.mjs "$TMPDIR/preset-import-browser/preset-import.json"
+      - name: Run oversized artifact publication browser refusal acceptance
+        if: always()
+        run: node tools/run_artifact_publication_browser_acceptance.mjs "$TMPDIR/artifact-publication"
+      - name: Require current-package artifact refusal and cleanup evidence
+        if: always()
+        run: node tools/verify_artifact_publication_browser_report.mjs "$TMPDIR/artifact-publication"
+      - name: Run same-daemon auth and skew browser acceptance
+        if: always()
+        run: node tools/run_auth_skew_browser_acceptance.mjs --report="$TMPDIR/auth-skew.json"
+      - name: Verify same-daemon auth and skew evidence
+        if: always()
+        run: node tools/verify_auth_skew_browser_report.mjs "$TMPDIR/auth-skew.json"
+      - name: Run authenticated browser stream boundary acceptance
+        if: always()
+        run: node tools/run_stream_browser_acceptance.mjs --report="$TMPDIR/stream-browser.json"
+      - name: Verify authenticated browser stream boundary evidence
+        if: always()
+        run: node tools/verify_stream_browser_report.mjs "$TMPDIR/stream-browser.json"
+      - name: Run sparse and truncated browser stream acceptance
+        if: always()
+        run: node tools/run_stream_sparse_browser_acceptance.mjs --report="$TMPDIR/stream-sparse-browser.json"
+      - name: Require sparse and truncated stream evidence and cleanup
+        if: always()
+        run: node tools/verify_stream_sparse_browser_report.mjs "$TMPDIR/stream-sparse-browser.json"
+      - name: Run reducer-derived dashboard state acceptance
+        if: always()
+        run: node tools/run_dashboard_state_browser_acceptance.mjs --report="$TMPDIR/dashboard-state-browser.json"
+      - name: Verify reducer-derived dashboard state evidence
+        if: always()
+        run: node tools/verify_dashboard_state_browser_report.mjs "$TMPDIR/dashboard-state-browser.json"
+      # Refusal/retirement and bounded quiescence only: neither an attempt
+      # rollover nor the private post-retirement cursor is claimed.
+      - name: Run malformed JSON stream-control browser refusal acceptance
+        if: always()
+        run: node tools/run_stream_malformed_browser_acceptance.mjs --report="$TMPDIR/stream-malformed-browser.json"
+      - name: Require current-package malformed-control refusal and cleanup
+        if: always()
+        run: node tools/verify_stream_malformed_browser_report.mjs "$TMPDIR/stream-malformed-browser.json"
+      - name: Run invalid UTF-8 stream-control browser refusal acceptance
+        if: always()
+        run: node tools/run_stream_malformed_browser_acceptance.mjs --invalid-utf8 --report="$TMPDIR/stream-invalid-utf8-browser.json"
+      - name: Require current-package invalid UTF-8 refusal and cleanup
+        if: always()
+        run: node tools/verify_stream_malformed_browser_report.mjs "$TMPDIR/stream-invalid-utf8-browser.json"
+      # Additive F02 byte/framing faults; existing stream-control gates remain.
+      - name: Run real F02 journal-byte fault browser acceptance
+        if: always()
+        run: node tools/run_journal_fault_browser_acceptance.mjs --report="$TMPDIR/journal-fault-browser.json"
+      - name: Require current-package journal-byte evidence and owned cleanup
+        if: always()
+        run: node tools/verify_journal_fault_browser_report.mjs "$TMPDIR/journal-fault-browser.json"
+      - name: Run real F13 hostile-origin browser acceptance
+        if: always()
+        run: node tools/run_hostile_origin_browser_acceptance.mjs --report="$TMPDIR/hostile-origin-browser.json"
+      - name: Require current-package hostile-origin evidence and owned cleanup
+        if: always()
+        run: node tools/verify_hostile_origin_browser_report.mjs "$TMPDIR/hostile-origin-browser.json"
+      # F05 genuine broker capacity overflow: real two-attempt journals and
+      # bounded broker overflow evidence, not a synthetic disconnect control.
+      - name: Check F05 genuine broker-overflow Python fixture contract
+        run: python -m pytest unit_tests/test_genuine_broker_overflow_browser_fixture.py -q
+      - name: Check F05 genuine broker-overflow Node contracts
+        run: node --test tools/run_genuine_broker_overflow_browser_acceptance.test.mjs tools/verify_genuine_broker_overflow_browser_report.test.mjs
+      - name: Run real F05 genuine broker-overflow browser acceptance
+        if: always()
+        run: node tools/run_genuine_broker_overflow_browser_acceptance.mjs --report="$TMPDIR/genuine-broker-overflow-browser.json"
+      - name: Require current-package genuine broker-overflow evidence and owned cleanup
+        if: always()
+        run: node tools/verify_genuine_broker_overflow_browser_report.mjs "$TMPDIR/genuine-broker-overflow-browser.json"
+      - name: Run retained native concurrency acceptance
+        if: always()
+        run: node tools/run_retained_concurrency_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-concurrency.json"
+      - name: Verify retained native concurrency evidence
+        if: always()
+        run: node tools/verify_retained_concurrency_report.mjs "$TMPDIR/retained-concurrency.json" "$TMPDIR/retained-builds/summary.json"
+      - name: Run real partial-best fallback browser acceptance
+        if: always()
+        run: |
+          mkdir -m 700 "$TMPDIR/partial-best-fallback"
+          TMPDIR="$TMPDIR/partial-best-fallback" node tools/run_web_acceptance.mjs --case=partial-best-fallback
+      - name: Require exact partial-best fallback source, PNG and cleanup evidence
+        if: always()
+        run: |
+          node --input-type=module - "$TMPDIR/partial-best-fallback" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdir, lstat } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { verifyPartialBestReport } from './tools/verify_partial_best_browser_report.mjs';
+          const root = process.argv[2], entries = await readdir(root);
+          assert.equal(entries.length, 1, 'Exactly one owned fallback workspace required');
+          assert(/^wavedl-browser-acceptance-[A-Za-z0-9]+$/.test(entries[0]));
+          const workspace = join(root, entries[0]), info = await lstat(workspace);
+          assert(info.isDirectory() && !info.isSymbolicLink());
+          const record = await verifyPartialBestReport(join(workspace, 'summary.json'));
+          assert.equal(record.name, 'partial-best-fallback');
+          JS
+      - name: Run real partial-best refusal browser acceptance
+        if: always()
+        run: |
+          mkdir -m 700 "$TMPDIR/partial-best-refusal"
+          TMPDIR="$TMPDIR/partial-best-refusal" node tools/run_web_acceptance.mjs --case=partial-best-refusal
+      - name: Require exact partial-best refusal, durable counts and cleanup evidence
+        if: always()
+        run: |
+          node --input-type=module - "$TMPDIR/partial-best-refusal" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdir, lstat } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { verifyPartialBestReport } from './tools/verify_partial_best_browser_report.mjs';
+          const root = process.argv[2], entries = await readdir(root);
+          assert.equal(entries.length, 1, 'Exactly one owned refusal workspace required');
+          assert(/^wavedl-browser-acceptance-[A-Za-z0-9]+$/.test(entries[0]));
+          const workspace = join(root, entries[0]), info = await lstat(workspace);
+          assert(info.isDirectory() && !info.isSymbolicLink());
+          const record = await verifyPartialBestReport(join(workspace, 'summary.json'));
+          assert.equal(record.name, 'partial-best-refusal');
+          JS
+      - name: Run real automatic-plot metadata checksum refusal browser acceptance
+        if: always()
+        run: |
+          mkdir -m 700 "$TMPDIR/autoplot-metadata-integrity"
+          TMPDIR="$TMPDIR/autoplot-metadata-integrity" node tools/run_web_acceptance.mjs --case=autoplot-metadata-integrity
+      - name: Require exact metadata checksum refusal, no fallback and cleanup evidence
+        if: always()
+        run: |
+          node --input-type=module - "$TMPDIR/autoplot-metadata-integrity" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdir, lstat } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { verifyAutoplotMetadataIntegrityReport } from './tools/verify_autoplot_metadata_integrity_report.mjs';
+          const root = process.argv[2], entries = await readdir(root);
+          assert.equal(entries.length, 1, 'Exactly one owned metadata-integrity workspace required');
+          assert(/^wavedl-browser-acceptance-[A-Za-z0-9]+$/.test(entries[0]));
+          const workspace = join(root, entries[0]), info = await lstat(workspace);
+          assert(info.isDirectory() && !info.isSymbolicLink());
+          const record = await verifyAutoplotMetadataIntegrityReport(join(workspace, 'summary.json'));
+          assert.equal(record.name, 'autoplot-metadata-integrity');
+          JS
+      # A genuine factory build identity changes; no new binary or cache-hit claim.
+      - name: Run cached controller and controlled build replacement acceptance
+        if: always()
+        run: |
+          mkdir -m 700 "$TMPDIR/cached-build-replacement-browser"
+          TMPDIR="$TMPDIR/cached-build-replacement-browser" node tools/run_web_acceptance.mjs --case=cached-build-replacement
+      - name: Require exact cached build replacement report and owned cleanup
+        if: always()
+        run: |
+          node --input-type=module - "$TMPDIR/cached-build-replacement-browser" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdir, lstat } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { verifyCachedBuildReplacementReport } from './tools/verify_cached_build_replacement_report.mjs';
+          const root = process.argv[2], entries = await readdir(root);
+          assert.equal(entries.length, 1, 'Exactly one owned cached-build workspace required');
+          assert(/^wavedl-browser-acceptance-[A-Za-z0-9]+$/.test(entries[0]));
+          const workspace = join(root, entries[0]), info = await lstat(workspace);
+          assert(info.isDirectory() && !info.isSymbolicLink());
+          const record = await verifyCachedBuildReplacementReport(join(workspace, 'summary.json'));
+          assert.equal(record.name, 'cached-build-replacement');
+          JS
+      - name: Run instrumented native Fetch SSE split acceptance
+        if: always()
+        run: |
+          mkdir -m 700 "$TMPDIR/native-sse-browser"
+          TMPDIR="$TMPDIR/native-sse-browser" node tools/run_native_sse_split_browser_acceptance.mjs --report="$TMPDIR/native-sse-browser/native-sse.json"
+      - name: Require exact native SSE report, current assets and owned cleanup
+        if: always()
+        run: |
+          node --input-type=module - "$TMPDIR/native-sse-browser" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdir, lstat } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { verifyNativeSseSplitFile } from './tools/verify_native_sse_split_report.mjs';
+          const root = process.argv[2], info = await lstat(root);
+          assert(info.isDirectory() && !info.isSymbolicLink());
+          assert.deepEqual(await readdir(root), ['native-sse.json']);
+          const report = await verifyNativeSseSplitFile(join(root, 'native-sse.json'));
+          assert.equal(report.scope, 'instrumented-native-sse-split');
+          JS
+      - name: Require complete current-build evidence and verified cleanup
+        if: always()
+        run: node tools/verify_browser_ci_report.mjs "$TMPDIR"
+      - name: Upload nonsecret acceptance reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-acceptance-ubuntu-py3.11-node24
+          # Never upload fixture roots, credential files, downloads, HAR, or logs.
+          path: |
+            ${{ runner.temp }}/wavedl-browser-ci/retained-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/retained-active-draft.json
+            ${{ runner.temp }}/wavedl-browser-ci/retained-rollback-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/retained-builds/summary.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/summary.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/baseline.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/offline.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/detach.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/reload.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/cancel.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/lost-ack.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/artifact-tamper.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/port-reuse.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/live-port-reuse.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/authoring-parity.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/download-names.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/dataset-parity.json
+            ${{ runner.temp }}/wavedl-browser-ci/partial-best-fallback/wavedl-browser-acceptance-*/summary.json
+            ${{ runner.temp }}/wavedl-browser-ci/partial-best-fallback/wavedl-browser-acceptance-*/partial-best-fallback.json
+            ${{ runner.temp }}/wavedl-browser-ci/partial-best-refusal/wavedl-browser-acceptance-*/summary.json
+            ${{ runner.temp }}/wavedl-browser-ci/partial-best-refusal/wavedl-browser-acceptance-*/partial-best-refusal.json
+            ${{ runner.temp }}/wavedl-browser-ci/autoplot-metadata-integrity/wavedl-browser-acceptance-*/summary.json
+            ${{ runner.temp }}/wavedl-browser-ci/autoplot-metadata-integrity/wavedl-browser-acceptance-*/autoplot-metadata-integrity.json
+            ${{ runner.temp }}/wavedl-browser-ci/adoption-browser/standalone-adoption.json
+            ${{ runner.temp }}/wavedl-browser-ci/preview-fault-browser/preview-fault.json
+            ${{ runner.temp }}/wavedl-browser-ci/cold-offline-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/pending-cancel-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/catalogue-fault-browser/catalogue-fault.json
+            ${{ runner.temp }}/wavedl-browser-ci/header-deadline-browser/wavedl-header-deadline-*/header-deadline.json
+            ${{ runner.temp }}/wavedl-browser-ci/preview-budget-browser/wavedl-preview-budget-*/preview-budget.json
+            ${{ runner.temp }}/wavedl-browser-ci/native-sse-browser/native-sse.json
+            ${{ runner.temp }}/wavedl-browser-ci/cached-build-replacement-browser/wavedl-browser-acceptance-*/summary.json
+            ${{ runner.temp }}/wavedl-browser-ci/cached-build-replacement-browser/wavedl-browser-acceptance-*/cached-build-replacement.json
+            ${{ runner.temp }}/wavedl-browser-ci/history-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/reconnect-browser/reconnect.json
+            ${{ runner.temp }}/wavedl-browser-ci/daemon-restart-browser/daemon-restart.json
+            ${{ runner.temp }}/wavedl-browser-ci/wavedl-cancel-ack-*/cancellation-lost-ack.json
+            ${{ runner.temp }}/wavedl-browser-ci/numerical-runtime.xml
+            ${{ runner.temp }}/wavedl-browser-ci/cv-option-fidelity.xml
+            ${{ runner.temp }}/wavedl-browser-ci/onecycle-updates.xml
+            ${{ runner.temp }}/wavedl-browser-ci/numerical-failure-browser/numerical-failure.json
+            ${{ runner.temp }}/wavedl-browser-ci/epoch-metrics.json
+            ${{ runner.temp }}/wavedl-browser-ci/epoch-metrics.json.first.png
+            ${{ runner.temp }}/wavedl-browser-ci/epoch-metrics.json.final.png
+            ${{ runner.temp }}/wavedl-browser-ci/supersession-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/adoption-negative-browser/standalone-adoption-negative.json
+            ${{ runner.temp }}/wavedl-browser-ci/mapped-autoplot-browser/mapped-autoplot.json
+            ${{ runner.temp }}/wavedl-browser-ci/mapped-autoplot-browser/mapped-raster.png
+            ${{ runner.temp }}/wavedl-browser-ci/mapped-autoplot-failed-browser/mapped-autoplot.json
+            ${{ runner.temp }}/wavedl-browser-ci/mapped-autoplot-uncertain-browser/mapped-autoplot.json
+            ${{ runner.temp }}/wavedl-browser-ci/adoption-rollover/standalone-adoption-rollover.json
+            ${{ runner.temp }}/wavedl-browser-ci/preferences-browser/preferences-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/submitted-plan-browser/submitted-plan-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/result-operations-browser/result-operations.json
+            ${{ runner.temp }}/wavedl-browser-ci/onnx-export-browser/onnx-export.json
+            ${{ runner.temp }}/wavedl-browser-ci/inference-cancellation-browser/inference-cancellation.json
+            ${{ runner.temp }}/wavedl-browser-ci/cv-parity-browser/cv-parity.json
+            ${{ runner.temp }}/wavedl-browser-ci/wizard-progression-browser/wizard-progression-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/training-fields-browser/training-fields-full.json
+            ${{ runner.temp }}/wavedl-browser-ci/training-validation-browser/training-validation.json
+            ${{ runner.temp }}/wavedl-browser-ci/preset-import-browser/preset-import.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-http-recovery.xml
+            ${{ runner.temp }}/wavedl-browser-ci/submission-http-crash-recovery.xml
+            ${{ runner.temp }}/wavedl-browser-ci/registry-http-recovery/registry-http-recovery-projection-cursor-rebuild.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-http-recovery/registry-http-recovery-projection-cursor-ingest.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-http-recovery/registry-http-recovery-cursor-projection-rebuild.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-http-recovery/registry-http-recovery-cursor-projection-ingest.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-metric-http-recovery.xml
+            ${{ runner.temp }}/wavedl-browser-ci/registry-metric-http-recovery/registry-metric-http-recovery-projection-cursor-rebuild.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-metric-http-recovery/registry-metric-http-recovery-projection-cursor-ingest.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-metric-http-recovery/registry-metric-http-recovery-cursor-projection-rebuild.json
+            ${{ runner.temp }}/wavedl-browser-ci/registry-metric-http-recovery/registry-metric-http-recovery-cursor-projection-ingest.json
+            ${{ runner.temp }}/wavedl-browser-ci/artifact-publication/artifact-publication-oversized-inventory.json
+            ${{ runner.temp }}/wavedl-browser-ci/auth-skew.json
+            ${{ runner.temp }}/wavedl-browser-ci/stream-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/stream-sparse-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/dashboard-state-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/stream-malformed-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/stream-invalid-utf8-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/journal-fault-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/storage-fault-query-only.json
+            ${{ runner.temp }}/wavedl-browser-ci/storage-fault-page-quota.json
+            ${{ runner.temp }}/wavedl-browser-ci/hostile-origin-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/genuine-broker-overflow-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/retained-concurrency.json
+          if-no-files-found: warn

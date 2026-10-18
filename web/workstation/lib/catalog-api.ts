@@ -1,0 +1,310 @@
+import { ConnectionSession, ConnectionSessionError } from './connection-session';
+import { DaemonApiError, object } from './daemon-api';
+
+export interface BrowseEntry {
+  readonly name: string;
+  readonly kind: 'file' | 'directory';
+}
+export interface BrowsePage {
+  readonly root: string;
+  readonly path: string;
+  readonly entries: readonly BrowseEntry[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+export interface DataSelection {
+  readonly path: string;
+  readonly root: string;
+  readonly relativePath: string;
+  readonly daemonId: string;
+  readonly kind: 'file' | 'directory';
+}
+export interface ModelDescription {
+  readonly id: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly bestFor: string;
+  readonly supportedDims: readonly number[];
+  readonly category: string;
+  readonly pretrained: boolean;
+}
+export interface ModelSelection {
+  readonly model: string;
+  readonly daemonId: string;
+  readonly source?: 'custom';
+  readonly runtimeVerified?: false;
+}
+type Selection = DataSelection | ModelSelection;
+const scopes = new WeakMap<Selection, { session: ConnectionSession; revision: number }>();
+const catalogues = new WeakMap<
+  readonly ModelDescription[],
+  { session: ConnectionSession; revision: number }
+>();
+const fail = (): never => {
+  throw new DaemonApiError('response', 'Invalid daemon catalog response');
+};
+function text(value: unknown, max = 8192): value is string {
+  return typeof value === 'string' && value.length <= max && !value.includes('\0');
+}
+function rootId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+export function relativePath(value: unknown): value is string {
+  return (
+    text(value, 4096) &&
+    new TextEncoder().encode(value).length <= 4096 &&
+    (value === '' ||
+      (value.split('/').length <= 128 &&
+        value
+          .split('/')
+          .every((part) => part !== '' && part !== '.' && part !== '..' && !/[\\:]/.test(part))))
+  );
+}
+function integer(value: unknown, max: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max;
+}
+function absolutePath(value: unknown): value is string {
+  if (!text(value, 8192)) return false;
+  let parts: string[];
+  if (value.startsWith('/')) parts = value.slice(1).split('/');
+  else if (/^[A-Za-z]:\\/.test(value)) parts = value.slice(3).split('\\');
+  else if (value.startsWith('\\\\')) {
+    parts = value.slice(2).split('\\');
+    if (parts.length < 2) return false;
+  } else return false;
+  return parts.every(
+    (part, index) => part !== '.' && part !== '..' && (part !== '' || index === parts.length - 1),
+  );
+}
+
+/** Catalogues describe installed metadata; they never certify runtime capability. */
+export class CatalogApi {
+  constructor(readonly session: ConnectionSession) {}
+  assertSelection(selection: Selection): void {
+    const scope = scopes.get(selection);
+    if (
+      !scope ||
+      scope.session !== this.session ||
+      scope.revision !== this.session.snapshot().revision ||
+      !this.session.api ||
+      selection.daemonId !== this.session.api.daemonId
+    )
+      throw new ConnectionSessionError('stale', 'Select again from the current verified daemon.');
+  }
+  #selection<T extends Selection>(selection: T): T {
+    scopes.set(selection, { session: this.session, revision: this.session.snapshot().revision });
+    Object.freeze(selection);
+    return selection;
+  }
+  roots(signal?: AbortSignal): Promise<readonly string[]> {
+    return this.session.perform(
+      async (api, requestSignal) => {
+        const body = await api.read('/api/browse', requestSignal);
+        if (
+          !object(body) ||
+          Object.keys(body).length !== 1 ||
+          !Array.isArray(body.roots) ||
+          body.roots.length > 32
+        )
+          return fail();
+        const roots = body.roots.map((item) => {
+          if (!object(item) || Object.keys(item).length !== 1 || !rootId(item.id)) return fail();
+          return item.id;
+        });
+        if (new Set(roots).size !== roots.length) return fail();
+        return Object.freeze(roots);
+      },
+      { signal },
+    );
+  }
+  browse(root: string, path = '', offset = 0, signal?: AbortSignal): Promise<BrowsePage> {
+    if (!rootId(root) || !relativePath(path) || !integer(offset, 10000))
+      return Promise.reject(new ConnectionSessionError('request', 'Invalid browse location.'));
+    const limit = 100;
+    return this.session.perform(
+      async (api, requestSignal) => {
+        const query = new URLSearchParams({
+          root,
+          path,
+          offset: String(offset),
+          limit: String(limit),
+        });
+        const body = await api.read(`/api/browse?${query}`, requestSignal);
+        if (
+          !object(body) ||
+          Object.keys(body).length !== 6 ||
+          body.root !== root ||
+          body.path !== path ||
+          body.offset !== offset ||
+          body.limit !== limit ||
+          !integer(body.total, 10000) ||
+          !Array.isArray(body.entries) ||
+          body.entries.length > limit ||
+          body.entries.length !== Math.min(limit, Math.max(0, body.total - offset))
+        )
+          return fail();
+        const entries = body.entries.map((item) => {
+          if (
+            !object(item) ||
+            Object.keys(item).length !== 2 ||
+            !text(item.name, 4096) ||
+            item.name === '' ||
+            item.name.includes('/') ||
+            !relativePath(item.name) ||
+            (item.kind !== 'file' && item.kind !== 'directory')
+          )
+            return fail();
+          return Object.freeze({ name: item.name, kind: item.kind });
+        });
+        if (new Set(entries.map((item) => item.name)).size !== entries.length) return fail();
+        return Object.freeze({
+          root,
+          path,
+          offset,
+          limit,
+          total: body.total,
+          entries: Object.freeze(entries),
+        });
+      },
+      { signal },
+    );
+  }
+  resolve(root: string, path: string, signal?: AbortSignal): Promise<DataSelection> {
+    if (!rootId(root) || !relativePath(path))
+      return Promise.reject(new ConnectionSessionError('request', 'Invalid browse selection.'));
+    return this.session.perform(
+      async (api, requestSignal) => {
+        const body = await api.mutate(
+          '/api/browse/resolve',
+          { root, path },
+          { signal: requestSignal },
+        );
+        if (
+          !object(body) ||
+          Object.keys(body).length !== 4 ||
+          body.root !== root ||
+          body.relative_path !== path ||
+          !absolutePath(body.path) ||
+          (body.kind !== 'file' && body.kind !== 'directory') ||
+          (path === '' && body.kind !== 'directory') ||
+          !api.daemonId
+        )
+          return fail();
+        return this.#selection({
+          path: body.path,
+          root,
+          relativePath: path,
+          kind: body.kind,
+          daemonId: api.daemonId,
+        });
+      },
+      { signal },
+    );
+  }
+  models(signal?: AbortSignal): Promise<readonly ModelDescription[]> {
+    return this.session.perform(
+      async (api, requestSignal) => {
+        const body = await api.read('/api/models', requestSignal);
+        if (
+          !object(body) ||
+          Object.keys(body).length !== 4 ||
+          new TextEncoder().encode(JSON.stringify(body)).length > 256 * 1024 ||
+          body.source !== 'bundled_metadata' ||
+          body.runtime_verified !== false ||
+          !object(body.categories) ||
+          Object.keys(body.categories).length > 128 ||
+          !Array.isArray(body.models) ||
+          body.models.length > 1000
+        )
+          return fail();
+        const categories = new Map<string, string>();
+        for (const [name, category] of Object.entries(body.categories)) {
+          if (
+            !text(name, 256) ||
+            !object(category) ||
+            !text(category.short_description) ||
+            !Array.isArray(category.models) ||
+            category.models.length > 1000
+          )
+            return fail();
+          for (const id of category.models) {
+            if (typeof id !== 'string' || !/^[a-z0-9_]{1,128}$/.test(id) || categories.has(id))
+              return fail();
+            categories.set(id, name);
+          }
+        }
+        const models = body.models.map((item) => {
+          if (
+            !object(item) ||
+            typeof item.id !== 'string' ||
+            !/^[a-z0-9_]{1,128}$/.test(item.id) ||
+            !text(item.display_name, 256) ||
+            !text(item.description) ||
+            !text(item.best_for) ||
+            typeof item.is_pretrained !== 'boolean' ||
+            !Array.isArray(item.supported_dims) ||
+            item.supported_dims.length < 1 ||
+            item.supported_dims.length > 3 ||
+            !item.supported_dims.every((dim) => dim === 1 || dim === 2 || dim === 3) ||
+            new Set(item.supported_dims).size !== item.supported_dims.length ||
+            !categories.has(item.id)
+          )
+            return fail();
+          return Object.freeze({
+            id: item.id,
+            displayName: item.display_name,
+            description: item.description,
+            bestFor: item.best_for,
+            supportedDims: Object.freeze([...item.supported_dims]),
+            category: categories.get(item.id) ?? '',
+            pretrained: item.is_pretrained,
+          });
+        });
+        if (new Set(models.map((item) => item.id)).size !== models.length) return fail();
+        const catalogue = Object.freeze(models);
+        catalogues.set(catalogue, {
+          session: this.session,
+          revision: this.session.snapshot().revision,
+        });
+        return catalogue;
+      },
+      { signal },
+    );
+  }
+  selectModel(model: ModelDescription, catalogue: readonly ModelDescription[]): ModelSelection {
+    const daemonId = this.session.api?.daemonId;
+    const scope = catalogues.get(catalogue);
+    if (
+      !daemonId ||
+      !scope ||
+      scope.session !== this.session ||
+      scope.revision !== this.session.snapshot().revision ||
+      !catalogue.includes(model)
+    )
+      throw new ConnectionSessionError('stale', 'Reload the model catalogue before selecting.');
+    return this.#selection({ model: model.id, daemonId });
+  }
+  /** Explicit registry identifier only: required imports belong to the run request. */
+  selectCustomModel(modelId: string, signal?: AbortSignal): Promise<ModelSelection> {
+    if (typeof modelId !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(modelId))
+      return Promise.reject(
+        new ConnectionSessionError(
+          'request',
+          'Enter a bounded model registry identifier, not a path or expression.',
+        ),
+      );
+    return this.session.perform(
+      async (api, requestSignal) => {
+        const health = await api.health(requestSignal);
+        return this.#selection({
+          model: modelId,
+          daemonId: health.daemon_id,
+          source: 'custom',
+          runtimeVerified: false,
+        });
+      },
+      { signal },
+    );
+  }
+}

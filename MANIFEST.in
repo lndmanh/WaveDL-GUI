@@ -1,0 +1,4 @@
+# Retained local Qt work is not part of the daemon/browser application.
+prune src/wavedl_gui
+exclude unit_tests/test_gui_*.py
+exclude unit_tests/daemon/test_installed_gui_http.py

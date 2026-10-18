@@ -83,7 +83,7 @@ _setup_per_rank_compile_cache()
 # =============================================================================
 # Standard imports (after environment setup)
 # =============================================================================
-import argparse
+import gc
 import json
 import logging
 import math
@@ -91,11 +91,15 @@ import pickle
 import shutil
 import sys
 import time
+import traceback
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
+    import argparse
+
     import optuna
 
 
@@ -120,7 +124,24 @@ from accelerate.utils import set_seed
 from sklearn.metrics import r2_score
 from tqdm.auto import tqdm
 
+from wavedl.checkpointing import (
+    publish_cv_outputs,
+    save_emergency_checkpoint,
+    save_normal_checkpoint,
+    unwrap_checkpoint_model,
+)
+from wavedl.core.checkpoint_selection import (
+    read_selection_metadata,
+    resolve_checkpoint_path,
+    select_checkpoint,
+)
+from wavedl.core.events import MetricPayload, StatePayload, SupersedePayload
+from wavedl.core.generations import published_generations
+from wavedl.core.layout import RunLayout
+from wavedl.core.training_cli import parse_training_args
+from wavedl.journal import _read_manifest
 from wavedl.models import build_model, get_model, list_models
+from wavedl.runtime import open_training_runtime, training_lifecycle, wait_for_workers
 from wavedl.utils import (
     FIGURE_DPI,
     MetricTracker,
@@ -231,282 +252,14 @@ def _finite_or_none(value: Any) -> Any:
 # ==============================================================================
 # ARGUMENT PARSING
 # ==============================================================================
-def parse_args() -> argparse.Namespace:
+def parse_args() -> tuple[argparse.Namespace, argparse.ArgumentParser]:
     """Parse command-line arguments with comprehensive options."""
-    parser = argparse.ArgumentParser(
-        description="Universal DDP Training Pipeline",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    return parse_training_args(
+        models=list_models(),
+        losses=list_losses(),
+        optimizers=list_optimizers(),
+        schedulers=list_schedulers(),
     )
-
-    # Model Selection
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="cnn",
-        help=f"Model architecture to train. Available: {list_models()}",
-    )
-    parser.add_argument(
-        "--list_models", action="store_true", help="List all available models and exit"
-    )
-    parser.add_argument(
-        "--import",
-        dest="import_modules",
-        type=str,
-        nargs="+",
-        default=[],
-        help="Python modules to import before training (for custom models)",
-    )
-    parser.add_argument(
-        "--pretrained",
-        action="store_true",
-        help="Use ImageNet pretrained weights (only for *_pretrained model variants). "
-        "Default: train from scratch.",
-    )
-
-    # Configuration File
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=None,
-        help="Path to YAML config file. CLI args override config values.",
-    )
-
-    # Hyperparameters
-    parser.add_argument(
-        "--batch_size", type=int, default=128, help="Batch size per GPU"
-    )
-    parser.add_argument("--lr", type=float, default=1e-3, help="Initial learning rate")
-    parser.add_argument(
-        "--epochs", type=int, default=1000, help="Maximum training epochs"
-    )
-    parser.add_argument(
-        "--patience", type=int, default=20, help="Early stopping patience"
-    )
-    parser.add_argument("--weight_decay", type=float, default=1e-4, help="Weight decay")
-    parser.add_argument(
-        "--grad_clip", type=float, default=1.0, help="Gradient clipping norm"
-    )
-    parser.add_argument(
-        "--grad_accum_steps",
-        type=int,
-        default=1,
-        help="Gradient accumulation steps. Effective batch = batch_size x grad_accum_steps x num_gpus",
-    )
-
-    # Loss Function
-    parser.add_argument(
-        "--loss",
-        type=str,
-        default="mse",
-        choices=["mse", "mae", "huber", "smooth_l1", "log_cosh", "weighted_mse"],
-        help=f"Loss function for training. Available: {list_losses()}",
-    )
-    parser.add_argument(
-        "--huber_delta", type=float, default=1.0, help="Delta for Huber loss"
-    )
-    parser.add_argument(
-        "--loss_weights",
-        type=str,
-        default=None,
-        help="Comma-separated weights for weighted_mse (e.g., '1.0,2.0,1.0')",
-    )
-
-    # Optimizer
-    parser.add_argument(
-        "--optimizer",
-        type=str,
-        default="adamw",
-        choices=["adamw", "adam", "sgd", "nadam", "radam", "rmsprop"],
-        help=f"Optimizer for training. Available: {list_optimizers()}",
-    )
-    parser.add_argument(
-        "--momentum", type=float, default=0.9, help="Momentum for SGD/RMSprop"
-    )
-    parser.add_argument(
-        "--nesterov", action="store_true", help="Use Nesterov momentum (SGD)"
-    )
-    parser.add_argument(
-        "--betas",
-        type=str,
-        default="0.9,0.999",
-        help="Betas for Adam variants (comma-separated)",
-    )
-
-    # Learning Rate Scheduler
-    parser.add_argument(
-        "--scheduler",
-        type=str,
-        default="plateau",
-        choices=[
-            "plateau",
-            "cosine",
-            "cosine_restarts",
-            "onecycle",
-            "step",
-            "multistep",
-            "exponential",
-            "linear_warmup",
-        ],
-        help=f"LR scheduler. Available: {list_schedulers()}",
-    )
-    parser.add_argument(
-        "--scheduler_patience",
-        type=int,
-        default=10,
-        help="Patience for ReduceLROnPlateau",
-    )
-    parser.add_argument(
-        "--min_lr", type=float, default=1e-6, help="Minimum learning rate"
-    )
-    parser.add_argument(
-        "--scheduler_factor", type=float, default=0.5, help="LR reduction factor"
-    )
-    parser.add_argument(
-        "--warmup_epochs", type=int, default=5, help="Warmup epochs for linear_warmup"
-    )
-    parser.add_argument(
-        "--step_size", type=int, default=30, help="Step size for StepLR"
-    )
-    parser.add_argument(
-        "--milestones",
-        type=str,
-        default=None,
-        help="Comma-separated epochs for MultiStepLR (e.g., '30,60,90')",
-    )
-
-    # Data
-    parser.add_argument(
-        "--data_path", type=str, default="train_data.npz", help="Path to NPZ dataset"
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=-1,
-        help="DataLoader workers per GPU (-1=auto-detect based on CPU cores)",
-    )
-    parser.add_argument("--seed", type=int, default=2025, help="Random seed")
-    parser.add_argument(
-        "--deterministic",
-        action="store_true",
-        help="Enable deterministic mode for reproducibility (slower, disables TF32/cuDNN benchmark)",
-    )
-    parser.add_argument(
-        "--cache_validate",
-        type=str,
-        default="sha256",
-        choices=["sha256", "fast", "size"],
-        help="Cache validation mode: sha256 (full hash), fast (partial), size (quick)",
-    )
-    parser.add_argument(
-        "--single_channel",
-        action="store_true",
-        help="Confirm data is single-channel (suppress ambiguous shape warnings for shallow 3D volumes)",
-    )
-
-    # Cross-Validation
-    parser.add_argument(
-        "--cv",
-        type=int,
-        default=0,
-        help="Enable K-fold cross-validation with K folds (0=disabled)",
-    )
-    parser.add_argument(
-        "--cv_stratify",
-        action="store_true",
-        help="Use stratified splitting for cross-validation",
-    )
-    parser.add_argument(
-        "--cv_bins",
-        type=int,
-        default=10,
-        help="Number of bins for stratified CV (only with --cv_stratify)",
-    )
-
-    # Checkpointing & Resume
-    parser.add_argument(
-        "--resume", type=str, default=None, help="Checkpoint directory to resume from"
-    )
-    parser.add_argument(
-        "--save_every",
-        type=int,
-        default=50,
-        help="Save checkpoint every N epochs (0=disable)",
-    )
-    parser.add_argument(
-        "--output_dir", type=str, default=".", help="Output directory for checkpoints"
-    )
-    parser.add_argument(
-        "--fresh",
-        action="store_true",
-        help="Force fresh training, ignore existing checkpoints",
-    )
-
-    # Performance
-    parser.add_argument(
-        "--compile", action="store_true", help="Enable torch.compile (PyTorch 2.x)"
-    )
-    parser.add_argument(
-        "--precision",
-        type=str,
-        default="bf16",
-        choices=["bf16", "fp16", "no"],
-        help="Mixed precision mode",
-    )
-    # Alias for consistency with wavedl-train (--mixed_precision is passed to accelerate)
-    parser.add_argument(
-        "--mixed_precision",
-        dest="precision",
-        type=str,
-        choices=["bf16", "fp16", "no"],
-        help=argparse.SUPPRESS,  # Hidden: use --precision instead
-    )
-
-    # Physical Constraints
-    parser.add_argument(
-        "--constraint",
-        type=str,
-        nargs="+",
-        default=[],
-        help="Soft constraint expressions: 'y0 - y1*y2' (penalize violations)",
-    )
-
-    parser.add_argument(
-        "--constraint_file",
-        type=str,
-        default=None,
-        help="Python file with constraint(pred, inputs) function",
-    )
-    parser.add_argument(
-        "--constraint_weight",
-        type=float,
-        nargs="+",
-        default=[0.1],
-        help="Weight(s) for soft constraints (one per constraint, or single shared weight)",
-    )
-    parser.add_argument(
-        "--constraint_reduction",
-        type=str,
-        default="mse",
-        choices=["mse", "mae"],
-        help="Reduction mode for constraint penalties",
-    )
-
-    # Logging
-    parser.add_argument(
-        "--wandb", action="store_true", help="Enable Weights & Biases logging"
-    )
-    parser.add_argument(
-        "--wandb_watch",
-        action="store_true",
-        help="Enable WandB gradient watching (adds overhead, useful for debugging)",
-    )
-    parser.add_argument(
-        "--project_name", type=str, default="DL-Training", help="WandB project name"
-    )
-    parser.add_argument("--run_name", type=str, default=None, help="WandB run name")
-
-    args = parser.parse_args()
-    return args, parser  # Returns (Namespace, ArgumentParser)
 
 
 def _save_best_checkpoint(
@@ -925,8 +678,101 @@ def main():
         # Merge config with CLI args (CLI takes precedence via parser defaults detection)
         args = merge_config_with_args(config, args, parser=parser)
 
+    if args.grad_accum_steps < 1:
+        raise ValueError(
+            f"--grad_accum_steps must be >= 1, got {args.grad_accum_steps}"
+        )
+    accelerator = Accelerator(
+        mixed_precision=args.precision,
+        gradient_accumulation_steps=args.grad_accum_steps,
+        step_scheduler_with_optimizer=False,
+        log_with="wandb" if args.wandb and WANDB_AVAILABLE else None,
+    )
+    cleanup_owned = False
+    try:
+        journal = open_training_runtime(args, accelerator)
+        with training_lifecycle(journal):
+            cleanup_owned = True
+            _run_training_and_cleanup(args, accelerator, journal)
+    finally:
+        # Bootstrap has no prepared models. Once training starts, its cleanup
+        # owner decides whether model release made backend destruction safe.
+        if not cleanup_owned and dist.is_initialized():
+            dist.destroy_process_group()
+
+
+def _run_training_and_cleanup(args, accelerator, journal):
+    """Release prepared models before destroying their distributed backend.
+
+    A DDP reducer retains its process group. Destroying the default group first
+    can leave the reducer as its final owner during interpreter teardown, where
+    Gloo workers may need the GIL held by the reducer's destructor. Error
+    tracebacks also retain the training frame, so release its inactive locals
+    before clearing Accelerate's prepared-object references. Keep the original
+    exception and traceback, and perform no cleanup collectives.
+    """
+    primary_error = None
+    cleanup_errors = []
+    try:
+        _run_training(args, accelerator, journal)
+    except BaseException as error:
+        traceback.clear_frames(error.__traceback__)
+        primary_error = error
+    try:
+        accelerator.free_memory()
+        # Accelerate collects before clearing its own prepared-object lists.
+        # Collect remaining cycles while the default group still owns its backend.
+        gc.collect()
+    except BaseException as error:
+        traceback.clear_frames(error.__traceback__)
+        cleanup_errors.append(("prepared-model release", error))
+    else:
+        try:
+            accelerator.end_training()
+        except BaseException as error:
+            traceback.clear_frames(error.__traceback__)
+            cleanup_errors.append(("tracker/backend shutdown", error))
+        # Tracker finalization can fail before end_training destroys the group.
+        # Only attempt this fallback after prepared-model release succeeded.
+        try:
+            if dist.is_initialized():
+                dist.destroy_process_group()
+        except BaseException as error:
+            traceback.clear_frames(error.__traceback__)
+            cleanup_errors.append(("distributed backend shutdown", error))
+
+    if cleanup_errors:
+        failures = (
+            [("training", primary_error)] if primary_error is not None else []
+        ) + cleanup_errors
+        details = "; ".join(
+            f"{phase}: {type(error).__name__}: {str(error)[:256]}"
+            for phase, error in failures
+        )
+        if cleanup_errors[0][0] == "prepared-model release":
+            details += "; backend shutdown skipped: prepared-model release failed"
+        raise BaseExceptionGroup(
+            f"Training cleanup failed: {details}", [error for _, error in failures]
+        )
+    if primary_error is not None:
+        raise primary_error
+
+
+def _run_training(args, accelerator, journal):
+    """Run the existing training algorithms under the actual runtime lifecycle."""
+    journal.emit("state", StatePayload("running"))
+    requested_device = journal.bootstrap.request_manifest.runtime.device
+    if requested_device != "auto" and requested_device != accelerator.device.type:
+        raise ValueError(
+            f"Requested device {requested_device} differs from actual {accelerator.device.type}"
+        )
     # Handle --cv flag (cross-validation mode)
     if args.cv > 0:
+        from wavedl.core.training_cli import validate_cv_options
+
+        validate_cv_options(args)
+        if accelerator.num_processes != 1:
+            raise ValueError("Cross-validation does not support distributed execution")
         print(f"🔄 Cross-Validation Mode: {args.cv} folds")
         from wavedl.utils.cross_validation import run_cross_validation
 
@@ -938,50 +784,62 @@ def main():
 
         # Use memory-mapped loading when available (now returns LazyDataHandle for all formats)
         _cv_handle = None
-        if hasattr(source, "load_mmap"):
-            _cv_handle = source.load_mmap(args.data_path)
-            X, y = _cv_handle.inputs, _cv_handle.outputs
-        else:
-            X, y = source.load(args.data_path)
+        try:
+            if hasattr(source, "load_mmap"):
+                _cv_handle = source.load_mmap(args.data_path)
+                X, y = _cv_handle.inputs, _cv_handle.outputs
+            else:
+                X, y = source.load(args.data_path)
 
-        # Handle sparse matrices (must materialize for CV shuffling)
-        if hasattr(X, "__getitem__") and len(X) > 0 and hasattr(X[0], "toarray"):
-            X = np.stack([x.toarray() for x in X])
+            # Handle sparse matrices (must materialize for CV shuffling)
+            if hasattr(X, "__getitem__") and len(X) > 0 and hasattr(X[0], "toarray"):
+                X = np.stack([x.toarray() for x in X])
 
-        # Normalize target shape: (N,) -> (N, 1) for consistency
-        if y.ndim == 1:
-            y = y.reshape(-1, 1)
+            # Normalize target shape: (N,) -> (N, 1) for consistency
+            if y.ndim == 1:
+                y = y.reshape(-1, 1)
 
-        # Validate and determine input shape (consistent with prepare_data)
-        # Check for ambiguous shapes that could be multi-channel or shallow 3D volume
-        sample_shape = X.shape[1:]  # Per-sample shape
+            # Validate and determine input shape (consistent with prepare_data)
+            # Check for ambiguous shapes that could be multi-channel or shallow 3D volume
+            sample_shape = X.shape[1:]  # Per-sample shape
 
-        # Same heuristic as prepare_data: detect ambiguous 3D shapes
-        is_ambiguous_shape = (
-            len(sample_shape) == 3  # Exactly 3D: could be (C, H, W) or (D, H, W)
-            and sample_shape[0] <= 16  # First dim looks like channels
-            and sample_shape[1] > 16
-            and sample_shape[2] > 16  # Both spatial dims are large
-        )
-
-        if is_ambiguous_shape and not args.single_channel:
-            raise ValueError(
-                f"Ambiguous input shape detected: sample shape {sample_shape}. "
-                f"This could be either:\n"
-                f"  - Multi-channel 2D data (C={sample_shape[0]}, H={sample_shape[1]}, W={sample_shape[2]})\n"
-                f"  - Single-channel 3D volume (D={sample_shape[0]}, H={sample_shape[1]}, W={sample_shape[2]})\n\n"
-                f"If this is single-channel 3D/shallow volume data, use --single_channel flag.\n"
-                f"If this is multi-channel 2D data, reshape to (N*C, H, W) with adjusted targets."
+            # Same heuristic as prepare_data: detect ambiguous 3D shapes
+            is_ambiguous_shape = (
+                len(sample_shape) == 3  # Exactly 3D: could be (C, H, W) or (D, H, W)
+                and sample_shape[0] <= 16  # First dim looks like channels
+                and sample_shape[1] > 16
+                and sample_shape[2] > 16  # Both spatial dims are large
             )
 
-        # in_shape = spatial dimensions for model registry (channel added during training)
-        in_shape = sample_shape
+            if is_ambiguous_shape and not args.single_channel:
+                raise ValueError(
+                    f"Ambiguous input shape detected: sample shape {sample_shape}. "
+                    f"This could be either:\n"
+                    f"  - Multi-channel 2D data (C={sample_shape[0]}, H={sample_shape[1]}, W={sample_shape[2]})\n"
+                    f"  - Single-channel 3D volume (D={sample_shape[0]}, H={sample_shape[1]}, W={sample_shape[2]})\n\n"
+                    f"If this is single-channel 3D/shallow volume data, use --single_channel flag.\n"
+                    f"If this is multi-channel 2D data, reshape to (N*C, H, W) with adjusted targets."
+                )
 
-        # Parse betas for CV (same logic as main training path)
-        cv_betas = tuple(float(x.strip()) for x in args.betas.split(","))
+            # in_shape = spatial dimensions for model registry (channel added during training)
+            in_shape = sample_shape
 
-        # Run cross-validation
-        try:
+            # Parse betas for CV (same logic as main training path)
+            cv_betas = tuple(float(x.strip()) for x in args.betas.split(","))
+            if len(cv_betas) != 2 or not all(0.0 <= beta < 1.0 for beta in cv_betas):
+                raise ValueError("--betas must have exactly two values in [0, 1)")
+            cv_loss_weights = (
+                [float(x.strip()) for x in args.loss_weights.split(",")]
+                if args.loss_weights
+                else None
+            )
+            cv_milestones = (
+                [int(x.strip()) for x in args.milestones.split(",")]
+                if args.milestones
+                else None
+            )
+
+            # Run cross-validation
             run_cross_validation(
                 X=X,
                 y=y,
@@ -1008,7 +866,24 @@ def main():
                 workers=args.workers,
                 seed=args.seed,
                 grad_clip=args.grad_clip,
+                device=accelerator.device,
+                loss_weights=cv_loss_weights,
+                huber_delta=args.huber_delta,
+                nesterov=args.nesterov,
+                scheduler_gamma=args.scheduler_factor,
+                step_size=args.step_size,
+                milestones=cv_milestones,
+                warmup_epochs=args.warmup_epochs,
+                grad_accum_steps=args.grad_accum_steps,
+                precision=args.precision,
+                pretrained=args.pretrained,
+                constraint=args.constraint,
+                constraint_file=args.constraint_file,
+                constraint_weight=args.constraint_weight,
+                constraint_reduction=args.constraint_reduction,
+                deterministic=args.deterministic,
             )
+            publish_cv_outputs(journal, args.output_dir, folds=args.cv)
         finally:
             # Clean up file handle if HDF5/MAT
             if _cv_handle is not None and hasattr(_cv_handle, "close"):
@@ -1022,16 +897,6 @@ def main():
     # SYSTEM INITIALIZATION
     # ==========================================================================
     # Initialize Accelerator for DDP and mixed precision
-    if args.grad_accum_steps < 1:
-        raise ValueError(
-            f"--grad_accum_steps must be >= 1, got {args.grad_accum_steps}"
-        )
-
-    accelerator = Accelerator(
-        mixed_precision=args.precision,
-        gradient_accumulation_steps=args.grad_accum_steps,
-        log_with="wandb" if args.wandb and WANDB_AVAILABLE else None,
-    )
     set_seed(args.seed)
 
     # Deterministic mode for scientific reproducibility
@@ -1276,8 +1141,9 @@ def main():
             model, optimizer, train_dl, val_dl
         )
 
-        # Now create scheduler with the CORRECT sharded steps_per_epoch
-        steps_per_epoch = len(train_dl)  # Post-DDP sharded length
+        # Count optimizer updates, including Accelerate's final partial flush.
+        # The prepared loader is already sharded, so no world-size multiplier.
+        steps_per_epoch = math.ceil(len(train_dl) / args.grad_accum_steps)
         scheduler = get_scheduler(
             name=args.scheduler,
             optimizer=optimizer,
@@ -1291,7 +1157,12 @@ def main():
             milestones=milestones,
             warmup_epochs=args.warmup_epochs,
         )
-        # Prepare scheduler separately (Accelerator wraps it for state saving)
+        # Step explicitly once per successful optimizer update. Accelerate's
+        # scheduler wrapper multiplies steps by world size for non-split loaders,
+        # which would double-count our already-sharded update budget.
+        # Keep the prepared wrapper so existing scheduler checkpoint filenames
+        # remain compatible; step_scheduler_with_optimizer=False disables its
+        # implicit adjustment while our training loop handles skipped updates.
         scheduler = accelerator.prepare(scheduler)
     else:
         # EPOCH-BASED SCHEDULER (plateau, cosine, step, etc.)
@@ -1338,6 +1209,7 @@ def main():
     # Periodic checkpoints may be newer than best_checkpoint after a
     # non-KeyboardInterrupt crash (e.g., OOM, hardware failure).
     training_already_complete = False
+    restored_generation = None
     if not args.fresh and args.resume is None:
         if os.path.exists(complete_flag_path):
             # Training already completed — will exit after entering try block
@@ -1347,6 +1219,12 @@ def main():
                 logger.info(
                     "✅ Training already completed (early stopping). Use --fresh to retrain."
                 )
+        elif (
+            journal.bootstrap.layout.checkpoints.is_dir()
+            and (restored_generation := select_checkpoint(journal.bootstrap.layout))
+            is not None
+        ):
+            args.resume = str(restored_generation.path)
         elif os.path.exists(interrupted_ckpt_path):
             # Prefer interrupted checkpoint (most recent optimizer/scheduler state)
             args.resume = interrupted_ckpt_path
@@ -1408,6 +1286,21 @@ def main():
     )
 
     if args.resume:
+        args.resume = str(resolve_checkpoint_path(args.resume, purpose="resume"))
+        if (Path(args.resume) / "COMPLETE.json").is_file():
+            source_root = Path(args.resume).parent.parent.resolve()
+            source_manifest = _read_manifest(source_root / "manifest.json")
+            source_layout = RunLayout(source_root, source_manifest.run_id)
+            restored_generation = next(
+                (
+                    item
+                    for item in published_generations(source_layout)
+                    if item.path == Path(args.resume).resolve()
+                ),
+                None,
+            )
+            if restored_generation is None:
+                raise ValueError("Resume generation is not a validated publication")
         if os.path.exists(args.resume):
             logger.info(f"🔄 Loading checkpoint from: {args.resume}")
 
@@ -1465,20 +1358,34 @@ def main():
                 start_epoch = meta.get("epoch", 0)
                 best_val_loss = meta.get("best_val_loss", float("inf"))
                 patience_ctr = meta.get("patience_ctr", 0)
+                if (
+                    restored_generation is not None
+                    and start_epoch != restored_generation.step
+                ):
+                    raise ValueError("Generation step differs from training metadata")
                 logger.info(
                     f"   ✅ Restored: Epoch {start_epoch}, Best Loss: {best_val_loss:.6f}"
                 )
             else:
+                if restored_generation is not None:
+                    raise ValueError(
+                        "Published resume generation requires training_meta.pkl"
+                    )
                 logger.warning(
                     "   ⚠️ training_meta.pkl not found, starting from epoch 0"
                 )
 
             # Restore history, truncating to start_epoch to avoid duplicate
             # rows for epochs that will be re-run from the best checkpoint.
-            history_path = os.path.join(args.output_dir, "training_history.csv")
+            history_path = os.path.join(
+                args.resume if restored_generation is not None else args.output_dir,
+                "training_history.csv",
+            )
             if os.path.exists(history_path):
                 full_history = pd.read_csv(history_path).to_dict("records")
-                history = full_history[:start_epoch]
+                history = [
+                    row for row in full_history if row.get("epoch", 0) <= start_epoch
+                ]
                 if len(full_history) > start_epoch:
                     logger.info(
                         f"   ✅ Loaded {len(history)} of {len(full_history)} history "
@@ -1486,6 +1393,39 @@ def main():
                     )
                 else:
                     logger.info(f"   ✅ Loaded {len(history)} epochs from history")
+            if restored_generation is not None:
+                if "training_history.csv" not in restored_generation.files:
+                    raise ValueError(
+                        "Published resume generation requires training history"
+                    )
+                if source_layout.run_id == journal.bootstrap.layout.run_id:
+                    selection = read_selection_metadata(restored_generation)
+                    source_seq = (
+                        selection.get("source_seq") if selection is not None else None
+                    )
+                    if source_seq is None:
+                        journal.log(
+                            "Legacy generation has no causal source sequence; "
+                            "restored metric lineage may be ambiguous",
+                            stream="system",
+                            level="warning",
+                        )
+                    journal.emit(
+                        "supersede",
+                        SupersedePayload(
+                            restored_generation.attempt,
+                            start_epoch,
+                            restored_generation.generation,
+                            source_seq=source_seq,
+                        ),
+                    )
+                else:
+                    journal.log(
+                        f"Resumed foreign run {source_layout.run_id}, "
+                        f"generation {restored_generation.generation}, "
+                        f"attempt {restored_generation.attempt}, step {start_epoch}",
+                        stream="system",
+                    )
         else:
             raise FileNotFoundError(f"Checkpoint not found: {args.resume}")
 
@@ -1515,6 +1455,7 @@ def main():
     # Initialize epoch before try block so the interrupt handler always has
     # a valid value, even if KeyboardInterrupt fires before the loop starts.
     epoch = start_epoch
+    completed_epochs = start_epoch
 
     try:
         if training_already_complete:
@@ -1562,8 +1503,14 @@ def main():
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)  # Faster than zero_grad()
 
-                    # Per-batch LR scheduling (e.g., OneCycleLR)
-                    if scheduler_step_per_batch and accelerator.sync_gradients:
+                    # Per-update LR scheduling (e.g., OneCycleLR). An AMP
+                    # overflow skips the optimizer update and must not spend a
+                    # scheduler step either.
+                    if (
+                        scheduler_step_per_batch
+                        and accelerator.sync_gradients
+                        and not accelerator.optimizer_step_was_skipped
+                    ):
                         scheduler.step()
 
                     # Accumulate as tensors to avoid .item() sync per batch
@@ -1698,7 +1645,17 @@ def main():
                 avg_mae = avg_mae_per_param.mean()
 
             # ==================== LOGGING & CHECKPOINTING ====================
+            # Compute the validation transition once on rank zero.  Keep the
+            # collective below in its established position (after scheduling),
+            # while allowing the structured metric to describe the state this
+            # epoch will commit.
+            is_best_candidate = False
             if accelerator.is_main_process:
+                is_best_candidate = avg_val_loss < best_val_loss
+                emitted_best_val_loss = (
+                    avg_val_loss if is_best_candidate else best_val_loss
+                )
+                emitted_patience_ctr = 0 if is_best_candidate else patience_ctr + 1
                 # Scientific metrics - cast to float32 before numpy
                 # gather_for_metrics already handles DDP padding removal
                 y_pred = gathered_preds.float().numpy()
@@ -1748,7 +1705,7 @@ def main():
                     "total_epochs": args.epochs,
                     "train_loss": avg_train_loss,
                     "val_loss": avg_val_loss,
-                    "best_val_loss": best_val_loss,
+                    "best_val_loss": emitted_best_val_loss,
                     "r2": r2,
                     "pearson": pcc,
                     "grad_norm": grad_norm_tracker.avg,
@@ -1757,7 +1714,7 @@ def main():
                     "mae_per_param": [float(m) for m in avg_mae_per_param],
                     "epoch_time": round(epoch_time, 2),
                     "total_time": round(total_training_time, 2),
-                    "patience_counter": patience_ctr,
+                    "patience_counter": emitted_patience_ctr,
                     "max_patience": args.patience,
                 }
                 # allow_nan=False turns any non-finite value that escapes the
@@ -1765,6 +1722,15 @@ def main():
                 print(
                     f"##METRICS##{json.dumps(_finite_or_none(gui_metrics), allow_nan=False)}",
                     flush=True,
+                )
+                journal.emit(
+                    "metric",
+                    MetricPayload(
+                        "epoch",
+                        avg_val_loss,
+                        epoch + 1,
+                        metrics=_finite_or_none(gui_metrics),
+                    ),
                 )
 
                 # WandB logging
@@ -1784,7 +1750,7 @@ def main():
                     # Periodic scatter plots (epoch+1 to match the displayed/logged
                     # 1-indexed epoch numbering used everywhere else in the loop)
                     if ((epoch + 1) % WANDB_SCATTER_INTERVAL == 0) or (
-                        avg_val_loss < best_val_loss
+                        is_best_candidate
                     ):
                         real_true = scaler.inverse_transform(y_true)
                         real_pred = scaler.inverse_transform(y_pred)
@@ -1793,123 +1759,6 @@ def main():
                         plt.close(fig)
 
                     accelerator.log(log_dict)
-
-            # ==========================================================================
-            # DDP-SAFE CHECKPOINT LOGIC
-            # ==========================================================================
-            # Step 1: Determine if this is the best epoch (BEFORE updating best_val_loss)
-            is_best_epoch = False
-            if accelerator.is_main_process:
-                if avg_val_loss < best_val_loss:
-                    is_best_epoch = True
-
-            # Step 2: Broadcast decision to all ranks (required for save_state)
-            is_best_epoch = broadcast_early_stop(is_best_epoch, accelerator)
-
-            # Step 3: Save checkpoint with all ranks participating
-            if is_best_epoch:
-                ckpt_dir = os.path.join(args.output_dir, "best_checkpoint")
-                with suppress_accelerate_logging():
-                    accelerator.save_state(ckpt_dir, safe_serialization=False)
-
-                # Step 4: Rank 0 handles metadata and updates tracking variables
-                if accelerator.is_main_process:
-                    best_val_loss = avg_val_loss  # Update AFTER checkpoint saved
-                    patience_ctr = 0
-
-                    with open(os.path.join(ckpt_dir, "training_meta.pkl"), "wb") as f:
-                        pickle.dump(
-                            {
-                                "epoch": epoch + 1,
-                                "best_val_loss": best_val_loss,
-                                "patience_ctr": patience_ctr,
-                                # Model info for auto-detection during inference
-                                "model_name": args.model,
-                                "in_shape": in_shape,
-                                "out_dim": out_dim,
-                            },
-                            f,
-                        )
-
-                    # Unwrap model for saving (handle torch.compile compatibility)
-                    try:
-                        unwrapped = accelerator.unwrap_model(model)
-                    except KeyError:
-                        # torch.compile model may not have _orig_mod in expected location
-                        # Fall back to getting the module directly
-                        unwrapped = model.module if hasattr(model, "module") else model
-                        # If still compiled, try to get the underlying model
-                        if hasattr(unwrapped, "_orig_mod"):
-                            unwrapped = unwrapped._orig_mod
-
-                    torch.save(
-                        unwrapped.state_dict(),
-                        os.path.join(args.output_dir, "best_model_weights.pth"),
-                    )
-
-                    # Copy scaler to checkpoint for portability (always overwrite to stay current)
-                    scaler_src = os.path.join(args.output_dir, "scaler.pkl")
-                    scaler_dst = os.path.join(ckpt_dir, "scaler.pkl")
-                    if os.path.exists(scaler_src):
-                        shutil.copy2(scaler_src, scaler_dst)
-
-                    logger.info(
-                        f"   💾 Best model saved (val_loss: {best_val_loss:.6f})"
-                    )
-
-                    # Also save CSV on best model (ensures progress is saved)
-                    pd.DataFrame(history).to_csv(
-                        os.path.join(args.output_dir, "training_history.csv"),
-                        index=False,
-                    )
-
-                    # Deferred cleanup: now that a fresh checkpoint exists,
-                    # it's safe to remove the consumed interrupted checkpoint.
-                    if _cleanup_interrupted_pending:
-                        shutil.rmtree(interrupted_ckpt_path, ignore_errors=True)
-                        _cleanup_interrupted_pending = False
-                        logger.info("   🗑️  Cleaned up consumed interrupted checkpoint")
-            else:
-                if accelerator.is_main_process:
-                    patience_ctr += 1
-
-            # Periodic checkpoint (all ranks participate in save_state)
-            periodic_checkpoint_needed = (
-                args.save_every > 0 and (epoch + 1) % args.save_every == 0
-            )
-            if periodic_checkpoint_needed:
-                ckpt_name = f"epoch_{epoch + 1}_checkpoint"
-                ckpt_dir = os.path.join(args.output_dir, ckpt_name)
-                with suppress_accelerate_logging():
-                    accelerator.save_state(ckpt_dir, safe_serialization=False)
-
-                if accelerator.is_main_process:
-                    with open(os.path.join(ckpt_dir, "training_meta.pkl"), "wb") as f:
-                        pickle.dump(
-                            {
-                                "epoch": epoch + 1,
-                                "best_val_loss": best_val_loss,
-                                "patience_ctr": patience_ctr,
-                                # Model info for auto-detection during inference
-                                "model_name": args.model,
-                                "in_shape": in_shape,
-                                "out_dim": out_dim,
-                            },
-                            f,
-                        )
-                    logger.info(f"   📁 Periodic checkpoint: {ckpt_name}")
-
-                    # Deferred cleanup (same as best checkpoint path above)
-                    if _cleanup_interrupted_pending:
-                        shutil.rmtree(interrupted_ckpt_path, ignore_errors=True)
-                        _cleanup_interrupted_pending = False
-                        logger.info("   🗑️  Cleaned up consumed interrupted checkpoint")
-
-                    # Save CSV with each checkpoint (keeps logs in sync with model state)
-                    pd.DataFrame(history).to_csv(
-                        os.path.join(args.output_dir, "training_history.csv"),
-                        index=False,
-                    )
 
             # Learning rate scheduling (epoch-based schedulers only)
             # NOTE: All epoch-based schedulers must step only on main process
@@ -1924,7 +1773,7 @@ def main():
                         scheduler.step()
 
                 # Sync LR across all processes after main process updates it
-                accelerator.wait_for_everyone()
+                wait_for_workers(accelerator)
 
                 # Broadcast per-group LRs from rank 0 to all processes
                 # (preserves multi-group ratios, e.g., Swin backbone 0.1× vs head 1×)
@@ -1940,6 +1789,62 @@ def main():
                     if not accelerator.is_main_process:
                         for i, pg in enumerate(optimizer.param_groups):
                             pg["lr"] = lr_tensor[i].item()
+
+            completed_epochs = epoch + 1
+
+            # Normal checkpoints remain collective; publication is rank-zero-only.
+            is_best_epoch = broadcast_early_stop(
+                is_best_candidate if accelerator.is_main_process else False,
+                accelerator,
+            )
+            if accelerator.is_main_process:
+                if is_best_epoch:
+                    best_val_loss = avg_val_loss
+                    patience_ctr = 0
+                else:
+                    patience_ctr += 1
+
+            metadata = {
+                "epoch": epoch + 1,
+                "best_val_loss": best_val_loss,
+                "patience_ctr": patience_ctr,
+                "model_name": args.model,
+                "in_shape": in_shape,
+                "out_dim": out_dim,
+            }
+            kinds = []
+            if is_best_epoch:
+                kinds.append(("best", "best_checkpoint"))
+            if args.save_every > 0 and (epoch + 1) % args.save_every == 0:
+                kinds.append(("periodic", f"epoch_{epoch + 1}_checkpoint"))
+            for kind, checkpoint_name in kinds:
+                with suppress_accelerate_logging():
+                    published = save_normal_checkpoint(
+                        accelerator,
+                        Path(args.output_dir) / checkpoint_name,
+                        journal,
+                        metadata=metadata,
+                        history=history,
+                        scaler_source=Path(args.output_dir) / "scaler.pkl",
+                        kind=kind,
+                    )
+                if accelerator.is_main_process:
+                    if kind == "best":
+                        torch.save(
+                            unwrap_checkpoint_model(accelerator, model).state_dict(),
+                            os.path.join(args.output_dir, "best_model_weights.pth"),
+                        )
+                    pd.DataFrame(history).to_csv(
+                        os.path.join(args.output_dir, "training_history.csv"),
+                        index=False,
+                    )
+                    logger.info(
+                        f"   💾 Published {kind} checkpoint: {published.generation}"
+                    )
+                    if _cleanup_interrupted_pending:
+                        # Only a durable new publication permits recovery-source cleanup.
+                        shutil.rmtree(interrupted_ckpt_path)
+                        _cleanup_interrupted_pending = False
 
             # DDP-safe early stopping
             should_stop = (
@@ -1960,44 +1865,31 @@ def main():
                 break
 
     except KeyboardInterrupt:
-        # Rank-0-only save to avoid DDP deadlock — accelerator.save_state()
-        # is collective and hangs if ranks receive the signal at different times.
+        # Emergency publication deliberately has no distributed participation.
         if accelerator.is_main_process:
             logger.warning("Training interrupted. Saving emergency checkpoint...")
-            try:
-                os.makedirs(interrupted_ckpt_path, exist_ok=True)
-                unwrapped = accelerator.unwrap_model(model)
-                torch.save(
-                    unwrapped.state_dict(),
-                    os.path.join(interrupted_ckpt_path, "model_weights.pth"),
-                )
-                torch.save(
-                    optimizer.state_dict(),
-                    os.path.join(interrupted_ckpt_path, "optimizer.pt"),
-                )
-                torch.save(
-                    scheduler.state_dict(),
-                    os.path.join(interrupted_ckpt_path, "scheduler.pt"),
-                )
-                with open(
-                    os.path.join(interrupted_ckpt_path, "training_meta.pkl"), "wb"
-                ) as f:
-                    pickle.dump(
-                        {
-                            "epoch": epoch,
-                            "best_val_loss": best_val_loss,
-                            "patience_ctr": patience_ctr,
-                            "model_name": args.model,
-                            "in_shape": in_shape,
-                            "out_dim": out_dim,
-                        },
-                        f,
-                    )
-                logger.info(
-                    f"   💾 Emergency checkpoint saved (will resume from epoch {epoch + 1})"
-                )
-            except Exception as save_err:
-                logger.error(f"Failed to save emergency checkpoint: {save_err}")
+            save_emergency_checkpoint(
+                accelerator,
+                model,
+                optimizer,
+                scheduler,
+                interrupted_ckpt_path,
+                journal,
+                metadata={
+                    "epoch": completed_epochs,
+                    "best_val_loss": best_val_loss,
+                    "patience_ctr": patience_ctr,
+                    "model_name": args.model,
+                    "in_shape": in_shape,
+                    "out_dim": out_dim,
+                },
+                history=history,
+                scaler_source=Path(args.output_dir) / "scaler.pkl",
+            )
+            logger.info(
+                f"   💾 Emergency checkpoint published at step {completed_epochs}"
+            )
+        raise
 
     except Exception as e:
         logger.error(f"Critical error: {e}", exc_info=True)
@@ -2034,13 +1926,6 @@ def main():
                 logger.info("✔ Saved: training_curves.png, training_curves.svg")
             except Exception as e:
                 logger.warning(f"Could not generate training curves: {e}")
-
-        if args.wandb and WANDB_AVAILABLE:
-            accelerator.end_training()
-
-        # Clean up distributed process group to prevent resource leak warning
-        if dist.is_initialized():
-            dist.destroy_process_group()
 
         logger.info("Training completed.")
 

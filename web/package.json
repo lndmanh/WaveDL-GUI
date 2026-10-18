@@ -1,0 +1,57 @@
+{
+  "name": "wavedl-workstation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt generate",
+    "generate": "nuxt generate",
+    "postinstall": "nuxt prepare",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt prepare && vue-tsc --noEmit -p tsconfig.workstation.json && tsc -p tsconfig.worker.json",
+    "test": "nuxt prepare && vitest run",
+    "test:generated": "node --test test/generated/*.test.mjs",
+    "test:browser": "node ../tools/run_web_acceptance.mjs",
+    "lint:workstation": "oxlint workstation nuxt.config.ts vitest.config.ts test/workstation test/generated",
+    "format:workstation": "oxfmt workstation nuxt.config.ts vitest.config.ts tsconfig.workstation.json test/workstation test/generated",
+    "format:check": "oxfmt --check workstation nuxt.config.ts vitest.config.ts tsconfig.workstation.json test/workstation test/generated"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.28.0",
+    "@vite-pwa/nuxt": "1.1.1",
+    "@vueuse/core": "14.4.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "nuxt": "4.5.2",
+    "reka-ui": "2.10.1",
+    "tailwind-merge": "3.6.0",
+    "tailwindcss": "4.3.2",
+    "uplot": "1.6.32",
+    "vue": "3.5.43",
+    "vee-validate": "5.0.0-beta.0",
+    "zod": "4.6.5",
+    "workbox-core": "7.4.0",
+    "workbox-precaching": "7.4.0",
+    "workbox-routing": "7.4.0"
+  },
+  "overrides": {
+    "simple-git": {
+      "@simple-git/argv-parser": "2.0.1"
+    }
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.2",
+    "@vitejs/plugin-vue": "6.0.9",
+    "@types/node": "26.2.0",
+    "@vue/test-utils": "2.4.11",
+    "happy-dom": "20.11.1",
+    "fake-indexeddb": "6.2.5",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.77.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "vue-tsc": "3.3.9"
+  }
+}

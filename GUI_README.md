@@ -1,4 +1,12 @@
-# Implement a cross-platform GUI application for the wavedl. There should be 2 mode of working, directly on GUI or print out a list of commands for using in terminal. We should leverage the existing wavedl training scripts and CLI.
+# Historical Qt GUI design (unshipped)
+
+> This document describes the retained PySide6/Qt prototype from the migration
+> period. It is not the active product specification. The supported application
+> is the daemon/browser workstation documented in `README.md` and the current
+> acceptance ledger; no Qt compatibility or old-user-data migration is required.
+
+The original design goal was to provide a cross-platform GUI for WaveDL with a
+terminal-command mode while reusing the existing training scripts and CLI.
 
 ### Current CLI Entry Points
 

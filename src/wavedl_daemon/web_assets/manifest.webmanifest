@@ -1,0 +1,1 @@
+{"name":"WaveDL Workstation","short_name":"WaveDL","description":"A daemon-connected workspace for wave-based inverse problems.","start_url":"/","display":"standalone","background_color":"#f5f5f7","theme_color":"#f5f5f7","lang":"en","scope":"/","icons":[{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
