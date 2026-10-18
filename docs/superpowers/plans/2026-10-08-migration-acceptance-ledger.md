@@ -43,6 +43,14 @@ open: the runner's default object owner differs from its actual user, correctly
 triggering the product's strict ownership checks. A reviewed test-only wrapper
 now sets and restores the test process's default owner before fixture creation;
 an unwrapped native witness checks restoration and child-created file ownership.
+Fresh test workspaces receive a protected user/SYSTEM/Administrators inheritable
+DACL instead of inheriting foreign write grants from runner temp directories;
+existing paths and token DACLs are untouched. Native Windows also exposed the
+extended-DOS/UNC path spelling comparison in submission validation; only exact
+recognized namespace aliases are normalized, retaining declared mapping checks.
+The remaining download sharing violation has sanitized operation diagnostics,
+not a claimed fix. A separate Linux preview-fixture readiness race now publishes
+complete JSON atomically. Hosted confirmation of these latest changes is open.
 Production ownership/DACL rules are unchanged. Native test fixtures also retain
 explicit Windows write/rename-denial and unchanged-byte witnesses instead of
 assuming POSIX mutation behavior. These fixes still require hosted confirmation.

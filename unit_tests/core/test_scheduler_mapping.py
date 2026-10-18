@@ -6,10 +6,13 @@ import shutil
 import sys
 from argparse import Namespace
 from dataclasses import asdict, replace
+from pathlib import PureWindowsPath
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from wavedl.core import scheduler_attempt
 from wavedl.core.layout import OperationKind, RunLayout, allocate_attempt
 from wavedl.core.manifest import (
     RuntimeSelection,
@@ -28,7 +31,7 @@ from wavedl.journal import bootstrap_run
 from wavedl.launch_runtime import bind_scheduler_startup, prepare_runtime
 
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX scheduler mapping")
+posix_mapping = pytest.mark.skipif(os.name != "posix", reason="POSIX scheduler mapping")
 
 
 def options():
@@ -42,6 +45,7 @@ def options():
     )
 
 
+@posix_mapping
 def test_mapped_execution_binding_is_readable_from_both_declared_views(tmp_path):
     run_id, request = str(uuid4()), str(uuid4())
     host = RunLayout.create(tmp_path / "daemon", run_id)
@@ -128,6 +132,7 @@ def test_mapped_execution_binding_is_readable_from_both_declared_views(tmp_path)
     assert worker.request_manifest == manifest
 
 
+@posix_mapping
 def test_unmapped_working_directory_and_conflicting_normalized_roots_refused(tmp_path):
     run_id = str(uuid4())
     layout = RunLayout(tmp_path / "host" / run_id, run_id)
@@ -157,3 +162,100 @@ def test_unmapped_working_directory_and_conflicting_normalized_roots_refused(tmp
         validate_scheduler_view(duplicate, layout.run_dir)
     with pytest.raises(ValueError, match="outside the approved"):
         validate_scheduler_view(manifest, tmp_path / "other")
+
+
+@pytest.mark.parametrize(
+    ("ordinary", "extended"),
+    [
+        (r"C:\runs\job", r"\\?\C:\runs\job"),
+        (r"c:\RUNS\job", r"\\?\C:\runs\JOB"),
+        (r"\\server\share\runs\job", r"\\?\UNC\server\share\runs\job"),
+    ],
+)
+def test_windows_storage_namespace_comparison_accepts_only_equivalent_spellings(
+    ordinary, extended
+):
+    assert scheduler_attempt._windows_scheduler_path(extended) == PureWindowsPath(
+        ordinary
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        r"C:relative",
+        r"\rooted",
+        "relative",
+        r"\\.\C:\runs\job",
+        r"\\?\GLOBALROOT\Device\HarddiskVolume1\runs\job",
+        r"\\?\Volume{123}\runs\job",
+        r"\\?\UNC\server",
+        r"\\server",
+    ],
+)
+def test_windows_storage_namespace_comparison_rejects_device_and_relative_paths(path):
+    with pytest.raises(ValueError):
+        scheduler_attempt._windows_scheduler_path(path)
+
+
+def test_windows_exact_mapping_keeps_component_authority(monkeypatch):
+    # Supply already-resolved Windows paths on every host; native integration
+    # still exercises real final-path handles through the submission tests.
+    monkeypatch.setattr(scheduler_attempt, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        scheduler_attempt,
+        "Path",
+        lambda value: SimpleNamespace(resolve=lambda: PureWindowsPath(value)),
+    )
+    manifest = SimpleNamespace(
+        run_directory=r"C:\host\job",
+        working_directory=r"D:\compute\job",
+        storage_map=[
+            SimpleNamespace(host_root=r"C:\host", execution_root=r"D:\compute")
+        ],
+    )
+    assert validate_scheduler_view(manifest, r"\\?\c:\HOST\job") == "host"
+    assert validate_scheduler_view(manifest, r"\\?\D:\compute\job") == "execution"
+    manifest.run_directory = r"\\?\C:\host\job"
+    manifest.working_directory = r"\\?\D:\compute\job"
+    manifest.storage_map = [
+        SimpleNamespace(host_root=r"\\?\C:\host", execution_root=r"\\?\D:\compute")
+    ]
+    assert validate_scheduler_view(manifest, r"C:\host\job") == "host"
+    assert validate_scheduler_view(manifest, r"D:\compute\job") == "execution"
+    for foreign in (r"C:\hostile\job", r"E:\compute\job", r"D:\compute\job2"):
+        with pytest.raises(ValueError, match="outside the approved"):
+            validate_scheduler_view(manifest, foreign)
+    manifest.working_directory = r"D:\compute\job2"
+    with pytest.raises(ValueError, match="exact declared mapping"):
+        validate_scheduler_view(manifest, r"C:\host\job")
+    manifest.working_directory = r"D:\compute\job"
+    manifest.storage_map.append(
+        SimpleNamespace(host_root=r"\\?\c:\HOST", execution_root=r"E:\other")
+    )
+    with pytest.raises(ValueError, match="Ambiguous normalized"):
+        validate_scheduler_view(manifest, r"C:\host\job")
+
+
+def test_windows_unc_mapping_does_not_alias_other_server_or_share(monkeypatch):
+    monkeypatch.setattr(scheduler_attempt, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        scheduler_attempt,
+        "Path",
+        lambda value: SimpleNamespace(resolve=lambda: PureWindowsPath(value)),
+    )
+    manifest = SimpleNamespace(
+        run_directory=r"\\server\share\job",
+        working_directory=r"\\server\share\job",
+        storage_map=[],
+    )
+    assert validate_scheduler_view(manifest, r"\\?\UNC\SERVER\SHARE\job") == "host"
+    for foreign in (r"\\other\share\job", r"\\server\other\job"):
+        with pytest.raises(ValueError, match="outside the approved"):
+            validate_scheduler_view(manifest, foreign)
+
+
+@posix_mapping
+def test_posix_scheduler_paths_do_not_rewrite_windows_literal_names(tmp_path):
+    path = tmp_path / r"\\?\C:\runs\job"
+    assert scheduler_attempt._scheduler_path(path) == path.resolve()

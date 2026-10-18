@@ -6,6 +6,7 @@ import select
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -13,6 +14,48 @@ import pytest
 
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX phase-child fixture")
+
+
+def test_readiness_is_invisible_until_complete_payload_is_closed(tmp_path, monkeypatch):
+    from tools import browser_preview_fault_fixture as fixture
+
+    partial = threading.Event()
+    release = threading.Event()
+    failures = []
+    ready = tmp_path / ".preview-ready-5.json"
+    argv = [sys.executable, "-m", "wavedl.core.dataset_preview"]
+
+    def paused_dump(value, stream):
+        encoded = json.dumps(value)
+        stream.write(encoded[:1])
+        stream.flush()
+        partial.set()
+        assert release.wait(timeout=5)
+        stream.write(encoded[1:])
+
+    def writer():
+        try:
+            fixture.publish_ready(tmp_path, 5, argv)
+        except BaseException as error:
+            failures.append(error)
+
+    monkeypatch.setattr(fixture.json, "dump", paused_dump)
+    thread = threading.Thread(target=writer)
+    thread.start()
+    try:
+        assert partial.wait(timeout=5)
+        assert not ready.exists()
+    finally:
+        release.set()
+        thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert not failures
+    assert json.loads(ready.read_bytes()) == {
+        "phase": 5,
+        "pid": os.getpid(),
+        "argv": argv,
+    }
+    assert sorted(tmp_path.iterdir()) == [ready]
 
 
 def test_sigint_shutdown_preserves_services_closed_marker(tmp_path):

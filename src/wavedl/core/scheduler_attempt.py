@@ -19,7 +19,7 @@ import re
 import time
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from uuid import UUID, uuid4
 
 from wavedl.core.layout import (
@@ -42,24 +42,59 @@ def _integer(value, minimum):
         raise ValueError("Invalid scheduler integer")
 
 
+def _windows_scheduler_path(path: str | Path) -> PureWindowsPath:
+    """Compare only equivalent DOS/UNC spellings, never arbitrary devices."""
+    value = PureWindowsPath(path)
+    drive = value.drive
+    if drive.startswith("\\\\?\\"):
+        if re.fullmatch(r"\\\\\?\\[A-Za-z]:", drive):
+            drive = drive[4:]
+        elif drive.startswith("\\\\?\\UNC\\"):
+            drive = "\\\\" + drive[8:]
+        else:
+            raise ValueError("Unsupported scheduler Windows namespace")
+        value = PureWindowsPath(drive + "\\", *value.parts[1:])
+    if not value.is_absolute():
+        raise ValueError("Scheduler Windows path must be absolute")
+    if re.fullmatch(r"[A-Za-z]:", value.drive):
+        return value
+    # A UNC root contains exactly a server and share. Device namespaces and
+    # incomplete roots must not become aliases for an approved storage view.
+    parts = value.drive.split("\\")
+    if (
+        len(parts) == 4
+        and parts[:2] == ["", ""]
+        and all(part not in {"", ".", "..", "?"} for part in parts[2:])
+    ):
+        return value
+    raise ValueError("Unsupported scheduler Windows namespace")
+
+
+def _scheduler_path(path: str | Path) -> Path | PureWindowsPath:
+    resolved = Path(path).resolve()
+    return _windows_scheduler_path(resolved) if os.name == "nt" else resolved
+
+
 def validate_scheduler_view(manifest: Manifest, path: Path) -> str:
     """Validate the declared host-to-execution relationship before using a view."""
-    host = Path(manifest.run_directory).resolve()
-    execution = Path(manifest.working_directory).resolve()
+    host = _scheduler_path(manifest.run_directory)
+    execution = _scheduler_path(manifest.working_directory)
     roots = {}
     for mapping in manifest.storage_map:
-        root = Path(mapping.host_root).resolve()
+        root = _scheduler_path(mapping.host_root)
         if root in roots:
             raise ValueError("Ambiguous normalized scheduler storage mapping")
-        roots[root] = Path(mapping.execution_root).resolve()
+        roots[root] = _scheduler_path(mapping.execution_root)
     expected = host
     for root in sorted(roots, key=lambda item: len(item.parts), reverse=True):
         if host.is_relative_to(root):
             expected = roots[root] / host.relative_to(root)
             break
-    if expected.resolve() != execution:
+    if os.name != "nt":
+        expected = expected.resolve()
+    if expected != execution:
         raise ValueError("Scheduler execution view lacks an exact declared mapping")
-    actual = Path(path).resolve()
+    actual = _scheduler_path(path)
     if actual == host:
         return "host"
     if actual == execution:

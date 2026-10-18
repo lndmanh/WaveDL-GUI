@@ -8,13 +8,26 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 
-def phase_child(root, phase, argv):
+def publish_ready(root, phase, argv):
+    """Expose only a complete readiness payload in the owned fixture directory."""
     ready = root / f".preview-ready-{phase}.json"
-    ready.write_text(json.dumps({"phase": phase, "pid": os.getpid(), "argv": argv}))
+    descriptor, name = tempfile.mkstemp(prefix=".preview-ready-", dir=root)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump({"phase": phase, "pid": os.getpid(), "argv": argv}, stream)
+        os.replace(temporary, ready)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def phase_child(root, phase, argv):
+    publish_ready(root, phase, argv)
     deadline = time.monotonic() + 45
     while phase in (1, 2, 5) and not (root / f".preview-release-{phase}").exists():
         if time.monotonic() >= deadline:

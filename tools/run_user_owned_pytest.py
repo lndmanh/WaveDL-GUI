@@ -3,7 +3,8 @@
 Elevated Windows runners can default new files to Administrators ownership.
 The runtime deliberately requires actual-user ownership, so tests must create
 their fixtures with the corresponding owner. Never change production policy,
-privileges, DACLs or existing filesystem objects here.
+privileges, token DACLs or existing filesystem objects here. Only a freshly
+created test workspace receives an explicit protected inheritable DACL.
 
 Microsoft contracts:
 https://learn.microsoft.com/en-us/windows/win32/secauthz/owner-of-a-new-object
@@ -14,7 +15,9 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from contextlib import contextmanager
+from pathlib import Path
 
 
 class TokenOwnerAPI:
@@ -99,6 +102,89 @@ class TokenOwnerAPI:
         if not self.kernel.CloseHandle(token):
             raise self.error()
 
+    def protect_directory(self, path):
+        """Set a protected inheritable DACL on a freshly allocated test root."""
+        c, t = self.c, self.t
+        signatures = {
+            "ConvertSidToStringSidW": ([t.LPVOID, c.POINTER(t.LPWSTR)], t.BOOL),
+            "ConvertStringSecurityDescriptorToSecurityDescriptorW": (
+                [t.LPCWSTR, t.DWORD, c.POINTER(t.LPVOID), c.POINTER(t.DWORD)],
+                t.BOOL,
+            ),
+            "GetSecurityDescriptorDacl": (
+                [t.LPVOID, c.POINTER(t.BOOL), c.POINTER(t.LPVOID), c.POINTER(t.BOOL)],
+                t.BOOL,
+            ),
+            "SetNamedSecurityInfoW": (
+                [t.LPWSTR, c.c_int, t.DWORD, t.LPVOID, t.LPVOID, t.LPVOID, t.LPVOID],
+                t.DWORD,
+            ),
+        }
+        for name, (args, result) in signatures.items():
+            function = getattr(self.security, name)
+            function.argtypes, function.restype = args, result
+        self.kernel.LocalFree.argtypes = [t.LPVOID]
+        self.kernel.LocalFree.restype = t.LPVOID
+        token = self.open()
+        descriptor, sid_text = t.LPVOID(), t.LPWSTR()
+        try:
+            _user_buffer, user_sid = self.query(token, 1)
+            if not self.security.ConvertSidToStringSidW(user_sid, c.byref(sid_text)):
+                raise self.error()
+            sddl = private_sddl(sid_text.value)
+            if not self.security.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl, 1, c.byref(descriptor), None
+            ):
+                raise self.error()
+            present, defaulted, dacl = t.BOOL(), t.BOOL(), t.LPVOID()
+            if not self.security.GetSecurityDescriptorDacl(
+                descriptor, c.byref(present), c.byref(dacl), c.byref(defaulted)
+            ):
+                raise self.error()
+            if not present.value or not dacl.value:
+                raise RuntimeError("Explicit private test DACL required")
+            # SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION.
+            result = self.security.SetNamedSecurityInfoW(
+                str(path), 1, 0x80000004, None, None, dacl, None
+            )
+            if result:
+                raise c.WinError(result)
+        finally:
+            try:
+                try:
+                    if descriptor and self.kernel.LocalFree(descriptor):
+                        raise self.error()
+                finally:
+                    allocation = c.cast(sid_text, t.LPVOID)
+                    if allocation and self.kernel.LocalFree(allocation):
+                        raise self.error()
+            finally:
+                self.close(token)
+
+
+def private_sddl(user_sid):
+    import re
+
+    if not isinstance(user_sid, str) or not re.fullmatch(
+        r"S-1-(?:[0-9]+-)*[0-9]+", user_sid
+    ):
+        raise ValueError("Actual token-user SID required")
+    return f"D:P(A;OICI;FA;;;{user_sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+
+
+@contextmanager
+def private_test_workspace(*, platform=None, api_factory=TokenOwnerAPI):
+    """Protect only one fresh empty root; never alter its shared temp parent."""
+    native = (os.name if platform is None else platform) == "nt"
+    with tempfile.TemporaryDirectory(prefix="wavedl-user-pytest-") as temporary:
+        root = Path(temporary)
+        if root.is_symlink() or not root.is_dir() or list(root.iterdir()):
+            raise RuntimeError("Fresh ordinary empty test root required")
+        root = root.resolve()
+        if native:
+            api_factory().protect_directory(root)
+        yield root
+
 
 @contextmanager
 def user_owned_objects(*, platform=None, api_factory=TokenOwnerAPI):
@@ -139,7 +225,20 @@ def main(argv=None):
         with user_owned_objects():
             import pytest
 
-            return pytest.main(sys.argv[1:] if argv is None else argv)
+            arguments = list(sys.argv[1:] if argv is None else argv)
+            if os.name == "nt":
+                if any(
+                    arg == "--basetemp" or arg.startswith("--basetemp=")
+                    for arg in arguments
+                ):
+                    raise ValueError(
+                        "Wrapper owns the Windows pytest base temporary root"
+                    )
+                with private_test_workspace() as workspace:
+                    return pytest.main(
+                        [*arguments, "--basetemp", str(workspace / "pytest")]
+                    )
+            return pytest.main(arguments)
     finally:
         sys.path[:] = original_path
 

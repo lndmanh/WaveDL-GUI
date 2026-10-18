@@ -104,6 +104,111 @@ def test_posix_context_never_loads_native_bindings():
         pass
 
 
+def test_private_workspace_protects_only_fresh_root_then_removes_it():
+    protected = []
+
+    class PrivateAPI:
+        def protect_directory(self, root):
+            assert root.name.startswith("wavedl-user-pytest-")
+            assert (
+                root.is_dir() and not root.is_symlink() and list(root.iterdir()) == []
+            )
+            protected.append(root)
+
+    with MODULE.private_test_workspace(platform="nt", api_factory=PrivateAPI) as root:
+        assert protected == [root]
+        (root / "pytest").mkdir()
+        (root / "pytest/owned").write_bytes(b"owned")
+    assert not root.exists()
+    assert root.parent.is_dir()
+
+
+def test_private_sddl_is_protected_inheritable_and_has_only_trusted_principals():
+    assert MODULE.private_sddl("S-1-5-21-123") == (
+        "D:P(A;OICI;FA;;;S-1-5-21-123)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+    )
+    with pytest.raises(ValueError):
+        MODULE.private_sddl("S-1-5)(A;;FA;;;WD)")
+
+
+@pytest.mark.parametrize("set_error", [0, 5])
+def test_typed_private_dacl_binding_targets_only_selected_root_and_frees_buffers(
+    set_error,
+):
+    from ctypes import wintypes
+
+    calls = []
+    sid_memory = ctypes.create_unicode_buffer("S-1-5-21-123")
+
+    class Function:
+        def __init__(self, callback):
+            self.callback = callback
+
+        def __call__(self, *args):
+            return self.callback(*args)
+
+    def string_sid(sid, out):
+        ctypes.cast(out, ctypes.POINTER(wintypes.LPWSTR))[0] = ctypes.cast(
+            sid_memory, wintypes.LPWSTR
+        )
+        return 1
+
+    def descriptor(sddl, revision, out, size):
+        calls.append(("sddl", sddl, revision))
+        ctypes.cast(out, ctypes.POINTER(wintypes.LPVOID))[0] = 222
+        return 1
+
+    def dacl(sd, present, out, defaulted):
+        ctypes.cast(present, ctypes.POINTER(wintypes.BOOL))[0] = 1
+        ctypes.cast(out, ctypes.POINTER(wintypes.LPVOID))[0] = 333
+        return 1
+
+    def set_security(path, kind, flags, owner, group, acl, sacl):
+        calls.append(("target", path, kind, flags, owner, group, acl.value, sacl))
+        return set_error
+
+    api = MODULE.TokenOwnerAPI.__new__(MODULE.TokenOwnerAPI)
+    api.c = SimpleNamespace(
+        byref=ctypes.byref,
+        cast=ctypes.cast,
+        POINTER=ctypes.POINTER,
+        c_int=ctypes.c_int,
+        WinError=lambda code: OSError(code, "native failure"),
+    )
+    api.t = wintypes
+    api.kernel = SimpleNamespace(
+        LocalFree=Function(lambda p: calls.append(("free", p.value)) and None)
+    )
+    api.security = SimpleNamespace(
+        ConvertSidToStringSidW=Function(string_sid),
+        ConvertStringSecurityDescriptorToSecurityDescriptorW=Function(descriptor),
+        GetSecurityDescriptorDacl=Function(dacl),
+        SetNamedSecurityInfoW=Function(set_security),
+    )
+    api.open = lambda: 700
+    api.query = lambda token, kind: (object(), 111)
+    api.close = lambda token: calls.append(("close", token))
+    if set_error:
+        with pytest.raises(OSError):
+            api.protect_directory(Path("fresh-owned-test-root"))
+    else:
+        api.protect_directory(Path("fresh-owned-test-root"))
+    assert calls[0] == ("sddl", MODULE.private_sddl("S-1-5-21-123"), 1)
+    assert calls[1] == (
+        "target",
+        "fresh-owned-test-root",
+        1,
+        0x80000004,
+        None,
+        None,
+        333,
+        None,
+    )
+    assert calls[2][0] == "free" and calls[2][1] == 222
+    assert calls[3][0] == "free"
+    assert calls[-1] == ("close", 700)
+
+
 def test_wrapper_enters_owner_context_before_pytest_main_or_temp_allocation(
     monkeypatch,
 ):
@@ -151,6 +256,43 @@ def test_wrapper_restores_import_path_and_owner_after_pytest_failure(monkeypatch
         MODULE.main([])
     assert sys.path == original_path
     assert api.owner == 100 and api.events[-1] == "close"
+
+
+def test_windows_wrapper_forces_fresh_protected_basetemp_before_pytest(monkeypatch):
+    api = OwnerAPI()
+    original_owner, original_workspace = (
+        MODULE.user_owned_objects,
+        MODULE.private_test_workspace,
+    )
+    roots = []
+
+    class PrivateAPI:
+        def protect_directory(self, root):
+            assert api.owner == 200
+            roots.append(root)
+
+    monkeypatch.setattr(MODULE, "os", SimpleNamespace(name="nt", getcwd=os.getcwd))
+    monkeypatch.setattr(
+        MODULE,
+        "user_owned_objects",
+        lambda: original_owner(platform="nt", api_factory=lambda: api),
+    )
+    monkeypatch.setattr(
+        MODULE,
+        "private_test_workspace",
+        lambda: original_workspace(platform="nt", api_factory=PrivateAPI),
+    )
+
+    def pytest_main(args):
+        assert args == ["unit_tests/core", "--basetemp", str(roots[0] / "pytest")]
+        assert roots[0].is_dir() and api.owner == 200
+        return 9
+
+    monkeypatch.setitem(sys.modules, "pytest", SimpleNamespace(main=pytest_main))
+    assert MODULE.main(["unit_tests/core"]) == 9
+    assert not roots[0].exists() and api.owner == 100
+    with pytest.raises(ValueError, match="owns the Windows pytest"):
+        MODULE.main(["--basetemp=existing-user-folder"])
 
 
 def test_typed_native_bindings_query_set_compare_and_close(monkeypatch):
@@ -257,28 +399,32 @@ def test_native_owner_context_creates_user_owned_file_and_restores_token(tmp_pat
     token = api.open()
     try:
         _before_buffer, before = api.query(token, 4)
-        with MODULE.user_owned_objects():
+        with (
+            MODULE.user_owned_objects(),
+            MODULE.private_test_workspace() as workspace,
+        ):
             _user_buffer, user = api.query(token, 1)
             _current_buffer, current = api.query(token, 4)
             assert api.equal(current, user)
-            (tmp_path / "native-user-owned").write_bytes(b"native ownership")
+            (workspace / "native-user-owned").write_bytes(b"native ownership")
             subprocess.run(
                 [
                     sys.executable,
                     "-c",
                     "from pathlib import Path; import sys; Path(sys.argv[1]).write_bytes(b'child ownership')",
-                    str(tmp_path / "native-child-owned"),
+                    str(workspace / "native-child-owned"),
                 ],
                 check=True,
                 timeout=10,
             )
             with (
-                open_directory(tmp_path) as root,
+                open_directory(workspace) as root,
                 root.open_file("native-user-owned") as file,
             ):
                 file.verify_private_owner()
+                root.verify_private_owner()
             with (
-                open_directory(tmp_path) as root,
+                open_directory(workspace) as root,
                 root.open_file("native-child-owned") as file,
             ):
                 file.verify_private_owner()

@@ -21,9 +21,24 @@ TOKEN = "private-transport-test-token"
 
 def transport_failure_detail(error):
     cause = error.__context__
+    # Native failures are deliberately hidden at the public transport boundary.
+    # Identify the failing internal operation without printing private paths,
+    # traceback source lines, locals, or the OS error's potentially private text.
+    frames = []
+    traceback = cause.__traceback__ if cause is not None else None
+    while traceback is not None:
+        frame = traceback.tb_frame
+        if frame.f_globals.get("__name__") in {
+            "wavedl.core.client_transport",
+            "wavedl.core.safe_files",
+            "wavedl.core.windows_ownership",
+        }:
+            frames.append(f"{frame.f_code.co_name}:{traceback.tb_lineno}")
+        traceback = traceback.tb_next
     return (
         f"{type(cause).__name__}, errno={getattr(cause, 'errno', None)}, "
-        f"winerror={getattr(cause, 'winerror', None)}"
+        f"winerror={getattr(cause, 'winerror', None)}, "
+        f"operations={'/'.join(frames) or 'unavailable'}"
     )
 
 
@@ -368,11 +383,38 @@ def test_failed_download_before_readiness_surfaces_sanitized_context_without_han
         with pytest.raises(pytest.fail.Exception) as failure:
             await ready_or_task_failure(asyncio.Event(), task)
         assert str(failure.value) == (
-            "Transport failed before readiness: PermissionError, errno=13, winerror=32"
+            "Transport failed before readiness: PermissionError, errno=13, "
+            "winerror=32, operations=unavailable"
         )
         assert task.done()
 
     asyncio.run(run())
+
+
+def test_transport_failure_diagnostics_identify_internal_phase_without_private_data(
+    monkeypatch, tmp_path
+):
+    from wavedl.core import client_transport
+
+    private = "private-token-and-path-must-not-appear"
+
+    def fail_open(*args, **kwargs):
+        error = PermissionError(13, private, str(tmp_path / private))
+        error.winerror = 32
+        raise error
+
+    monkeypatch.setattr(client_transport, "open_directory", fail_open)
+    ref = ArtifactRef(RUN, "gen-000001", "file.bin", 0, "0" * 64)
+    with pytest.raises(ClientTransportError) as caught:
+        asyncio.run(
+            HttpTransport("http://127.0.0.1:1", TOKEN).download(
+                ref, tmp_path / "result.bin", max_bytes=1
+            )
+        )
+    detail = transport_failure_detail(caught.value)
+    assert "PermissionError, errno=13, winerror=32, operations=download:" in detail
+    assert private not in detail and TOKEN not in detail
+    assert str(tmp_path) not in detail and "fail_open" not in detail
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX directory-rename race")
