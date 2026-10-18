@@ -192,12 +192,23 @@ def test_outage_uses_authoritative_file(tmp_path):
     with socket.socket() as unused:
         unused.bind(("127.0.0.1", 0))
         port = unused.getsockname()[1]
-    client = LivePushClient(LivePushConfig(f"http://127.0.0.1:{port}", "secret"))
+    config = LivePushConfig(f"http://127.0.0.1:{port}", "secret")
+    client = LivePushClient(config)
     run = journal(tmp_path, client)
-    wait_until(lambda: client.counters["disabled"])
-    run.emit("state", StatePayload("running"))
-    run.close()
-    assert len(read_events(run)) == 2
+    try:
+        # The network attempt may consume its entire product deadline before
+        # Windows reports refusal. Allow finite worker/OS scheduling overhead;
+        # this test checks file fallback, not the stricter IO-deadline contract.
+        wait_until(lambda: client.counters["disabled"], timeout=config.deadline + 3)
+        run.emit("state", StatePayload("running"))
+    finally:
+        run.close()
+    assert client.counters["pending_bytes"] == 0
+    wait_until(lambda: not client._thread.is_alive(), timeout=3)
+    events = read_events(run)
+    assert [event.seq for event in events] == [0, 1]
+    assert [event.type for event in events] == ["hello", "state"]
+    assert events[1].payload == {"state": "running", "message": ""}
 
 
 @pytest.mark.parametrize(

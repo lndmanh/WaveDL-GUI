@@ -195,7 +195,7 @@ def test_registry_names_enrich_help_and_alias_stays_hidden(capsys):
 def test_training_wrapper_keeps_dependency_free_parser_contract(monkeypatch):
     """Execute just the wrapper AST, without import-time ML/cache side effects."""
     source = Path(__file__).resolve().parents[2] / "src/wavedl/train.py"
-    tree = ast.parse(source.read_text())
+    tree = ast.parse(source.read_text(encoding="utf-8"))
     wrapper = next(
         node
         for node in tree.body
@@ -236,6 +236,7 @@ assert training_defaults()["precision"] == "bf16"
         env=os.environ | {"PYTHONPATH": str(source_root)},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=15,
     )
     assert result.returncode == 0, result.stderr
