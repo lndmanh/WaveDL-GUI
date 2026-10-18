@@ -72,6 +72,12 @@ preserving Local's existing deadline and all claim/publication fences. Exact
 filesystem identity replaces lexical spelling in those two test assertions.
 These follow-ups and the independent daemon diagnostic lane need fresh CI.
 
+At `0973409`, both Windows core suites pass **814 / 135 platform skips**, with
+all mandatory core ownership/publication cases passing. The independent daemon
+lane then reveals two module-level test fixtures using POSIX-only `/unused`
+paths; their native absolute-path correction passes **69** focused tests
+locally. Daemon/platform certification remains open until its full native run.
+
 Hosted full CPU Tests run `39162366676` at `a3888c0` also completes successfully
 on Python 3.11/3.12/3.13: each **3,838 passed / 36 skipped / 336 deselected**;
 the Python 3.11 isolated wheel gate passes. This predates the latest native

@@ -3,6 +3,7 @@
 import asyncio
 import json
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -36,7 +37,7 @@ RECEIPT = SubmissionHandle(
     RUN_ID,
     RUN_ID,
     "owner",
-    "/unused",
+    str(Path("/unused").absolute()),
     job_id="123;cluster",
     raw_json=json.dumps(
         {
@@ -90,7 +91,15 @@ def test_unbound_native_lifecycle_ignores_runtime_and_publication(
 
 
 def test_unbound_rejects_bound_handles_and_evidence():
-    bound = Handle("slurm", RUN_ID, "request", 1, "owner", "/unused", job_id="123")
+    bound = Handle(
+        "slurm",
+        RUN_ID,
+        "request",
+        1,
+        "owner",
+        str(Path("/unused").absolute()),
+        job_id="123",
+    )
     with pytest.raises(ValueError):
         replace(INTENT, handle=bound)
     with pytest.raises(ValueError):

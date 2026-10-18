@@ -1,6 +1,7 @@
 """Attempt-scoped truth table; no ML, Qt, subprocess or filesystem needed."""
 
 from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
 
 import pytest
 
@@ -24,7 +25,15 @@ from wavedl_daemon.runs.reducer import (
 
 RUN_ID = "00000000-0000-0000-0000-000000000001"
 OTHER_ID = "00000000-0000-0000-0000-000000000002"
-HANDLE = Handle("slurm", RUN_ID, "request", 1, "owner", "/unused", job_id="123")
+HANDLE = Handle(
+    "slurm",
+    RUN_ID,
+    "request",
+    1,
+    "owner",
+    str(Path("/unused").absolute()),
+    job_id="123",
+)
 INTENT = RunIntent(
     RUN_ID, OperationKind.TRAIN, 1, "slurm", SubmissionState.SUBMITTED, HANDLE
 )
