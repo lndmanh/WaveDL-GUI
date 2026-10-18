@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import sys
 from argparse import Namespace
 from dataclasses import asdict
@@ -40,6 +41,8 @@ def options(**changes):
 
 @pytest.fixture
 def writer_scheduler(tmp_path):
+    if os.name != "posix":
+        pytest.skip("Slurm writer allocation requires POSIX scheduler coordination")
     from wavedl.core.submission import (
         create_submission,
         identity_for_submission,
@@ -329,6 +332,17 @@ def test_scheduler_allocation_coordinator_binds_all_launchers_and_workers(tmp_pa
         "SLURM_JOB_ID": "12345",
         "SLURM_RESTART_COUNT": "0",
     }
+    if os.name != "posix":
+        with pytest.raises(
+            OSError, match="Scheduler startup coordination requires POSIX"
+        ):
+            bind_scheduler_startup(layout.run_dir, env)
+        assert list(layout.attempts.iterdir()) == [layout.attempt_dir(1)]
+        assert (layout.attempt_dir(1) / "runtime_request.json").read_bytes() == (
+            original_request
+        )
+        assert not (layout.attempt_dir(1) / "runtime_identity.json").exists()
+        return
     initial = bind_scheduler_startup(layout.run_dir, env)
     assert initial.attempt == 1
     _, first = prepare_runtime(

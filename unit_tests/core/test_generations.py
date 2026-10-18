@@ -355,18 +355,41 @@ def test_discovery_rejects_replaced_symlink_without_losing_prior(
     prior = publish_generation(layout, source, attempt=attempt, step=1)
     later = publish_generation(layout, source, attempt=attempt, step=2)
     target = later.path / member
+    unchanged = {
+        path.relative_to(later.path): path.read_bytes()
+        for path in later.path.rglob("*")
+        if path.is_file()
+    }
+    blocked = []
     original = safe_files.SafeDirectory.entries
 
     def entries(anchor):
         values = list(original(anchor))
         if anchor.path.name == "checkpoints":
             moved = tmp_path / (member + ".outside")
+            if os.name == "nt":
+                with pytest.raises(PermissionError) as denied:
+                    target.rename(moved)
+                assert denied.value.winerror == 32
+                assert not moved.exists()
+                blocked.append(member)
+                yield from values
+                return
             target.rename(moved)
             target.symlink_to(moved, target_is_directory=moved.is_dir())
         yield from values
 
     monkeypatch.setattr(safe_files.SafeDirectory, "entries", entries)
-    assert published_generations(layout) == [prior]
+    assert published_generations(layout) == (
+        [prior, later] if os.name == "nt" else [prior]
+    )
+    if os.name == "nt":
+        assert blocked == [member]
+        assert {
+            path.relative_to(later.path): path.read_bytes()
+            for path in later.path.rglob("*")
+            if path.is_file()
+        } == unchanged
 
 
 def test_discovery_rejects_symlink_generation_but_keeps_prior(tmp_path):

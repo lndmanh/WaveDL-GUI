@@ -412,6 +412,7 @@ def test_injected_selected_runtime_difference_refused(tmp_path, change):
         )
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX no-follow flag contract")
 def test_metadata_no_follow_missing_fails_closed(tmp_path, monkeypatch):
     first = boot(tmp_path)
     monkeypatch.delattr(runtime_journal.os, "O_NOFOLLOW", raising=False)
@@ -431,7 +432,8 @@ def test_symlink_runtime_identity_refused(tmp_path):
     target.write_bytes(identity.read_bytes())
     identity.unlink()
     identity.symlink_to(target)
-    with pytest.raises(OSError):
+    expected = ValueError if os.name == "nt" else OSError
+    with pytest.raises(expected, match="Reparse" if os.name == "nt" else None):
         bootstrap_run(
             tmp_path,
             resolved_config=first.request_manifest.resolved_config,
@@ -445,7 +447,8 @@ def test_dangling_attempt_request_symlink_does_not_fall_back_to_root(tmp_path):
     request = first.layout.attempt_dir(1) / "runtime_request.json"
     request.unlink()
     request.symlink_to(tmp_path / "absent-request.json")
-    with pytest.raises(OSError):
+    expected = ValueError if os.name == "nt" else OSError
+    with pytest.raises(expected, match="Reparse" if os.name == "nt" else None):
         bootstrap_run(
             tmp_path,
             resolved_config=first.request_manifest.resolved_config,

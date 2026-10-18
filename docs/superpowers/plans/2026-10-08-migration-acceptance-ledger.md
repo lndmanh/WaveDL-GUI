@@ -27,6 +27,41 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Hosted validation in progress — 2026-10-19
+
+The approved review branch is `review/daemon-browser-ci-2026-10-19`; no tag,
+release or publication has been created. At commit `ec7b783`, hosted **Tests**
+run `39149255592` succeeds on Python 3.11, 3.12 and 3.13: each reports **3,804
+passed / 35 skipped / 336 deselected**. The Python 3.11 dependency-resolved
+installed-wheel gate also passes. Hosted static-client run `39148790131` at
+`beb2dee` passes typecheck, lint, format checks, generation, **820 browser tests
+/ one skip**, and **38 generated-worker tests / zero skips**. Browser inputs
+are unchanged between these two commits. Lint is also green at both revisions.
+
+Linux and macOS foundations pass on Python 3.11 and 3.13. Native Windows remains
+open: the runner's default object owner differs from its actual user, correctly
+triggering the product's strict ownership checks. A reviewed test-only wrapper
+now sets and restores the test process's default owner before fixture creation;
+an unwrapped native witness checks restoration and child-created file ownership.
+Production ownership/DACL rules are unchanged. Native test fixtures also retain
+explicit Windows write/rename-denial and unchanged-byte witnesses instead of
+assuming POSIX mutation behavior. These fixes still require hosted confirmation.
+
+Clean tracked-source validation exposed and fixed an ignored shadcn utility.
+GitHub workflow-context validation and two stale upload-step test lookups were
+also corrected. The latest reviewed local batch passes **1,649 Node contracts**,
+**869 core tests / six platform skips**, and **32 wrapper/release tests / one
+native-Windows skip**, with pinned Ruff checks and actionlint. The earlier
+browser integration runs failed; downstream missing-evidence failures do not
+become independent product failures or successful acceptance. A fresh complete
+browser/CPU lane is still required, as are final supported-platform, GPU and
+real-site Slurm/filesystem gates. T30c/T38/T42 are not signed off here.
+
+An isolated Nuxt 4.6.2 trial removes the critical build-tool advisory path, but
+changes browser assets and the Node support floor; it has not been adopted.
+Two transitive build-tool advisory roots remain in that trial. This is not a
+clean dependency-audit claim or authority to bypass final package acceptance.
+
 ### Current authority-corrected source and bundle — 2026-10-18
 
 #### Latest Linux CPU isolated artifact acceptance

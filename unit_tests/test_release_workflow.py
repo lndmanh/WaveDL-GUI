@@ -93,8 +93,14 @@ def test_retired_desktop_workflow_and_paths_are_not_active():
         "python": ["3.11", "3.13"],
     }
     commands = "\n".join(step.get("run", "") for step in jobs["foundations"]["steps"])
-    assert "pytest unit_tests/core --confcutdir=unit_tests/core" in commands
-    assert "pytest unit_tests/daemon --confcutdir=unit_tests/daemon" in commands
+    assert (
+        "run_user_owned_pytest.py unit_tests/core --confcutdir=unit_tests/core"
+        in commands
+    )
+    assert (
+        "run_user_owned_pytest.py unit_tests/daemon --confcutdir=unit_tests/daemon"
+        in commands
+    )
     assert "verify_native_foundations_report.py" in commands
 
 

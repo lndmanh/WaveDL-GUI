@@ -181,12 +181,20 @@ def test_first_flush_syncs_file_then_journal_directory(tmp_path, monkeypatch):
     attempt = allocate_attempt(layout)
     calls = []
     real_fsync = os.fsync
+    real_directory_sync = journal_writer.sync_directory
 
     def sync(fd):
-        calls.append("directory" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file")
+        if stat.S_ISREG(os.fstat(fd).st_mode):
+            calls.append("file")
         real_fsync(fd)
 
+    def sync_parent(path):
+        assert path == layout.journal(attempt).parent
+        calls.append("directory")
+        real_directory_sync(path)
+
     monkeypatch.setattr(journal_writer.os, "fsync", sync)
+    monkeypatch.setattr(journal_writer, "sync_directory", sync_parent)
     with JournalWriter(layout, attempt=attempt) as writer:
         writer.append("hello", {})
         assert calls == ["file", "directory"]

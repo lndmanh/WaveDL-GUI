@@ -159,8 +159,13 @@ def test_binary_read_and_byte_bound(tmp_path):
     assert safe_files.read_regular_file(path, limit=3) == b"\x00\xff\n"
     with pytest.raises(ValueError, match="bounded"):
         safe_files.read_regular_file(path, limit=2)
-    with pytest.raises(ValueError):
-        safe_files.read_regular_file(tmp_path)
+    if os.name == "nt":
+        with pytest.raises(PermissionError) as denied:
+            safe_files.read_regular_file(tmp_path)
+        assert denied.value.winerror == 5
+    else:
+        with pytest.raises(ValueError):
+            safe_files.read_regular_file(tmp_path)
 
 
 @pytest.mark.parametrize("limit", [-1, True, 1.5])
@@ -384,6 +389,7 @@ def test_mock_windows_read_rejects_directory_before_read():
         (b"", 0, b""),
         (b"a\nsecond", 2, b"a\n"),
     ],
+    ids=["large-tail", "partial", "empty", "second-line"],
 )
 def test_first_line_ignores_total_file_size(tmp_path, data, limit, expected):
     path = tmp_path / "events.jsonl"
@@ -542,6 +548,10 @@ def test_native_windows_junction_rejected(tmp_path):
         safe_files.open_directory(junction)
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX fsync; Windows held-handle flush is tested by mock Win32 capability",
+)
 def test_directory_sync_uses_held_posix_descriptor_without_path_reopen(
     tmp_path, monkeypatch
 ):

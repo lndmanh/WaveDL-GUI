@@ -26,6 +26,7 @@ on:
       - "tools/**"
       - "tools/verify_native_foundations_report.py"
       - "unit_tests/test_native_foundations_report.py"
+      - "unit_tests/test_user_owned_pytest.py"
       - "unit_tests/test_tmpfs_acceptance_report.py"
       - "unit_tests/test_tmpfs_workflow.py"
       - "pyproject.toml"
@@ -55,6 +56,7 @@ on:
       - "tools/**"
       - "tools/verify_native_foundations_report.py"
       - "unit_tests/test_native_foundations_report.py"
+      - "unit_tests/test_user_owned_pytest.py"
       - "unit_tests/test_tmpfs_acceptance_report.py"
       - "unit_tests/test_tmpfs_workflow.py"
       - "pyproject.toml"
@@ -161,10 +163,12 @@ jobs:
         run: python -m ruff format --check src/wavedl/core src/wavedl/client.py src/wavedl/operations.py src/wavedl/launcher.py src/wavedl/distributed_launch.py src/wavedl/launch_runtime.py src/wavedl/local_startup.py src/wavedl/runtime.py src/wavedl/checkpointing.py src/wavedl/journal.py src/wavedl/train.py src/wavedl/test.py src/wavedl_daemon unit_tests/core unit_tests/daemon
       # The top-level runtime/cleanup/DDP tests use parent ML fixtures and run in
       # test.yml; this matrix preserves independently runnable light contracts.
+      - name: Verify scoped test-process ownership setup and native restoration
+        run: python -m pytest unit_tests/test_user_owned_pytest.py --noconftest -q
       - name: Shared contracts without parent ML fixtures
-        run: python -m pytest unit_tests/core --confcutdir=unit_tests/core --junitxml=core-foundations.xml -q
+        run: python tools/run_user_owned_pytest.py unit_tests/core --confcutdir=unit_tests/core --junitxml=core-foundations.xml -q
       - name: Native supervision and durable control
-        run: python -m pytest unit_tests/daemon --confcutdir=unit_tests/daemon --junitxml=daemon-foundations.xml -q
+        run: python tools/run_user_owned_pytest.py unit_tests/daemon --confcutdir=unit_tests/daemon --junitxml=daemon-foundations.xml -q
       - name: Check native foundations report guard
         run: python -m pytest unit_tests/test_native_foundations_report.py --noconftest -q
       - name: Require native foundations acceptance reports

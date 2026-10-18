@@ -123,7 +123,10 @@ test("CI triggers, executes, verifies and uploads only the restart report", asyn
   assert(workflow.includes('run: node tools/verify_daemon_restart_browser_report.mjs "$TMPDIR/daemon-restart-browser/daemon-restart.json"'));
   assert(workflow.includes('node --test tools/verify_daemon_restart_browser_report.test.mjs'));
   assert(workflow.includes('python -m pytest unit_tests/test_daemon_restart_browser_fixture.py -q'));
-  const upload = workflow.slice(workflow.indexOf("- name: Upload only nonsecret JSON acceptance evidence"));
+  const uploads = workflow.split(/(?=^      - )/m).filter(step =>
+    /^        uses: actions\/upload-artifact@[^\s]+$/m.test(step));
+  assert.equal(uploads.length, 1, "Exactly one acceptance artifact upload required");
+  const upload = uploads[0];
   assert(upload.includes("${{ runner.temp }}/wavedl-browser-ci/daemon-restart-browser/daemon-restart.json"));
   assert(!upload.includes("daemon-restart-browser/**"), "Never upload private fixture roots");
 });

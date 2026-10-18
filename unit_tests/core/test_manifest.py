@@ -155,8 +155,8 @@ def test_equivalent_host_alias_mappings_are_rejected_before_rewrite(tmp_path):
         plan(
             tmp_path,
             storage_map=(
-                StorageMapping(str(host), "/execution/a"),
-                StorageMapping(str(alias), "/execution/b"),
+                StorageMapping(str(host), str(tmp_path / "execution/a")),
+                StorageMapping(str(alias), str(tmp_path / "execution/b")),
             ),
         )
 

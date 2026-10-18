@@ -30,8 +30,11 @@ test("CI preserves twelve cases and requires additive cancellation evidence", as
   assert(workflow.includes("run: node tools/run_cancellation_lost_ack_browser_acceptance.mjs"));
   assert(workflow.includes("assert.equal(entries.length, 1"));
   assert(workflow.includes('verifyCancellationLostAckFile(join(process.env.TMPDIR, entries[0].name, "cancellation-lost-ack.json"))'));
-  const upload = workflow.slice(workflow.indexOf("- name: Upload only nonsecret JSON acceptance evidence"));
-  assert(upload.includes("wavedl-cancel-ack-*/cancellation-lost-ack.json"));
+  const uploads = workflow.split(/(?=^      - )/m).filter(step =>
+    /^        uses: actions\/upload-artifact@[^\s]+$/m.test(step));
+  assert.equal(uploads.length, 1, "Exactly one acceptance artifact upload required");
+  const upload = uploads[0];
+  assert(upload.includes("${{ runner.temp }}/wavedl-browser-ci/wavedl-cancel-ack-*/cancellation-lost-ack.json"));
   assert(!upload.includes("wavedl-cancel-ack-*/**"));
 });
 
