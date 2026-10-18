@@ -271,11 +271,13 @@ class _Win32:
             raise self.error()
 
     def link(self, source, directory, name):
-        """Publish an exclusive hard link relative to a held directory handle.
+        """Publish an exclusive hard link in the held source file's directory.
 
         FileLinkInformation (11), not the bypass-access-check or Ex variants.
         No pathname parent reopen, replacement flag, or weaker sharing fallback.
         The caller retains synchronous ordinary-file/directory handles throughout.
+        RootDirectory must be NULL for the documented same-directory operation;
+        the validated basename is relative to the source, not process cwd.
         """
         c = self.ctypes
         name = _member(name)
@@ -317,7 +319,7 @@ class _Win32:
         buffer = c.create_string_buffer(size)
         information = c.cast(buffer, c.POINTER(LinkInformation)).contents
         information.replace = 0  # ReplaceIfExists FALSE; remaining union bytes zero.
-        information.root = directory
+        information.root = None
         information.length = len(encoded)
         c.memmove(
             c.addressof(buffer) + LinkInformation.name.offset, encoded, len(encoded)

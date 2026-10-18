@@ -676,13 +676,19 @@ def test_native_windows_writable_directory_remains_pinned_and_sync_is_fail_close
             )
 
 
-def test_held_directory_exclusive_link_preserves_bytes_and_existing_target(tmp_path):
+def test_held_directory_exclusive_link_preserves_bytes_and_existing_target(
+    tmp_path, monkeypatch
+):
     (tmp_path / "source").write_bytes(b"verified-content")
     (tmp_path / "existing").write_bytes(b"existing-content")
+    foreign = tmp_path.with_name(tmp_path.name + "-unrelated-cwd")
+    foreign.mkdir()
     with safe_files.open_directory(tmp_path, writable=True) as directory:
+        monkeypatch.chdir(foreign)
         directory.link_file("source", "published")
         directory.sync()
         assert (tmp_path / "published").read_bytes() == b"verified-content"
+        assert not (foreign / "published").exists()
         assert os.path.samefile(tmp_path / "source", tmp_path / "published")
         with pytest.raises(FileExistsError):
             directory.link_file("source", "existing")
@@ -783,7 +789,7 @@ def test_native_link_buffer_uses_held_handles_utf16_and_no_replace(
 
         info = ctypes.cast(buffer, ctypes.POINTER(Information)).contents
         encoded = "target-🌊".encode("utf-16-le")
-        assert source == 123 and info.root == 456 and kind == 11
+        assert source == 123 and info.root is None and kind == 11
         assert info.replace == 0 and info.length == len(encoded)
         assert length >= ctypes.sizeof(Information)
         assert (
