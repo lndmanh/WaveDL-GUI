@@ -212,6 +212,7 @@ def test_typed_private_dacl_binding_targets_only_selected_root_and_frees_buffers
 def test_wrapper_enters_owner_context_before_pytest_main_or_temp_allocation(
     monkeypatch,
 ):
+    monkeypatch.setattr(MODULE, "os", SimpleNamespace(name="posix", getcwd=os.getcwd))
     api = OwnerAPI()
     original_path = sys.path.copy()
     original = MODULE.user_owned_objects
@@ -238,6 +239,7 @@ def test_wrapper_enters_owner_context_before_pytest_main_or_temp_allocation(
 
 
 def test_wrapper_restores_import_path_and_owner_after_pytest_failure(monkeypatch):
+    monkeypatch.setattr(MODULE, "os", SimpleNamespace(name="posix", getcwd=os.getcwd))
     api = OwnerAPI()
     original_path = sys.path.copy()
     original = MODULE.user_owned_objects

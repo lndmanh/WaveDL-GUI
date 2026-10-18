@@ -891,11 +891,20 @@ jobs:
           from pathlib import Path
           root = ET.parse(Path(os.environ["TMPDIR"]) / "cv-option-fidelity.xml").getroot()
           cases = list(root.iter("testcase"))
-          assert len(cases) == 98
+          assert len(cases) == 104
           families = ["unit_tests.test_data_cv" if case.get("classname", "").startswith("unit_tests.test_data_cv.") else case.get("classname") for case in cases]
           assert all(family in {"unit_tests.test_cv_option_fidelity", "unit_tests.test_cv_training_semantics", "unit_tests.test_cv_physical_components", "unit_tests.test_cv_deterministic", "unit_tests.test_cv_workers", "unit_tests.test_data_cv"} for family in families)
-          assert len({(case.get("classname"), case.get("name")) for case in cases}) == 98
-          assert Counter(families) == Counter({"unit_tests.test_cv_option_fidelity": 21, "unit_tests.test_cv_training_semantics": 20, "unit_tests.test_cv_physical_components": 11, "unit_tests.test_cv_deterministic": 6, "unit_tests.test_cv_workers": 7, "unit_tests.test_data_cv": 33})
+          assert len({(case.get("classname"), case.get("name")) for case in cases}) == 104
+          assert Counter(families) == Counter({"unit_tests.test_cv_option_fidelity": 21, "unit_tests.test_cv_training_semantics": 20, "unit_tests.test_cv_physical_components": 11, "unit_tests.test_cv_deterministic": 6, "unit_tests.test_cv_workers": 7, "unit_tests.test_data_cv": 39})
+          required_data_cases = {
+              "test_cross_validation_rejects_invalid_input_contract[X0-y0-2-samples and targets]",
+              "test_cross_validation_rejects_invalid_input_contract[X1-y1-2-same number of samples]",
+              "test_cross_validation_rejects_invalid_input_contract[X2-y2-2-at least 2 dimensions]",
+              "test_cross_validation_rejects_invalid_input_contract[X3-y3-5-at least 5 samples]",
+              "test_cross_validation_rejects_nonfinite_input_contract",
+              "test_cross_validation_rejects_non_numeric_input_contract",
+          }
+          assert required_data_cases <= {case.get("name") for case in cases if case.get("classname") == "unit_tests.test_data_cv"}
           assert not any(list(root.iter(kind)) for kind in ("skipped", "failure", "error"))
           PY
       - name: Test epoch metric evidence contracts

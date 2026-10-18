@@ -1,5 +1,6 @@
 """Keep the CPU CV cohort complete, successful, and mandatory in browser CI."""
 
+import ast
 import os
 import shlex
 import subprocess
@@ -19,7 +20,15 @@ FAMILY_COUNTS = {
     "unit_tests.test_cv_option_fidelity": 21,
     "unit_tests.test_cv_training_semantics": 20,
     "unit_tests.test_cv_physical_components": 11,
-    "unit_tests.test_data_cv": 33,
+    "unit_tests.test_data_cv": 39,
+}
+REQUIRED_DATA_CASES = {
+    "test_cross_validation_rejects_invalid_input_contract[X0-y0-2-samples and targets]",
+    "test_cross_validation_rejects_invalid_input_contract[X1-y1-2-same number of samples]",
+    "test_cross_validation_rejects_invalid_input_contract[X2-y2-2-at least 2 dimensions]",
+    "test_cross_validation_rejects_invalid_input_contract[X3-y3-5-at least 5 samples]",
+    "test_cross_validation_rejects_nonfinite_input_contract",
+    "test_cross_validation_rejects_non_numeric_input_contract",
 }
 COHORT_PATHS = {f"{family.replace('.', '/')}.py" for family in FAMILY_COUNTS}
 
@@ -59,16 +68,18 @@ def _report():
     """Mirror pytest's single-suite report with class-qualified data CV cases."""
     root = ET.Element("testsuites")
     suite = ET.SubElement(
-        root, "testsuite", tests="98", skipped="0", failures="0", errors="0"
+        root, "testsuite", tests="104", skipped="0", failures="0", errors="0"
     )
     for family, count in FAMILY_COUNTS.items():
         classname = (
             f"{family}.TestDataCV" if family.endswith("test_data_cv") else family
         )
-        for index in range(count):
+        for index in range(count - (6 if family.endswith("test_data_cv") else 0)):
             ET.SubElement(
                 suite, "testcase", classname=classname, name=f"test_case[{index}]"
             )
+    for name in sorted(REQUIRED_DATA_CASES):
+        ET.SubElement(suite, "testcase", classname="unit_tests.test_data_cv", name=name)
     return root, suite
 
 
@@ -163,6 +174,46 @@ def test_cv_guard_accepts_complete_production_shaped_report(workflow, tmp_path):
     assert result.returncode == 0, result.stderr
 
 
+def test_cv_guard_tracks_real_source_contract_cases_without_importing_ml(workflow):
+    """Read the actual parameter rows so a stale synthetic total cannot pass."""
+    source = ast.parse(
+        (ROOT / "unit_tests/test_data_cv.py").read_text(encoding="utf-8")
+    )
+    functions = {
+        node.name: node for node in source.body if isinstance(node, ast.FunctionDef)
+    }
+    invalid = functions["test_cross_validation_rejects_invalid_input_contract"]
+    (parameterization,) = invalid.decorator_list
+    assert isinstance(parameterization, ast.Call)
+    assert isinstance(parameterization.func, ast.Attribute)
+    assert parameterization.func.attr == "parametrize"
+    rows = parameterization.args[1]
+    assert isinstance(rows, ast.List)
+    expected = set()
+    for index, row in enumerate(rows.elts):
+        assert isinstance(row, ast.Tuple)
+        folds, message = (ast.literal_eval(value) for value in row.elts[2:])
+        expected.add(f"{invalid.name}[X{index}-y{index}-{folds}-{message}]")
+    for name in (
+        "test_cross_validation_rejects_nonfinite_input_contract",
+        "test_cross_validation_rejects_non_numeric_input_contract",
+    ):
+        assert not functions[name].decorator_list
+        expected.add(name)
+    assert expected == REQUIRED_DATA_CASES
+    tree = ast.parse(_guard_script(workflow))
+    assignment = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "required_data_cases"
+            for target in node.targets
+        )
+    )
+    assert ast.literal_eval(assignment.value) == expected
+
+
 def test_cv_guard_rejects_absent_report(workflow, tmp_path):
     result = _run_guard(workflow, tmp_path)
     assert result.returncode != 0
@@ -178,6 +229,7 @@ def test_cv_guard_rejects_absent_report(workflow, tmp_path):
         "duplicate_replacement",
         "relabel_unknown_family",
         "relabel_known_family",
+        "replace_required_data_case",
         "skipped",
         "error",
         "failure",
@@ -202,6 +254,9 @@ def test_cv_guard_rejects_incomplete_or_unsuccessful_report(
     elif mutation == "relabel_known_family":
         suite[0].set("classname", "unit_tests.test_cv_option_fidelity")
         suite[0].set("name", "test_relabelled_unique")
+    elif mutation == "replace_required_data_case":
+        case = next(case for case in suite if case.get("name") in REQUIRED_DATA_CASES)
+        case.set("name", "test_unrelated_data_case")
     else:
         ET.SubElement(suite[0], mutation)
     # Keep aggregate counts plausible: the guard must inspect the actual cases.
