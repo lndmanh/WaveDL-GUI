@@ -294,12 +294,18 @@ def test_mock_windows_submission_publication_syncs_held_capability_not_reopened_
     from wavedl.core import persistence
 
     calls = []
+
+    def link_file(source, target):
+        calls.append("held-link")
+        os.link(tmp_path / source, tmp_path / target, follow_symlinks=False)
+
     directory = SimpleNamespace(
         path=tmp_path,
         api=object(),
         writable=True,
         guard=lambda: calls.append("guard"),
         sync=lambda: calls.append("held-sync"),
+        link_file=link_file,
     )
     monkeypatch.setattr(
         submission,
@@ -312,7 +318,6 @@ def test_mock_windows_submission_publication_syncs_held_capability_not_reopened_
             O_EXCL=os.O_EXCL,
             fdopen=os.fdopen,
             fsync=os.fsync,
-            link=os.link,
         ),
     )
 
@@ -326,6 +331,7 @@ def test_mock_windows_submission_publication_syncs_held_capability_not_reopened_
     assert (tmp_path / "private").is_dir()
     assert (tmp_path / "binding.json").read_bytes() == b"verified"
     assert calls.count("held-sync") == 3
+    assert calls.count("held-link") == 1
     assert not list(tmp_path.glob(".binding.json-*"))
     with pytest.raises(FileExistsError):
         submission._publish(directory, "binding.json", b"replacement")

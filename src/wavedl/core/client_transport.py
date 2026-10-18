@@ -538,9 +538,7 @@ class HttpTransport:
                 os.unlink(temporary, dir_fd=parent.handle)
                 parent.sync()
             else:
-                os.link(
-                    parent.path / temporary, parent.path / name, follow_symlinks=False
-                )
+                parent.link_file(temporary, name)
                 parent.sync()
                 parent.guard()
                 (parent.path / temporary).unlink()

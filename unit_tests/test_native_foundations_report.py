@@ -78,7 +78,7 @@ def test_complete_posix_report_passes(tmp_path):
     [
         ("linux", POSIX_REQUIRED, 13),
         ("darwin", POSIX_REQUIRED, 13),
-        ("win32", WINDOWS_REQUIRED, 10),
+        ("win32", WINDOWS_REQUIRED, 12),
     ],
 )
 def test_complete_native_report_passes_for_each_supported_platform(
@@ -329,7 +329,7 @@ def test_cli_uses_actual_platform_and_has_no_platform_override(
     monkeypatch.setattr(guard.sys, "platform", "win32")
     monkeypatch.setattr(guard.sys, "argv", ["guard", str(core), str(daemon)])
     assert guard.main() == 0
-    assert "10 required native cases passed" in capsys.readouterr().out
+    assert "12 required native cases passed" in capsys.readouterr().out
     monkeypatch.setattr(
         guard.sys, "argv", ["guard", str(core), str(daemon), "--platform=linux"]
     )

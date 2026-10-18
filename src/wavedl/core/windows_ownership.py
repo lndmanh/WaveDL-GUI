@@ -4,6 +4,8 @@ The owner's SID must be the process token's actual TokenUser SID. SYSTEM and
 Builtin Administrators are explicitly trusted for writes: desktop administrators
 already control the process. No other user/group is trusted, even if the process
 token happens to be a member. Unsupported ACE layouts fail closed.
+Owner Rights (S-1-3-4) ACEs apply only to that already-verified object owner;
+they are not a separately trusted user or group.
 """
 
 from __future__ import annotations
@@ -229,7 +231,11 @@ class _SecurityAPI:
                 _Ace(
                     header.kind,
                     mask,
-                    self.same_sid(sid, owner),
+                    self.same_sid(sid, owner)
+                    # WinCreatorOwnerRightsSid=71 identifies OWNER RIGHTS,
+                    # not CREATOR OWNER (3). The caller verifies actual object
+                    # ownership against TokenUser before examining any ACE.
+                    or bool(self.advapi.IsWellKnownSid(sid, 71)),
                     bool(
                         self.advapi.IsWellKnownSid(sid, 22)
                         or self.advapi.IsWellKnownSid(sid, 26)

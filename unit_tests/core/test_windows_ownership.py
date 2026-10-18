@@ -270,6 +270,50 @@ def test_actual_ctypes_query_wrappers_close_token_and_free_descriptor(failure):
     assert events == expected
 
 
+@pytest.mark.parametrize("kind", [71, 1, 3, 11, 27])
+@pytest.mark.parametrize("mask", [1, 2, 0x10000000, 0x80000000])
+@pytest.mark.parametrize("actual_owner", [True, False])
+def test_native_ace_owner_rights_only_trusts_verified_actual_owner(
+    kind, mask, actual_owner
+):
+    """Fixed-width real ACE parsing distinguishes OW from creator/world/users."""
+    api, events = native_binding_mock(None if actual_owner else "foreign-owner")
+    storage = ctypes.create_string_buffer(20)
+    header = ctypes.cast(storage, ctypes.POINTER(api.AceHeader)).contents
+    header.kind, header.size = 0, 20
+    address = ctypes.addressof(storage)
+    ctypes.cast(address + 4, ctypes.POINTER(api.t.DWORD)).contents.value = mask
+
+    def acl_info(dacl, out, size, information_kind):
+        ctypes.cast(out, ctypes.POINTER(api.AclSize)).contents.count = 1
+        return True
+
+    def get_ace(dacl, index, out):
+        ctypes.cast(out, ctypes.POINTER(api.t.LPVOID)).contents.value = address
+        return True
+
+    api.advapi.GetAclInformation = Function(acl_info)
+    api.advapi.GetAce = Function(get_ace)
+    api.advapi.IsWellKnownSid = Function(lambda sid, expected: expected == kind)
+    if actual_owner and kind == 71:
+        _verify_with_security_api(api, 700, confidential=True)
+    else:
+        with pytest.raises(UnsafeOwnership):
+            _verify_with_security_api(api, 700, confidential=True)
+    assert events[-2:] == [("free", 8888), ("close", 101)]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows mkdir0700 owner-rights ACE")
+def test_native_mkdir_700_owner_rights_is_private_to_actual_user(tmp_path):
+    selected = tmp_path / "mode700"
+    selected.mkdir(mode=0o700)
+    (selected / "private-file").write_bytes(b"native owner rights")
+    with open_directory(selected) as directory:
+        directory.verify_private_owner(confidential=True)
+        with directory.open_file("private-file") as file:
+            file.verify_private_owner(confidential=True)
+
+
 @pytest.mark.skipif(
     os.name != "nt", reason="Actual token/SID/ACL checks require Windows"
 )

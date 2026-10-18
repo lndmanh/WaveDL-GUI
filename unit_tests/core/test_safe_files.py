@@ -5,6 +5,7 @@ import hashlib
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -673,3 +674,144 @@ def test_native_windows_writable_directory_remains_pinned_and_sync_is_fail_close
             pytest.skip(
                 "This native filesystem does not support durable directory flush"
             )
+
+
+def test_held_directory_exclusive_link_preserves_bytes_and_existing_target(tmp_path):
+    (tmp_path / "source").write_bytes(b"verified-content")
+    (tmp_path / "existing").write_bytes(b"existing-content")
+    with safe_files.open_directory(tmp_path, writable=True) as directory:
+        directory.link_file("source", "published")
+        directory.sync()
+        assert (tmp_path / "published").read_bytes() == b"verified-content"
+        assert os.path.samefile(tmp_path / "source", tmp_path / "published")
+        with pytest.raises(FileExistsError):
+            directory.link_file("source", "existing")
+        assert (tmp_path / "existing").read_bytes() == b"existing-content"
+        if os.name == "nt":
+            with pytest.raises(OSError):
+                tmp_path.rename(tmp_path.with_name("link-parent-renamed"))
+
+
+@pytest.mark.parametrize("member", ["..", "a/b", "a\\b", "C:stream", "bad\0name"])
+def test_link_refuses_nonmembers_before_native_operation(tmp_path, member):
+    with safe_files.open_directory(tmp_path, writable=True) as directory:
+        with pytest.raises(ValueError):
+            directory.link_file("source", member)
+        with pytest.raises(ValueError):
+            directory.link_file(member, "target")
+
+
+def test_link_requires_explicit_writable_capability(tmp_path):
+    with (
+        safe_files.open_directory(tmp_path) as directory,
+        pytest.raises(PermissionError),
+    ):
+        directory.link_file("source", "target")
+
+
+def test_windows_link_uses_safe_source_and_held_directory_without_parent_reopen(
+    monkeypatch, tmp_path
+):
+    calls = []
+    api = SimpleNamespace(
+        info=lambda handle: calls.append(("guard", handle)),
+        link=lambda source, parent, target: calls.append(
+            ("link", source, parent, target)
+        ),
+    )
+    directory = safe_files.SafeDirectory(tmp_path, 456, api=api, writable=True)
+
+    class Source:
+        handle = 123
+
+        def verify_private_owner(self):
+            calls.append("source-owner")
+
+        def guard(self):
+            calls.append("source-guard")
+
+        def __enter__(self):
+            calls.append("source-enter")
+            return self
+
+        def __exit__(self, *args):
+            calls.append("source-close")
+
+    def open_source(name):
+        assert name == "source"
+        return Source()
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Hard-link publication must not reopen the directory path")
+
+    monkeypatch.setattr(directory, "open_file", open_source)
+    monkeypatch.setattr(safe_files, "open_directory", forbidden)
+    directory.link_file("source", "target")
+    assert calls == [
+        ("guard", 456),
+        "source-enter",
+        "source-owner",
+        "source-guard",
+        ("link", 123, 456, "target"),
+        "source-guard",
+        "source-close",
+        ("guard", 456),
+    ]
+
+
+@pytest.mark.parametrize("status,code", [(0, 0), (-1073741771, 183), (-1, 50)])
+def test_native_link_buffer_uses_held_handles_utf16_and_no_replace(
+    monkeypatch, status, code
+):
+    calls = []
+
+    class Function:
+        def __init__(self, callback):
+            self.callback = callback
+
+        def __call__(self, *args):
+            return self.callback(*args)
+
+    def native_link(source, iosb, buffer, length, kind):
+        class Information(ctypes.Structure):
+            _fields_: ClassVar = [
+                ("replace", ctypes.c_uint32),
+                ("root", ctypes.c_void_p),
+                ("length", ctypes.c_uint32),
+                ("name", ctypes.c_uint16 * 1),
+            ]
+
+        info = ctypes.cast(buffer, ctypes.POINTER(Information)).contents
+        encoded = "target-🌊".encode("utf-16-le")
+        assert source == 123 and info.root == 456 and kind == 11
+        assert info.replace == 0 and info.length == len(encoded)
+        assert length >= ctypes.sizeof(Information)
+        assert (
+            ctypes.string_at(
+                ctypes.addressof(buffer) + Information.name.offset, info.length
+            )
+            == encoded
+        )
+        calls.append("link")
+        return status
+
+    native = SimpleNamespace(
+        NtSetInformationFile=Function(native_link),
+        RtlNtStatusToDosError=Function(lambda value: calls.append(value) or code),
+    )
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *a, **kw: native, raising=False)
+    monkeypatch.setattr(
+        ctypes, "WinError", lambda value: OSError(value, "native error"), raising=False
+    )
+    api = safe_files._Win32.__new__(safe_files._Win32)
+    api.ctypes = ctypes
+    if status:
+        expected = safe_files.UnsupportedSafeRead if code == 50 else OSError
+        with pytest.raises(expected):
+            api.link(123, 456, "target-🌊")
+        assert calls == ["link", status]
+    else:
+        api.link(123, 456, "target-🌊")
+        assert calls == ["link"]
+    assert native.NtSetInformationFile.restype is ctypes.c_int32
+    assert native.RtlNtStatusToDosError.restype is ctypes.c_uint32

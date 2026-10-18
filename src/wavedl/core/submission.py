@@ -203,7 +203,7 @@ def _publish(directory: SafeDirectory, name: str, content: bytes) -> None:
                 stream.flush()
                 os.fsync(stream.fileno())
             directory.guard()
-            os.link(temporary, directory.path / name, follow_symlinks=False)
+            directory.link_file(temporary.name, name)
             directory.sync()
         finally:
             temporary.unlink(missing_ok=True)

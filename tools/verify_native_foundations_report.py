@@ -43,10 +43,12 @@ WINDOWS_REQUIRED = {
     "core": {
         "unit_tests.core.test_windows_ownership": {
             "test_native_current_user_file_owner_and_dacl",
+            "test_native_mkdir_700_owner_rights_is_private_to_actual_user",
         },
         "unit_tests.core.test_safe_files": {
             "test_native_windows_pinned_directory_cannot_be_renamed",
             "test_native_windows_junction_rejected",
+            "test_held_directory_exclusive_link_preserves_bytes_and_existing_target",
         },
     },
     "daemon": {

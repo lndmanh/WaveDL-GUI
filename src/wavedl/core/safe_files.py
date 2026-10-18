@@ -270,6 +270,72 @@ class _Win32:
                 )
             raise self.error()
 
+    def link(self, source, directory, name):
+        """Publish an exclusive hard link relative to a held directory handle.
+
+        FileLinkInformation (11), not the bypass-access-check or Ex variants.
+        No pathname parent reopen, replacement flag, or weaker sharing fallback.
+        The caller retains synchronous ordinary-file/directory handles throughout.
+        """
+        c = self.ctypes
+        name = _member(name)
+        encoded = name.encode("utf-16-le")
+        if len(encoded) > 65534:
+            raise ValueError("Hard-link member exceeds native name bound")
+
+        class LinkInformation(c.Structure):
+            _fields_: ClassVar = [
+                ("replace", c.c_uint32),
+                ("root", c.c_void_p),
+                ("length", c.c_uint32),
+                ("name", c.c_uint16 * 1),
+            ]
+
+        class StatusUnion(c.Union):
+            _fields_: ClassVar = [("status", c.c_int32), ("pointer", c.c_void_p)]
+
+        class StatusBlock(c.Structure):
+            _fields_: ClassVar = [
+                ("result", StatusUnion),
+                ("information", c.c_size_t),
+            ]
+
+        native = c.WinDLL("ntdll", use_last_error=True)
+        native.NtSetInformationFile.argtypes = [
+            c.c_void_p,
+            c.POINTER(StatusBlock),
+            c.c_void_p,
+            c.c_uint32,
+            c.c_int,
+        ]
+        native.NtSetInformationFile.restype = c.c_int32
+        native.RtlNtStatusToDosError.argtypes = [c.c_int32]
+        native.RtlNtStatusToDosError.restype = c.c_uint32
+        size = max(
+            c.sizeof(LinkInformation), LinkInformation.name.offset + len(encoded)
+        )
+        buffer = c.create_string_buffer(size)
+        information = c.cast(buffer, c.POINTER(LinkInformation)).contents
+        information.replace = 0  # ReplaceIfExists FALSE; remaining union bytes zero.
+        information.root = directory
+        information.length = len(encoded)
+        c.memmove(
+            c.addressof(buffer) + LinkInformation.name.offset, encoded, len(encoded)
+        )
+        status_block = StatusBlock()
+        status = native.NtSetInformationFile(
+            source, c.byref(status_block), buffer, size, 11
+        )
+        if status != 0:
+            # Synchronous handles must not return pending/intermediate success.
+            # Never claim publication when terminal completion is unknown.
+            code = native.RtlNtStatusToDosError(status)
+            if code in (1, 50, 87, 120):
+                raise UnsupportedSafeRead(
+                    errno.ENOTSUP, "Native hard links unsupported"
+                )
+            raise c.WinError(code)
+
     def info(self, handle):
         if self.dll.GetFileType(handle) != 1:  # FILE_TYPE_DISK, not pipe/device
             raise ValueError("Metadata handle is not a disk file")
@@ -604,6 +670,35 @@ class SafeDirectory:
             self.api.sync(self.handle)
         else:
             os.fsync(self.handle)
+
+    def link_file(self, source: str, target: str):
+        """Atomically publish a single regular member without replacing a target.
+
+        Publication is not a durability acknowledgement; callers must sync this
+        held writable directory before treating the new name as durable.
+        """
+        self._check()
+        source, target = _member(source), _member(target)
+        if not self.writable:
+            raise PermissionError(
+                "Hard-link publication requires a writable capability"
+            )
+        self.guard()
+        with self.open_file(source) as opened:
+            opened.verify_private_owner()
+            opened.guard()
+            if self.api:
+                self.api.link(opened.handle, self.handle, target)
+            else:
+                os.link(
+                    source,
+                    target,
+                    src_dir_fd=self.handle,
+                    dst_dir_fd=self.handle,
+                    follow_symlinks=False,
+                )
+            opened.guard()
+        self.guard()
 
     def _duplicate_windows(self):
         self._check()

@@ -48,9 +48,16 @@ DACL instead of inheriting foreign write grants from runner temp directories;
 existing paths and token DACLs are untouched. Native Windows also exposed the
 extended-DOS/UNC path spelling comparison in submission validation; only exact
 recognized namespace aliases are normalized, retaining declared mapping checks.
-The remaining download sharing violation has sanitized operation diagnostics,
-not a claimed fix. A separate Linux preview-fixture readiness race now publishes
-complete JSON atomically. Hosted confirmation of these latest changes is open.
+Sanitized operation diagnostics identified a shared hard-link publication
+failure. Windows downloads and submission receipts now publish through held
+native file/directory handles, with replacement disabled and directory sync
+still mandatory; native acceptance is pending. Owner Rights ACEs are recognized
+only after actual TokenUser ownership is verified, matching Python 3.13's private
+directory ACLs. The Windows guard now requires both the exclusive-link and
+private-mkdir witnesses. Independent security review passes; the local full core
+suite passes **935 / seven native-platform skips**. A separate Linux
+preview-fixture readiness race now publishes complete JSON atomically. Hosted
+confirmation of these latest changes is open.
 Production ownership/DACL rules are unchanged. Native test fixtures also retain
 explicit Windows write/rename-denial and unchanged-byte witnesses instead of
 assuming POSIX mutation behavior. These fixes still require hosted confirmation.
