@@ -168,6 +168,9 @@ jobs:
       - name: Shared contracts without parent ML fixtures
         run: python tools/run_user_owned_pytest.py unit_tests/core --confcutdir=unit_tests/core --junitxml=core-foundations.xml -q
       - name: Native supervision and durable control
+        # Collect independent native diagnostics even if core contracts fail.
+        # Cancelled runs must not keep doing expensive acceptance work.
+        if: ${{ !cancelled() }}
         run: python tools/run_user_owned_pytest.py unit_tests/daemon --confcutdir=unit_tests/daemon --junitxml=daemon-foundations.xml -q
       - name: Check native foundations report guard
         run: python -m pytest unit_tests/test_native_foundations_report.py --noconftest -q

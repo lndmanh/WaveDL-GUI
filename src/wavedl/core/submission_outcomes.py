@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -15,6 +16,7 @@ from .safe_files import open_directory
 from .scheduler_attempt import SchedulerIdentity, read_scheduler_binding_in_directory
 from .submission import (
     MAX_MANIFEST_BYTES,
+    _open_writable_root,
     identity_for_submission_directory,
     open_submission_in_directory,
     publish_submission_member,
@@ -63,7 +65,12 @@ def _authority(run_directory, *, request_id, owner, plan_sha256, writable=False)
     path = Path(run_directory)
     if not path.is_absolute() or ".." in path.parts:
         raise ValueError("Submission outcome requires an absolute ordinary run path")
-    with open_directory(path, writable=writable) as root:
+    admission = (
+        _open_writable_root(path, deadline=time.monotonic() + 5, opener=open_directory)
+        if writable
+        else open_directory(path)
+    )
+    with admission as root:
         root.verify_private_owner()
         request = identity_for_submission_directory(
             root,

@@ -61,13 +61,25 @@ def test_create_read_and_file_publication_do_not_allocate_runtime_attempts(tmp_p
     layout, identity = setup_run(tmp_path)
     before = layout.manifest.read_bytes()
     namespace = create_submission(layout.run_dir, identity)
-    assert namespace == layout.run_dir / "submissions" / REQUEST_ID
+    expected_namespace = layout.run_dir / "submissions" / REQUEST_ID
+    # A held Windows handle returns the extended DOS namespace spelling.
+    # Require the exact existing directory/member, not lexical path spelling.
+    assert namespace.name == REQUEST_ID
+    assert namespace.samefile(expected_namespace)
+    assert namespace.parent.samefile(expected_namespace.parent)
+    assert {path.name for path in expected_namespace.parent.iterdir()} == {REQUEST_ID}
     assert read_submission(layout.run_dir, identity) == identity
     assert identity.manifest_sha256 == hashlib.sha256(before).hexdigest()
     published = publish_submission_file(
         layout.run_dir, identity, "submission.sh", b"script"
     )
-    assert published.parent == namespace
+    assert published.name == "submission.sh"
+    assert published.parent.samefile(namespace)
+    assert published.samefile(expected_namespace / "submission.sh")
+    assert {path.name for path in namespace.iterdir()} == {
+        "request.json",
+        "submission.sh",
+    }
     assert read_submission_file(layout.run_dir, identity, "submission.sh") == b"script"
     assert not list(layout.attempts.iterdir())
     assert layout.manifest.read_bytes() == before
@@ -380,3 +392,97 @@ def test_caller_held_root_helpers_never_reopen_root(tmp_path, monkeypatch):
             assert selected.read_file("binding.json") == b"{}"
         root.guard()
         assert root.handle is not None
+
+
+def test_writer_root_sharing_retry_precedes_claim_and_preserves_single_publication(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from wavedl.core import submission
+
+    layout, identity = setup_run(tmp_path)
+    original = submission.open_directory
+    attempts, anchors = [], []
+
+    def contend(path, *, writable=False):
+        attempts.append(path)
+        if len(attempts) == 1:
+            assert not (layout.run_dir / "submissions").exists()
+            error = PermissionError(13, "owned sharing contention")
+            error.winerror = 32
+            raise error
+        anchor = original(path, writable=writable)
+        anchors.append(anchor)
+        return anchor
+
+    monkeypatch.setattr(
+        submission, "os", SimpleNamespace(**(vars(os) | {"name": "nt"}))
+    )
+    monkeypatch.setattr(submission, "open_directory", contend)
+    selected = create_submission(layout.run_dir, identity)
+    assert selected.joinpath("request.json").is_file()
+    assert len(attempts) == 2
+    assert all(anchor.handle is None for anchor in anchors)
+    assert not list(layout.attempts.iterdir())
+    with pytest.raises(FileExistsError):
+        create_submission(layout.run_dir, identity)
+
+
+@pytest.mark.parametrize("platform,code", [("nt", 5), ("posix", 32)])
+def test_writer_root_does_not_retry_other_permissions_or_posix_errors(
+    monkeypatch, tmp_path, platform, code
+):
+    import time
+    from types import SimpleNamespace
+
+    from wavedl.core import submission
+
+    error = PermissionError(13, "not transient")
+    error.winerror = code
+    calls = []
+
+    def denied(*args, **kwargs):
+        calls.append(True)
+        raise error
+
+    monkeypatch.setattr(submission, "os", SimpleNamespace(name=platform))
+    with pytest.raises(PermissionError) as refusal:
+        submission._open_writable_root(
+            tmp_path, deadline=time.monotonic() + 1, opener=denied
+        )
+    assert refusal.value is error and calls == [True]
+
+
+def test_writer_root_deadline_retains_original_denial_without_allocating(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from wavedl.core import submission
+
+    clock, calls = [0.0], []
+    error = PermissionError(13, "held by another writer")
+    error.winerror = 32
+
+    def denied(*args, **kwargs):
+        calls.append(clock[0])
+        raise error
+
+    def sleep(seconds):
+        clock[0] += seconds
+
+    monkeypatch.setattr(submission, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        submission, "time", SimpleNamespace(monotonic=lambda: clock[0], sleep=sleep)
+    )
+    with pytest.raises(PermissionError) as refusal:
+        submission._open_writable_root(
+            tmp_path, deadline=0.05, poll_seconds=0.02, opener=denied
+        )
+    assert refusal.value is error
+    assert calls == [0, 0.02, 0.04] and clock[0] == 0.05
+    assert list(tmp_path.iterdir()) == []
+    with pytest.raises(TimeoutError):
+        submission._open_writable_root(tmp_path, deadline=0.05, opener=denied)
+    assert len(calls) == 3

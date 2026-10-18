@@ -81,9 +81,16 @@ def test_setup_failure_has_full_provenance_without_attempt_or_journal(prepared):
     layout, request, identity = prepared
     before = layout.manifest.read_bytes()
     path = write(prepared)
-    assert path == (
-        layout.run_dir / "submissions" / REQUEST / submission_outcome_name(identity)
-    )
+    namespace = layout.run_dir / "submissions" / REQUEST
+    expected_name = submission_outcome_name(identity)
+    assert path.name == expected_name
+    assert path.samefile(namespace / expected_name)
+    assert path.parent.samefile(namespace)
+    assert {member.name for member in namespace.parent.iterdir()} == {REQUEST}
+    assert {member.name for member in namespace.iterdir()} == {
+        "request.json",
+        expected_name,
+    }
     receipt = read(prepared)
     assert receipt == {
         "schema_version": 2,
@@ -382,4 +389,32 @@ def test_outcome_ancestry_swap_cannot_publish_into_foreign_run(prepared, monkeyp
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows held-write capability")
 def test_windows_setup_failure_receipt_uses_held_root(prepared):
     write(prepared)
+    assert read(prepared)["attempt"] is None
+
+
+def test_outcome_writer_retries_root_sharing_only_before_publication(
+    prepared, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from wavedl.core import submission, submission_outcomes
+
+    original = submission_outcomes.open_directory
+    calls = []
+
+    def contend(path, *, writable=False):
+        calls.append(path)
+        if len(calls) == 1:
+            assert not list(path.rglob("slurm-outcome-*"))
+            error = PermissionError(13, "owned Windows sharing")
+            error.winerror = 32
+            raise error
+        return original(path, writable=writable)
+
+    monkeypatch.setattr(
+        submission, "os", SimpleNamespace(**(vars(os) | {"name": "nt"}))
+    )
+    monkeypatch.setattr(submission_outcomes, "open_directory", contend)
+    write(prepared)
+    assert len(calls) == 2
     assert read(prepared)["attempt"] is None

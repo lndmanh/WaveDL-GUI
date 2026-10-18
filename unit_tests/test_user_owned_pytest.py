@@ -375,6 +375,8 @@ def test_foundations_core_and_daemon_use_owned_wrapper_without_weakening_gates()
             f"--confcutdir=unit_tests/{folder} --junitxml={report} -q"
         )
         assert not step.get("continue-on-error", False)
+        if folder == "daemon":
+            assert step["if"] == "${{ !cancelled() }}"
     guard = next(
         step
         for step in steps

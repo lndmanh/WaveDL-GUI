@@ -62,6 +62,21 @@ Production ownership/DACL rules are unchanged. Native test fixtures also retain
 explicit Windows write/rename-denial and unchanged-byte witnesses instead of
 assuming POSIX mutation behavior. These fixes still require hosted confirmation.
 
+At `a35565d`, both native Windows Python 3.11/3.13 runs pass actual binary
+downloads, the mandatory exclusive-link/collision witness and private-mkdir
+Owner Rights checks. Their remaining six core failures comprise four writable
+root-admission contention cases and two equivalent-path test assertions; the
+daemon suite has not yet been certified. The reviewed follow-up retries only
+Windows sharing denial during bounded root acquisition **before mutation**,
+preserving Local's existing deadline and all claim/publication fences. Exact
+filesystem identity replaces lexical spelling in those two test assertions.
+These follow-ups and the independent daemon diagnostic lane need fresh CI.
+
+Hosted full CPU Tests run `39162366676` at `a3888c0` also completes successfully
+on Python 3.11/3.12/3.13: each **3,838 passed / 36 skipped / 336 deselected**;
+the Python 3.11 isolated wheel gate passes. This predates the latest native
+publication changes and is not silently promoted to their acceptance.
+
 Clean tracked-source validation exposed and fixed an ignored shadcn utility.
 GitHub workflow-context validation and two stale upload-step test lookups were
 also corrected. The latest reviewed local batch passes **1,649 Node contracts**,

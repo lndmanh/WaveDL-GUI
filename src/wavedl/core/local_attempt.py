@@ -20,6 +20,7 @@ from wavedl.core.protocol import strict_loads
 from wavedl.core.safe_files import open_directory
 from wavedl.core.submission import (
     SubmissionIdentity,
+    _open_writable_root,
     mkdir_submission_member as _mkdir,
     open_submission_in_directory,
     publish_submission_member as _publish,
@@ -233,7 +234,12 @@ def coordinate_local_attempt(
             raise ValueError(f"Invalid Local startup {name}")
     deadline = time.monotonic() + timeout_seconds
     with (
-        open_directory(_root_path(run_directory), writable=True) as root,
+        _open_writable_root(
+            _root_path(run_directory),
+            deadline=deadline,
+            poll_seconds=poll_seconds,
+            opener=open_directory,
+        ) as root,
         open_submission_in_directory(
             root, identity.submission_identity, writable=True
         ) as namespace,

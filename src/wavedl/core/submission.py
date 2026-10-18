@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
+import time
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -269,7 +271,11 @@ def _namespace(
     with ExitStack() as stack:
         writable = create or writable
         root = stack.enter_context(
-            open_directory(_root_path(run_directory), writable=writable)
+            _open_writable_root(
+                _root_path(run_directory), deadline=time.monotonic() + 5
+            )
+            if writable
+            else open_directory(_root_path(run_directory))
         )
         root.verify_private_owner()
         _verify(root, identity)
@@ -288,6 +294,46 @@ def _namespace(
         yield selected
         for directory in (selected, submissions, root):
             directory.guard()
+
+
+def _open_writable_root(path, *, deadline, poll_seconds=0.02, opener=None):
+    """Admit a writer before mutation; retry only native Windows sharing denial.
+
+    The absolute monotonic deadline is never reset. This bounds admission polls,
+    not filesystem syscalls. Sharing remains restrictive; after admission every
+    claim/proof/publication executes exactly once under the retained capability.
+    Submission/outcome writers allow five seconds for admission; Local startup
+    supplies its existing overall coordination deadline instead.
+    """
+    if (
+        isinstance(deadline, bool)
+        or not isinstance(deadline, (int, float))
+        or not math.isfinite(deadline)
+        or isinstance(poll_seconds, bool)
+        or not isinstance(poll_seconds, (int, float))
+        or not math.isfinite(poll_seconds)
+        or not 0 < poll_seconds <= 60
+    ):
+        raise ValueError("Finite writer admission deadline and positive poll required")
+    opener = open_directory if opener is None else opener
+    denial = None
+    while True:
+        if time.monotonic() >= deadline:
+            if denial is not None:
+                raise denial
+            raise TimeoutError(
+                "Writer root admission deadline exceeded before mutation"
+            )
+        try:
+            return opener(path, writable=True)
+        except PermissionError as error:
+            if os.name != "nt" or getattr(error, "winerror", None) != 32:
+                raise
+            denial = error
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(poll_seconds, remaining))
 
 
 def create_submission(run_directory: Path, identity: SubmissionIdentity) -> Path:

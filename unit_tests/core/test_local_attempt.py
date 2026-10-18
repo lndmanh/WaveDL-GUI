@@ -302,3 +302,63 @@ def test_writer_and_reader_use_one_explicit_root_capability(setup, monkeypatch):
     opened.clear()
     assert read_local_binding(layout.run_dir, identity) == expected
     assert opened == [(layout.run_dir, False)]
+
+
+def test_local_writer_sharing_admission_uses_existing_deadline_before_allocation(
+    setup, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from wavedl.core import local_attempt, submission
+
+    layout, _, identity = setup
+    original = local_attempt.open_directory
+    calls = []
+
+    def contend(path, *, writable=False):
+        calls.append(path)
+        if len(calls) == 1:
+            assert list(layout.attempts.iterdir()) == []
+            error = PermissionError(13, "owned Windows sharing")
+            error.winerror = 32
+            raise error
+        return original(path, writable=writable)
+
+    monkeypatch.setattr(
+        submission, "os", SimpleNamespace(**(vars(os) | {"name": "nt"}))
+    )
+    monkeypatch.setattr(local_attempt, "open_directory", contend)
+    result = coordinate_local_attempt(layout.run_dir, identity, timeout_seconds=1)
+    assert result.attempt == 1 and len(calls) == 2
+    assert len(list(layout.attempts.iterdir())) == 1
+
+
+def test_local_writer_expired_admission_never_allocates_or_resets_deadline(
+    setup, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from wavedl.core import local_attempt, submission
+
+    layout, namespace, identity = setup
+    clock = [0.0]
+    error = PermissionError(13, "owned Windows sharing")
+    error.winerror = 32
+    calls = []
+
+    def denied(*args, **kwargs):
+        calls.append(clock[0])
+        raise error
+
+    timer = SimpleNamespace(
+        monotonic=lambda: clock[0], sleep=lambda s: clock.__setitem__(0, clock[0] + s)
+    )
+    monkeypatch.setattr(submission, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(submission, "time", timer)
+    monkeypatch.setattr(local_attempt, "time", timer)
+    monkeypatch.setattr(local_attempt, "open_directory", denied)
+    with pytest.raises(PermissionError) as refusal:
+        coordinate_local_attempt(layout.run_dir, identity, timeout_seconds=0.03)
+    assert refusal.value is error and clock[0] == 0.03 and calls == [0, 0.02]
+    assert list(layout.attempts.iterdir()) == []
+    assert not (namespace / "startup-claim").exists()
