@@ -28,6 +28,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+!web/app/lib/
+web/app/lib/*
+!web/app/lib/utils.ts
 !web/workstation/lib/
 !web/workstation/lib/**
 lib64/

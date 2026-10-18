@@ -608,11 +608,13 @@ jobs:
       PYTHONUNBUFFERED: "1"
       WANDB_MODE: disabled
       WAVEDL_PYTHON: python
-      # Node os.tmpdir() honors TMPDIR. No arbitrary /tmp artifact collection.
-      TMPDIR: ${{ runner.temp }}/wavedl-browser-ci
     steps:
       - name: Create dedicated job temporary directory
-        run: mkdir -m 700 -p "$TMPDIR"
+        run: |
+          # runner context is unavailable in job env; initialize on the runner.
+          export TMPDIR="$RUNNER_TEMP/wavedl-browser-ci"
+          mkdir -m 700 -p "$TMPDIR"
+          printf 'TMPDIR=%s\n' "$TMPDIR" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           persist-credentials: false

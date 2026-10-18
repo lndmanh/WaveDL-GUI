@@ -8,6 +8,7 @@ route and the real supervised worker, rather than mocking preview responses.
 import asyncio
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -106,7 +107,10 @@ def test_fixture_selected_byte_decompressed_and_feature_caps_refuse(
     with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
         service = DatasetPreviewService(
             sys.executable,
-            tmp_path,
+            # Foundations intentionally imports from relative PYTHONPATH=src.
+            # Keep the real worker's source import rooted at the checkout,
+            # independently of the selected temporary dataset authority.
+            Path(__file__).resolve().parents[2],
             pool,
             CatalogService({"data": tmp_path}),
             limits=replace(PreviewLimits(), max_output_bytes=200_000, **overrides),

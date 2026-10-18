@@ -1,5 +1,8 @@
 """Keep daemon/browser acceptance gates mandatory and observable."""
 
+import os
+import stat
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -15,6 +18,46 @@ WORKFLOW = (
 @pytest.fixture
 def workflow():
     return yaml.safe_load(WORKFLOW.read_text())
+
+
+def assert_runtime_tmpdir(job):
+    assert "TMPDIR" not in job["env"]
+    assert all("runner." not in str(value) for value in job["env"].values())
+    first = job["steps"][0]
+    assert first["name"] == "Create dedicated job temporary directory"
+    assert 'export TMPDIR="$RUNNER_TEMP/wavedl-browser-ci"' in first["run"]
+    assert 'mkdir -m 700 -p "$TMPDIR"' in first["run"]
+    assert 'printf \'TMPDIR=%s\\n\' "$TMPDIR" >> "$GITHUB_ENV"' in first["run"]
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="Ubuntu runner uses POSIX shell and modes"
+)
+def test_browser_tmpdir_uses_runner_runtime_and_persists_for_later_steps(
+    workflow, tmp_path
+):
+    job = workflow["jobs"]["chromium-cpu"]
+    assert_runtime_tmpdir(job)
+    runner_temp = tmp_path / "runner temp"
+    runner_temp.mkdir()
+    github_env = tmp_path / "github-env"
+    subprocess.run(
+        ["bash", "-e", "-c", job["steps"][0]["run"]],
+        env={
+            **os.environ,
+            "RUNNER_TEMP": str(runner_temp),
+            "GITHUB_ENV": str(github_env),
+            "TMPDIR": "/must-not-be-used",
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    expected = runner_temp / "wavedl-browser-ci"
+    assert expected.is_dir()
+    assert stat.S_IMODE(expected.stat().st_mode) == 0o700
+    assert github_env.read_text() == f"TMPDIR={expected}\n"
 
 
 @pytest.mark.parametrize("event", ["push", "pull_request"])
@@ -320,9 +363,7 @@ def test_journal_byte_fault_browser_and_strict_file_guard_are_mandatory(workflow
         assert step["if"] == "always()"
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
-    assert workflow["jobs"]["chromium-cpu"]["env"]["TMPDIR"] == (
-        "${{ runner.temp }}/wavedl-browser-ci"
-    )
+    assert_runtime_tmpdir(workflow["jobs"]["chromium-cpu"])
     assert upload["if"] == "always()"
     assert upload["uses"] == "actions/upload-artifact@v4"
     assert not upload.get("continue-on-error", False)
@@ -378,7 +419,7 @@ def test_hostile_origin_contracts_and_browser_file_guard_are_mandatory(workflow)
         assert step["if"] == "always()"
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
-    assert job["env"]["TMPDIR"] == "${{ runner.temp }}/wavedl-browser-ci"
+    assert_runtime_tmpdir(job)
     assert upload["if"] == "always()"
     assert upload["uses"] == "actions/upload-artifact@v4"
     assert not upload.get("continue-on-error", False)
@@ -445,7 +486,7 @@ def test_genuine_broker_overflow_contracts_and_browser_file_guard_are_mandatory(
         assert step["if"] == "always()"
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
-    assert job["env"]["TMPDIR"] == "${{ runner.temp }}/wavedl-browser-ci"
+    assert_runtime_tmpdir(job)
     assert upload["if"] == "always()"
     assert upload["uses"] == "actions/upload-artifact@v4"
     assert not upload.get("continue-on-error", False)

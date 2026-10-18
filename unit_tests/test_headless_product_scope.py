@@ -71,6 +71,30 @@ def test_supported_runtime_has_no_desktop_imports():
                 ), path
 
 
+def test_browser_class_utility_is_present_and_not_ignored(tmp_path):
+    """A clean checkout must include the shared shadcn class utility."""
+    utility = "web/app/lib/utils.ts"
+    assert (ROOT / utility).is_file()
+    (tmp_path / ".gitignore").write_text((ROOT / ".gitignore").read_text())
+    subprocess.run(
+        ["git", "init", "--quiet", str(tmp_path)],
+        capture_output=True,
+        check=True,
+    )
+    ignored = ["lib/package.py", "web/app/lib/themes.ts"]
+    result = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--stdin"],
+        cwd=tmp_path,
+        input="\n".join([utility, *ignored]) + "\n",
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ignored
+
+
 def test_model_catalog_loads_without_desktop_or_ml_dependencies(tmp_path):
     script = """
 import importlib.abc

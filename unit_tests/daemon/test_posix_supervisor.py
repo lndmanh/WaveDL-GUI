@@ -322,6 +322,9 @@ def test_fast_native_failure_exit_stress(tmp_path):
 def test_exited_before_kqueue_registration_drains_without_early_reaping(
     tmp_path, monkeypatch, exit_code, descendant
 ):
+    # Python 3.13 exposes waitid on Darwin too. Exercise the genuine native
+    # kqueue fallback explicitly, rather than depending on interpreter version.
+    monkeypatch.delattr(os, "waitid", raising=False)
     pid_file = tmp_path / "registration-child.pid"
     code = f"print('retained output'); raise SystemExit({exit_code})"
     if descendant:
@@ -419,6 +422,7 @@ def test_permission_error_with_live_group_is_not_absence(tmp_path, monkeypatch):
 def test_registration_esrch_without_terminal_owned_leader_fails_closed(
     tmp_path, monkeypatch
 ):
+    monkeypatch.delattr(os, "waitid", raising=False)
     real_kqueue = select.kqueue
 
     class RegistrationDenied:
