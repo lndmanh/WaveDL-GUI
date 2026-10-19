@@ -6,6 +6,14 @@
 export const browserLaunchArgs =
   "--disable-gpu,--disable-optimization-guide-model-downloads-for-benchmarking";
 
+// Linux Chromium creates its own private mkdtemp directory for SingletonSocket.
+// Nested CI report TMPDIRs can exceed sockaddr_un even with a short session.
+// Change only the browser child's temporary-directory base, never the profile,
+// fixture environment, report destination or the parent's environment.
+export function browserTemporaryEnvironment(environment, platform = process.platform) {
+  return platform === "linux" ? { ...environment, TMPDIR: "/tmp" } : { ...environment };
+}
+
 // No filesystem paths, credentials, or platform-compatibility certification.
 // The caller retains its private profile and the browser's security defaults.
 export const browserLaunchPolicy = Object.freeze({

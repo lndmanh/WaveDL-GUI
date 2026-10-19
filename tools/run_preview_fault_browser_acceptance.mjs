@@ -10,7 +10,7 @@ import { connect } from "node:net";
 import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
 import { boundedFile } from "./verify_retained_browser_report.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
-import { browserLaunchArgs } from "./browser_launch_policy.mjs";
+import { browserLaunchArgs, browserTemporaryEnvironment } from "./browser_launch_policy.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 import { verifyPreviewFaultFile, verifyPreviewFaultRecord } from "./verify_preview_fault_browser_report.mjs";
 
@@ -37,7 +37,7 @@ const command = args => {
   const environment = { ...process.env };
   for (const key of Object.keys(environment)) if (key.startsWith("AGENT_BROWSER_")) delete environment[key];
   environment.AGENT_BROWSER_SESSION = session;
-  return boundedCommand(browser, ["--session", session, ...(args[0] === "open" ? ["--args", browserLaunchArgs] : []), ...args], { cwd: repo, env: environment, timeout: 35000 });
+  return boundedCommand(browser, ["--session", session, ...(args[0] === "open" ? ["--args", browserLaunchArgs] : []), ...args], { cwd: repo, env: browserTemporaryEnvironment(environment), timeout: 35000 });
 };
 const dom = async script => JSON.parse(JSON.parse(await command(["eval", "-b", Buffer.from(script).toString("base64")])));
 const actions = createBrowserActions({ cli: (...args) => command(args), dom, snapshot: () => command(["snapshot", "-i"]) });

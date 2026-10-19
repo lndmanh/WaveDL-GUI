@@ -18,9 +18,10 @@ import { openTrainingEditor, editorFieldObservationExpression } from './browser_
 import { createBrowserActions, controlExpression, actionableExpression, xpathLiteral, DRIVER_READINESS_MODE } from './browser_actions.mjs';
 import { boundedCommand } from './run_retained_browser_acceptance.mjs';
 import { retainFailurePrefixes } from './browser_failure_evidence.mjs';
-import { browserLaunchArgs } from './browser_launch_policy.mjs';
+import { browserLaunchArgs, browserTemporaryEnvironment } from './browser_launch_policy.mjs';
 import { verifyCachedBuildReplacementRecord } from './verify_cached_build_replacement_report.mjs';
 import { controllerIdentityScript } from './browser_controller_identity.mjs';
+import { acceptanceDiagnostic } from './browser_acceptance_diagnostic.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const cases = ['baseline', 'offline', 'detach', 'reload', 'cancel', 'lost-ack', 'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity'];
@@ -74,7 +75,7 @@ async function command(executable, args, input, timeout = 35000) {
     for (const key of Object.keys(environment)) if (key.startsWith('AGENT_BROWSER_')) delete environment[key];
     const sessionFlag = args.indexOf('--session');
     if (sessionFlag >= 0) environment.AGENT_BROWSER_SESSION = args[sessionFlag + 1];
-    return boundedCommand(executable, args, { cwd: repo, env: environment, timeout });
+    return boundedCommand(executable, args, { cwd: repo, env: browserTemporaryEnvironment(environment), timeout });
   }
   return await new Promise((done, fail) => {
     const environment = { ...process.env };
@@ -272,6 +273,7 @@ async function scenario(name) {
   let stdout = '', stderr = '';
   fixture.stdout.on('data', (chunk) => { stdout += chunk; });
   fixture.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-2000); });
+  let diagnosticStage = 'fixture-startup';
   try {
     const startupDeadline = Date.now() + 45000;
     while (Date.now() < startupDeadline && !stdout.includes('Browser: ')) {
@@ -285,7 +287,9 @@ async function scenario(name) {
     expectedBrowserOrigin = new URL(url).origin;
     stdout = ''; // Do not persist single-use bootstrap credentials.
     browserOpened = true;
+    diagnosticStage = 'browser-open';
     await cli('open', url);
+    diagnosticStage = 'browser-readiness';
     const tabInventory = JSON.parse(await cli('--json', 'tab', 'list'));
     const ownedTab = tabInventory.data?.tabs?.find((tab) => {
       if (!tab.active || typeof tab.url !== 'string') return false;
@@ -310,6 +314,7 @@ async function scenario(name) {
     const manifest = await readFile(join(fixtureWebAssets ?? join(repo, 'src/wavedl_daemon/web_assets'), '.wavedl-assets.json'));
     if (fixtureWebAssets) record.explicitFixtureWebAssets = fixtureWebAssets;
     record.assetManifestSha256 = createHash('sha256').update(manifest).digest('hex');
+    diagnosticStage = 'scenario';
     if (name === 'dataset-parity') {
       await datasetParity({ cli, dom, snapshot, button, actions, downloads, check, record,
         root, registry, python, command, repo });
@@ -870,6 +875,7 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
     record.status = 'passed';
   } catch (error) {
     record.status = 'failed';
+    console.error(acceptanceDiagnostic(diagnosticStage));
     // Redact all query values, bearer-like strings, and fixture-specific secrets.
     record.error = String(error.message).replace(/bootstrap=[^\s"']+/g, 'bootstrap=[REDACTED]').replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]');
     if (!browserClosed) {
@@ -1081,6 +1087,7 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
     const sanitizedRecord = sanitizePrivate(record);
     for (const key of Object.keys(record)) delete record[key];
     Object.assign(record, sanitizedRecord);
+    if (record.cleanup.errors.length) console.error(acceptanceDiagnostic('cleanup'));
     await writeFile(join(workspace, `${name}.json`), serializePrivate(record), { mode: 0o600 });
     sharedToken = null;
     console.log(`${name}: ${record.status}`);

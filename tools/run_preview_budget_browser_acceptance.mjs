@@ -10,7 +10,7 @@ import { connect } from "node:net";
 import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
 import { boundedFile } from "./verify_retained_browser_report.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
-import { browserLaunchArgs } from "./browser_launch_policy.mjs";
+import { browserLaunchArgs, browserTemporaryEnvironment } from "./browser_launch_policy.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 import {
   verifyPreviewBudgetFile,
@@ -80,7 +80,7 @@ function command(args) {
     "--session", session,
     ...(args[0] === "open" ? ["--args", browserLaunchArgs] : []),
     ...args,
-  ], { cwd: repo, env: environment, timeout: 35000 });
+  ], { cwd: repo, env: browserTemporaryEnvironment(environment), timeout: 35000 });
 }
 async function dom(script) {
   const encoded = Buffer.from(script).toString("base64");

@@ -16,7 +16,7 @@ function validRecord() {
     processFingerprints: [process], requests: [request, { method: "POST", path: "/api/bootstrap", status: 200, cursor: {} }], eventIds: [[1, 0]], eventHashes: [digest], cursors: [[1, 0]] };
   const before = structuredClone(state), after = structuredClone(state), frozen = structuredClone(state);
   after.runs[0].state = frozen.runs[0].state = "supervision_lost";
-  const storage = { cookies: "", local: [], session: [] };
+  const storage = { cookies: "", local: 1, session: 0, valid: true, entries: [{ key: "wavedl:cursor:v1:daemon:run", cursor: { attempt: 1, seq: 0 } }] };
   const derivedBefore = { run_id: "run", plan_id: "plan", request_id: "request", attempt: 1,
     backend: "local", operation: "train", state: "running", uncertainty: false,
     submission_requested: true, cancellation_requested: false };
@@ -38,7 +38,7 @@ function validRecord() {
     healthBefore: { daemon_id: "daemon", build_id: "build" }, healthAfter: { daemon_id: "daemon", build_id: "build" },
     abruptReturncode: "SIGKILL", detached: { selectedAbsent: true, credentialEmpty: true }, before, after, frozen,
     renderedBefore: { runId: "run", badge: "running", storage }, renderedAfter: { runId: "run", badge: "supervision lost uncertain", currentMetrics: false, text: "Last known runtime metrics\nLatest emitted metrics are retained as evidence. Elapsed time and epoch progress do not confirm that the runtime is still active.", storage },
-    loss: { currentMetrics: false }, capture: { allLive: true, captured: 1, processes: [process], daemon: process },
+    loss: { currentMetrics: false, storage }, capture: { allLive: true, captured: 1, processes: [process], daemon: process },
     daemonProofBefore: process, daemonProofAfter: { ...process, pid: 20 },
     processCleanup: { taggedProcessesAbsent: true, cachedRuntimeProcessesAbsent: true },
     cleanup: { errors: [], daemonsReaped: true, browserClosed: true, servicesClosed: true, listenerClosed: true, rootsRemoved: true } };
@@ -46,6 +46,47 @@ function validRecord() {
 test("complete structural record passes while raw SQL failure is not public authority", () => {
   const record = validRecord(); record.after.runs[0].state = "failed"; record.frozen.runs[0].state = "failed";
   assert.equal(verifyDaemonRestartRecord(record), true);
+});
+
+for (const [name, mutate] of [
+  ["unknown local key", storage => { storage.entries[0].key = "private-credential"; }],
+  ["foreign cursor scope", storage => { storage.entries[0].key = "wavedl:cursor:v1:other:run"; }],
+  ["unvalidated storage", storage => { storage.valid = false; }],
+  ["cookie", storage => { storage.cookies = "present"; }],
+  ["session storage", storage => { storage.session = 1; }],
+  ["extra local entry", storage => { storage.local = 2; storage.entries.push(structuredClone(storage.entries[0])); }],
+  ["uncommitted sequence", storage => { storage.entries[0].cursor.seq = 5; }],
+  ["foreign attempt", storage => { storage.entries[0].cursor.attempt = 2; }],
+  ["noninteger sequence", storage => { storage.entries[0].cursor.seq = 0.5; }],
+  ["extra cursor fields", storage => { storage.entries[0].cursor.token = "private"; }],
+  ["missing final cursor", storage => { storage.local = 0; storage.entries = []; }],
+]) test(`rejects restart storage ${name}`, () => {
+  const record = validRecord();
+  record.renderedAfter.storage = structuredClone(record.renderedAfter.storage);
+  mutate(record.renderedAfter.storage);
+  assert.throws(() => verifyDaemonRestartRecord(record));
+});
+
+test("a not-yet-persisted initial cursor is permitted, but loss cannot erase a saved cursor", () => {
+  const record = validRecord();
+  record.renderedBefore.storage = { cookies: "", local: 0, session: 0, valid: true, entries: [] };
+  assert.equal(verifyDaemonRestartRecord(record), true);
+  record.loss.storage = { cookies: "", local: 0, session: 0, valid: true, entries: [] };
+  assert.equal(verifyDaemonRestartRecord(record), true);
+  record.renderedBefore.storage = structuredClone(record.renderedAfter.storage);
+  assert.throws(() => verifyDaemonRestartRecord(record));
+});
+
+test("persisted restart cursor cannot regress even to another committed event", () => {
+  const record = validRecord();
+  for (const state of [record.before, record.after, record.frozen]) {
+    state.eventIds.push([1, 1]);
+    state.eventHashes.push("b".repeat(64));
+    state.cursors = [[1, 1]];
+  }
+  record.renderedBefore.storage = structuredClone(record.renderedBefore.storage);
+  record.renderedBefore.storage.entries[0].cursor.seq = 1;
+  assert.throws(() => verifyDaemonRestartRecord(record));
 });
 for (const [name, mutate] of [
   ["PID omitted", (r) => { delete r.daemonPidAfter; }],

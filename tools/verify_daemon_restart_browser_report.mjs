@@ -128,8 +128,27 @@ export function verifyDaemonRestartRecord(r) {
     "Elapsed time and progress must not imply active supervision");
   assert(!r.renderedAfter.text.includes("Current runtime metrics"),
     "Lost supervision must not present a current-runtime metrics title");
-  for (const o of [r.renderedBefore, r.renderedAfter])
-    assert.deepEqual(o.storage, { cookies: "", local: [], session: [] });
+  let previousCursor = -1;
+  for (const observation of [r.renderedBefore, r.loss, r.renderedAfter]) {
+    const storage = observation.storage;
+    assert.deepEqual(Object.keys(storage).sort(), ["cookies", "entries", "local", "session", "valid"]);
+    assert.equal(storage.cookies, "");
+    assert.equal(storage.session, 0);
+    assert.equal(storage.valid, true, "Only the exact scoped replay cursor may persist");
+    assert(Number.isSafeInteger(storage.local) && storage.local >= 0 && storage.local <= 1);
+    if (previousCursor >= 0) assert.equal(storage.local, 1, "Disconnect must not erase the persisted cursor");
+    assert.equal(storage.entries.length, storage.local);
+    for (const entry of storage.entries) {
+      assert.deepEqual(Object.keys(entry).sort(), ["cursor", "key"]);
+      assert.equal(entry.key, `wavedl:cursor:v1:${encodeURIComponent(r.healthBefore.daemon_id)}:${encodeURIComponent(r.before.runId)}`);
+      assert.deepEqual(Object.keys(entry.cursor).sort(), ["attempt", "seq"]);
+      assert.equal(entry.cursor.attempt, 1);
+      assert(Number.isSafeInteger(entry.cursor.seq) && entry.cursor.seq >= previousCursor);
+      assert(r.frozen.eventIds.some(([attempt, seq]) => attempt === entry.cursor.attempt && seq === entry.cursor.seq), "Persisted cursor must identify a committed journal event");
+      previousCursor = entry.cursor.seq;
+    }
+  }
+  assert.equal(r.renderedAfter.storage.local, 1, "Reconnected replay must persist its scoped cursor");
   assert(r.frozen.requests.length > 0);
   assert(r.frozen.requests.every((q) => ["GET", "POST"].includes(q.method)));
   assert(!r.frozen.requests.some((q) => q.method === "POST" && q.path !== "/api/bootstrap"));

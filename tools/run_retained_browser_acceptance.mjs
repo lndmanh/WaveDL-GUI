@@ -23,6 +23,25 @@ import { fileURLToPath } from "node:url";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
 import { createActiveDraftProof, frozenAssetProof } from "./browser_retained_active_draft.mjs";
 
+/** Observe actual worker claim without reloading or changing the document. */
+export async function controlledInitialPage(readPage, poll, initial, origin) {
+  const controlled = await poll(
+    () => readPage(),
+    value => value.controller === `${origin}/sw.js`,
+    "g1 native service worker control",
+  );
+  assert.equal(controlled.url, initial.url, "Worker claim must preserve the initial URL");
+  assert.equal(
+    controlled.timeOrigin, initial.timeOrigin,
+    "Worker claim must not reload the initial document",
+  );
+  assert.deepEqual(
+    controlled.entries, initial.entries,
+    "Worker claim must preserve the initial entry generation",
+  );
+  return controlled;
+}
+
 // Every invocation owns its POSIX process group. Neither argv nor unredacted
 // process output is included in errors, and inherited pipes cannot stall close.
 export function boundedCommand(
@@ -36,17 +55,37 @@ export function boundedCommand(
     reapTimeout = 3000,
     drainTimeout = 5000,
     stdoutLimit = 8 * 1024 * 1024,
+    input,
+    stdinLimit = 1024 * 1024,
     redact = () => "[suppressed]",
   } = {},
 ) {
   return new Promise((done, fail) => {
+    if (!Number.isSafeInteger(stdinLimit) || stdinLimit <= 0 ||
+        input !== undefined &&
+        (!(typeof input === "string" || Buffer.isBuffer(input)) ||
+          Buffer.byteLength(input) > stdinLimit)) {
+      fail(new Error("Owned command failed (stdin limit or type): [suppressed]"));
+      return;
+    }
     const grouped = process.platform !== "win32";
-    const child = spawn(binary, args, {
-      cwd,
-      env,
-      detached: grouped,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const spawnFailure = (error) => {
+      const code = ["E2BIG", "ENOENT", "EACCES", "ENOMEM", "EMFILE", "ENFILE"].includes(error?.code)
+        ? `; code=${error.code}` : "";
+      return new Error(`Owned command failed (spawn error${code}): [suppressed]`);
+    };
+    let child;
+    try {
+      child = spawn(binary, args, {
+        cwd,
+        env,
+        detached: grouped,
+        stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      fail(spawnFailure(error));
+      return;
+    }
     const timers = new Set();
     let stdout = "",
       stdoutBytes = 0,
@@ -73,6 +112,7 @@ export function boundedCommand(
     const finish = (error, value) => {
       if (settled) return;
       settled = true;
+      child.stdin?.destroy();
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
       if (error) fail(error);
@@ -80,13 +120,22 @@ export function boundedCommand(
     };
     let stderrSuppressed = false;
     const failure = (reason) => {
-      const error = new Error(`Owned command failed (${reason}): ${stderrSuppressed ? "[suppressed]" : String(redact(stderr)).slice(-1000)}`);
+      // Classify only recognized driver failures. Never copy matching lines,
+      // browser URLs, executable paths, credentials or arbitrary stderr.
+      const acceptanceStage = stderr.match(/^WAVEDL_ACCEPTANCE_DIAGNOSTIC=(fixture-startup|browser-open|browser-readiness|scenario|cleanup)$/m)?.[1];
+      const category = stderrSuppressed ? "" :
+        acceptanceStage ? `; diagnostic=acceptance-${acceptanceStage}` :
+        /Navigation failed: net::ERR_[A-Z_]+/.test(stderr) ? "; diagnostic=browser-navigation" :
+        /Failed to launch (?:browser|Chrome)|browserType\.launch:/.test(stderr) ? "; diagnostic=browser-launch" :
+        /(?:socket path|Socket path).*(?:too long|exceeds)/.test(stderr) ? "; diagnostic=socket-path-limit" : "";
+      const error = new Error(`Owned command failed (${reason}${category}): ${stderrSuppressed ? "[suppressed]" : String(redact(stderr)).slice(-1000)}`);
       error.stdout = redact(stdout).slice(-20000);
       return error;
     };
     const stop = (reason) => {
       if (stopped || settled) return;
       stopped = reason;
+      child.stdin?.destroy();
       signal("SIGTERM");
       later(() => signal("SIGKILL"), termGrace);
       later(() => {
@@ -119,7 +168,7 @@ export function boundedCommand(
         stderrSuppressed = true;
       } else stderr += chunk;
     });
-    child.on("error", () => finish(failure("spawn error")));
+    child.on("error", error => finish(spawnFailure(error)));
     child.on("exit", () => {
       exited = true;
       // exit reaps the direct child; close additionally requires pipe EOF.
@@ -141,6 +190,10 @@ export function boundedCommand(
         finish(failure(stopped ?? `exit=${code}, signal=${terminalSignal}`));
       else finish(null, stdout.trim());
     });
+    if (child.stdin) {
+      child.stdin.on("error", () => stop("stdin transport error"));
+      child.stdin.end(input);
+    }
   });
 }
 
@@ -606,9 +659,9 @@ async function main() {
     await cli("open", bootstrap);
     tabs.push((await tabListing()).find((tab) => tab.active) ?? (await tabListing())[0]);
     await cli("wait", "--fn", `!!document.querySelector('nav[aria-label="Sections"]')`);
-    const first = await page();
+    const initialPage = await page();
     assert(
-      first.entries.some((url) => builds[0].entryUrls.includes(url)),
+      initialPage.entries.some((url) => builds[0].entryUrls.includes(url)),
       "Real g1 entry loaded",
     );
     const initialStorage = await poll(
@@ -617,6 +670,7 @@ async function main() {
       "g1 installation",
     );
     verifyStorage(initialStorage, builds.slice(0, 1));
+    const first = await controlledInitialPage(page, poll, initialPage, origin);
     report.stages.push({
       stage: "g1",
       page: first,

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { createConnection } from "node:net";
 import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
-import { browserLaunchArgs } from "./browser_launch_policy.mjs";
+import { browserLaunchArgs, browserTemporaryEnvironment } from "./browser_launch_policy.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
 import { verifyPreferencesReport } from "./verify_preferences_browser_report.mjs";
 
@@ -94,7 +94,7 @@ async function until(predicate, ms, message) {
     await pause();
   }
 }
-const command = (args, timeout = 35000) => {
+const command = (args, timeout = 35000, input) => {
   record.stage = `browser:${args[0]}${args[0] === "wait" && args[1] === "--text" ? ":" + args[2] : ""}`;
   const env = { ...process.env, AGENT_BROWSER_SESSION: session };
   for (const key of Object.keys(env))
@@ -102,11 +102,11 @@ const command = (args, timeout = 35000) => {
   return boundedCommand(
     browser,
     ["--session", session, ...(args[0] === "open" ? ["--args", browserLaunchArgs] : []), ...args],
-    { cwd: repo, timeout, env },
+    { cwd: repo, timeout, env: browserTemporaryEnvironment(env), input },
   );
 };
 const dom = async (script) =>
-  JSON.parse(JSON.parse(await command(["eval", "-b", Buffer.from(script).toString("base64")])));
+  JSON.parse(JSON.parse(await command(["eval", "--stdin"], 35000, script)));
 const actions = createBrowserActions({
   cli: (...args) => command(args),
   dom,

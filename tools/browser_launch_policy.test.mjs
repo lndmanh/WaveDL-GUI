@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { browserLaunchArgs, browserLaunchPolicy } from "./browser_launch_policy.mjs";
+import { browserLaunchArgs, browserLaunchPolicy, browserTemporaryEnvironment } from "./browser_launch_policy.mjs";
+
+test("only Linux browser children receive a short Chromium socket temporary base", () => {
+  const original = Object.freeze({ TMPDIR: "/private/long-owned-reports", TEMP: "preserve", AGENT_BROWSER_SESSION: "owned", WAVEDL_SECRET: "private-sentinel" });
+  assert.deepEqual(browserTemporaryEnvironment(original, "linux"), { ...original, TMPDIR: "/tmp" });
+  for (const platform of ["darwin", "win32"]) {
+    const result = browserTemporaryEnvironment(original, platform);
+    assert.deepEqual(result, original);
+    assert.notEqual(result, original);
+  }
+  assert.equal(original.TMPDIR, "/private/long-owned-reports");
+});
 
 test("exact Chrome benchmark options survive comma-separated CLI parsing", () => {
   assert.equal(

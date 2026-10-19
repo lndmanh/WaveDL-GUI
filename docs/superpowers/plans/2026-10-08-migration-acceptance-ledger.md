@@ -78,6 +78,51 @@ lane then reveals two module-level test fixtures using POSIX-only `/unused`
 paths; their native absolute-path correction passes **69** focused tests
 locally. Daemon/platform certification remains open until its full native run.
 
+At `fd69cd9`, authoritative hosted Tests artifacts from run `39164247624`
+confirm **3,898 passed / 37 skipped / zero failures or errors** on each of
+Python 3.11/3.12/3.13; the isolated Python 3.11 wheel case also passes. Native
+Windows core remains green, but both daemon jobs were cancelled after exposing
+a test-fixture readiness hang and additional platform-specific failures. Those
+cancelled daemon runs are not acceptance. The reviewed follow-up preserves POSIX
+mutation witnesses and requires exact native Windows blocked-mutation evidence,
+uses native-absolute fixture paths, bounds readiness/cleanup and preserves exact
+generated asset bytes across autocrlf checkouts. Two production fixes address
+early native timed waits and bounded directory-flush admission while a journal
+reader briefly pins ancestry; neither replays a mutation or a failed flush.
+The native journal reader/writer overlap witness is now mandatory in the Windows
+report guard. Local core validation is **952 passed / eight platform skips**;
+fresh Windows confirmation is required.
+The complete local daemon suite also passes **1,865 / nine skips**, including
+installed static-client packaging; pinned Ruff 0.14.10 checks pass. Generated
+asset attributes have an actual autocrlf checkout regression with a CRLF control.
+
+Browser run `39164002364` completes with failures. Artifact inspection identifies
+an initial retained-page observation captured before worker claim, a stale
+restart-harness expectation that forbade the intended scoped replay cursor,
+and oversized preference-evaluation argv. Follow-up harness changes retain
+strict worker/document identity and cursor-scope checks and use bounded stdin.
+Actual local preferences, header-deadline and preview-budget browser scenarios
+pass strict verification. A subsequent Linux Chromium reproduction at the exact
+65-byte hosted temporary path fails with `Socket path too long` in Chromium's
+own singleton directory (not the driver session socket). Only the Linux browser
+child now receives `/tmp` as its temporary base; Chromium retains its private
+random directory, while fixture, profile, report and parent environments are
+unchanged. The complete Linux HEADER scenario passes at that same long report
+path after the fix. No historical evidence is rewritten; a fresh complete hosted
+browser run remains required.
+Fresh local daemon-restart browser acceptance also strict-passes with unchanged
+be6 assets, actual scoped cursor progression and all owned cleanup checks. The
+report SHA-256 is
+`5d7c595221dfb027139c62a394be25e7fc82fb93158b9a69cc962b9c01ebe520`.
+Independent command-helper review reproduced and corrected a blocked-stdin
+cleanup edge; an isolated failed-signal regression now proves finite driver exit.
+Nine additional hosted nested-runner failures have no uploaded inner report and
+cannot be classified from suppressed exit codes alone. Finite nonsecret stage
+diagnostics were added; no missing report is treated as passed or as a proven
+product defect. The shared browser launcher receives the reproduced Linux socket
+fix, but each affected scenario's complete hosted rerun remains required.
+The final independent local Node cohort passes **1,695 / zero skips**.
+
 Hosted full CPU Tests run `39162366676` at `a3888c0` also completes successfully
 on Python 3.11/3.12/3.13: each **3,838 passed / 36 skipped / 336 deselected**;
 the Python 3.11 isolated wheel gate passes. This predates the latest native

@@ -150,6 +150,8 @@ tools/*
 !tools/browser_dataset_parity.test.mjs
 !tools/browser_failure_evidence.mjs
 !tools/browser_failure_evidence.test.mjs
+!tools/browser_acceptance_diagnostic.mjs
+!tools/browser_acceptance_diagnostic.test.mjs
 !tools/browser_launch_policy.mjs
 !tools/browser_launch_policy.test.mjs
 !tools/run_adoption_browser_acceptance.mjs

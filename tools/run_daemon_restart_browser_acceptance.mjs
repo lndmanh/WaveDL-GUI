@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
+import { observeCursorStorage } from "./browser_cursor_storage.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 import { verifyDaemonRestartRecord, verifyDaemonRestartFile, limitation } from "./verify_daemon_restart_browser_report.mjs";
 
@@ -180,7 +181,7 @@ const publicRun = async (runId) => {
   assert(value && typeof value === "object" && value.run_id === runId);
   return { value, wireProof: { path: `/api/runs/${runId}`, status: response.status, raw, bytes: Buffer.byteLength(raw), sha256: createHash("sha256").update(raw).digest("hex") } };
 };
-const view = `JSON.stringify((()=>{const s=document.querySelector('[aria-label="Selected run"]');return {runId:s?.querySelector('.identity')?.textContent.trim(),badge:s?.querySelector('[data-slot="badge"]')?.textContent.trim(),text:s?.innerText,body:document.body.innerText,currentMetrics:!!document.querySelector('[aria-label="Current runtime metrics"] progress'),storage:{cookies:document.cookie,local:Object.keys(localStorage),session:Object.keys(sessionStorage)}};})())`;
+const view = (daemonId, runId) => `JSON.stringify((()=>{const s=document.querySelector('[aria-label="Selected run"]');return {runId:s?.querySelector('.identity')?.textContent.trim(),badge:s?.querySelector('[data-slot="badge"]')?.textContent.trim(),text:s?.innerText,body:document.body.innerText,currentMetrics:!!document.querySelector('[aria-label="Current runtime metrics"] progress'),storage:(${observeCursorStorage.toString()})(localStorage,sessionStorage,document.cookie,${JSON.stringify(daemonId)},${JSON.stringify(runId)})};})())`;
 try {
   r.sourceSnapshotBefore = await sourceSnapshot();
   r.assetBefore = await currentAssetDigest();
@@ -234,8 +235,9 @@ try {
     "--fn",
     `document.querySelector('[aria-label="Runtime metric history"]')?.querySelector('canvas')`,
   ]);
-  r.renderedBefore = await dom(view);
   r.healthBefore = await health();
+  const scopedView = () => view(r.healthBefore.daemon_id, r.before.runId);
+  r.renderedBefore = await dom(scopedView());
   const derivedBefore = await publicRun(r.before.runId);
   r.derivedBefore = derivedBefore.value;
   r.derivedBeforeWire = derivedBefore.wireProof;
@@ -258,7 +260,7 @@ try {
   await actions.button("Connection", false, { scope: '//nav[@aria-label="Sections"]' });
   await actions.button("Verify connection");
   await command(["wait", "--text", "Connect securely"]);
-  r.loss = await dom(view);
+  r.loss = await dom(scopedView());
   await actions.button("Disconnect and clear scope");
   r.detached = await dom(
     `JSON.stringify({selectedAbsent:!document.querySelector('[aria-label="Selected run"]'),credentialEmpty:document.querySelector('#daemon-bearer')?.value===''} )`,
@@ -281,7 +283,8 @@ try {
   const derivedAfter = await publicRun(r.before.runId);
   r.derivedAfter = derivedAfter.value;
   r.derivedAfterWire = derivedAfter.wireProof;
-  r.renderedAfter = await dom(view);
+  await command(["wait", "--fn", `(()=>{const s=(${observeCursorStorage.toString()})(localStorage,sessionStorage,document.cookie,${JSON.stringify(r.healthAfter.daemon_id)},${JSON.stringify(r.before.runId)});return s.valid&&s.local===1&&s.entries[0].cursor.attempt===1&&s.entries[0].cursor.seq>=0;})()`]);
+  r.renderedAfter = await dom(scopedView());
   r.assetAfter = await currentAssetDigest();
   const frozenDerived = await publicRun(r.before.runId);
   r.frozenDerived = frozenDerived.value;
