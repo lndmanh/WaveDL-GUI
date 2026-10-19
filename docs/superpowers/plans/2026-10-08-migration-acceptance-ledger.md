@@ -27,6 +27,23 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Fresh full twelve-case browser aggregate — 2026-10-19 (32c25fc inputs)
+
+The default unfiltered real-browser runner completes **12/12**, exit zero, in
+11m37s. Root independently accepts the dedicated-parent strict CLI guard:
+`node tools/verify_browser_ci_report.mjs /private/tmp/wavedl-current-full12.Dy8jMj`.
+Report:
+`/private/tmp/wavedl-current-full12.Dy8jMj/wavedl-browser-acceptance-XHb6kf/summary.json`,
+SHA-256 `79eea143156d267a215c4ba7acce9b7099f45f2f336ad96a6806e7f502fe9ed6`.
+All twelve unique mandatory cases pass without skips/failure fields, exact be6
+assets, absent browser sessions, closed fixture services/listeners and removed
+owned roots/profiles. The parent contains exactly one owned report workspace.
+This is actual local macOS CPU / agent-browser 0.26 evidence using current
+`32c25fc` product inputs, not merely synthetic verifier tests. Later `fd5c726`
+changes only CI/contracts/docs: `git diff 32c25fc fd5c726 -- src/wavedl
+src/wavedl_daemon web tools` is empty. Hosted CPU/browser runs remain live and
+are not promoted to passes; GPU and real-site gates remain open.
+
 ### Reviewed CI cancellation correction — 2026-10-19
 
 The superseded browser run continued starting expensive scenarios after
