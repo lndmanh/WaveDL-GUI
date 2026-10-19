@@ -167,6 +167,13 @@ function synthetic() {
         limitation: restartLimitation,
       },
       {
+        isolation: {
+          servedGeneration: builds[2].generation,
+          workerSha256: builds[2].workerSha256,
+          offlineInventorySha256: builds[2].offlineInventorySha256,
+          pageBefore: { ...page(2), timeOrigin: start + 8000 },
+          pageAfter: { ...page(2), timeOrigin: start + 8000 },
+        },
         beforeLoss: storage(3),
         loss: {
           owned: storage(3).cacheNames.sort(),
@@ -367,6 +374,13 @@ test("rejects missing or weakened restart durability evidence", () => {
 
 test("rejects weakened owned storage loss and network fallback evidence", () => {
   for (const mutate of [
+    (r) => delete r.stages[10].isolation,
+    (r) => (r.stages[10].isolation.servedGeneration = "foreign"),
+    (r) => (r.stages[10].isolation.workerSha256 = "0".repeat(64)),
+    (r) => (r.stages[10].isolation.offlineInventorySha256 = "0".repeat(64)),
+    (r) => r.stages[10].isolation.pageAfter.timeOrigin++,
+    (r) => (r.stages[10].isolation.pageAfter.controller = undefined),
+    (r) => r.stages[10].beforeLoss.registrations[0].installing = "installing",
     (r) => r.stages[10].loss.owned.push("foreign-cache"),
     (r) => r.stages[10].loss.deleted.pop(),
     (r) => (r.stages[10].loss.idb.outcome = "unattempted"),

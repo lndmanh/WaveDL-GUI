@@ -446,6 +446,16 @@ export function verifyReport(report, summary, builds, { activeDraft = false } = 
   });
   const loss = s[10];
   assert.equal(loss.limitation, storageLossLimitation, "Storage-loss scope must remain explicit");
+  assert.equal(loss.isolation.servedGeneration, builds[2].generation);
+  assert.equal(loss.isolation.workerSha256, builds[2].workerSha256);
+  assert.equal(loss.isolation.offlineInventorySha256, builds[2].offlineInventorySha256);
+  for (const value of [loss.isolation.pageBefore, loss.isolation.pageAfter]) {
+    assert.equal(value.url, origin + "/");
+    assert.equal(value.controller, origin + "/sw.js");
+    assert.equal(value.timeOrigin, s[9].restartedPage.timeOrigin);
+    assert.deepEqual(value.entries, builds[2].entryUrls);
+  }
+  assert.deepEqual(loss.beforeLoss.registrations, [{ scope: origin + "/", active: "activated" }]);
   storage(loss.beforeLoss, builds.slice(0, 3), origin);
   assert.deepEqual(
     loss.loss.owned,

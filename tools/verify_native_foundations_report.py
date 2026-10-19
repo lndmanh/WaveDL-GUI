@@ -55,6 +55,9 @@ WINDOWS_REQUIRED = {
         },
     },
     "daemon": {
+        "unit_tests.daemon.test_inspection": {
+            "test_native_windows_catalog_header_worker_preserves_identity_binding",
+        },
         "unit_tests.daemon.test_slurm_observation": {
             "test_native_windows_pipe_is_rejected_before_reading",
         },

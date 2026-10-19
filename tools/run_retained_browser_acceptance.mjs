@@ -381,10 +381,11 @@ async function main() {
     assert.deepEqual(after.entries, before.entries, "Other tab entry script remains stable");
     return after;
   }
-  async function swap(build) {
-    const next = join(owned, `${build.namespace}-incoming`);
+  async function swap(build, label = build.namespace) {
+    assert(/^(?:g[1-4]|loss-g3)$/.test(label));
+    const next = join(owned, `${label}-incoming`);
     await cp(build.assetsDir, next, { recursive: true, errorOnExist: true, force: false });
-    await rename(join(owned, "assets"), join(owned, `${build.namespace}-previous`));
+    await rename(join(owned, "assets"), join(owned, `${label}-previous`));
     await rename(next, join(owned, "assets"));
     const response = await fetch(`${origin}/offline-build.json`, {
       cache: "no-store",
@@ -862,7 +863,39 @@ async function main() {
     // Deliberately keep the registration and all documents alive: deleting the
     // retained resources must be observable as a hard worker refusal, never a
     // hidden unregister/recovery path or a network fallback.
-    const beforeLoss = await dom(storageExpression);
+    // Loss is not concurrent admission: after proving g4 refusal and restart,
+    // serve the exact already-active g3 bytes so Chrome's native update check
+    // cannot admit g4 merely because this scenario deliberately frees capacity.
+    const lossPageBefore = await page();
+    await swap(builds[2], "loss-g3");
+    const servedWorker = await fetch(`${origin}/sw.js`, {
+      cache: "no-store", signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(servedWorker.status, 200);
+    const workerSha256 = digest(Buffer.from(await servedWorker.arrayBuffer()));
+    const servedInventory = await fetch(`${origin}/offline-build.json`, {
+      cache: "no-store", signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(servedInventory.status, 200);
+    const inventoryBytes = Buffer.from(await servedInventory.arrayBuffer());
+    const offlineInventorySha256 = digest(inventoryBytes);
+    const servedGeneration = JSON.parse(inventoryBytes).generation;
+    assert.equal(workerSha256, builds[2].workerSha256);
+    assert.equal(offlineInventorySha256, builds[2].offlineInventorySha256);
+    assert.equal(servedGeneration, builds[2].generation);
+    const beforeLoss = await poll(
+      (timeout) => dom(storageExpression, timeout),
+      value => JSON.stringify(value.registrations) === JSON.stringify([
+        { scope: origin + "/", active: "activated" },
+      ]),
+      "Storage-loss active-only registration boundary",
+    );
+    verifyStorage(beforeLoss, builds.slice(0, 3));
+    const lossPageAfter = await controlledInitialPage(page, poll, lossPageBefore, origin);
+    const isolation = {
+      servedGeneration, workerSha256, offlineInventorySha256,
+      pageBefore: lossPageBefore, pageAfter: lossPageAfter,
+    };
     const lossExpression = `(async () => {
       const owned = (await caches.keys()).filter((name) => name.startsWith('wavedl-retained-v1-'));
       const deleted = [];
@@ -927,6 +960,7 @@ async function main() {
     };
     report.stages.push({
       stage: "browser-storage-loss-refusal",
+      isolation,
       beforeLoss,
       loss,
       refusals,

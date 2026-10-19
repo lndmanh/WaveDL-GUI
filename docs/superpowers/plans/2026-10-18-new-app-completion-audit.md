@@ -4,6 +4,25 @@ Requirement assessment reviewed by the main agent; not full T38/T42 sign-off.
 This audits the new daemon/browser application, not a Qt transition.
 No legacy migration, deprecation period or Qt-retaining release is required.
 
+## 2026-10-19 verification addendum
+
+The ledger's newest sections supersede the older unrun-hosted labels below.
+Hosted CPU Tests now pass on Python 3.11/3.12/3.13 at `f8ad5f0`; static-client
+checks and both Linux/macOS foundation versions pass at `6ed0fa4`, as do both
+real-tmpfs lanes. All 14 required native Windows safety cases pass on both
+versions, but full Windows daemon acceptance still fails on persisted-input
+reading, selected HEADER identity and test-hook cleanup. Reviewed follow-ups
+retain native ownership, held-file identity, bounds and truthful uncertainty;
+the new HEADER native witness is mandatory for the next run.
+
+Exact clean `6ed0fa4` wheel/sdist CPU lifecycle acceptance and fresh local
+retained/cancellation/partial-best/native-SSE browser reports pass within their
+declared boundaries. Hosted browser aggregate, final full supported-platform
+validation, actual GPU/accelerate trees and real Slurm/filesystem-site gates
+remain open. Local passes and passing native safety subsets do not close these
+gates. Exact hashes, failed precursors and source boundaries are in the ledger;
+no tag or publication is authorized by this addendum.
+
 ## Authority and evidence boundaries
 
 Normative requirements: `2026-10-04-web-client-parity.md` capability matrix,

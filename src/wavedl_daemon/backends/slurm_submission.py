@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,6 +13,7 @@ from uuid import UUID
 from wavedl.core.layout import RunLayout
 from wavedl.core.manifest import write_manifest
 from wavedl.core.persistence import write_once
+from wavedl.core.safe_files import open_directory
 from wavedl.core.submission import (
     create_submission,
     identity_for_submission,
@@ -63,19 +62,30 @@ _JOB = re.compile(r"[1-9][0-9]*(?:;[A-Za-z0-9_.-]+)?\Z")
 
 def _read_bounded(path: Path, limit: int) -> bytes:
     """Refuse links, FIFOs and oversized files before reading persisted input."""
-    descriptor = os.open(
-        path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0)
-    )
-    with os.fdopen(descriptor, "rb") as stream:
-        metadata = os.fstat(stream.fileno())
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ValueError("Submission input must be a regular file")
-        if metadata.st_size > limit:
-            raise BudgetExhausted("Submission input exceeds byte budget")
-        payload = stream.read(limit + 1)
-    if len(payload) > limit:
-        raise BudgetExhausted("Submission input exceeds byte budget")
-    return payload
+    if type(limit) is not int or limit < 0:
+        raise ValueError("Submission byte bound must be nonnegative")
+    path = Path(path)
+    with open_directory(path.parent) as parent:
+        parent.verify_private_owner()
+        parent.guard()
+        with parent.open_file(path.name) as stream:
+            stream.verify_private_owner()
+            stream.guard()
+            if stream.stat().st_size > limit:
+                raise BudgetExhausted("Submission input exceeds byte budget")
+            payload = bytearray()
+            while len(payload) <= limit:
+                chunk = stream.read(min(65536, limit + 1 - len(payload)))
+                if not chunk:
+                    break
+                payload.extend(chunk)
+            if len(payload) > limit:
+                raise BudgetExhausted("Submission input exceeds byte budget")
+            stream.verify_private_owner()
+            parent.verify_private_owner()
+            stream.guard()
+            parent.guard()
+            return bytes(payload)
 
 
 def _identity(plan: Plan, request_id: str, attempt: int | None) -> None:

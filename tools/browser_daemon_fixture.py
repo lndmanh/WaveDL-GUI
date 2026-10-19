@@ -18,7 +18,9 @@ import socket
 import sqlite3
 import stat
 import sys
+import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import parse_qsl
 from uuid import UUID
@@ -30,6 +32,7 @@ from scipy.io import savemat
 from wavedl import __version__
 from wavedl.core.generations import publish_generation, published_generations
 from wavedl.core.layout import RunLayout
+from wavedl.core.safe_files import open_directory
 from wavedl_daemon.backends.local import LocalBackend
 from wavedl_daemon.execution.budget import WorkBudget
 from wavedl_daemon.execution.commands import run_command
@@ -367,7 +370,42 @@ def read_fixture_token(path: Path, root: Path) -> str:
         os.close(descriptor)
 
 
-async def serve_fixture(
+@contextmanager
+def fixture_temporary_storage(root: Path):
+    """Confine import-time/runtime temporary files to the owned fixture root."""
+    if root.is_symlink() or not root.is_dir() or list(root.iterdir()):
+        raise ValueError("Browser fixture requires a dedicated empty directory")
+    root = root.resolve()
+    with open_directory(root) as selected:
+        selected.verify_private_owner(confidential=True)
+        selected.guard()
+    directory = root / ".runtime-tmp"
+    directory.mkdir(mode=0o700)
+    previous = {key: os.environ.get(key) for key in ("TMPDIR", "TEMP", "TMP")}
+    cached = tempfile.tempdir
+    try:
+        for key in previous:
+            os.environ[key] = str(directory)
+        # scipy/other startup imports can cache the inherited report directory
+        # before a real training child imports W&B's module-level temp objects.
+        tempfile.tempdir = str(directory)
+        yield directory
+    finally:
+        tempfile.tempdir = cached
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+async def serve_fixture(root: Path, *args, **kwargs) -> None:
+    """Run a fixture with temporary state confined until owned-root cleanup."""
+    with fixture_temporary_storage(root):
+        await _serve_fixture(root, *args, **kwargs)
+
+
+async def _serve_fixture(
     root: Path,
     epochs: int,
     port: int,
@@ -387,8 +425,6 @@ async def serve_fixture(
     autoplot_metadata_integrity: bool = False,
 ) -> None:
     """Use a dedicated empty root, genuine backend and normal runtime allocation."""
-    if root.is_symlink() or not root.is_dir() or list(root.iterdir()):
-        raise ValueError("Browser fixture requires a dedicated empty directory")
     root = root.resolve()
     token = (
         read_fixture_token(token_file, root)

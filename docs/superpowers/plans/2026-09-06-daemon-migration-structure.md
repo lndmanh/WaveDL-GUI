@@ -45,6 +45,17 @@ current task/milestone tables supersede conflicting Qt-transition requirements.
 
 ### Current implementation/evidence status — 2026-10-15 (new-app validation)
 
+#### Current hosted/native follow-up — 2026-10-19
+
+The approved review branch now contains the new daemon/browser app without
+shipping Qt. At `6ed0fa4`, hosted static-client/lint and both Linux/macOS
+foundation versions pass; Windows and complete browser aggregate acceptance
+remain open. Fresh exact wheel/sdist CPU lifecycle checks pass with zero skips,
+and independently reviewed browser follow-ups retain strict ownership, attempt,
+worker-identity and cleanup requirements. The acceptance ledger's latest section
+records exact source/report hashes and supersedes historical validation totals
+below. No real-site Slurm/GPU or final T30c/T38/T42 sign-off is inferred.
+
 #### Latest Linux CPU artifact validation — 2026-10-18
 
 The exact wheel and sdist now each pass isolated dependency-resolved Linux/arm64

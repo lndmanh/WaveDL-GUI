@@ -122,10 +122,31 @@ export function verifyCancellationLostAckReport(report) {
   assert(polls.some(item=>JSON.parse(item.rawBody).cancellation_requested===true));
   assert(report.wire.every(item => item.method === 'GET' || item === cancel), 'No other mutation allowed');
   const runResponses = report.wire.filter(item => item.path === `/api/runs/${runId}/cancel` || item.path === `/api/runs/${runId}`);
+  let attemptBound = false;
   for (const item of runResponses) {
     const body = json(item.rawBody);
     for (const [key, value] of Object.entries({run_id: runId, plan_id: planId, request_id: requestId})) assert.equal(body[key], value);
-    assert.equal(body.backend, 'local'); assert.equal(body.operation, 'train'); assert.equal(body.attempt, 1);
+    assert.equal(body.backend, 'local'); assert.equal(body.operation, 'train');
+    if (body.attempt === null) {
+      assert.equal(attemptBound, false, 'Confirmed runtime attempt cannot revert to unbound');
+      assert.equal(item.method, 'GET');
+      assert.equal(item.originalStatus, 200, 'Unbound prefix requires a successful public GET');
+      assert(item.sequence < preProbe.sequence && item.sequence < cancel.sequence, 'Unbound observation must precede the confirmed pre-cancel probe');
+      assert.equal(body.state, 'submission_unknown');
+      assert.equal(body.uncertainty, true);
+      assert.equal(body.cancellation_requested, false);
+      assert.equal(body.evidence.current_runtime_attempt, null);
+      assert.equal(body.evidence.last_runtime_attempt, null);
+      assert.equal(body.evidence.confidence, 'unconfirmed');
+      assert.equal(body.evidence.runtime.hello_seen, false);
+      assert.equal(body.evidence.runtime.state, null);
+      assert.equal(body.evidence.runtime.exit_seq, -1);
+      assert.equal(body.evidence.runtime.outcome, null);
+      assert.equal(body.evidence.backend, null);
+    } else {
+      assert.equal(body.attempt, 1);
+      attemptBound = true;
+    }
     assert.equal(item.authenticated, true); assert.equal(item.scoped, true);
     if (item !== cancel) { assert.equal(item.deliveredStatus, item.originalStatus); assert.equal(item.deliveredRawBody, item.rawBody); }
   }

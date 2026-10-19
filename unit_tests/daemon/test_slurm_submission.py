@@ -12,6 +12,8 @@ import pytest
 from wavedl.core.layout import OperationKind, RunLayout
 from wavedl.core.manifest import RuntimeSelection, build_manifest
 from wavedl.core.persistence import write_once
+from wavedl.core.safe_files import UnsafeOwnership
+from wavedl_daemon.backends import slurm_submission
 from wavedl_daemon.backends.contracts import Plan, UnsupportedPlan
 from wavedl_daemon.backends.scheduler import SchedulerCommands
 from wavedl_daemon.backends.slurm_plan import SlurmPlanner, SlurmSite, job_name
@@ -328,3 +330,147 @@ def test_fifo_submission_input_refused_without_blocking(plan, lock, name):
         with pytest.raises(SchedulerUnavailable):
             backend.find_by_request_id(plan, request_id=str(uuid4()), attempt=1)
     assert not runner.calls
+
+
+@pytest.mark.parametrize("size", [0, 65536, 1048576])
+def test_persisted_input_reader_retains_exact_bounded_bytes(tmp_path, size):
+    path = tmp_path / "persisted.json"
+    content = b"x" * size
+    write_once(path, content)
+    assert slurm_submission._read_bounded(path, size) == content
+    if size:
+        with pytest.raises(BudgetExhausted):
+            slurm_submission._read_bounded(path, size - 1)
+
+
+def test_submission_manifest_symlink_is_refused_before_scheduler(plan, lock):
+    directory = Path(plan.run_dir)
+    directory.mkdir(parents=True, mode=0o700)
+    target = directory / "private-target.json"
+    write_once(target, plan.manifest_json.encode())
+    (directory / "manifest.json").symlink_to(target)
+    runner = Runner()
+    backend = SlurmSubmission(runner, owner="alice", dispatch_lock=lock)
+    with pytest.raises((OSError, ValueError)):
+        backend.submit(plan, request_id=str(uuid4()), attempt=1)
+    assert runner.calls == []
+    assert target.read_bytes() == plan.manifest_json.encode()
+    assert not (directory / "attempts").exists()
+
+
+def test_persisted_input_reader_rejects_linked_parent_and_directory(tmp_path):
+    owned = tmp_path / "owned"
+    owned.mkdir(mode=0o700)
+    write_once(owned / "input.json", b"owned")
+    alias = tmp_path / "alias"
+    alias.symlink_to(owned, target_is_directory=True)
+    with pytest.raises((OSError, ValueError)):
+        slurm_submission._read_bounded(alias / "input.json", 100)
+    with pytest.raises((OSError, ValueError)):
+        slurm_submission._read_bounded(owned, 100)
+
+
+def test_persisted_input_reader_enforces_native_private_owner(tmp_path, monkeypatch):
+    from wavedl.core import safe_files
+
+    path = tmp_path / "input.json"
+    write_once(path, b"owned")
+    calls = []
+
+    def denied(api, handle, *, confidential=False):
+        calls.append(handle)
+        raise UnsafeOwnership("Untrusted input owner")
+
+    monkeypatch.setattr(safe_files, "_private_owner", denied)
+    with pytest.raises(UnsafeOwnership):
+        slurm_submission._read_bounded(path, 100)
+    assert len(calls) == 1
+
+
+def test_persisted_input_reader_bounds_growth_and_closes_file(tmp_path, monkeypatch):
+    from wavedl.core import safe_files
+
+    path = tmp_path / "input.json"
+    write_once(path, b"short")
+    opened = []
+
+    def grown_read(stream, count):
+        opened.append(stream)
+        assert count == 6  # At most limit+1 bytes, even after the size check.
+        return b"grown!"
+
+    monkeypatch.setattr(safe_files.SafeFile, "read", grown_read)
+    with pytest.raises(BudgetExhausted):
+        slurm_submission._read_bounded(path, 5)
+    assert len(opened) == 1 and opened[0].handle is None
+
+
+@pytest.mark.parametrize("changed", ["member", "parent"])
+def test_persisted_input_reader_rechecks_owner_after_read_and_closes(
+    tmp_path, monkeypatch, changed
+):
+    from wavedl.core import safe_files
+
+    path = tmp_path / "input.json"
+    write_once(path, b"owned")
+    native_owner = safe_files._private_owner
+    native_read = safe_files.SafeFile.read
+    owner_calls, opened = [], []
+    read_started = False
+
+    def owner(api, handle, *, confidential=False):
+        owner_calls.append(handle)
+        if read_started:
+            target = owner_calls[1] if changed == "member" else owner_calls[0]
+            if handle == target:
+                raise UnsafeOwnership("Ownership changed while reading")
+        return native_owner(api, handle, confidential=confidential)
+
+    def read(stream, count):
+        nonlocal read_started
+        read_started = True
+        opened.append(stream)
+        return native_read(stream, count)
+
+    monkeypatch.setattr(safe_files, "_private_owner", owner)
+    monkeypatch.setattr(safe_files.SafeFile, "read", read)
+    with pytest.raises(UnsafeOwnership, match="changed while reading"):
+        slurm_submission._read_bounded(path, 100)
+    assert opened and all(stream.handle is None for stream in opened)
+    assert len(owner_calls) == (3 if changed == "member" else 4)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Windows pins replacement natively")
+def test_persisted_input_reader_checks_identity_after_read(tmp_path, monkeypatch):
+    from wavedl.core import safe_files
+
+    path = tmp_path / "input.json"
+    write_once(path, b"owned")
+    native_read = safe_files.SafeFile.read
+    replaced = []
+
+    def replace_after_read(stream, count):
+        chunk = native_read(stream, count)
+        if not replaced:
+            path.unlink()
+            path.write_bytes(b"other")
+            replaced.append(stream)
+        return chunk
+
+    monkeypatch.setattr(safe_files.SafeFile, "read", replace_after_read)
+    with pytest.raises(ValueError, match="no longer identifies pinned file"):
+        slurm_submission._read_bounded(path, 100)
+    assert replaced[0].handle is None
+    assert path.read_bytes() == b"other"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Native mode ownership contract")
+@pytest.mark.parametrize("member", [False, True])
+def test_persisted_input_reader_rejects_writable_parent_or_member(tmp_path, member):
+    owned = tmp_path / "owned"
+    owned.mkdir(mode=0o700)
+    path = owned / "input.json"
+    write_once(path, b"untrusted-writable")
+    (path if member else owned).chmod(0o666 if member else 0o777)
+    with pytest.raises(UnsafeOwnership):
+        slurm_submission._read_bounded(path, 100)

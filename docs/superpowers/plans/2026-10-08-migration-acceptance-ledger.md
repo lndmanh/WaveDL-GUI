@@ -27,6 +27,104 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Fresh reviewed browser and committed-artifact evidence — 2026-10-19
+
+Commit `6ed0fa4` is pushed only to the approved review branch. Hosted static
+client run `39253277305` and lint `39253277388` pass. Foundations run
+`39253277430` passes both Linux and macOS versions and both real-tmpfs lanes.
+Both Windows jobs finish with all **14 required native cases passed**, including
+the two real descendant-supervision cases and native pipe rejection. Their full
+daemon reports still fail: nine shared Slurm persisted-input reads reference
+POSIX-only `os.O_NONBLOCK`; Python 3.13 additionally refuses the selected dataset
+inspection worker. The reports correctly fail the overall guard. A test-hook
+handle leak also prevents Windows temporary-workspace cleanup after a denied
+rename. These are concrete follow-up work, not a clean Windows acceptance claim.
+
+Reviewed follow-ups replace the Slurm reader with held native-safe directory/
+file capabilities, bounded chunk reads and pre/post ownership plus identity
+guards. A mid-read ownership change fails closed. HEADER now uses the same
+borrowed native-handle identity representation as its authority, rather than
+comparing it with Python's wider Windows `fstat` IDs; no IDs are truncated and
+no pathname is reopened for the comparison. The native HEADER worker witness
+becomes mandatory (**15 Windows cases** for the next run). The catalog test hook
+closes its opened file if mutation fails before returning it to the production
+resolver; Windows denial/unchanged bytes and POSIX replacement checks remain.
+Root's focused independent run passes **209 / one native-Windows skip**, with
+pinned Ruff lint/read-only format checks clean. These changes still require
+fresh complete native Windows confirmation.
+The final combined core/daemon regression independently passes **2,851 / 19
+explicit skips**, zero failures/errors, in 180.01 seconds. JUnit:
+`/private/tmp/wavedl-native-final-followup-20261019.xml`. Pinned Ruff 0.14.10
+lint and read-only format checks pass **237 files**. Unrelated historical Qt
+work and its staged blobs remain unchanged.
+
+The shared browser fixture now confines third-party runtime temporary files
+under its private owned root. Its environment and Python temporary-directory
+cache are restored on normal/error exit; a real W&B import followed by abrupt
+process exit proves scratch-file containment. Root and independent review pass
+all **seven** new tests. No report inventory is relaxed, no W&B feature is
+disabled, and no files outside the owned fixture root are deleted.
+
+Actual partial-best fallback and native SSE split browser scenarios pass their
+unchanged strict verifiers and exact parent inventories under
+`/private/tmp/wavedl-tempcontainment-browser.hmNiNU/`. The fallback summary has
+SHA-256 `51d1dea2399171f3cdabf5f8eb8d9fa05a0736d43a752f0167b3f15ffbc4f2dc`;
+the SSE report is
+`6dfa31f2ba9a69ba54cb5a11b06811c58d4425ddfbc2ea9396fd74d643085924`.
+Native UTF-8/CRLF splits and all owned cleanup checks pass; be6 assets remain
+unchanged. These are local macOS CPU browser scenarios, not hosted aggregate
+acceptance or native Windows/GPU/site proof.
+
+Retained storage-loss testing now explicitly excludes concurrent admission as
+its existing limitation requires. Only after proving G4 capacity refusal and
+restart durability, the private fixture serves exact already-active G3 worker
+and inventory bytes; unchanged document/controller identity and active-only
+registration are required before deleting owned caches/IDB. Strict verification
+still requires actual immutable/navigation refusal and empty retained storage.
+New mandatory boundary evidence and seven adversarial mutations prevent older
+reports from claiming this slice. Four newly generated current-source controlled
+builds and both actual browser modes pass root's strict guards under
+`/private/tmp/wavedl-retained-stable-loss.uFvkHU/`. Producer summary SHA-256:
+`217c41a32f952223ab618e1d60816c6cbb90261b9a9cc920dff5290627203fff`;
+normal report: `26aad438bce506404c8f0894fafd4ae67756176b962128d5b86ceef7d1a17108`;
+active-draft report:
+`8a7270295c21c8487f7dcd66ebe3c5c7a60d3dab116ffb1114d623bdaa00e2f6`.
+These controlled-build scenarios do not replace the frozen package assets.
+
+Cancellation lost-ack verification now permits only a successful HTTP 200
+pre-admission GET with `submission_unknown`, null attempt, no hello/backend
+authority and no cancellation intent, strictly before the confirmed attempt.
+Once bound, an attempt cannot revert; post-cancel/pre-probe/terminal bindings
+remain strict. **37** focused tests cover truthful and adversarial prefixes.
+The final fresh actual browser report strict-passes current source/assets and
+exact report-only parent inventory:
+`/private/tmp/wavedl-cancel-ack-final-parent.TUnJwI/wavedl-cancel-ack-envgWV/cancellation-lost-ack.json`,
+SHA-256 `4897bb3590b6a37c677eaf83b5748c3783bf6169f084bae19d947cd28ec7a3d3`.
+Native cancellation/pid absence and owned cleanup are verified; runtime exit
+remains truthfully unknown. Earlier source-bound reports are retained without
+rewriting their fingerprints. The full current Node cohort passes
+**1,704 / zero skips**; no production grace period was changed for this gate.
+The full local daemon run including scratch isolation passes **1,881 / ten
+explicit skips**, JUnit
+`/private/tmp/wavedl-daemon-browser-followup-full-20261019.xml`. This report
+predates the additional HEADER/Slurm follow-ups above, not their final regression.
+
+Clean-archive **6ed0fa4** wheel and sdist independently pass exact-artifact,
+offline Linux/arm64 Python 3.13 CPU lifecycle acceptance, **one pass / zero
+skips** each, exit zero/no OOM. Both exclude Qt and match all 38 be6 asset
+files. Wheel SHA-256:
+`26f4792f38f4cc868c979103f78e731ab8adeb0faf69c4cf37ed7291a1af6643`;
+sdist: `944a2f6f5c7b6a181840fbedc9b254eb0ef9985d18efa5861c643477383be254`.
+Evidence root: `/private/tmp/wavedl-exact-6ed0fa4.3LkcSJ/`; wheel JUnit SHA-256
+`875cf0a1b9be3a82ef8c443b0209f1c23d61851b876d864cc11e67fd16c39c47`;
+sdist JUnit
+`b0f1d47ad47c690be3b3e5101b0c6c69085dae4d1657d96bf25d87b8a6011cc7`.
+Actual CPU journals/publications and authenticated daemon/CLI/asset checks are
+retained. Only these tasks' temporary stopped containers/work volumes were
+removed after evidence capture; user containers/data are unchanged. Later
+QA-only changes are not relabelled as this exact archive's source. Full
+T30c/T38/T42, native Windows/GPU, real-site and release gates remain open.
+
 ### Current native and browser follow-up — 2026-10-19
 
 At `f8ad5f0`, hosted Tests run `39194376726` succeeds on Python

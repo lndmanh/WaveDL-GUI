@@ -100,16 +100,49 @@ def test_resolve_ancestry_swap_never_returns_replacement_path(tmp_path, monkeypa
     folder.mkdir()
     (folder / "data").write_bytes(b"data")
     original = SafeDirectory.open_file
+    opened, closed, blocked = [], [], []
 
     def open_and_swap(directory, name, **kwargs):
         file = original(directory, name, **kwargs)
-        folder.rename(tmp_path / "moved")
-        folder.mkdir()
-        return file
+        opened.append(file)
+        close = file.close
+
+        def tracked_close():
+            close()
+            closed.append(file)
+
+        file.close = tracked_close
+        try:
+            if os.name == "nt":
+                with pytest.raises(PermissionError) as denied:
+                    folder.rename(tmp_path / "moved")
+                assert denied.value.winerror == 32
+                blocked.append(True)
+                assert not (tmp_path / "moved").exists()
+                assert (folder / "data").read_bytes() == b"data"
+                raise denied.value
+            folder.rename(tmp_path / "moved")
+            folder.mkdir()
+            return file
+        except BaseException:
+            # Until this hook returns, ExitStack has not received the resource.
+            file.close()
+            raise
 
     monkeypatch.setattr(SafeDirectory, "open_file", open_and_swap)
     with pytest.raises(BrowseForbidden):
         CatalogService({"data": tmp_path}).resolve("data", "folder/data")
+    assert len(opened) == 1
+    assert closed == opened
+    assert all(file.handle is None for file in opened)
+    if os.name == "nt":
+        assert blocked == [True]
+        assert (folder / "data").read_bytes() == b"data"
+        (folder / "data").unlink()  # No pinned handle survives resolver refusal.
+        assert not (folder / "data").exists()
+    else:
+        assert (tmp_path / "moved" / "data").read_bytes() == b"data"
+        assert not list(folder.iterdir())
 
 
 def test_resolve_route_is_authenticated_strict_bounded_and_redacted(tmp_path):

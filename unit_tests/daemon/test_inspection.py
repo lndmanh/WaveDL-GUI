@@ -298,6 +298,24 @@ def test_catalog_bound_inspection_rejects_paths_outside_configured_root(
     assert npy_result["format"] == "npy"
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="Native Windows authority/worker identity convention"
+)
+def test_native_windows_catalog_header_worker_preserves_identity_binding(tmp_path):
+    np.save(tmp_path / "native.npy", np.zeros((3, 2), dtype="float32"))
+    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
+        inspector = DatasetInspector(
+            sys.executable,
+            Path.cwd(),
+            pool,
+            catalog=CatalogService({"native": tmp_path}),
+        )
+        result = asyncio.run(inspector.inspect("native", "native.npy"))
+        assert result["format"] == "npy"
+        assert result["variables"][0]["shape"] == [3, 2]
+        assert pool.outstanding == 0
+
+
 @pytest.mark.skipif(os.name != "posix", reason="Executable wrapper requires POSIX")
 def test_catalog_bound_inspection_rejects_replaced_path_before_metadata_acceptance(
     tmp_path,

@@ -64,6 +64,35 @@ function proof() {
 test("accepts internally bound local CPU cancellation proof", () => assert.equal(verifyCancellationLostAckReport(proof()), true));
 test("accepts stale running runtime projection with independent confirmed native cancellation", () => {const r=proof();r.after.runs[0].state='running';assert.equal(verifyCancellationLostAckReport(r),true);});
 
+function rewriteWire(item, body) {
+  item.rawBody = JSON.stringify(body);
+  item.bodyBytes = Buffer.byteLength(item.rawBody); item.bodySha256 = digest(item.rawBody);
+  if (item.originalStatus === item.deliveredStatus) {
+    item.deliveredRawBody = item.rawBody;
+    item.deliveredBodyBytes = item.bodyBytes; item.deliveredBodySha256 = item.bodySha256;
+  }
+}
+function withPreAdmission() {
+  const r = proof(), prefix = structuredClone(r.wire[0]);
+  for (const item of r.wire) item.sequence++;
+  prefix.sequence = 1; prefix.atMs = 250; prefix.browser = true;
+  rewriteWire(prefix, { ...JSON.parse(prefix.rawBody), attempt: null, state: 'submission_unknown', uncertainty: true,
+    evidence: {current_runtime_attempt:null,last_runtime_attempt:null,confidence:'unconfirmed',backend:null,runtime:{hello_seen:false,state:null,exit_seq:-1,outcome:null}},
+  });
+  r.wire.unshift(prefix); return r;
+}
+test('accepts truthful unbound browser GET prefix before confirmed attempt', () => assert(verifyCancellationLostAckReport(withPreAdmission())));
+for (const [name, mutate] of [
+  ['unsuccessful unbound GET', r => {r.wire[0].originalStatus=503;r.wire[0].deliveredStatus=503;}],
+  ['null running attempt', r => {const b=JSON.parse(r.wire[0].rawBody);b.state='running';rewriteWire(r.wire[0],b);}],
+  ['null cancellation attempt', r => {const b=JSON.parse(r.wire[2].rawBody);b.attempt=null;rewriteWire(r.wire[2],b);}],
+  ['null post-confirmed terminal attempt', r => {const b=JSON.parse(r.wire[3].rawBody);b.attempt=null;rewriteWire(r.wire[3],b);}],
+  ['null prefix fabricated hello', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.runtime.hello_seen=true;rewriteWire(r.wire[0],b);}],
+  ['null prefix fabricated native authority', r => {const b=JSON.parse(r.wire[0].rawBody);b.uncertainty=false;rewriteWire(r.wire[0],b);}],
+  ['prefix cancellation already requested', r => {const b=JSON.parse(r.wire[0].rawBody);b.cancellation_requested=true;rewriteWire(r.wire[0],b);}],
+  ['prefix return after confirmation', r => {const prefix=structuredClone(r.wire[0]);prefix.sequence=3;prefix.atMs=450;r.wire.splice(2,0,prefix);for(let i=3;i<r.wire.length;i++)r.wire[i].sequence++;}],
+]) test(`rejects ${name}`, () => {const r=withPreAdmission();mutate(r);assert.throws(()=>verifyCancellationLostAckReport(r));});
+
 for (const [name, mutate] of [
   ["stale assets after run", r => { r.fingerprintsAfter.assetManifestSha256 = "0".repeat(64); }],
   ["forged manifest", r => { r.manifest.runtime.device = "cuda"; }],

@@ -514,6 +514,33 @@ def _mat4_metadata_snapshot(stream, end, limits):
     ), complex_flags
 
 
+def _held_identity(stream, metadata):
+    """Match authority fingerprints using this already-open file, not its path.
+
+    Python 3.12+ Windows fstat may expose FileIdInfo's wider volume/file IDs.
+    Dataset authority uses BY_HANDLE_FILE_INFORMATION, so compare that same
+    representation without truncating IDs or weakening the identity fence.
+    """
+    if os.name == "nt":
+        import msvcrt
+
+        from wavedl.core.safe_files import _windows_api
+
+        # Borrow the CRT-owned HANDLE; stream remains its sole close owner.
+        native = _windows_api().info(msvcrt.get_osfhandle(stream.fileno()))
+        ticks = native.write.dwHighDateTime << 32 | native.write.dwLowDateTime
+        return {
+            "st_dev": int(native.volume),
+            "st_ino": int(native.index_high << 32 | native.index_low),
+            "st_size": int(native.size_high << 32 | native.size_low),
+            "st_mtime_ns": (ticks - 116444736000000000) * 100,
+        }
+    return {
+        name: int(getattr(metadata, name))
+        for name in ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+    }
+
+
 def _open_dataset(path, limits, expected_identity=None):
     path = Path(path)
     if not path.is_absolute():
@@ -522,12 +549,11 @@ def _open_dataset(path, limits, expected_identity=None):
     stream = os.fdopen(descriptor, "rb")
     metadata = os.fstat(stream.fileno())
     if expected_identity is not None:
-        actual_identity = {
-            "st_dev": int(metadata.st_dev),
-            "st_ino": int(metadata.st_ino),
-            "st_size": int(metadata.st_size),
-            "st_mtime_ns": int(metadata.st_mtime_ns),
-        }
+        try:
+            actual_identity = _held_identity(stream, metadata)
+        except BaseException:
+            stream.close()
+            raise
         if (
             type(expected_identity) is not dict
             or set(expected_identity) != set(actual_identity)
