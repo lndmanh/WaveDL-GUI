@@ -41,8 +41,20 @@ def planner(**kwargs):
     )
 
 
+def native_plan_refused(request, selected_planner):
+    """Windows is not a Slurm execution host; successful rendering is POSIX-only."""
+    if os.name != "nt":
+        return False
+    with pytest.raises(UnsupportedPlan, match="Slurm directive paths"):
+        selected_planner.plan(request)
+    assert not Path(request.run_directory).exists()
+    return True
+
+
 def test_plan_is_immutable_pure_and_preserves_lexical_interpreter(tmp_path):
     request = manifest(tmp_path)
+    if native_plan_refused(request, planner()):
+        return
     plan = planner().plan(request)
     assert not (tmp_path / "owned").exists()
     assert request.runtime.python in plan.script
@@ -116,7 +128,10 @@ def test_scheduler_authentication_jwt_never_reaches_setup_binding_or_rank(
 
 
 def test_full_uuid_identity_binding_does_not_rerender(tmp_path):
-    plan = planner().plan(manifest(tmp_path))
+    request = manifest(tmp_path)
+    if native_plan_refused(request, planner()):
+        return
+    plan = planner().plan(request)
     first = "11111111-1111-4111-8111-111111111111"
     second = "11111111-2222-4222-8222-222222222222"
     assert job_name(first) != job_name(second)
@@ -165,6 +180,8 @@ def test_explicit_cluster_required(tmp_path):
 
 
 def test_topology_exact_total_and_one_launcher_per_machine(tmp_path):
+    if native_plan_refused(manifest(tmp_path), planner()):
+        return
     plan = planner(gpus_per_node=4).plan(
         manifest(tmp_path, device="cuda"), topology=Topology(3, 4)
     )
@@ -212,14 +229,19 @@ def test_unsupported_config_modes_and_gpu_settings_refused(tmp_path):
 
 
 def test_mapped_execution_paths_remain_separate_from_host_paths(tmp_path):
+    execution = (
+        str(tmp_path / "compute/shared") if os.name == "nt" else "/compute/shared"
+    )
     request = build_manifest(
         RunLayout(tmp_path / "owned", str(uuid4())),
         operation=OperationKind.TRAIN,
         resolved_config={"model": "cnn", "data_path": "data.npz"},
         runtime=RuntimeSelection("venv/bin/python", "selected", "cpu", {}),
         submission_cwd=tmp_path,
-        storage_map=(StorageMapping(str(tmp_path), "/compute/shared"),),
+        storage_map=(StorageMapping(str(tmp_path), execution),),
     )
+    if native_plan_refused(request, planner()):
+        return
     plan = planner().plan(request)
     assert plan.run_dir == str(tmp_path / "owned")
     assert plan.working_directory == "/compute/shared/owned"
@@ -428,5 +450,7 @@ def test_unsafe_directive_paths_and_identity_markers_are_refused(tmp_path):
     for suffix in ("percent%", "quote'", 'quote"', "slash\\", "newline\n"):
         with pytest.raises(UnsupportedPlan):
             planner().plan(manifest(tmp_path / suffix))
+    if native_plan_refused(manifest(tmp_path), planner()):
+        return
     with pytest.raises(UnsupportedPlan, match="marker"):
         planner().plan(manifest(tmp_path, run_name="@@WAVEDL_ATTEMPT@@"))

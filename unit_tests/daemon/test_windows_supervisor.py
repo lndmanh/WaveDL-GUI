@@ -168,8 +168,10 @@ def test_portable_timeout_accelerates_existing_long_grace(tmp_path):
 def test_portable_leader_exit_cleans_descendants_without_wait_timeout(tmp_path):
     api = FakeAPI()
     api.leader_running = lambda process: False
+    api.exit_code = lambda process: 0
     process = WindowsSupervisor(_api=api).start(ProcessSpec(("unused",), tmp_path))
     result = process.wait()
+    assert result.returncode == 0
     assert not result.timed_out and not result.cancelled
     assert "terminate_job" in api.events
 
@@ -263,35 +265,83 @@ def test_native_suspended_assignment_and_descendant_inherits_job(tmp_path):
 def test_native_ignoring_descendant_killed_even_after_leader_exit(
     tmp_path, leader_exits
 ):
+    import _winapi
+
     ready = tmp_path / "ready"
+    pid_file = tmp_path / "descendant-pid"
+    release = tmp_path / "release-leader"
     child = (
-        "import signal,time; from pathlib import Path; "
+        "import os,signal,time; from pathlib import Path; "
         "signal.signal(signal.SIGBREAK,signal.SIG_IGN); "
+        f"Path({str(pid_file)!r}).write_text(str(os.getpid())); "
         f"Path({str(ready)!r}).touch(); time.sleep(120)"
     )
+    # Hold the leader until the descendant has installed its signal handler
+    # and the test owns a native handle. Otherwise automatic leader-exit
+    # cleanup can correctly kill a slow-starting interpreter before readiness.
     code = (
         "import subprocess,sys,time,signal; "
+        "from pathlib import Path; "
         "signal.signal(signal.SIGBREAK,signal.SIG_IGN); "
         f"subprocess.Popen([sys.executable,'-c',{child!r}]); "
-        + ("" if leader_exits else "time.sleep(120)")
+        f"release=Path({str(release)!r}); "
+        "deadline=time.monotonic()+30\n"
+        "while not release.exists() and time.monotonic()<deadline: "
+        "time.sleep(.01)\n"
+        "assert release.exists(), 'leader release timed out'\n"
     )
-    process = WindowsSupervisor().start(
+
+    class InspectTermination(_Win32):
+        def __init__(self):
+            super().__init__()
+            self.kills = 0
+
+        def terminate_job(self, job):
+            super().terminate_job(job)
+            self.kills += 1
+
+    api = InspectTermination()
+    process = WindowsSupervisor(_api=api).start(
         ProcessSpec((sys.executable, "-c", code), tmp_path)
     )
+    descendant = None
     try:
         deadline = time.monotonic() + 15
         while not ready.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         assert ready.exists()
+        descendant = _winapi.OpenProcess(
+            0x00100000,
+            False,
+            int(pid_file.read_text()),  # SYNCHRONIZE
+        )
+        assert _winapi.WaitForSingleObject(descendant, 0) == _winapi.WAIT_TIMEOUT
         started = time.monotonic()
-        process.cancel(grace_seconds=0.1)
+        if leader_exits:
+            release.touch()
+        else:
+            process.cancel(grace_seconds=0.1)
         result = process.wait(timeout=5)
-        assert result.cancelled and not result.timed_out
-        assert time.monotonic() - started >= 0.09
+        assert result.cancelled is not leader_exits
+        assert not result.timed_out
+        if leader_exits:
+            # A successful leader exit remains truthful even though its
+            # ignoring descendant required forced Job Object termination.
+            assert result.returncode == 0
+            assert time.monotonic() - started >= 0.19
+        else:
+            assert result.returncode != 0
+            assert time.monotonic() - started >= 0.09
+        assert api.kills == 1
+        assert _winapi.WaitForSingleObject(descendant, 0) == _winapi.WAIT_OBJECT_0
         assert process.wait() is result
     finally:
-        process.cancel(grace_seconds=0)
-        process.wait()
+        try:
+            process.cancel(grace_seconds=0)
+            process.wait()
+        finally:
+            if descendant is not None:
+                _winapi.CloseHandle(descendant)
 
 
 @native

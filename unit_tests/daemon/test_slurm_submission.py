@@ -1,8 +1,9 @@
 """Submission ambiguity must never silently create or cancel a different job."""
 
+import json
 import os
 import sys
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ import pytest
 from wavedl.core.layout import OperationKind, RunLayout
 from wavedl.core.manifest import RuntimeSelection, build_manifest
 from wavedl.core.persistence import write_once
+from wavedl_daemon.backends.contracts import Plan, UnsupportedPlan
 from wavedl_daemon.backends.scheduler import SchedulerCommands
 from wavedl_daemon.backends.slurm_plan import SlurmPlanner, SlurmSite, job_name
 from wavedl_daemon.backends.slurm_submission import (
@@ -49,10 +51,29 @@ def plan(tmp_path):
         RunLayout(tmp_path / "run", str(uuid4())),
         operation=OperationKind.TRAIN,
         resolved_config={"epochs": 1, "model": "mlp", "data_path": "train.npz"},
-        runtime=RuntimeSelection("/usr/bin/python3", "selected", "cpu", {}),
+        runtime=RuntimeSelection(sys.executable, "selected", "cpu", {}),
         submission_cwd=tmp_path,
     )
-    return SlurmPlanner(SlurmSite(partition="cpu", cluster="alpha")).plan(manifest)
+    planner = SlurmPlanner(SlurmSite(partition="cpu", cluster="alpha"))
+    if os.name == "nt":
+        # The fake scheduler below tests submission state, not Windows Slurm
+        # execution. Preserve the real native-path rendering refusal first.
+        with pytest.raises(UnsupportedPlan, match="Slurm directive paths"):
+            planner.plan(manifest)
+        assert not Path(manifest.run_directory).exists()
+        return Plan(
+            "slurm",
+            json.dumps(asdict(manifest)),
+            script=(
+                "# fixture-only fake scheduler input, never executed as a shell\n"
+                "#SBATCH --job-name=@@WAVEDL_JOB_NAME@@\n"
+                "#SBATCH --comment=@@WAVEDL_REQUEST_ID@@\n"
+                "export WAVEDL_REQUEST_ID=@@WAVEDL_REQUEST_ID@@\n"
+                "export WAVEDL_ATTEMPT=@@WAVEDL_ATTEMPT@@\n"
+            ),
+            resources=(("cluster", "alpha"),),
+        )
+    return planner.plan(manifest)
 
 
 @pytest.fixture
@@ -219,12 +240,28 @@ def test_real_bounded_fake_scheduler_invocation(plan, lock, tmp_path, mode):
     }
     write_once(executable, f"#!{sys.executable}\n{programs[mode]}\n".encode())
     executable.chmod(0o700)
+    supervisor = None
+    if os.name == "nt":
+        from wavedl_daemon.supervision.windows import WindowsSupervisor
+
+        class PythonFixtureSupervisor:
+            """Run the owned Python fixture without relying on POSIX shebangs."""
+
+            def start(self, spec, *, output_limit):
+                assert spec.argv[0] == str(executable)
+                return WindowsSupervisor().start(
+                    replace(spec, argv=(sys.executable, *spec.argv)),
+                    output_limit=output_limit,
+                )
+
+        supervisor = PythonFixtureSupervisor()
     runner = SchedulerCommands(
         cwd=tmp_path,
         executables={"sbatch": str(executable)},
         budget=WorkBudget(
             timeout_seconds=0.1 if mode == "timeout" else 5, max_output_bytes=32
         ),
+        supervisor=supervisor,
     )
     backend = SlurmSubmission(runner, owner="alice", dispatch_lock=lock)
     if mode == "ack":

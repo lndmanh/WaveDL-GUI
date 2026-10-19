@@ -27,6 +27,73 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Current native and browser follow-up — 2026-10-19
+
+At `f8ad5f0`, hosted Tests run `39194376726` succeeds on Python
+3.11/3.12/3.13. Foundations run `39194376731` passes both Linux versions,
+both real-tmpfs lanes and macOS 3.13. macOS 3.11 exposes a genuine supervision
+race: immediate escalation can encounter a zombie-only group before the cached
+leader-exit flag updates. The reviewed fix still requires Darwin's strong
+reserved-owned-leader/all-zombie snapshot; EPERM alone never proves absence,
+and PID/PGID ownership is not released early. Root's native macOS supervisor
+rerun passes **57/57**, including eight deterministic stale-observation cases.
+Fresh hosted confirmation remains required.
+
+Both Windows core suites pass **825 / 135 platform skips**. Full daemon
+results remain failed, not acceptance: Python 3.11 has **48 failures / 28
+errors**, and 3.13 has **50 failures / 28 errors**. Reviewed test corrections
+retain real native-path Slurm planner refusal while separately exercising fake
+scheduler state machines, use native Python supervision for executable fixtures,
+mutate and restore actual Windows DACLs, and require an ignoring descendant to
+be alive before automatic leader-exit cleanup. A native pipe rejection witness
+is now mandatory in the Windows report guard (**14 required cases**, POSIX
+unchanged at 13). No native Windows rerun or clean platform result is inferred.
+The unexplained selected-inspection refusal retains the real worker contract
+and gains child-result diagnostics, not a waiver.
+Independent full local reruns pass **1,874 daemon tests / ten explicit skips**
+and **952 core tests / eight skips**; the native Darwin report guard accepts
+all 13 required cases. JUnit reports are
+`/private/tmp/wavedl-daemon-platform-reviewed-20261019.xml` and
+`/private/tmp/wavedl-core-platform-reviewed-20261019.xml`. All **76** report
+guard tests and pinned Ruff lint/read-only format checks pass. Independent Sol
+review finds no weaker ownership, process-identity or native-exit proof.
+
+Browser run `39194376744` completes with four distinct issues: retained-storage
+loss races a genuine background generation admission; cancellation evidence
+incorrectly rejects truthful pre-admission `attempt=null` GETs; two exact report
+inventories contain third-party runtime temporary directories. The cancellation
+native terminal state is not a journal exit: missing runtime exit remains
+explicitly **unknown**, as required by the existing report contract. Downstream
+missing baseline/aggregate evidence is a consequence, not a separate product
+failure. The other executed browser gates pass, but this run is not aggregate
+acceptance. Follow-ups must preserve strict report inventories, attempt binding,
+native worker identity and declared scenario boundaries.
+
+Fresh clean-archive `f8ad5f0` wheel and sdist each pass network-disabled,
+dependency-resolved Linux/arm64 Python 3.13 CPU lifecycle acceptance: **one
+pass / zero skips** each, exit zero and no OOM. Wheel SHA-256:
+`092efe5dcf1b6bb86a83d08bc1724d571d0459b6a6c2e8133e68f39cfd81c56a`;
+sdist: `3f684987447a7f8ca3bf316d96930d241e29ec9c33262af64f8a6f25df179897`.
+Reports under `/private/tmp/wavedl-exact-f8ad5f0.OsoARw/` have SHA-256
+`6f819ee118f6ab175f0fe1c5b561222c350ad4a7c5937ef3751a04f652fc720d`
+(wheel) and
+`cfad91439da2ede22deb6eeb46ff2f66970501f24572cf60ec87d8f947e8430a`
+(sdist). All 38 vendored files match be6; neither package ships Qt. An initial
+bind-mount ownership refusal remains retained as failed evidence; the final
+wheel used a private native Docker volume without relaxing ownership checks.
+These artifacts predate the Darwin follow-up and do not certify its bytes.
+
+A narrow lock-only devtools update selects **3.4.3**, removing the critical
+`simple-git` dependency path without changing Nuxt 4.5.2, Vue 3.5.43, Vite
+8.3.2 or the Node floor. The current lock is semantically identical to the
+isolated candidate accepted by `npm ci`, typecheck, **820 tests / one skip**,
+lint/format checks, generation and **38/38** worker checks. Frozen be6 assets
+are not replaced by this build-tool change. The isolated audit changes from
+12 high / one critical to **11 high / zero critical** affected entries;
+`braces` and `node-forge` build-tool advisory roots remain, so this is not a
+clean dependency-audit claim. Trial evidence:
+`/private/tmp/wavedl-devtools-trial.UcdqOr/TRIAL-REPORT.md`.
+
 ### Hosted validation in progress — 2026-10-19
 
 The approved review branch is `review/daemon-browser-ci-2026-10-19`; no tag,

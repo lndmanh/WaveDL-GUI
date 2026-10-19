@@ -2,6 +2,10 @@
 
 import json
 import os
+import subprocess
+import sys
+import time
+from contextlib import contextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
 from uuid import uuid4
@@ -109,6 +113,84 @@ def receipt(h, **changes):
     }
     values.update(changes)
     return write_outcome_receipt(directory, **values)
+
+
+@contextmanager
+def windows_foreign_write_acl(path):
+    """Temporarily grant one owned path access, restoring its original DACL."""
+    import ctypes
+    from ctypes import wintypes
+
+    api = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    pointer = wintypes.LPVOID
+    api.GetNamedSecurityInfoW.argtypes = [
+        wintypes.LPWSTR,
+        ctypes.c_int,
+        wintypes.DWORD,
+        ctypes.POINTER(pointer),
+        ctypes.POINTER(pointer),
+        ctypes.POINTER(pointer),
+        ctypes.POINTER(pointer),
+        ctypes.POINTER(pointer),
+    ]
+    api.GetNamedSecurityInfoW.restype = wintypes.DWORD
+    api.GetSecurityDescriptorControl.argtypes = [
+        pointer,
+        ctypes.POINTER(wintypes.WORD),
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    api.GetSecurityDescriptorControl.restype = wintypes.BOOL
+    api.SetNamedSecurityInfoW.argtypes = [
+        wintypes.LPWSTR,
+        ctypes.c_int,
+        wintypes.DWORD,
+        pointer,
+        pointer,
+        pointer,
+        pointer,
+    ]
+    api.SetNamedSecurityInfoW.restype = wintypes.DWORD
+    kernel.LocalFree.argtypes = [pointer]
+    kernel.LocalFree.restype = pointer
+    descriptor, dacl = pointer(), pointer()
+    code = api.GetNamedSecurityInfoW(
+        str(path),
+        1,
+        4,
+        None,
+        None,
+        ctypes.byref(dacl),
+        None,
+        ctypes.byref(descriptor),
+    )
+    if code:
+        raise ctypes.WinError(code)
+    try:
+        control, revision = wintypes.WORD(), wintypes.DWORD()
+        if not api.GetSecurityDescriptorControl(
+            descriptor, ctypes.byref(control), ctypes.byref(revision)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        # Preserve whether inheritance was protected, not just the ACE list.
+        flags = 4 | (0x80000000 if control.value & 0x1000 else 0x20000000)
+        try:
+            subprocess.run(
+                ["icacls", str(path), "/grant", "*S-1-1-0:(W)"],
+                check=True,
+                capture_output=True,
+                timeout=10,
+            )
+            yield
+        finally:
+            code = api.SetNamedSecurityInfoW(
+                str(path), 1, flags, None, None, dacl, None
+            )
+            if code:
+                raise ctypes.WinError(code)
+    finally:
+        if kernel.LocalFree(descriptor):
+            raise ctypes.WinError(ctypes.get_last_error())
 
 
 @pytest.mark.parametrize(
@@ -365,13 +447,32 @@ def test_group_writable_receipt_ancestry_is_refused(tmp_path, member):
         "attempt": file.parent,
         "receipt": file,
     }[member]
-    path.chmod(path.stat().st_mode | 0o020)
-    assert (
-        SlurmObservation(Runner(sacct=account(h)), owner="alice")
-        .collect(h)
-        .runtime.status
-        == OutcomeStatus.UNKNOWN
-    )
+    observer = SlurmObservation(Runner(sacct=account(h)), owner="alice")
+    assert observer.collect(h).runtime.status == OutcomeStatus.SUCCESS
+
+    def verify_refused():
+        started = time.monotonic()
+        outcome = observer.collect(h)
+        assert time.monotonic() - started < 5
+        assert outcome.runtime.status == OutcomeStatus.UNKNOWN
+        assert str(tmp_path) not in outcome.runtime.detail
+
+    if os.name == "nt":
+        # chmod cannot express Windows group access. Mutate the actual DACL on
+        # this exact owned fixture member; SID spelling is locale-independent.
+        with windows_foreign_write_acl(path):
+            verify_refused()
+        # SUCCESS requires all held ancestry/file handles to pass native DACL
+        # ownership validation again after the original DACL is restored.
+        assert observer.collect(h).runtime.status == OutcomeStatus.SUCCESS
+    else:
+        original_mode = path.stat().st_mode
+        try:
+            path.chmod(original_mode | 0o020)
+            verify_refused()
+        finally:
+            path.chmod(original_mode)
+        assert observer.collect(h).runtime.status == OutcomeStatus.SUCCESS
 
 
 @pytest.mark.parametrize("nested", [False, True])
@@ -517,9 +618,11 @@ def test_symlink_receipt_not_trusted(tmp_path):
     )
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX filesystem FIFO; Windows native pipe rejection tested separately",
+)
 def test_fifo_receipt_refused_without_blocking(tmp_path):
-    import os
-
     h = handle(tmp_path)
     path = Path(h.run_dir) / "attempts" / "1" / "slurm-outcome.json"
     path.parent.mkdir(parents=True)
@@ -530,6 +633,63 @@ def test_fifo_receipt_refused_without_blocking(tmp_path):
         .runtime.status
         == OutcomeStatus.UNKNOWN
     )
+
+
+def test_directory_receipt_is_not_a_valid_outcome(tmp_path):
+    """Native filesystem special objects cannot establish scheduler success."""
+    h = handle(tmp_path)
+    path = Path(h.run_dir) / "attempts" / "1" / "slurm-outcome.json"
+    path.mkdir(parents=True)
+    assert (
+        SlurmObservation(Runner(sacct=account(h)), owner="alice")
+        .collect(h)
+        .runtime.status
+        == OutcomeStatus.UNKNOWN
+    )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Actual Win32 named pipe primitive")
+def test_native_windows_pipe_is_rejected_before_reading():
+    """Windows pipes live outside filesystem receipts; native reader fails closed."""
+    # Isolate the native operation behind a wall-clock timeout: rejection must
+    # not wait for pipe data, a writer or a connection handshake.
+    script = r"""
+import ctypes
+from ctypes import wintypes
+from pathlib import Path
+from uuid import uuid4
+from wavedl.core.safe_files import _windows_api
+kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+kernel.CreateNamedPipeW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+    wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+    wintypes.DWORD, wintypes.LPVOID]
+kernel.CreateNamedPipeW.restype = wintypes.HANDLE
+kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel.CloseHandle.restype = wintypes.BOOL
+name = "\\\\.\\pipe\\wavedl-receipt-" + str(uuid4())
+pipe = kernel.CreateNamedPipeW(name, 3, 1, 1, 4096, 4096, 0, None)
+if pipe == ctypes.c_void_p(-1).value:
+    raise ctypes.WinError(ctypes.get_last_error())
+try:
+    try:
+        _windows_api().open(Path(name))
+    except ValueError as error:
+        assert "disk" in str(error)
+    else:
+        raise AssertionError("Native pipe was accepted as a disk file")
+finally:
+    if not kernel.CloseHandle(pipe):
+        raise ctypes.WinError(ctypes.get_last_error())
+print("native-pipe-refused")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.stdout.strip() == "native-pipe-refused"
 
 
 def test_capability_query_failure_remains_unknown_with_diagnostics():

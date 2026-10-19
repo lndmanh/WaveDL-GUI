@@ -55,6 +55,9 @@ WINDOWS_REQUIRED = {
         },
     },
     "daemon": {
+        "unit_tests.daemon.test_slurm_observation": {
+            "test_native_windows_pipe_is_rejected_before_reading",
+        },
         "unit_tests.daemon.test_windows_supervisor": {
             "test_native_large_independent_streams_and_closed_stdin",
             "test_native_assignment_failure_never_executes_child",

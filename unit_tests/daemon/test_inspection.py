@@ -252,7 +252,28 @@ def test_http_disconnect_cancels_and_drains_inspection(
         asyncio.run(scenario())
 
 
-def test_catalog_bound_inspection_rejects_paths_outside_configured_root(tmp_path):
+def test_catalog_bound_inspection_rejects_paths_outside_configured_root(
+    tmp_path, monkeypatch
+):
+    from wavedl_daemon.runs import inspection
+
+    original_command = inspection.run_command
+    observations = []
+
+    def observed(spec, budget, *, token):
+        result = original_command(spec, budget, token=token)
+        observations.append(
+            {
+                "returncode": result.returncode,
+                "timed_out": result.timed_out,
+                "cancelled": result.cancelled,
+                "stdout": result.stdout.decode("utf-8", errors="replace"),
+                "stderr": result.stderr.decode("utf-8", errors="replace"),
+            }
+        )
+        return result
+
+    monkeypatch.setattr(inspection, "run_command", observed)
     dataset = tmp_path / "data.npz"
     np.savez(dataset, inputs=np.zeros((2, 1)), outputs=np.zeros((2, 1)))
     npy = tmp_path / "vector.npy"
@@ -266,8 +287,13 @@ def test_catalog_bound_inspection_rejects_paths_outside_configured_root(tmp_path
         )
         with pytest.raises(InspectionRefused):
             asyncio.run(inspector.inspect("data", "../outside-secret.npy"))
-        result = asyncio.run(inspector.inspect("data", "data.npz"))
-        npy_result = asyncio.run(inspector.inspect("data", "vector.npy"))
+        try:
+            result = asyncio.run(inspector.inspect("data", "data.npz"))
+            npy_result = asyncio.run(inspector.inspect("data", "vector.npy"))
+        except InspectionRefused:
+            pytest.fail(
+                f"Actual selected worker refused unchanged fixture: {observations!r}"
+            )
     assert {item["name"] for item in result["variables"]} == {"inputs", "outputs"}
     assert npy_result["format"] == "npy"
 

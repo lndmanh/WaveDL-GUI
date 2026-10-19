@@ -418,6 +418,50 @@ def test_permission_error_with_live_group_is_not_absence(tmp_path, monkeypatch):
     assert native.returncode == -signal.SIGKILL
 
 
+@pytest.mark.parametrize(
+    "platform,snapshot,dead",
+    [
+        ("darwin", "123 123 Z", True),
+        ("darwin", "123 123 Z\n124 123 Z", True),
+        ("darwin", "123 123 Z\n124 123 S", False),
+        ("darwin", "123 999 Z", False),
+        ("darwin", "124 123 Z", False),
+        ("darwin", "", False),
+        ("darwin", "unknown evidence", False),
+        ("linux", "123 123 Z", False),
+    ],
+)
+def test_signal_eperm_uses_strong_exit_proof_despite_stale_observation(
+    monkeypatch, platform, snapshot, dead
+):
+    """Only an unreaped owned leader and exclusively zombie group prove exit."""
+    process = POSIXProcess.__new__(POSIXProcess)
+    process._process = type("OwnedProcess", (), {"pid": 123})()
+    process._reaped = False
+    process._leader_exited = False
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(process, "_group_snapshot", lambda: snapshot)
+    denied = PermissionError(errno.EPERM, "owned group signal denied")
+
+    def killpg(pid, signum):
+        assert pid == 123 and signum == signal.SIGKILL
+        raise denied
+
+    monkeypatch.setattr(os, "killpg", killpg)
+    if dead:
+        assert process._signal_group(signal.SIGKILL) is False
+        assert process._leader_exited
+    else:
+        with pytest.raises(PermissionError) as captured:
+            process._signal_group(signal.SIGKILL)
+        assert captured.value is denied
+        assert not process._leader_exited
+    assert not process._reaped  # Strong exit observation never releases PID/PGID.
+    process._reaped = True
+    with pytest.raises(RuntimeError, match="released process-group identity"):
+        process._signal_group(signal.SIGKILL)
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="Darwin kqueue registration")
 def test_registration_esrch_without_terminal_owned_leader_fails_closed(
     tmp_path, monkeypatch

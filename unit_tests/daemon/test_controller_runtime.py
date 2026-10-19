@@ -384,7 +384,12 @@ def test_wrong_actual_interpreter_is_sticky_automatic_protocol_failure(runtime):
     controller, _, _, provenance, _, plan, layout, _, _ = runtime
     observe(runtime, ObservationStatus.RUNNING, 0)
     with JournalWriter(layout, attempt=1) as writer:
-        writer.append("hello", hello(interpreter="/unapproved/python").payload)
+        writer.append(
+            "hello",
+            hello(
+                interpreter=str((layout.run_dir / "unapproved-python").absolute())
+            ).payload,
+        )
     until(controller, lambda: controller.derive(plan.plan_id).state == RunState.FAILED)
     derived = controller.derive(plan.plan_id)
     assert "interpreter differs" in derived.reason

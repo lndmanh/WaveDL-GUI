@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -50,7 +51,7 @@ def receipt(job=1, cluster="alpha", owner="alice", restart=0):
         str(uuid4()),
         request_id,
         owner,
-        "/tmp/run",
+        str(Path(__file__).resolve().parent / "synthetic-run"),
         job_id=f"{job};{cluster}",
         raw_json=json.dumps(
             {

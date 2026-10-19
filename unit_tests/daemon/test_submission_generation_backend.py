@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 from dataclasses import replace
 from uuid import uuid4
 
@@ -11,7 +12,13 @@ from wavedl.core.layout import OperationKind, RunLayout
 from wavedl.core.manifest import RuntimeSelection, build_manifest
 from wavedl.core.scheduler_attempt import SchedulerIdentity
 from wavedl.core.submission_outcomes import write_submission_outcome_receipt
-from wavedl_daemon.backends.contracts import ObservationStatus, OutcomeStatus
+from wavedl_daemon.backends.contracts import (
+    ObservationStatus,
+    OutcomeStatus,
+    Plan,
+    Topology,
+    UnsupportedPlan,
+)
 from wavedl_daemon.backends.slurm import SlurmBackend
 from wavedl_daemon.backends.slurm_observation import SlurmObservation
 from wavedl_daemon.backends.slurm_plan import SlurmPlanner, SlurmSite
@@ -47,7 +54,51 @@ def submission(tmp_path):
             submission_cwd=tmp_path,
         )
         site = SlurmSite(partition="cpu", cluster="alpha", requeue=requeue)
-        plan = SlurmPlanner(site).plan(manifest, allocation_mode="writer")
+        planner = SlurmPlanner(site)
+        if os.name == "nt":
+            # These tests persist real receipts but execute only fake scheduler
+            # commands. Native Windows paths must remain refused by the real
+            # shell/directive planner; a typed inert plan isolates collection.
+            with pytest.raises(UnsupportedPlan, match="Slurm directive paths"):
+                planner.plan(manifest, allocation_mode="writer")
+            topology = Topology()
+            plan = Plan(
+                target="slurm",
+                manifest_json=json.dumps(manifest.to_dict()),
+                script=(
+                    "#!/bin/sh\n"
+                    "# Fake scheduler only: @@WAVEDL_REQUEST_ID@@ "
+                    "@@WAVEDL_JOB_NAME@@ @@WAVEDL_PLAN_SHA256@@\n"
+                ),
+                topology=topology,
+                resources=tuple(
+                    sorted(
+                        {
+                            "partition": site.partition,
+                            "account": site.account,
+                            "cluster": site.cluster,
+                            "nodes": topology.num_machines,
+                            "ntasks": topology.num_machines,
+                            "ntasks_per_node": 1,
+                            "processes_per_machine": topology.processes_per_machine,
+                            "num_processes": topology.num_machines
+                            * topology.processes_per_machine,
+                            "cpus_per_task": site.cpus_per_task,
+                            "memory_per_node": site.memory,
+                            "gpus_per_node": site.gpus_per_node,
+                            "time": site.time,
+                            "constraint": site.constraint,
+                            "rendezvous_port": site.rendezvous_port,
+                            "requeue": site.requeue,
+                        }.items()
+                    )
+                ),
+                environment=tuple(sorted(manifest.runtime.environment.items())),
+                allocation_mode="writer",
+            )
+            assert plan.manifest == manifest
+        else:
+            plan = planner.plan(manifest, allocation_mode="writer")
         with DispatchLock(tmp_path / "dispatch.lock") as lock:
             handle = SlurmSubmission(
                 Runner(sbatch="42;alpha\n"), owner="alice", dispatch_lock=lock

@@ -118,7 +118,11 @@ class POSIXProcess:
         except PermissionError:
             # Darwin rejects signals to a group containing only zombies. EPERM
             # alone is not proof: a live, inaccessible descendant must fail.
-            if self._leader_exited and self._darwin_group_is_dead():
+            # TERM can exit the leader between this loop's exit observation and
+            # immediate KILL escalation. Do not let a stale observation prevent
+            # the stronger reserved-leader/all-zombie snapshot from proving exit.
+            if self._darwin_group_is_dead():
+                self._leader_exited = True
                 return False
             raise
         return True
