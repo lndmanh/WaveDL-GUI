@@ -346,7 +346,9 @@ def test_metric_guard_cli_requires_exact_four_case_matrix(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "content", [b"", b"{", b'{"attempt":1,"attempt":2}', b"{}", b" " * 65537]
+    "content",
+    [b"", b"{", b'{"attempt":1,"attempt":2}', b"{}", b" " * 65537],
+    ids=["empty", "torn", "duplicate-key", "missing-fields", "oversized"],
 )
 def test_metric_guard_refuses_malformed_or_oversized_report(tmp_path, content):
     path = tmp_path / "metric.json"

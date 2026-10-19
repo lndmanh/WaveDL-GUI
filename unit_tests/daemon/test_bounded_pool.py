@@ -12,6 +12,29 @@ from wavedl_daemon.execution import (
     WorkCancelled,
     WorkDeadlineExceeded,
 )
+from wavedl_daemon.execution.pool import CancellationToken
+
+
+@pytest.mark.parametrize("timeout,expected", [(None, True), (0.25, False)])
+def test_token_wait_rechecks_early_native_timeout(monkeypatch, timeout, expected):
+    clock = [0.0]
+    waits = []
+    monkeypatch.setattr("wavedl_daemon.execution.pool.time.monotonic", lambda: clock[0])
+    token = CancellationToken(1.0)
+
+    class EarlyTimeout:
+        def is_set(self):
+            return False
+
+        def wait(self, remaining):
+            waits.append(remaining)
+            clock[0] += remaining / 2 if len(waits) == 1 else remaining
+            return False
+
+    token._event = EarlyTimeout()
+    assert token.wait(timeout) is expected
+    assert len(waits) == 2
+    assert clock[0] == (1.0 if timeout is None else timeout)
 
 
 def test_exhaustion_and_cancel_does_not_release_running_slot():

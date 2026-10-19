@@ -298,7 +298,7 @@ def test_http_async_adapter_awaits_typed_result_and_maps_deadline_503(tmp_path):
 
 @pytest.mark.parametrize("cancel", [True, False])
 def test_async_inspection_caller_cancel_or_deadline_reaches_worker_cleanup(
-    monkeypatch, cancel
+    tmp_path, monkeypatch, cancel
 ):
     import sys
     from pathlib import Path
@@ -341,7 +341,7 @@ def test_async_inspection_caller_cancel_or_deadline_reaches_worker_cleanup(
             )
 
         async def inspect(self):
-            return await self.inspector.inspect("/tmp/data.npy")
+            return await self.inspector.inspect(str(tmp_path / "data.npy"))
 
         def status(self):
             return "ready"
@@ -353,24 +353,34 @@ def test_async_inspection_caller_cancel_or_deadline_reaches_worker_cleanup(
     async def run():
         await host.start()
         task = asyncio.create_task(host.call("inspect"))
-        while not entered.is_set():
-            await asyncio.sleep(0.005)
-        if cancel:
+        try:
+            async with asyncio.timeout(2):
+                while not entered.is_set():
+                    if task.done():
+                        await task  # Preserve the real pre-readiness failure.
+                        pytest.fail("Inspection completed without worker admission")
+                    await asyncio.sleep(0.005)
+            if cancel:
+                task.cancel()
+            with pytest.raises(WorkDeadlineExceeded):
+                await task
+            deadline = time.monotonic() + 1
+            while not cancellation.is_set() and time.monotonic() < deadline:
+                await asyncio.sleep(0.005)
+            assert cancellation.is_set()
+            assert tokens[0].cancellation_requested
+            assert host.outstanding == 1
+            assert pool.outstanding == 1
+            release.set()
+            async with asyncio.timeout(2):
+                while host.outstanding:
+                    await asyncio.sleep(0.005)
+            assert await host.call("status") == "ready"
+        finally:
+            release.set()
             task.cancel()
-        with pytest.raises(WorkDeadlineExceeded):
-            await task
-        deadline = time.monotonic() + 1
-        while not cancellation.is_set() and time.monotonic() < deadline:
-            await asyncio.sleep(0.005)
-        assert cancellation.is_set()
-        assert tokens[0].cancellation_requested
-        assert host.outstanding == 1
-        assert pool.outstanding == 1
-        release.set()
-        while host.outstanding:
-            await asyncio.sleep(0.005)
-        assert await host.call("status") == "ready"
-        await host.close()
+            await asyncio.gather(task, return_exceptions=True)
+            await host.close()
 
     try:
         asyncio.run(run())
@@ -459,22 +469,29 @@ def test_hosted_inspection_cancellation_terminates_real_supervised_child(
             )
 
         async def inspect(self):
-            return await self.inspector.inspect("/tmp/data.npy")
+            return await self.inspector.inspect(str(tmp_path / "data.npy"))
 
     host = ServiceHost(Service, budget=WorkBudget(timeout_seconds=5))
 
     async def run():
         await host.start()
         task = asyncio.create_task(host.call("inspect"))
-        deadline = time.monotonic() + 3
-        while not marker.exists() and time.monotonic() < deadline:
-            await asyncio.sleep(0.005)
-        assert marker.exists()
-        pid = int(marker.read_text())
-        task.cancel()
-        with pytest.raises(WorkDeadlineExceeded):
-            await task
-        await host.close()
+        try:
+            deadline = time.monotonic() + 3
+            while not marker.exists() and time.monotonic() < deadline:
+                if task.done():
+                    await task
+                    pytest.fail("Inspection completed before real child startup")
+                await asyncio.sleep(0.005)
+            assert marker.exists()
+            pid = int(marker.read_text())
+            task.cancel()
+            with pytest.raises(WorkDeadlineExceeded):
+                await task
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            await host.close()
         assert completed and completed[0].cancelled
         if os.name != "nt":
             with pytest.raises(ProcessLookupError):

@@ -284,6 +284,18 @@ def test_deleted_open_database_blocks_mutations(database, plan):
         acquire_dispatch_lock(database.parent / "dispatch.lock") as lock,
         PlanStore(database, dispatch_lock=lock) as store,
     ):
+        if os.name == "nt":
+            original_identity = database.stat()
+            original_bytes = database.read_bytes()
+            before = store.get_by_key("request-key")
+            with pytest.raises(PermissionError) as denied:
+                database.unlink()
+            assert denied.value.winerror == 32
+            assert database.stat().st_ino == original_identity.st_ino
+            assert database.read_bytes() == original_bytes
+            assert store.get_by_key("request-key") == before
+            assert put(store, plan).plan == plan
+            return
         database.unlink()
         with pytest.raises(PlanRecoveryRequired, match="removed"):
             put(store, plan)

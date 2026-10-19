@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -31,9 +32,21 @@ def sync_directory(path: Path) -> None:
         close = kernel.CloseHandle
         close.argtypes = [wintypes.HANDLE]
         close.restype = wintypes.BOOL
-        handle = create(str(path), 0xC0000000, 7, None, 3, 0x02000000, None)
-        if handle == wintypes.HANDLE(-1).value:
-            raise ctypes.WinError(ctypes.get_last_error())
+        # Safe readers briefly pin ancestry without write sharing. Admit this
+        # short-lived flush handle after they leave; never relax their sharing
+        # or retry the flush itself. The deadline bounds polls, not native I/O.
+        deadline = time.monotonic() + 5
+        while True:
+            handle = create(str(path), 0xC0000000, 7, None, 3, 0x02000000, None)
+            if handle != wintypes.HANDLE(-1).value:
+                break
+            error = ctypes.get_last_error()
+            remaining = deadline - time.monotonic()
+            if error != 32 or remaining <= 0:
+                raise ctypes.WinError(error)
+            time.sleep(min(0.02, remaining))
+            if time.monotonic() >= deadline:
+                raise ctypes.WinError(error)
         try:
             if not flush(handle):
                 raise ctypes.WinError(ctypes.get_last_error())

@@ -1,5 +1,6 @@
 import asyncio
 import getpass
+import os
 import sqlite3
 import sys
 import threading
@@ -201,21 +202,38 @@ def test_changed_metadata_before_registration_is_refused_without_database_rows(
     from wavedl_daemon.runs import adoption_service as module
 
     real_verify = module.verify_standalone_run
+    blocked = []
+    original_bytes = bootstrap.layout.manifest.read_bytes()
 
     def verify(*args, **kwargs):
         proof = real_verify(*args, **kwargs)
         path = bootstrap.layout.manifest
         raw = path.read_bytes()
+        if os.name == "nt":
+            with pytest.raises(PermissionError) as denied:
+                path.unlink()
+            assert denied.value.winerror == 32
+            assert path.read_bytes() == raw
+            blocked.append(True)
+            return proof
         path.unlink()
         path.write_bytes(raw)
         return proof
 
     monkeypatch.setattr(module, "verify_standalone_run", verify)
-    with pytest.raises((ValueError, OSError)):
+    if os.name == "nt":
         asyncio.run(
             service.adopt(str(bootstrap.layout.run_dir), idempotency_key="changed")
         )
-    assert service.plans.get_by_key("changed") is None
+        assert blocked == [True]
+        assert service.plans.get_by_key("changed") is not None
+        assert bootstrap.layout.manifest.read_bytes() == original_bytes
+    else:
+        with pytest.raises((ValueError, OSError)):
+            asyncio.run(
+                service.adopt(str(bootstrap.layout.run_dir), idempotency_key="changed")
+            )
+        assert service.plans.get_by_key("changed") is None
 
 
 def test_adoption_http_shape_idempotency_and_no_filesystem_disclosure(adoption_service):

@@ -1,6 +1,7 @@
 """Native proposals activate new generations without accepting stale work."""
 
 import json
+import os
 import sys
 import threading
 import time
@@ -19,6 +20,8 @@ from wavedl_daemon.backends.contracts import (
     BackendObservation,
     Handle,
     ObservationStatus,
+    Plan,
+    UnsupportedPlan,
 )
 from wavedl_daemon.backends.slurm_plan import SlurmPlanner, SlurmSite
 from wavedl_daemon.execution.budget import WorkBudget
@@ -104,10 +107,25 @@ def execution(tmp_path):
             runtime=RuntimeSelection(sys.executable, "existing", "cpu", {}),
             submission_cwd=tmp_path,
         )
+        planner = SlurmPlanner(
+            SlurmSite(partition="cpu", cluster="fixture", requeue=True)
+        )
+        if os.name == "nt":
+            # These controller tests use a fake scheduler, not native Slurm.
+            # Preserve the real planner's refusal of Windows directive paths
+            # while exercising every generation/provenance contract natively.
+            with pytest.raises(UnsupportedPlan, match="Slurm directive paths"):
+                planner.plan(manifest)
+            proposal = Plan(
+                "slurm",
+                json.dumps(asdict(manifest)),
+                argv=(sys.executable, "train.py"),
+                resources=(("requeue", True),),
+            )
+        else:
+            proposal = planner.plan(manifest)
         plan = plans.put(
-            SlurmPlanner(
-                SlurmSite(partition="cpu", cluster="fixture", requeue=True)
-            ).plan(manifest),
+            proposal,
             idempotency_key="requeue",
             request_payload={},
         )

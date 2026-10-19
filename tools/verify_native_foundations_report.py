@@ -41,6 +41,9 @@ POSIX_REQUIRED = {
 }
 WINDOWS_REQUIRED = {
     "core": {
+        "unit_tests.core.test_journal_writer": {
+            "test_first_flush_waits_for_native_journal_reader_release",
+        },
         "unit_tests.core.test_windows_ownership": {
             "test_native_current_user_file_owner_and_dacl",
             "test_native_mkdir_700_owner_rights_is_private_to_actual_user",

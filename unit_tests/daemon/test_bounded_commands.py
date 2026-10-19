@@ -47,7 +47,10 @@ def test_shell_free_and_stdin_closed(tmp_path):
         tmp_path,
     )
     result = run_command(command, WorkBudget())
-    assert result.stdout == b"''\n$(touch forbidden); echo injected\n"
+    newline = os.linesep.encode()
+    assert result.stdout == newline.join(
+        [b"''", b"$(touch forbidden); echo injected", b""]
+    )
     assert not (tmp_path / "forbidden").exists()
 
 

@@ -1,6 +1,7 @@
 """Fleet reconciliation uses fake evidence only, never real scheduler commands."""
 
 from dataclasses import replace
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -50,7 +51,7 @@ def handle(job=1, cluster="alpha", owner="alice", attempt=1):
         str(uuid4()),
         attempt,
         owner,
-        "/tmp/run",
+        str(Path.cwd() / "mock-reconciliation-run"),
         job_id=f"{job};{cluster}",
     )
 

@@ -57,8 +57,16 @@ class CancellationToken:
 
     def wait(self, timeout: float | None = None) -> bool:
         """Wait interruptibly, waking at cancellation or the deadline."""
-        remaining = max(0.0, self.deadline - time.monotonic())
-        self._event.wait(remaining if timeout is None else min(timeout, remaining))
+        end = self.deadline
+        if timeout is not None:
+            end = min(end, time.monotonic() + max(0.0, timeout))
+        while not self.cancelled:
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                break
+            # Native timed waits may wake early (notably on Windows). Re-wait
+            # for the remaining interval, never report an unexpired deadline.
+            self._event.wait(remaining)
         return self.cancelled
 
 

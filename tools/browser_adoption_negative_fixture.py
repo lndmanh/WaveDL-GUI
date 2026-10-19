@@ -6,13 +6,14 @@ import argparse
 import asyncio
 import hashlib
 import json
-import os
 import shutil
 import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
 from browser_adoption_fixture import source_evidence
+
+from wavedl.core.safe_files import open_directory
 
 
 MODES = ("corrupt-provenance", "conflicting-identity", "missing-provenance")
@@ -27,12 +28,23 @@ def files(run):
             before = path.stat()
             if before.st_size > 64 * 1024 * 1024:
                 raise ValueError("Evidence file exceeds bound")
-            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
-                opened = os.fstat(stream.fileno())
+            with (
+                open_directory(path.parent) as directory,
+                directory.open_file(path.name) as stream,
+            ):
+                opened = path.stat()
                 if (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino):
                     raise ValueError("Evidence changed before open")
-                raw = stream.read(64 * 1024 * 1024 + 1)
-                after = os.fstat(stream.fileno())
+                pieces = []
+                total = 0
+                while piece := stream.read():
+                    total += len(piece)
+                    if total > 64 * 1024 * 1024:
+                        raise ValueError("Evidence file exceeds bound")
+                    pieces.append(piece)
+                raw = b"".join(pieces)
+                stream.guard()
+                after = path.stat()
                 if (len(raw), after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (
                     opened.st_size,
                     opened.st_size,
@@ -40,7 +52,7 @@ def files(run):
                     opened.st_ctime_ns,
                 ):
                     raise ValueError("Evidence changed while reading")
-            result[str(path.relative_to(run))] = {
+            result[path.relative_to(run).as_posix()] = {
                 "size": len(raw),
                 "sha256": hashlib.sha256(raw).hexdigest(),
             }

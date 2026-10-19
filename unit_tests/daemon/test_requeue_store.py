@@ -4,6 +4,7 @@ import json
 import sqlite3
 import sys
 from dataclasses import asdict, replace
+from pathlib import Path
 
 import pytest
 
@@ -202,7 +203,7 @@ def test_stale_revision_conflicting_handle_and_late_old_observation_rejected(exe
         store.activate_requeue(
             plan_id,
             binding,
-            replace(handle, run_dir="/foreign/run"),
+            replace(handle, run_dir=str(Path(handle.run_dir).parent / "foreign-run")),
             expected_revision=old.revision,
         )
     current = store.activate_requeue(
@@ -305,7 +306,7 @@ def test_schema6_upgrade_and_future_read_only_recovery(tmp_path):
                     "request",
                     2,
                     "alice",
-                    "/run",
+                    str(tmp_path / "run"),
                 ),
                 expected_revision=0,
             )

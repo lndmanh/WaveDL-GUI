@@ -42,21 +42,36 @@ def test_missing_file_is_generic_refusal(tmp_path):
     assert "private-secret" not in str(error.value)
 
 
-def test_real_deadline_stops_descendant_marker_and_releases_slot(tmp_path):
+def test_real_deadline_stops_descendant_marker_and_releases_slot(tmp_path, monkeypatch):
+    from wavedl_daemon.runs import inspection
+
     marker = tmp_path / "late-marker"
-    worker = tmp_path / "python-worker"
-    child = f"import time; from pathlib import Path; time.sleep(0.8); Path({str(marker)!r}).write_text('escaped')"
-    worker.write_text(
-        f"#!{sys.executable}\nimport subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', {child!r}])\ntime.sleep(30)\n"
+    ready = tmp_path / "worker-started"
+    child = f"import time; from pathlib import Path; time.sleep(2); Path({str(marker)!r}).write_text('escaped')"
+    script = (
+        "import subprocess,sys,time; from pathlib import Path; "
+        f"subprocess.Popen([sys.executable, '-c', {child!r}]); "
+        f"Path({str(ready)!r}).write_text('started'); time.sleep(30)"
     )
-    worker.chmod(0o700)
-    budget = WorkBudget(max_workers=1, max_pending=0, timeout_seconds=0.2)
+    results = []
+
+    def controlled(spec, budget, *, token):
+        result = run_command(
+            replace(spec, argv=(sys.executable, "-c", script)), budget, token=token
+        )
+        results.append(result)
+        return result
+
+    monkeypatch.setattr(inspection, "run_command", controlled)
+    budget = WorkBudget(max_workers=1, max_pending=0, timeout_seconds=1)
     with BoundedThreadPool(budget) as pool:
-        inspector = DatasetInspector(str(worker), tmp_path, pool)
+        inspector = DatasetInspector(sys.executable, tmp_path, pool)
         with pytest.raises((InspectionRefused, WorkCancelled)):
             asyncio.run(inspector.inspect(str(tmp_path / "data.npy")))
         assert pool.outstanding == 0
-    time.sleep(0.9)
+    assert ready.read_text() == "started"
+    assert len(results) == 1 and results[0].timed_out
+    time.sleep(2.1)
     assert not marker.exists()
 
 

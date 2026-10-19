@@ -85,6 +85,13 @@ def test_retained_guard_rejects_metadata_replacement(standalone):
     with verify_standalone_run(standalone.layout.run_dir) as verified:
         path = standalone.layout.manifest
         old = path.read_bytes()
+        if os.name == "nt":
+            with pytest.raises(PermissionError) as denied:
+                path.unlink()
+            assert denied.value.winerror == 32
+            assert path.read_bytes() == old
+            verified.guard()
+            return
         path.unlink()
         path.write_bytes(old)
         with pytest.raises((ValueError, OSError)):

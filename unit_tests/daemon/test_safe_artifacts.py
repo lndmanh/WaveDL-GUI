@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sqlite3
 import threading
 from urllib.parse import quote
@@ -93,12 +94,19 @@ def test_replacement_after_open_cannot_redirect_stream(artifact_run, tmp_path):
     layout, publication, store = artifact_run
     with store.open(layout.run_id, publication.generation, "report.svg") as stream:
         target = publication.path / "report.svg"
-        target.unlink()
         secret = tmp_path / "secret"
         secret.write_bytes(b"private")
-        target.symlink_to(secret)
+        if os.name == "nt":
+            with pytest.raises(PermissionError) as denied:
+                target.unlink()
+            assert denied.value.winerror == 32
+            assert target.read_bytes() == b"<svg>active</svg>"
+        else:
+            target.unlink()
+            target.symlink_to(secret)
         assert stream.read() == b"<svg>active</svg>"
         assert stream.read() == b""
+        assert secret.read_bytes() == b"private"
 
 
 def test_replacement_between_inventory_validation_and_stream_open_is_rejected(
@@ -124,8 +132,16 @@ def test_replacement_between_inventory_validation_and_stream_open_is_rejected(
 def test_open_stream_never_sends_bytes_appended_after_validation(artifact_run):
     layout, publication, store = artifact_run
     with store.open(layout.run_id, publication.generation, "report.svg") as stream:
-        with (publication.path / "report.svg").open("ab") as target:
-            target.write(b"not-in-published-inventory")
+        path = publication.path / "report.svg"
+        if os.name == "nt":
+            with pytest.raises(PermissionError) as denied, path.open("ab") as target:
+                target.write(b"not-in-published-inventory")
+            assert denied.value.errno == 13
+            assert getattr(denied.value, "winerror", None) in (None, 32)
+            assert path.read_bytes() == b"<svg>active</svg>"
+        else:
+            with path.open("ab") as target:
+                target.write(b"not-in-published-inventory")
         assert stream.read() == b"<svg>active</svg>"
         assert stream.read() == b""
 

@@ -1,11 +1,13 @@
 import errno
 import os
 import stat
+import threading
 import time
 
 import pytest
 
-from wavedl.core import journal_writer
+from wavedl.core import journal_writer, persistence, safe_files
+from wavedl.core.journal_reader import JournalReader
 from wavedl.core.journal_writer import AbandonedTail, JournalWriter, RecordTooLarge
 from wavedl.core.layout import RunLayout, allocate_attempt
 from wavedl.core.protocol import decode
@@ -200,3 +202,100 @@ def test_first_flush_syncs_file_then_journal_directory(tmp_path, monkeypatch):
         assert calls == ["file", "directory"]
         writer.append("state", {})
         assert calls == ["file", "directory", "file"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows sharing contract")
+def test_first_flush_waits_for_native_journal_reader_release(tmp_path, monkeypatch):
+    """A pinned journal poll delays durability without losing or duplicating bytes."""
+    layout = RunLayout.create(tmp_path, RUN_ID)
+    reader_pinned = threading.Event()
+    release_reader = threading.Event()
+    writer_waiting = threading.Event()
+    writer_done = threading.Event()
+    failures = []
+    real_read = safe_files.SafeFile.read
+    real_sleep = persistence.time.sleep
+    real_sync = journal_writer.sync_directory
+    syncs = []
+
+    def held_read(stream, count):
+        reader_pinned.set()
+        if not release_reader.wait(5):
+            raise TimeoutError("Test reader was not released")
+        return real_read(stream, count)
+
+    def observed_wait(seconds):
+        writer_waiting.set()
+        real_sleep(seconds)
+
+    def sync_parent(path):
+        real_sync(path)
+        syncs.append(path)
+
+    def poll(reader):
+        try:
+            reader.read()
+        except BaseException as error:
+            failures.append(error)
+
+    def append(writer):
+        try:
+            writer.append("hello", {})
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            writer_done.set()
+
+    monkeypatch.setattr(safe_files.SafeFile, "read", held_read)
+    monkeypatch.setattr(persistence.time, "sleep", observed_wait)
+    monkeypatch.setattr(journal_writer, "sync_directory", sync_parent)
+    with JournalWriter(layout) as writer:
+        reader = JournalReader(writer.path, run_id=RUN_ID, attempt=writer.attempt)
+        reader_thread = threading.Thread(target=poll, args=(reader,))
+        writer_thread = threading.Thread(target=append, args=(writer,))
+        reader_thread.start()
+        try:
+            assert reader_pinned.wait(5)
+            writer_thread.start()
+            assert writer_waiting.wait(5)
+            assert not writer_done.is_set()
+        finally:
+            release_reader.set()
+            reader_thread.join(6)
+            if writer_thread.ident is not None:
+                writer_thread.join(6)
+        assert not reader_thread.is_alive() and not writer_thread.is_alive()
+        assert failures == []
+        assert writer_done.is_set()
+        assert syncs == [writer.path.parent]
+        writer.append("state", {})
+        assert syncs == [writer.path.parent]
+        events = JournalReader(
+            writer.path, run_id=RUN_ID, attempt=writer.attempt
+        ).read()
+        assert [(event.type, event.seq) for event in events] == [
+            ("hello", 0),
+            ("state", 1),
+        ]
+
+
+def test_directory_flush_failure_poisoned_without_republishing(tmp_path, monkeypatch):
+    layout = RunLayout.create(tmp_path, RUN_ID)
+    calls = []
+
+    def denied(path):
+        calls.append(path)
+        raise PermissionError("directory admission deadline exhausted")
+
+    monkeypatch.setattr(journal_writer, "sync_directory", denied)
+    with JournalWriter(layout) as writer:
+        with pytest.raises(PermissionError, match="deadline exhausted"):
+            writer.append("hello", {})
+        assert not writer._entry_synced
+        assert writer.seq == 1
+        before = writer.path.read_bytes()
+        assert decode(before).type == "hello"
+        with pytest.raises(RuntimeError, match="new attempt"):
+            writer.append("state", {})
+    assert calls == [writer.path.parent]
+    assert writer.path.read_bytes() == before

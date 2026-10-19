@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import sqlite3
 import sys
 from dataclasses import asdict, replace
@@ -241,6 +242,18 @@ def test_store_requires_dispatch_and_matching_db_inode(provenance_database, tmp_
     with RuntimeProvenanceStore(database) as store:
         with pytest.raises(DispatchRequired):
             store.record(plan.plan_id, hello())
+        if os.name == "nt":
+            before = store.get(plan.plan_id)
+            original_identity = database.stat()
+            original_bytes = database.read_bytes()
+            with pytest.raises(PermissionError) as denied:
+                database.rename(tmp_path / "old.db")
+            assert denied.value.winerror == 32
+            assert not (tmp_path / "old.db").exists()
+            assert database.stat().st_ino == original_identity.st_ino
+            assert database.read_bytes() == original_bytes
+            assert store.get(plan.plan_id) == before
+            return
         database.rename(tmp_path / "old.db")
         with sqlite3.connect(database):
             pass
@@ -416,7 +429,10 @@ def test_attested_alias_exact_environment_and_legacy_exact_only(provenance_datab
     plan = record.plan
     manifest = replace(
         plan.manifest,
-        runtime=replace(plan.manifest.runtime, python="/selected/system/alias"),
+        runtime=replace(
+            plan.manifest.runtime,
+            python=str(Path(sys.executable).anchor + "selected/system/alias"),
+        ),
     )
     plan = replace(plan, manifest_json=json.dumps(asdict(manifest)))
     actual = HelloPayload.from_dict(
@@ -445,6 +461,7 @@ def test_same_binary_or_prefix_cannot_replace_attested_environment(
     from wavedl_daemon.storage.runtime_provenance import _approved_runtime
 
     _, record = provenance_database
+    value = str(Path(sys.executable).anchor + value.lstrip("/"))
     actual = (
         hello(prefix=sys.prefix, base_prefix=sys.base_prefix, **{field: value})
         if field == "interpreter"

@@ -269,22 +269,36 @@ def test_request_cancel_waits_for_cooperative_work_and_releases_slot(
         asyncio.run(scenario())
 
 
-def test_process_deadline_reaps_child(tmp_path):
+def test_process_deadline_reaps_child(tmp_path, monkeypatch):
+    from wavedl_daemon.runs import preview_service
+
     write_dataset(tmp_path)
-    worker = tmp_path / "sleeping-python"
-    worker.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(30)\n")
-    worker.chmod(0o700)
+    original = preview_service.run_command
+    ready = tmp_path / "preview-child-ready"
+    results = []
+    script = f"import time; from pathlib import Path; Path({str(ready)!r}).write_text('started'); time.sleep(30)"
+
+    def controlled(spec, budget, *, token):
+        result = original(
+            replace(spec, argv=(sys.executable, "-c", script)), budget, token=token
+        )
+        results.append(result)
+        return result
+
+    monkeypatch.setattr(preview_service, "run_command", controlled)
     with BoundedThreadPool(
-        WorkBudget(max_workers=1, max_pending=0, timeout_seconds=0.2)
+        WorkBudget(max_workers=1, max_pending=0, timeout_seconds=1)
     ) as pool:
         service = DatasetPreviewService(
-            str(worker), tmp_path, pool, CatalogService({"data": tmp_path})
+            sys.executable, tmp_path, pool, CatalogService({"data": tmp_path})
         )
         start = time.monotonic()
         with pytest.raises((BudgetExhausted, WorkCancelled)):
             asyncio.run(service.preview(request()))
         assert time.monotonic() - start < 3
         assert pool.outstanding == 0
+    assert ready.read_text() == "started"
+    assert len(results) == 1 and results[0].timed_out
 
 
 def test_pending_preview_cancellation_drains_without_starting_child(
@@ -340,14 +354,24 @@ def test_hosted_preview_midrequest_mutation_refuses_decoded_child_result(
 
     write_dataset(tmp_path)
     original_command = preview_service.run_command
-    decoded = []
+    original_bytes = (tmp_path / "data.npz").read_bytes()
+    decoded, denied = [], []
 
     def mutate_after_decode(spec, budget, *, token):
         result = original_command(spec, budget, token=token)
         assert result.returncode == 0
         decoded.append(json.loads(result.stdout))
-        with (tmp_path / "data.npz").open("ab") as dataset:
-            dataset.write(b"changed-after-child-decode")
+        try:
+            with (tmp_path / "data.npz").open("ab") as dataset:
+                dataset.write(b"changed-after-child-decode")
+        except PermissionError as error:
+            if (
+                os.name != "nt"
+                or error.errno != 13
+                or getattr(error, "winerror", None) not in {None, 32}
+            ):
+                raise
+            denied.append(True)
         return result
 
     monkeypatch.setattr(preview_service, "run_command", mutate_after_decode)
@@ -369,9 +393,16 @@ def test_hosted_preview_midrequest_mutation_refuses_decoded_child_result(
             "daemon_id"
         ]
         result = client.post("/api/datasets/preview", json=request())
-        assert result.status_code == 409, result.text
         assert decoded[0]["input_shape"] == [6, 4]
-        assert "scatter" not in result.text
+        if os.name == "nt":
+            assert denied == [True]
+            assert result.status_code == 200, result.text
+            assert (tmp_path / "data.npz").read_bytes() == original_bytes
+            assert result.json()["input_shape"] == [6, 4]
+        else:
+            assert denied == []
+            assert result.status_code == 409, result.text
+            assert "scatter" not in result.text
         assert str(tmp_path) not in result.text
         assert services.pool.outstanding == 0
 

@@ -218,8 +218,9 @@ def test_actual_serve_bootstrap_client_idempotency_and_shutdown(
     extra = []
     if credential_mode == "private-file":
         credential = tmp_path / "daemon-token"
-        credential.write_text("private-startup-token\n")
+        credential.write_bytes(b"private-startup-token\n")
         credential.chmod(0o600)
+        assert read_credential(credential) == "private-startup-token"
         extra = ["--credential-file", str(credential)]
 
     class ControlledServer(uvicorn.Server):

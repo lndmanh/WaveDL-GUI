@@ -127,9 +127,11 @@ async def loopback_app(app, *, on_body=None, corrupt_control=None):
         finally:
             disconnected.set()
             writer.close()
-            with suppress(ConnectionResetError, BrokenPipeError):
-                await writer.wait_closed()
-            tasks.discard(task)
+            try:
+                with suppress(ConnectionResetError, BrokenPipeError):
+                    await writer.wait_closed()
+            finally:
+                tasks.discard(task)
 
     listener = await asyncio.start_server(accepted, "127.0.0.1", 0)
     port = listener.sockets[0].getsockname()[1]

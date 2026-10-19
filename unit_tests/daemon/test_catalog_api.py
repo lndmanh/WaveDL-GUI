@@ -283,16 +283,30 @@ def test_replaced_nested_directory_is_rejected_before_return(tmp_path, monkeypat
     folder.mkdir()
     (folder / "secret.txt").touch()
     original = SafeDirectory.entries
+    attempted = []
 
     def entries(anchor):
         yield from original(anchor)
-        if anchor.path == folder:
+        if anchor.path.samefile(folder):
+            attempted.append(True)
+            if os.name == "nt":
+                with pytest.raises(PermissionError) as denied:
+                    folder.rename(tmp_path / "moved")
+                assert denied.value.winerror == 32
+                assert not (tmp_path / "moved").exists()
+                assert (folder / "secret.txt").read_bytes() == b""
+                return
             folder.rename(tmp_path / "moved")
             folder.mkdir()
 
     monkeypatch.setattr(SafeDirectory, "entries", entries)
-    with pytest.raises(BrowseForbidden, match="ancestry changed"):
-        CatalogService({"data": tmp_path}).browse("data", "folder")
+    if os.name == "nt":
+        result = CatalogService({"data": tmp_path}).browse("data", "folder")
+        assert [entry["name"] for entry in result["entries"]] == ["secret.txt"]
+    else:
+        with pytest.raises(BrowseForbidden, match="ancestry changed"):
+            CatalogService({"data": tmp_path}).browse("data", "folder")
+    assert attempted == [True]
 
 
 def test_http_auth_query_bounds_unreadable_and_redacted_errors(tmp_path, monkeypatch):

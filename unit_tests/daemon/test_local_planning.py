@@ -114,7 +114,10 @@ def test_unsupported_runtime_refused(tmp_path, mode, container):
 
 def test_storage_remapping_refused(tmp_path):
     request = manifest(tmp_path)
-    request = replace(request, storage_map=(StorageMapping(str(tmp_path), "/compute"),))
+    request = replace(
+        request,
+        storage_map=(StorageMapping(str(tmp_path), str(tmp_path / "compute")),),
+    )
     with pytest.raises(UnsupportedPlan, match="remapped"):
         LocalBackend().plan(request)
 

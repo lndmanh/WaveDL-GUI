@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from wavedl.core.safe_files import open_directory
 from wavedl_daemon.runs.preview_authority import (
     PreviewAuthority,
     PreviewChanged,
@@ -55,12 +56,30 @@ def test_selection_is_absolute_and_matches_native_fingerprint(authority):
     selected = authority.resolve_selection("datasets", "nested/data.npz")
     info = selected.path.stat()
     assert selected.path.is_absolute()
-    assert selected.identity == {
+    expected = {
         "st_dev": info.st_dev,
         "st_ino": info.st_ino,
         "st_size": info.st_size,
         "st_mtime_ns": info.st_mtime_ns,
     }
+    if os.name == "nt":
+        with (
+            open_directory(selected.path.parent) as parent,
+            parent.open_file(selected.path.name) as file,
+        ):
+            native = file.api.info(file.handle)
+            expected = {
+                "st_dev": native.volume,
+                "st_ino": native.index_high << 32 | native.index_low,
+                "st_size": native.size_high << 32 | native.size_low,
+                "st_mtime_ns": (
+                    (native.write.dwHighDateTime << 32 | native.write.dwLowDateTime)
+                    - 116444736000000000
+                )
+                * 100,
+            }
+    assert selected.identity == expected
+    assert selected.path.read_bytes() == b"dataset"
     assert len(selected.ancestry) == 2
     verify_selection(selected)
 
@@ -81,7 +100,8 @@ def test_missing_file(authority):
 
 def test_directory_is_not_a_dataset(authority):
     (authority.roots["datasets"] / "directory.npz").mkdir()
-    with pytest.raises(PreviewChanged):
+    expected = PreviewForbidden if os.name == "nt" else PreviewChanged
+    with pytest.raises(expected):
         authority.resolve_selection("datasets", "directory.npz")
 
 
@@ -97,9 +117,19 @@ def test_rejects_links_and_fifo(authority, tmp_path):
             authority.resolve_selection("datasets", name)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows held anchors disallow rename")
 def test_root_rename_cannot_redirect_held_selection(authority):
     root = authority.roots["datasets"]
+    if os.name == "nt":
+        with authority.open_preview_selection(
+            "datasets", "nested/data.npz"
+        ) as selected:
+            with pytest.raises(PermissionError) as denied:
+                root.rename(root.with_name("old-datasets"))
+            assert denied.value.winerror == 32
+            assert not root.with_name("old-datasets").exists()
+            assert selected.path.read_bytes() == b"dataset"
+            verify_selection(selected)
+        return
     with (
         pytest.raises(PreviewChanged),
         authority.open_preview_selection("datasets", "nested/data.npz") as selected,
@@ -130,6 +160,17 @@ def test_body_exception_preserved_without_reclassification(authority):
 
 
 def test_mutated_dataset_rejected_on_context_exit(authority):
+    if os.name == "nt":
+        with authority.open_preview_selection(
+            "datasets", "nested/data.npz"
+        ) as selected:
+            with pytest.raises(PermissionError) as denied:
+                selected.path.write_bytes(b"changed")
+            assert denied.value.errno == 13
+            assert getattr(denied.value, "winerror", None) in (None, 32)
+            assert selected.path.read_bytes() == b"dataset"
+            verify_selection(selected)
+        return
     with (
         pytest.raises(PreviewChanged),
         authority.open_preview_selection("datasets", "nested/data.npz") as selected,

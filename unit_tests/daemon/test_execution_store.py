@@ -1,5 +1,6 @@
 import getpass
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -117,12 +118,19 @@ with (
 ):
     store.ensure(sys.argv[2], 4)
     assert store.claim_submission(sys.argv[2])[1]
-    os.kill(os.getpid(), signal.SIGKILL)
+    if os.name == 'nt':
+        import ctypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.GetCurrentProcess.restype = ctypes.c_void_p
+        kernel.TerminateProcess.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        assert kernel.TerminateProcess(kernel.GetCurrentProcess(), 73)
+    else:
+        os.kill(os.getpid(), signal.SIGKILL)
 """
     result = subprocess.run(
         [sys.executable, "-c", code, str(database), plan.plan_id], check=False
     )
-    assert result.returncode < 0
+    assert result.returncode == 73 if os.name == "nt" else result.returncode < 0
     with (
         acquire_dispatch_lock(database.parent / "dispatch.lock") as lock,
         ExecutionStore(database, dispatch_lock=lock) as store,
@@ -236,13 +244,25 @@ def test_recovery_and_database_identity_fail_closed(execution, tmp_path):
         ):
             unowned.claim_submission(plan.plan_id)
         saved = database.with_suffix(".saved")
-        database.rename(saved)
-        with pytest.raises(PlanRecoveryRequired):
-            store.get(plan.plan_id)
-        with sqlite3.connect(database):
-            pass
-        with pytest.raises(PlanRecoveryRequired):
-            store.claim_submission(plan.plan_id)
+        if os.name == "nt":
+            original_identity = database.stat()
+            original_bytes = database.read_bytes()
+            before = store.get(plan.plan_id)
+            with pytest.raises(PermissionError) as denied:
+                database.rename(saved)
+            assert denied.value.winerror == 32
+            assert not saved.exists()
+            assert database.stat().st_ino == original_identity.st_ino
+            assert database.read_bytes() == original_bytes
+            assert store.get(plan.plan_id) == before
+        else:
+            database.rename(saved)
+            with pytest.raises(PlanRecoveryRequired):
+                store.get(plan.plan_id)
+            with sqlite3.connect(database):
+                pass
+            with pytest.raises(PlanRecoveryRequired):
+                store.claim_submission(plan.plan_id)
     with pytest.raises(PlanRecoveryRequired):
         ExecutionStore(tmp_path / "missing.db")
 
