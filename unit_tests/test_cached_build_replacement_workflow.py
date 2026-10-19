@@ -44,7 +44,11 @@ def test_gate_is_mandatory_isolated_and_additive():
     )
     guard = guard_step()
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
         assert f'"$TMPDIR/{NAME}"' in step["run"]

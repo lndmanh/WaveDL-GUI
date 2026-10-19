@@ -45,7 +45,11 @@ def test_metric_crash_matrix_and_strict_four_report_gate_are_mandatory():
     )
     guard = _guard()
     for step in (run, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
         assert "--junitxml" in step["run"] or "ET.parse" in step["run"]

@@ -48,9 +48,10 @@ current task/milestone tables supersede conflicting Qt-transition requirements.
 #### Current hosted/native follow-up — 2026-10-19
 
 The approved review branch now contains the new daemon/browser app without
-shipping Qt. At `6ed0fa4`, hosted static-client/lint and both Linux/macOS
-foundation versions pass; Windows and complete browser aggregate acceptance
-remain open. Fresh exact wheel/sdist CPU lifecycle checks pass with zero skips,
+shipping Qt. At `32c25fc`, all six hosted Linux/macOS/Windows foundation
+versions and both real-tmpfs lanes pass, including all 15 required Windows
+native cases. Complete hosted CPU/browser aggregate acceptance remains open.
+Fresh exact wheel/sdist CPU lifecycle checks pass with zero skips,
 and independently reviewed browser follow-ups retain strict ownership, attempt,
 worker-identity and cleanup requirements. The acceptance ledger's latest section
 records exact source/report hashes and supersedes historical validation totals

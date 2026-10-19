@@ -47,6 +47,15 @@ supported. Final daemon/browser package and release validation remains open;
 tagging or publishing requires explicit approval. Dated evidence below records
 its original scope; older Qt-retirement gates are superseded by this direction.
 
+Current verification (2026-10-19): the reviewed daemon/browser implementation
+passes 2,851 local core/daemon tests (19 explicit skips) and 1,704 acceptance-tool
+tests. Exact `32c25fc` wheel/sdist CPU install-and-run checks pass with zero skips.
+The full native foundation matrix passes on Windows, macOS and Linux (Python
+3.11/3.13). Hosted CPU/browser aggregate and real GPU/Slurm-site validation remain
+open; this is not release sign-off. See the
+[acceptance ledger](docs/superpowers/plans/2026-10-08-migration-acceptance-ledger.md)
+for current source hashes, results, limitations and remaining gates.
+
 Latest local validation (2026-10-18): the daemon/browser bundle passes all 12
 strict browser acceptance scenarios, 820 web tests (one skip), and 38 generated
 worker checks. PNG preview exports now report preparation failures and browser

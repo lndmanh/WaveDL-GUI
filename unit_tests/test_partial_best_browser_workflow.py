@@ -28,7 +28,11 @@ def test_partial_best_gates_run_then_strictly_verify_single_owned_workspace():
             and f"record.name, '{name}'" in step["run"]
         )
         for step in (runner, guard):
-            assert step["if"] == "always()"
+            assert step["if"] == (
+                "${{ !cancelled() }}"
+                if step["name"].startswith(("Run ", "Exercise "))
+                else "always()"
+            )
             assert not step.get("continue-on-error", False)
             assert "||" not in step["run"]
             assert f'"$TMPDIR/{name}"' in step["run"]

@@ -29,7 +29,11 @@ def test_integrity_run_and_guard_are_required_and_additive_to_baseline_and_parti
     runner = next(step for step in steps if f"--case={NAME}" in step.get("run", ""))
     guard = guard_step()
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
         assert f'"$TMPDIR/{NAME}"' in step["run"]

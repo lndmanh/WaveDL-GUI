@@ -27,6 +27,61 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Reviewed CI cancellation correction — 2026-10-19
+
+The superseded browser run continued starting expensive scenarios after
+cancellation because 50 producer steps explicitly used `always()`. Only those
+producer conditions now use `${{ !cancelled() }}`: ordinary failure still allows
+diagnostic scenarios, but cancellation prevents new ones. The 57 explicit
+evidence guards and artifact upload retain `always()`; the original two implicit
+producers and two implicit prerequisite guards are unchanged. This follows
+[GitHub's status-function semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions),
+not a weaker acceptance policy. Root's independent parsed-YAML comparison proves
+all other workflow fields/commands unchanged. **95** focused workflow tests and
+pinned Ruff checks on all nine affected contract files pass; `actionlint` is
+unavailable and not claimed. This workflow-only correction is held from push
+while the current production-source CPU/browser jobs finish, avoiding needless
+cancellation of their evidence. It does not change the already-running workflow.
+
+### Full hosted native foundations accepted — 2026-10-19 (32c25fc)
+
+Run `39255215137` is terminal **success** on all eight jobs: Windows, macOS and
+Linux under Python 3.11/3.13, plus both real-tmpfs ENOSPC lanes. Root independently
+downloads/parses the six full core/daemon report pairs and runs the fail-closed
+platform guards. Each Windows version has **2,329 passes / 457 explicit skips**,
+with all **15 required native cases passed**, including actual catalog HEADER
+inspection, descendant cancellation/leader exit, native pipe rejection, journal
+reader/writer overlap and ownership/publication. Both full Windows daemon lanes
+now pass; no failed cases or workspace-cleanup traceback remains.
+
+Each macOS version has **2,826 passes / 40 skips**, all 13 required POSIX cases;
+each Linux version **2,810 / 56 skips**, all 13 POSIX cases. Each real-tmpfs
+report is **one pass / zero skips**. Exact reports and native Windows logs:
+`/private/tmp/wavedl-39255215137-reports.HShPur/`. Native/optional skips remain
+unverified, not successes. This closes this dependency-light native filesystem/
+process/daemon foundations matrix, not full Windows ML/GPU, real scheduler/site,
+the still-running hosted CPU/browser lanes, or final release sign-off.
+
+### Exact current production-source artifacts — 2026-10-19 (32c25fc)
+
+Clean-archive commit `32c25fc538dad3b3a8c80f2e854d8fe28092fa40`, including
+the native HEADER and safe Slurm-reader fixes, independently passes both exact
+wheel and sdist offline Linux/arm64 Python 3.13 CPU lifecycle checks: **one
+pass / zero skips** each, exit zero and no OOM. Wheel SHA-256:
+`c814c2082f9baa794f9f4ea68cf95fc6d8a55886dc1d12fe283b0bcffad16bbe`;
+sdist: `4cd8db7292dd3bf4eedfe8a51e109a7638c222089efb25594334afaffaae0232`.
+Both exclude Qt and match all 38 frozen be6 asset files. Reports under
+`/private/tmp/wavedl-exact-32c25fc.XDvN4P/` have SHA-256
+`b4c9e8f3e9a479af1bfea545e620d252b05f74f09e773c96bf5ba6ab8ce96975`
+(wheel) and
+`7d8c147f43d3454d58d97abed9865c630c69d3705802c9e13131ee02933a3b39`
+(sdist). Actual CPU publication/journals, isolated resolver/pip-check, installed
+console scripts, authenticated daemon/static/bootstrap/idempotency/shutdown and
+database integrity are verified; only task-owned acceptance work volumes and
+stopped containers were removed after evidence capture. No user data, tagging
+or publication was touched. Hosted native/browser aggregate, GPU and real-site
+gates remain distinct and open; these artifacts do not certify them.
+
 ### Fresh reviewed browser and committed-artifact evidence — 2026-10-19
 
 Commit `6ed0fa4` is pushed only to the approved review branch. Hosted static

@@ -7,15 +7,16 @@ No legacy migration, deprecation period or Qt-retaining release is required.
 ## 2026-10-19 verification addendum
 
 The ledger's newest sections supersede the older unrun-hosted labels below.
-Hosted CPU Tests now pass on Python 3.11/3.12/3.13 at `f8ad5f0`; static-client
-checks and both Linux/macOS foundation versions pass at `6ed0fa4`, as do both
-real-tmpfs lanes. All 14 required native Windows safety cases pass on both
-versions, but full Windows daemon acceptance still fails on persisted-input
-reading, selected HEADER identity and test-hook cleanup. Reviewed follow-ups
-retain native ownership, held-file identity, bounds and truthful uncertainty;
-the new HEADER native witness is mandatory for the next run.
+Hosted CPU Tests pass on Python 3.11/3.12/3.13 at `f8ad5f0`; fresh CPU Tests
+at `32c25fc` are still running. Static-client checks pass at `6ed0fa4`, with
+unchanged browser inputs since. At `32c25fc`, all six Linux/macOS/Windows
+foundation versions and both real-tmpfs lanes pass. Both full Windows daemon
+reports pass, including all 15 required native safety cases, the HEADER worker
+and successful cleanup. Reviewed fixes retain native ownership, held-file
+identity, bounds and truthful uncertainty. The full native foundations matrix
+is accepted within this dependency-light filesystem/process/daemon scope.
 
-Exact clean `6ed0fa4` wheel/sdist CPU lifecycle acceptance and fresh local
+Exact clean `32c25fc` wheel/sdist CPU lifecycle acceptance and fresh local
 retained/cancellation/partial-best/native-SSE browser reports pass within their
 declared boundaries. Hosted browser aggregate, final full supported-platform
 validation, actual GPU/accelerate trees and real Slurm/filesystem-site gates

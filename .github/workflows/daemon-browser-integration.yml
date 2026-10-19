@@ -748,7 +748,7 @@ jobs:
           assert not any(list(root.iter(kind)) for kind in ("skipped", "failure", "error"))
           PY
       - name: Exercise metric-bearing POSIX registry crash and recovery matrix
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           WAVEDL_REGISTRY_METRIC_RECOVERY_REPORT_DIR: ${{ runner.temp }}/wavedl-browser-ci/registry-metric-http-recovery
         run: python -m pytest unit_tests/daemon/test_registry_metric_http_recovery.py --junitxml="$TMPDIR/registry-metric-http-recovery.xml"
@@ -820,13 +820,13 @@ jobs:
           node --test tools/verify_storage_fault_browser_report.test.mjs
           python -m pytest unit_tests/daemon/test_storage_fault_browser_fixture.py -q
       - name: Run F06 read-only storage-fault browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_storage_fault_browser_acceptance.mjs --report="$TMPDIR/storage-fault-query-only.json" query_only
       - name: Require F06 read-only storage-fault evidence
         if: always()
         run: node tools/verify_storage_fault_browser_report.mjs "$TMPDIR/storage-fault-query-only.json" query_only
       - name: Run F06 quota storage-fault browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_storage_fault_browser_acceptance.mjs --report="$TMPDIR/storage-fault-page-quota.json" page_quota
       - name: Require F06 quota storage-fault evidence
         if: always()
@@ -945,7 +945,7 @@ jobs:
         if: always()
         run: node tools/verify_retained_browser_report.mjs "$TMPDIR/retained-browser.json" "$TMPDIR/retained-builds/summary.json"
       - name: Run retained native browser rollback acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_retained_rollback_browser_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-rollback-browser.json"
       - name: Require native rollback evidence and cleanup
         if: always()
@@ -953,7 +953,7 @@ jobs:
       # This additive two-tab case reuses the four isolated builds without
       # changing the original eleven retained-generation stages.
       - name: Run retained active-run and draft browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_retained_browser_acceptance.mjs --active-draft --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-active-draft.json"
       - name: Require retained active-run, draft and cleanup evidence
         if: always()
@@ -968,7 +968,7 @@ jobs:
       # Native browser bootstrap/fill commands expose these test-only tokens
       # briefly to local process arguments. Never supply a user/production token.
       - name: Run standalone adoption browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_adoption_browser_acceptance.mjs "$TMPDIR/adoption-browser"
       - name: Verify standalone adoption evidence
         if: always()
@@ -976,31 +976,31 @@ jobs:
       # These current-package gates fail closed; adding them does not certify
       # hosted CI, remote sites or the already separate default twelve cases.
       - name: Run supervised preview-fault browser refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_preview_fault_browser_acceptance.mjs "$TMPDIR/preview-fault-browser"
       - name: Require preview-fault refusal and cleanup evidence
         if: always()
         run: node tools/verify_preview_fault_browser_report.mjs "$TMPDIR/preview-fault-browser/preview-fault.json"
       - name: Run cold-process offline shell and authority acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: WAVEDL_PYTHON="$(python -c 'import sys; print(sys.executable)')" node tools/run_cold_offline_browser_acceptance.mjs "$TMPDIR/cold-offline-browser.json"
       - name: Require cold offline shell and authority evidence
         if: always()
         run: node tools/verify_cold_offline_browser_report.mjs "$TMPDIR/cold-offline-browser.json"
       - name: Run pending cancellation browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_pending_cancel_browser_acceptance.mjs --report="$TMPDIR/pending-cancel-browser.json"
       - name: Require pending cancellation and lost-ACK evidence
         if: always()
         run: node tools/verify_pending_cancel_browser_report.mjs "$TMPDIR/pending-cancel-browser.json"
       - name: Run catalogue and header refusal and recovery acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_catalogue_fault_browser_acceptance.mjs "$TMPDIR/catalogue-fault-browser"
       - name: Require catalogue and header refusal and recovery evidence
         if: always()
         run: node tools/verify_catalogue_fault_browser_report.mjs "$TMPDIR/catalogue-fault-browser/catalogue-fault.json"
       - name: Run real supervised HEADER deadline and public retry acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           mkdir -m 700 "$TMPDIR/header-deadline-browser"
           TMPDIR="$TMPDIR/header-deadline-browser" node tools/run_header_deadline_browser_acceptance.mjs
@@ -1022,10 +1022,10 @@ jobs:
           assert.equal(record.name, 'header-deadline');
           JS
       - name: Run 100k-history numerical browser replay acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_history_browser_acceptance.mjs --report="$TMPDIR/history-browser.json"
       - name: Run real preview resource-budget refusal and recovery acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           mkdir -m 700 "$TMPDIR/preview-budget-browser"
           TMPDIR="$TMPDIR/preview-budget-browser" node tools/run_preview_budget_browser_acceptance.mjs
@@ -1050,13 +1050,13 @@ jobs:
         if: always()
         run: node tools/verify_history_browser_report.mjs "$TMPDIR/history-browser.json"
       - name: Run same-daemon detach and fresh-replay browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_reconnect_browser_acceptance.mjs "$TMPDIR/reconnect-browser"
       - name: Require same-daemon fresh replay and cleanup evidence
         if: always()
         run: node tools/verify_reconnect_browser_report.mjs "$TMPDIR/reconnect-browser/reconnect.json"
       - name: Run owned daemon abrupt-restart browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_daemon_restart_browser_acceptance.mjs "$TMPDIR/daemon-restart-browser"
       - name: Require durable restart identity and owned cleanup evidence
         if: always()
@@ -1064,7 +1064,7 @@ jobs:
       # One fresh owned workspace only; stale retries cannot hide a failed run.
       # The original twelve-case aggregate remains a separate mandatory gate.
       - name: Run real cancellation lost-acknowledgement browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_cancellation_lost_ack_browser_acceptance.mjs
       - name: Require unique current cancellation evidence and cleanup
         if: always()
@@ -1080,141 +1080,141 @@ jobs:
           await verifyCancellationLostAckFile(join(process.env.TMPDIR, entries[0].name, "cancellation-lost-ack.json"));
           '
       - name: Run mounted numerical failure browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           WAVEDL_PYTHON="$(python -c 'import sys; print(sys.executable)')" node tools/run_numerical_failure_browser_acceptance.mjs "$TMPDIR/numerical-failure-browser"
       - name: Require mounted numerical failure evidence and cleanup
         if: always()
         run: node tools/verify_numerical_failure_browser_report.mjs "$TMPDIR/numerical-failure-browser/numerical-failure.json"
       - name: Run real same-epoch best loss and patience browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           WAVEDL_PYTHON="$(python -c 'import sys; print(sys.executable)')" node tools/run_epoch_metric_browser_acceptance.mjs --report="$TMPDIR/epoch-metrics.json"
       - name: Require current epoch metrics, publication, screenshots and cleanup
         if: always()
         run: node tools/verify_epoch_metric_browser_report.mjs "$TMPDIR/epoch-metrics.json"
       - name: Run genuine staged supersession browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_supersession_browser_acceptance.mjs --report="$TMPDIR/supersession-browser.json"
       - name: Require genuine supersession, projection, canvas and cleanup evidence
         if: always()
         run: node tools/verify_supersession_browser_report.mjs "$TMPDIR/supersession-browser.json"
       - name: Run standalone adoption fault refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_adoption_negative_browser_acceptance.mjs "$TMPDIR/adoption-negative-browser"
       - name: Require unchanged source and durable state after adoption faults
         if: always()
         run: node tools/verify_adoption_negative_browser_report.mjs "$TMPDIR/adoption-negative-browser/standalone-adoption-negative.json"
       - name: Run mapped automatic plotting through the public browser
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_mapped_autoplot_browser_acceptance.mjs "$TMPDIR/mapped-autoplot-browser"
       - name: Require pinned mapped source, displayed pixels and cleanup
         if: always()
         run: node tools/verify_mapped_autoplot_browser_report.mjs "$TMPDIR/mapped-autoplot-browser/mapped-autoplot.json"
       - name: Run failed-state automatic-plot refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_mapped_autoplot_browser_acceptance.mjs "$TMPDIR/mapped-autoplot-failed-browser" failed
       - name: Require failed-state automatic-plot refusal and cleanup
         if: always()
         run: node tools/verify_mapped_autoplot_negative_report.mjs "$TMPDIR/mapped-autoplot-failed-browser/mapped-autoplot.json" failed
       - name: Run uncertain-state automatic-plot refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_mapped_autoplot_browser_acceptance.mjs "$TMPDIR/mapped-autoplot-uncertain-browser" uncertain
       - name: Require uncertain-state automatic-plot refusal and cleanup
         if: always()
         run: node tools/verify_mapped_autoplot_negative_report.mjs "$TMPDIR/mapped-autoplot-uncertain-browser/mapped-autoplot.json" uncertain
       - name: Run standalone historical-attempt rollover browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_adoption_rollover_browser_acceptance.mjs "$TMPDIR/adoption-rollover"
       - name: Require current-package historical-attempt rollover evidence
         if: always()
         run: node tools/verify_adoption_rollover_browser_report.mjs "$TMPDIR/adoption-rollover"
       - name: Run malformed and oversized preference recovery acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_preferences_browser_acceptance.mjs "$TMPDIR/preferences-browser"
       - name: Require current-package preference recovery and cleanup evidence
         if: always()
         run: node tools/verify_preferences_browser_report.mjs "$TMPDIR/preferences-browser"
       - name: Run submitted-plan authoring protection acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_submitted_plan_browser_acceptance.mjs "$TMPDIR/submitted-plan-browser"
       - name: Require submitted-plan protection and cleanup evidence
         if: always()
         run: node tools/verify_submitted_plan_browser_report.mjs "$TMPDIR/submitted-plan-browser"
       - name: Run result-operation browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_result_operations_browser_acceptance.mjs "$TMPDIR/result-operations-browser"
       - name: Require result-operation identity and publication evidence
         if: always()
         run: node tools/verify_result_operations_browser_report.mjs "$TMPDIR/result-operations-browser/result-operations.json"
       - name: Run supported ONNX export browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_onnx_export_browser_acceptance.mjs "$TMPDIR/onnx-export-browser"
       - name: Require actual opset and independently runnable publication evidence
         if: always()
         run: node tools/verify_onnx_export_browser_report.mjs "$TMPDIR/onnx-export-browser/onnx-export.json"
       - name: Run actual inference cancellation browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_inference_cancellation_browser_acceptance.mjs "$TMPDIR/inference-cancellation-browser"
       - name: Require cancelled runtime and owned process cleanup evidence
         if: always()
         run: node tools/verify_inference_cancellation_browser_report.mjs "$TMPDIR/inference-cancellation-browser/inference-cancellation.json"
       - name: Run real cross-validation and explicit-fold evaluation acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_cv_parity_browser_acceptance.mjs "$TMPDIR/cv-parity-browser"
       - name: Require classified-fold source, prediction publication and cleanup
         if: always()
         run: node tools/verify_cv_parity_browser_report.mjs "$TMPDIR/cv-parity-browser/cv-parity.json"
       - name: Run guided authoring progression browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_wizard_progression_browser_acceptance.mjs "$TMPDIR/wizard-progression-browser"
       - name: Require guided progression and single acknowledged execution
         if: always()
         run: node tools/verify_wizard_progression_browser_report.mjs "$TMPDIR/wizard-progression-browser"
       - name: Run full training field browser authoring acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_training_fields_browser_acceptance.mjs "$TMPDIR/training-fields-browser"
       - name: Require exact browser authoring, exports and persisted preview
         if: always()
         run: node tools/verify_training_fields_browser_report.mjs "$TMPDIR/training-fields-browser/training-fields-full.json"
       - name: Run visible invalid authoring and real runtime refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_training_validation_browser_acceptance.mjs "$TMPDIR/training-validation-browser"
       - name: Require invalid field corrections, refusal boundaries and cleanup
         if: always()
         run: node tools/verify_training_validation_browser_report.mjs "$TMPDIR/training-validation-browser/training-validation.json"
       - name: Run imported preset browser authority acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_preset_import_browser_acceptance.mjs "$TMPDIR/preset-import-browser"
       - name: Require imported preset refusal and immutable-plan evidence
         if: always()
         run: node tools/verify_preset_import_browser_report.mjs "$TMPDIR/preset-import-browser/preset-import.json"
       - name: Run oversized artifact publication browser refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_artifact_publication_browser_acceptance.mjs "$TMPDIR/artifact-publication"
       - name: Require current-package artifact refusal and cleanup evidence
         if: always()
         run: node tools/verify_artifact_publication_browser_report.mjs "$TMPDIR/artifact-publication"
       - name: Run same-daemon auth and skew browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_auth_skew_browser_acceptance.mjs --report="$TMPDIR/auth-skew.json"
       - name: Verify same-daemon auth and skew evidence
         if: always()
         run: node tools/verify_auth_skew_browser_report.mjs "$TMPDIR/auth-skew.json"
       - name: Run authenticated browser stream boundary acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_stream_browser_acceptance.mjs --report="$TMPDIR/stream-browser.json"
       - name: Verify authenticated browser stream boundary evidence
         if: always()
         run: node tools/verify_stream_browser_report.mjs "$TMPDIR/stream-browser.json"
       - name: Run sparse and truncated browser stream acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_stream_sparse_browser_acceptance.mjs --report="$TMPDIR/stream-sparse-browser.json"
       - name: Require sparse and truncated stream evidence and cleanup
         if: always()
         run: node tools/verify_stream_sparse_browser_report.mjs "$TMPDIR/stream-sparse-browser.json"
       - name: Run reducer-derived dashboard state acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_dashboard_state_browser_acceptance.mjs --report="$TMPDIR/dashboard-state-browser.json"
       - name: Verify reducer-derived dashboard state evidence
         if: always()
@@ -1222,26 +1222,26 @@ jobs:
       # Refusal/retirement and bounded quiescence only: neither an attempt
       # rollover nor the private post-retirement cursor is claimed.
       - name: Run malformed JSON stream-control browser refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_stream_malformed_browser_acceptance.mjs --report="$TMPDIR/stream-malformed-browser.json"
       - name: Require current-package malformed-control refusal and cleanup
         if: always()
         run: node tools/verify_stream_malformed_browser_report.mjs "$TMPDIR/stream-malformed-browser.json"
       - name: Run invalid UTF-8 stream-control browser refusal acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_stream_malformed_browser_acceptance.mjs --invalid-utf8 --report="$TMPDIR/stream-invalid-utf8-browser.json"
       - name: Require current-package invalid UTF-8 refusal and cleanup
         if: always()
         run: node tools/verify_stream_malformed_browser_report.mjs "$TMPDIR/stream-invalid-utf8-browser.json"
       # Additive F02 byte/framing faults; existing stream-control gates remain.
       - name: Run real F02 journal-byte fault browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_journal_fault_browser_acceptance.mjs --report="$TMPDIR/journal-fault-browser.json"
       - name: Require current-package journal-byte evidence and owned cleanup
         if: always()
         run: node tools/verify_journal_fault_browser_report.mjs "$TMPDIR/journal-fault-browser.json"
       - name: Run real F13 hostile-origin browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_hostile_origin_browser_acceptance.mjs --report="$TMPDIR/hostile-origin-browser.json"
       - name: Require current-package hostile-origin evidence and owned cleanup
         if: always()
@@ -1253,19 +1253,19 @@ jobs:
       - name: Check F05 genuine broker-overflow Node contracts
         run: node --test tools/run_genuine_broker_overflow_browser_acceptance.test.mjs tools/verify_genuine_broker_overflow_browser_report.test.mjs
       - name: Run real F05 genuine broker-overflow browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_genuine_broker_overflow_browser_acceptance.mjs --report="$TMPDIR/genuine-broker-overflow-browser.json"
       - name: Require current-package genuine broker-overflow evidence and owned cleanup
         if: always()
         run: node tools/verify_genuine_broker_overflow_browser_report.mjs "$TMPDIR/genuine-broker-overflow-browser.json"
       - name: Run retained native concurrency acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: node tools/run_retained_concurrency_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-concurrency.json"
       - name: Verify retained native concurrency evidence
         if: always()
         run: node tools/verify_retained_concurrency_report.mjs "$TMPDIR/retained-concurrency.json" "$TMPDIR/retained-builds/summary.json"
       - name: Run real partial-best fallback browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           mkdir -m 700 "$TMPDIR/partial-best-fallback"
           TMPDIR="$TMPDIR/partial-best-fallback" node tools/run_web_acceptance.mjs --case=partial-best-fallback
@@ -1286,7 +1286,7 @@ jobs:
           assert.equal(record.name, 'partial-best-fallback');
           JS
       - name: Run real partial-best refusal browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           mkdir -m 700 "$TMPDIR/partial-best-refusal"
           TMPDIR="$TMPDIR/partial-best-refusal" node tools/run_web_acceptance.mjs --case=partial-best-refusal
@@ -1307,7 +1307,7 @@ jobs:
           assert.equal(record.name, 'partial-best-refusal');
           JS
       - name: Run real automatic-plot metadata checksum refusal browser acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           mkdir -m 700 "$TMPDIR/autoplot-metadata-integrity"
           TMPDIR="$TMPDIR/autoplot-metadata-integrity" node tools/run_web_acceptance.mjs --case=autoplot-metadata-integrity
@@ -1329,7 +1329,7 @@ jobs:
           JS
       # A genuine factory build identity changes; no new binary or cache-hit claim.
       - name: Run cached controller and controlled build replacement acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           mkdir -m 700 "$TMPDIR/cached-build-replacement-browser"
           TMPDIR="$TMPDIR/cached-build-replacement-browser" node tools/run_web_acceptance.mjs --case=cached-build-replacement
@@ -1350,7 +1350,7 @@ jobs:
           assert.equal(record.name, 'cached-build-replacement');
           JS
       - name: Run instrumented native Fetch SSE split acceptance
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           mkdir -m 700 "$TMPDIR/native-sse-browser"
           TMPDIR="$TMPDIR/native-sse-browser" node tools/run_native_sse_split_browser_acceptance.mjs --report="$TMPDIR/native-sse-browser/native-sse.json"

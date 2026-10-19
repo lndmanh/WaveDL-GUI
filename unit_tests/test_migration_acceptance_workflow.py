@@ -1,6 +1,7 @@
 """Keep daemon/browser acceptance gates mandatory and observable."""
 
 import os
+import re
 import stat
 import subprocess
 from pathlib import Path
@@ -18,6 +19,55 @@ WORKFLOW = (
 @pytest.fixture
 def workflow():
     return yaml.safe_load(WORKFLOW.read_text())
+
+
+def test_expensive_acceptance_preserves_failure_diagnostics_but_stops_on_cancel(
+    workflow,
+):
+    """New owned execution stops on cancellation; existing evidence still uploads."""
+    steps = workflow["jobs"]["chromium-cpu"]["steps"]
+    producers = [
+        step
+        for step in steps
+        if re.search(r"node tools/run_\S+acceptance\.mjs", step.get("run", ""))
+        or "pytest unit_tests/daemon/test_registry_metric_http_recovery.py"
+        in step.get("run", "")
+    ]
+    implicit = {
+        "Verify native retained generations and refused fourth update",
+        "Run all twelve mandatory browser acceptance cases",
+    }
+    assert len(producers) == 52
+    assert {step["name"] for step in producers if not step.get("if")} == implicit
+    for step in producers:
+        if step["name"] not in implicit:
+            # cancelled() is a status function, so no implicit success() is
+            # added: ordinary failed earlier gates still collect diagnostics.
+            assert step["if"] == "${{ !cancelled() }}"
+        assert not step.get("continue-on-error", False)
+    guards = [
+        step
+        for step in steps
+        if step.get("name", "").startswith(("Require ", "Verify "))
+        and step not in producers
+    ]
+    assert len(guards) == 59
+    implicit_guards = {
+        "Verify installed dependency and CPU data contracts",
+        "Require exhaustive field and effective Python export round trips",
+    }
+    assert {step["name"] for step in guards if not step.get("if")} == implicit_guards
+    for step in guards:
+        if step["name"] not in implicit_guards:
+            assert step["if"] == "always()"
+        assert not step.get("continue-on-error", False)
+    uploads = [
+        step
+        for step in steps
+        if step.get("uses", "").startswith("actions/upload-artifact@")
+    ]
+    assert len(uploads) == 1
+    assert uploads[0]["if"] == "always()"
 
 
 def assert_runtime_tmpdir(job):
@@ -178,7 +228,11 @@ def test_storage_fault_browser_modes_and_strict_guards_are_mandatory(
         < steps.index(upload)
     )
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert upload["if"] == "always()"
@@ -220,7 +274,11 @@ def test_invalid_authoring_browser_and_guard_are_mandatory(workflow):
     )
     assert steps.index(runner) < steps.index(guard)
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     artifacts = steps[-1]["with"]["path"]
@@ -267,7 +325,11 @@ def test_f12_malformed_and_invalid_utf8_browser_gates_are_mandatory(workflow):
     )
     upload = steps[-1]
     for step in (malformed_runner, malformed_guard, utf8_runner, utf8_guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert (
@@ -360,7 +422,11 @@ def test_journal_byte_fault_browser_and_strict_file_guard_are_mandatory(workflow
     upload = steps[-1]
     assert steps.index(runner) < steps.index(guard) < steps.index(upload)
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert_runtime_tmpdir(workflow["jobs"]["chromium-cpu"])
@@ -416,7 +482,11 @@ def test_hostile_origin_contracts_and_browser_file_guard_are_mandatory(workflow)
     assert all(steps.index(step) < steps.index(runner) for step in contracts)
     assert steps.index(runner) < steps.index(guard) < steps.index(upload)
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert_runtime_tmpdir(job)
@@ -483,7 +553,11 @@ def test_genuine_broker_overflow_contracts_and_browser_file_guard_are_mandatory(
     assert steps.index(node_contracts) < steps.index(runner)
     assert steps.index(runner) < steps.index(guard) < steps.index(upload)
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert_runtime_tmpdir(job)
@@ -548,7 +622,11 @@ def test_cold_offline_and_pending_cancel_live_gates_are_mandatory(workflow):
         )
     )
     for step in (cold_runner, cold_guard, pending_runner, pending_guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert steps.index(cold_runner) < steps.index(cold_guard)
@@ -591,7 +669,11 @@ def test_catalogue_fault_browser_gate_and_cleanup_guard_are_mandatory(workflow):
         )
     )
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert steps.index(runner) < steps.index(guard) < len(steps) - 1
@@ -657,7 +739,11 @@ def test_preset_and_preview_fault_contracts_and_browser_guards_are_mandatory(
         f'"$TMPDIR/{report}-browser/{report}.json"'
     )
     for step in (runner, guard):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
     assert steps.index(runner) < steps.index(guard) < len(steps) - 1
@@ -686,7 +772,11 @@ def test_mapped_autoplot_negative_fault_guards_are_mandatory(workflow):
         )
         assert steps.index(runner) < steps.index(guard) < len(steps) - 1
         for step in (runner, guard):
-            assert step["if"] == "always()"
+            assert step["if"] == (
+                "${{ !cancelled() }}"
+                if step["name"].startswith(("Run ", "Exercise "))
+                else "always()"
+            )
             assert not step.get("continue-on-error", False)
             assert "||" not in step["run"]
         assert (

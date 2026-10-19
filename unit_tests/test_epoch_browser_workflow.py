@@ -24,7 +24,11 @@ def test_epoch_browser_acceptance_and_strict_guard_are_mandatory():
         if "node tools/verify_epoch_metric_browser_report.mjs" in step.get("run", "")
     )
     for step in (runner, verifier):
-        assert step["if"] == "always()"
+        assert step["if"] == (
+            "${{ !cancelled() }}"
+            if step["name"].startswith(("Run ", "Exercise "))
+            else "always()"
+        )
         assert not step.get("continue-on-error", False)
         assert '"$TMPDIR/epoch-metrics.json"' in step["run"]
         assert "||" not in step["run"]
