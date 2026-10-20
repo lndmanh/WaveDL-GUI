@@ -81,6 +81,31 @@ def _require_windows_result(result, argv, timeout):
     return result.stdout.decode()
 
 
+def _pip_install_phase(output):
+    """Report the last observed marker, not an inferred reason for a timeout."""
+    for line in reversed(output.splitlines()):
+        for phase, prefixes in (
+            ("complete", (b"Successfully installed ",)),
+            ("uninstall-complete", (b"Successfully uninstalled ",)),
+            ("uninstall", (b"Attempting uninstall:", b"Uninstalling ")),
+            ("unpack", (b"Installing collected packages:",)),
+            ("resolve", (b"Processing ", b"Collecting ")),
+        ):
+            if line.strip().startswith(prefixes):
+                return phase
+    return "unknown"
+
+
+def _pip_timeout_diagnostic(result):
+    print(
+        "Installed dependency timeout: "
+        f"last_progress={_pip_install_phase(result.stdout)}, "
+        f"timed_out={bool(result.timed_out)}, cancelled={bool(result.cancelled)}, "
+        f"stdout_truncated={bool(result.stdout_truncated)}, "
+        f"stderr_truncated={bool(result.stderr_truncated)}"
+    )
+
+
 class _WindowsInstalledDaemon:
     """One suspended-assigned Job and its existing bounded output drain."""
 
@@ -158,7 +183,7 @@ class _WindowsInstalledDaemon:
                 self.api.close_reservation()
 
 
-def checked(argv, *, cwd, environment, timeout=None):
+def checked(argv, *, cwd, environment, timeout=None, pip_diagnostic=False):
     if timeout is None:
         timeout = int(os.environ.get("WAVEDL_ACCEPTANCE_TIMEOUT", "60"))
     if timeout < 1 or timeout > 300:
@@ -170,6 +195,8 @@ def checked(argv, *, cwd, environment, timeout=None):
             token = environment.get("WAVEDL_DAEMON_TOKEN")
             if token and token.encode() in result.stdout + result.stderr:
                 raise AssertionError("Installed client leaked authentication material")
+            if pip_diagnostic and result.timed_out:
+                _pip_timeout_diagnostic(result)
             return _require_windows_result(result, argv, timeout)
         finally:
             process.cancel(grace_seconds=0)
@@ -372,9 +399,10 @@ def build_installed(tmp_path_factory, *, wheelhouse=None):
         ],
         cwd=outside,
         environment=environment,
-        # Resolving and unpacking the complete ML stack into a fresh venv can
-        # exceed the runtime's 60-second command budget on slower CI disks.
-        timeout=180,
+        # Full offline dependency installation has its own finite budget; do
+        # not increase runtime commands or cheap inherited-site installation.
+        timeout=180 if wheelhouse is None else 300,
+        pip_diagnostic=wheelhouse is not None,
     )
     return outside, venv, binary, python, environment
 

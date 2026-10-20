@@ -278,3 +278,58 @@ def test_windows_reservation_precedes_assignment_and_closes_once(monkeypatch):
     api.close_reservation()
     api.close_reservation()
     assert calls == ["duplicate", "assign", ("close", 456)]
+
+
+@pytest.mark.parametrize(
+    "output,phase",
+    [
+        (b"private https://secret.example/token", "unknown"),
+        (b"Processing private.whl\r\nCollecting private", "resolve"),
+        (b"Processing private.whl\nInstalling collected packages: private", "unpack"),
+        (
+            b"Installing collected packages: private\n  Attempting uninstall: private",
+            "uninstall",
+        ),
+        (b"Uninstalling private\nSuccessfully installed private", "complete"),
+        (
+            b"Attempting uninstall: private\nSuccessfully uninstalled private",
+            "uninstall-complete",
+        ),
+        (b"Attempting uninstall: private\nProcessing private.whl", "resolve"),
+    ],
+)
+def test_pip_timeout_phase_is_finite_and_never_publishes_raw_output(output, phase):
+    assert acceptance._pip_install_phase(output) == phase
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_pip_timeout_diagnostic_is_opt_in_sanitized_and_never_passes(
+    monkeypatch, tmp_path, capsys, enabled
+):
+    private = b"private-auth https://private.example/token"
+    process = OwnedProcess(
+        result(
+            returncode=1,
+            stdout=b"Installing collected packages: " + private,
+            stderr=private,
+            timed_out=True,
+            cancelled=True,
+        )
+    )
+    monkeypatch.setattr(acceptance, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(acceptance, "_start_windows_installed", lambda *args: process)
+    with pytest.raises(acceptance.subprocess.TimeoutExpired):
+        acceptance.checked(
+            ["owned"],
+            cwd=tmp_path,
+            environment={},
+            timeout=300,
+            pip_diagnostic=enabled,
+        )
+    assert capsys.readouterr().out == (
+        "Installed dependency timeout: last_progress=unpack, timed_out=True, "
+        "cancelled=True, stdout_truncated=False, stderr_truncated=False\n"
+        if enabled
+        else ""
+    )
+    assert process.calls == [("wait", 300), ("cancel", 0), ("wait", None)]

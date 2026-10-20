@@ -27,6 +27,45 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Current native foundations and Windows installed runtime — 2026-10-20
+
+At `2c60886a3d4010733e7c3166ef8f7901623612e4`, foundations run `39408337875`
+finishes **success on all eight jobs**. Both native Windows versions pass all
+15 mandatory safety cases, all seven live-boundary cases and real installed
+TCP bootstrap/auth/shutdown with observed raw exit code 3. Each Windows report
+pair has **2,362 passes / 456 explicit skips / zero failures or errors**.
+Authoritative artifacts: `/private/tmp/wavedl-native-2c60886.ft8qMl/foundation311/`
+and `foundation313/`. Skips remain unverified, not successes.
+
+Separate Windows installed CPU run `39408337993` proves the full isolated
+lifecycle on Python 3.13: one intended case, zero skips/failures/errors, actual
+CPU training/publication, authenticated installed daemon/static/bootstrap/client
+checks, no forced shutdown, empty Job, released dispatch lock and SQLite integrity.
+The exact clean-built wheel is Qt-free with all 38 verified generated asset files;
+SHA-256 `24d507315ea824c03d2d3f047225726197600b688964e8b3175df7dc29b920b1`.
+Runtime is native Windows AMD64 / Python 3.13.16 / Torch 2.14.1+cpu. Its JUnit
+records raw daemon exit 3; report and artifact metadata are under
+`/private/tmp/wavedl-native-2c60886.ft8qMl/cpu313/`.
+
+Python 3.11 does not yet pass that separate installed gate: the offline dependency
+installation exceeds its 180-second fixture budget before runtime acceptance.
+This is not the older setuptools conflict or Unicode failure; the reason for
+slow installation is not established. Only isolated dependency installation
+now receives a separate finite 300-second budget; inherited-site install stays
+180, ordinary commands 60 and daemon shutdown 15. There is no retry or skipped
+assertion. On another timeout, an opt-in diagnostic reports only the last known
+pip progress-marker category and boolean outcome flags, never raw output/URLs.
+Seventy-seven focused tests and pinned Ruff checks pass for this QA-only change.
+These changed test/documentation paths do not match browser workflow push
+filters, so validating this correction does not restart its live browser run.
+
+The prior browser run `39403557516` is terminal cancelled, not fully accepted.
+Its uploaded reports nevertheless independently establish all twelve mandatory
+cases and catalogue/HEADER/cancellation corrections passed within that earlier
+`2ca2a26` source scope. Missing-output verifier failures during cancellation are
+not new product defects. Current browser run `39408338013` remains live on
+`2c60886` and must finish before a full hosted acceptance claim.
+
 ### Genuine native macOS MPS training cancellation — 2026-10-20
 
 At local product commit `4315d77da446cd04263dd60b4ee564749405280e`, one bounded

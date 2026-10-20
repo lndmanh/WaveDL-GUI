@@ -53,7 +53,8 @@ def test_explicit_release_wheel_is_copied_unchanged(tmp_path, monkeypatch, resol
     assert not any("wheel" in argv for argv in calls)
     assert ("--system-site-packages" not in calls[0]) is resolved
     assert "timeout" not in options[0]
-    assert options[1]["timeout"] == 180
+    assert options[1]["timeout"] == (300 if resolved else 180)
+    assert options[1]["pip_diagnostic"] is resolved
     # Dependency replacement is allowed only inside this freshly owned venv,
     # never the ambient build/runtime interpreter or inherited site packages.
     assert calls[1][0] == str(python)
