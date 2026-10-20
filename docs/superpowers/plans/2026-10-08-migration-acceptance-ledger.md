@@ -137,6 +137,16 @@ reclassified as be6. General CPU Tests `39415927698` and full browser run
 `39415927597` remain live after these results; full hosted acceptance and the
 original GPU/site/final-release gates remain open.
 
+The Python 3.11 and 3.13 cells of general CPU Tests `39415927698` subsequently
+finish success. Root parses 4,057 cases per version: **4,017 passed / 40 explicit
+skips / zero failures or errors**. The separate 3.11 isolated resolved-wheel
+case passes one intended case with zero skips; its JUnit SHA-256 is
+`ca356a5a6cc358222a73a56626ef6c1fb41848fd93b220f21ea99208d039ce40`.
+Reports are under `/private/tmp/wavedl-ci-current-e70b9d7.ne6XOJ/`.
+Python 3.12 remains live at this observation; neither that cell nor the whole
+Tests run is counted as passed prematurely. This is the selected non-slow,
+non-GPU suite, not a hardware/site qualification.
+
 ### Current hosted CPU and Windows installed acceptance — 2026-10-20
 
 Hosted CPU Tests run `39408337962` at product commit `2c60886` finishes
