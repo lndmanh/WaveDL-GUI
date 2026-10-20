@@ -27,6 +27,45 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Current authoring verifier schema correction — 2026-10-20
+
+Hosted browser run `39408338013` at `2c60886` passes its twelve-case aggregate
+but later fails guided-authoring, invalid-authoring and preset-import runners
+and their dependent report guards. The remaining independent cases continue;
+the full run is not accepted. Exact hosted error attribution awaits terminal
+logs/artifacts, not inferred solely from a matching local failure.
+
+Independent review reproduces a deterministic QA mismatch in all three guards:
+the shared transactional registry snapshot now includes the separate durable
+`submissions` namespace, while these guards still deep-compare old four-key
+snapshots. The correction explicitly requires `submissions: []` in empty and
+unsubmitted preview states; it does not discard the key, fabricate a bound
+execution or weaken equality. Guided approval also requires no writer intent
+before approval. New negative tests reject missing/allocated submission
+evidence, and a wizard regression executes the actual shared SQL against an
+empty schema. All **2,096 Node contract tests pass**, with zero skips/failures.
+No product, shared snapshot producer or browser asset bytes change.
+
+Fresh real-browser runs pass the corrected strict guards. Root independently
+verifies each report and its unchanged be6 manifest:
+
+| Scenario | Exact report path | Report SHA-256 |
+|---|---|---|
+| Guided progression, genuine training and automatic plotting | `/private/tmp/wavedl-wizard-current.BXsTq3/report/wizard-progression-browser.json` | `a99e1cd3d83b0f675e06878b82119137eb6a193cc4b1b1e224e7c16f941c699d` |
+| Preset refusal, correction and immutable preview | `/private/tmp/wavedl-preset-current.FbAceD/preset-import.json` | `af3dd3a77d2e437200cccd0e618f1750211e2cdab33cac69b825a7f0d1c5a9a5` |
+| Invalid fields, unsupported runtime and CV/resume/export refusal/recovery | `/private/tmp/wavedl-validation-current.YxOvSV/training-validation.json` | `fe093533fbb499b7bebbee27c12f946ef6213d3eaefd75f6b9ac85262e7ee365` |
+
+Wizard evidence has two plans, two bound executions and two completed runs after
+explicit approval, with no submissions before approval. Preset/validation
+evidence has two preview plans and no runs, bound executions or submission
+controls. All reported cleanup checks pass with empty error lists; wizard and
+preset also record explicit listener refusal. The validation report establishes
+fixture exit, service closure and profile/root removal but does not separately record
+TCP-listener refusal. These are fresh local macOS/CPU browser scopes, not
+retroactive success for the hosted failures, new GPU/site qualification or final
+T30c/T38/T42 sign-off. The queued corrected CI must run before a hosted pass is
+claimed.
+
 ### Current hosted CPU and Windows installed acceptance — 2026-10-20
 
 Hosted CPU Tests run `39408337962` at product commit `2c60886` finishes

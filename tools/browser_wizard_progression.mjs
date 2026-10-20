@@ -16,7 +16,7 @@ export function verifyWizardProgression(record) {
   assert.equal(typeof record.wizardReview?.epochs, 'string');
   assert.equal(record.wizardReview.epochs, '3');
   for (const state of [record.wizardAfterInvalidDataset, record.wizardAfterInvalidModel, record.wizardBeforeNavigation, record.wizardAfterInvalidTraining, record.wizardAfterNavigation]) {
-    assert.deepEqual(state, { runs: [], plans: 0, control: [], executions: [] });
+    assert.deepEqual(state, { runs: [], plans: 0, control: [], submissions: [], executions: [] });
   }
   assert.equal(record.wizardInvalidTraining?.message, true);
   assert.equal(record.wizardInvalidTraining?.step?.startsWith('4.'), true);
@@ -33,6 +33,7 @@ export function verifyWizardProgression(record) {
   assert(record.wizardManifest.resolved_config.data_path.endsWith('/samples.npz'));
   const preview = record.wizardPreviewRegistry;
   assert.equal(preview.plans, 1); assert.equal(preview.executions.length, 0);
+  assert.deepEqual(preview.submissions, []);
   assert.deepEqual(preview.control, [{ plan_id: record.wizardPlanId, submission_requested: 0, cancellation_requested: 0 }]);
   const submitted = record.wizardSubmitted;
   assert.equal(submitted.plans, 1); assert.equal(submitted.executions.length, 1);

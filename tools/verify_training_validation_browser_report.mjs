@@ -19,7 +19,7 @@ export const validationInputs = [
   ["Python interpreter", "python", null], ["cv-compile", "true", "false"],
   ["cv-nesterov", "0", "0.9"], ["cv-plateau", "1", "0.5"],
 ];
-const emptyState = { plans: 0, runs: [], control: [], executions: [] };
+const emptyState = { plans: 0, runs: [], control: [], submissions: [], executions: [] };
 
 export function verifyTrainingValidationRecord(record) {
   assert.equal(record.name, "training-validation");
@@ -101,6 +101,7 @@ export function verifyTrainingValidationRecord(record) {
   assert(v.successfulPreview === true);
   assert.equal(v.afterState.plans, v.beforeState.plans + 2);
   assert.equal(v.afterState.executions.length, 0);
+  assert.deepEqual(v.afterState.submissions, []);
   assert(v.afterState.control.every((x) => x.submission_requested === 0));
   assert.equal(v.beforeState.plans, 0);
   assert.deepEqual(v.beforeState, emptyState);
@@ -144,7 +145,7 @@ export function verifyTrainingValidationRecord(record) {
   assert.notEqual(recovery.planId, v.planId);
   assert(/^[0-9a-f-]{36}$/.test(recovery.planId));
   assert.deepEqual(recovery.afterState, v.afterState);
-  assert.deepEqual(recovery.beforeState, {plans:1,runs:[],executions:[],
+  assert.deepEqual(recovery.beforeState, {plans:1,runs:[],submissions:[],executions:[],
     control:v.afterState.control.filter(row => row.plan_id === v.planId)});
   assert.deepEqual(recovery.originalPlanRow, recovery.preservedPlanRow);
   assert.equal(recovery.originalPlanRow[0], v.planId);

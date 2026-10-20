@@ -5,11 +5,11 @@ import { readFileSync } from "node:fs";
 const defaults = Object.fromEntries(JSON.parse(readFileSync(
   new URL("../web/shared/training-options.json", import.meta.url), "utf8")).map(option =>
   [option.name, option.default]));
-const empty = {plans:0,runs:[],control:[],executions:[]};
+const empty = {plans:0,runs:[],control:[],submissions:[],executions:[]};
 function fixture() {
   const python = "/fixture/python";
   const assets = Object.fromEntries(Array.from({length:37},(_,i)=>["asset"+i,"a".repeat(64)]));
-  const baseline = {plans:1,runs:[],executions:[],control:[
+  const baseline = {plans:1,runs:[],submissions:[],executions:[],control:[
     {plan_id:"11111111-1111-4111-8111-111111111111",submission_requested:0,cancellation_requested:0}]};
   const state = {...structuredClone(baseline),plans:2};
   state.control.push({plan_id:"33333333-3333-4333-8333-333333333333",submission_requested:0,cancellation_requested:0});
@@ -72,6 +72,19 @@ function fixture() {
 test("complete production-shaped validation evidence is accepted",()=>{
   assert.doesNotThrow(()=>verifyTrainingValidationRecord(fixture()));
 });
+for (const phase of ['empty', 'one-plan', 'two-plan']) {
+  for (const fault of ['missing', 'allocated']) test(`rejects ${fault} ${phase} submission evidence`, () => {
+    const record = fixture();
+    const state = phase === 'empty'
+      ? record.trainingValidation.cvResumeRefusal.beforeState
+      : phase === 'one-plan'
+        ? record.trainingValidation.cvResumeRecovery.beforeState
+        : record.trainingValidation.afterState;
+    if (fault === 'missing') delete state.submissions;
+    else state.submissions.push({ plan_id: 'unowned-submission' });
+    assert.throws(() => verifyTrainingValidationRecord(record));
+  });
+}
 const tampers = {
   missingRecovery:r=>delete r.trainingValidation.cvResumeRecovery,
   recoveryWrongCv:r=>r.trainingValidation.cvResumeRecovery.request.config.cv=0,

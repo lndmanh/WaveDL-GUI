@@ -23,7 +23,7 @@ function fileEvidence(value, content, suffix) {
   assert(value.filename.endsWith(`/preset-import-${suffix}.json`));
 }
 function registry(value, rows) {
-  assert.deepEqual(value, { runs: [], plans: rows.length, control: rows.map(row => ({ plan_id: row[0], submission_requested: 0, cancellation_requested: 0 })), executions: [] });
+  assert.deepEqual(value, { runs: [], plans: rows.length, control: rows.map(row => ({ plan_id: row[0], submission_requested: 0, cancellation_requested: 0 })), submissions: [], executions: [] });
 }
 function rowEvidence(row, approved, interpreter) {
   assert.equal(row.length, 3); uuid(row[0]);
