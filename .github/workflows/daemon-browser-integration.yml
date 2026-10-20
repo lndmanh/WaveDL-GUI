@@ -669,6 +669,8 @@ jobs:
         run: npm run generate
       - name: Vendor verified generated assets into the daemon
         run: python tools/vendor_web_assets.py
+      - name: Capture exact generated asset manifest for evidence
+        run: cp -- src/wavedl_daemon/web_assets/.wavedl-assets.json "$TMPDIR/browser-build-manifest.json"
       - name: Install tested browser CLI and Chromium runtime
         run: |
           npm install --global agent-browser@0.26.0
@@ -1412,6 +1414,7 @@ jobs:
           name: browser-acceptance-ubuntu-py3.11-node24
           # Never upload fixture roots, credential files, downloads, HAR, or logs.
           path: |
+            ${{ runner.temp }}/wavedl-browser-ci/browser-build-manifest.json
             ${{ runner.temp }}/wavedl-browser-ci/retained-browser.json
             ${{ runner.temp }}/wavedl-browser-ci/retained-active-draft.json
             ${{ runner.temp }}/wavedl-browser-ci/retained-rollback-browser.json

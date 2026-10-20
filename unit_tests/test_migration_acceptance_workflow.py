@@ -80,6 +80,75 @@ def assert_runtime_tmpdir(job):
     assert 'printf \'TMPDIR=%s\\n\' "$TMPDIR" >> "$GITHUB_ENV"' in first["run"]
 
 
+def test_generated_manifest_is_copied_after_vendoring_and_uploaded_exactly(workflow):
+    steps = workflow["jobs"]["chromium-cpu"]["steps"]
+    vendor = next(
+        step for step in steps if step.get("run") == "python tools/vendor_web_assets.py"
+    )
+    capture = next(
+        step
+        for step in steps
+        if step.get("name") == "Capture exact generated asset manifest for evidence"
+    )
+    assert capture["run"] == (
+        "cp -- src/wavedl_daemon/web_assets/.wavedl-assets.json "
+        '"$TMPDIR/browser-build-manifest.json"'
+    )
+    assert not capture.get("continue-on-error", False)
+    assert "if" not in capture
+    first_browser = next(
+        step for step in steps if step.get("run") == "node tools/run_web_acceptance.mjs"
+    )
+    assert steps.index(vendor) < steps.index(capture) < steps.index(first_browser)
+    upload = next(
+        step
+        for step in steps
+        if step.get("uses", "").startswith("actions/upload-artifact@")
+    )
+    paths = upload["with"]["path"].splitlines()
+    assert (
+        paths.count("${{ runner.temp }}/wavedl-browser-ci/browser-build-manifest.json")
+        == 1
+    )
+    assert not any("web_assets/" in path for path in paths)
+    assert upload["if"] == "always()"
+
+
+@pytest.mark.parametrize("source_present", [True, False])
+def test_manifest_capture_preserves_original_bytes_or_fails(
+    workflow, tmp_path, source_present
+):
+    """Copy the producer bytes, never reconstruct a digest-matching stand-in."""
+    step = next(
+        step
+        for step in workflow["jobs"]["chromium-cpu"]["steps"]
+        if step.get("name") == "Capture exact generated asset manifest for evidence"
+    )
+    source = tmp_path / "src/wavedl_daemon/web_assets/.wavedl-assets.json"
+    source.parent.mkdir(parents=True)
+    content = b'{\n  "asset.js": "unmodified fixture bytes"\n}\n'
+    if source_present:
+        source.write_bytes(content)
+    destination = tmp_path / "evidence with spaces"
+    destination.mkdir()
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "TMPDIR": str(destination)},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    captured = destination / "browser-build-manifest.json"
+    if source_present:
+        assert result.returncode == 0
+        assert captured.read_bytes() == content
+    else:
+        assert result.returncode != 0
+        assert not captured.exists()
+
+
 @pytest.mark.skipif(
     os.name != "posix", reason="Ubuntu runner uses POSIX shell and modes"
 )
