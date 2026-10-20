@@ -99,6 +99,44 @@ and Windows installed CPU `39415927729` are also live; Lint `39415927702` passes
 Their final outcomes remain to be inspected; no current workflow was cancelled
 to make this push. Application/runtime/browser asset bytes remain unchanged.
 
+#### Fresh e70 static and native results
+
+Static-client run `39415927489` subsequently finishes success: lint, read-only
+formatting, typecheck, **820 tests passed / one skipped**, generation, vendoring
+and all **38 generated-worker tests** pass. Root inspects its uploaded raw
+generation through the vendor's input inventory checks: 35 generated files,
+without daemon-added metadata. Those raw files are not relabelled as the
+38-file managed daemon package. Artifact `12261692078` has digest
+`c5d06ed494956915a592254f45643fc7cc23ec6e394103a433e16b0bb55575f3`;
+root evidence: `/private/tmp/wavedl-static-e70b9d7.LT1FMg/` and adjacent CI log.
+
+Foundation run `39415927594` finishes success on all eight jobs. Root runs the
+current strict guard against both Windows report pairs: each has all 15 required
+native cases passed, 2,371 total passes, 456 explicit skips and no failures/errors.
+Root additionally checks all seven wire-boundary cases and the installed TCP
+daemon test in each XML; raw native daemon exit remains 3. This remains the
+dependency-light filesystem/process/daemon foundation scope, not GPU proof.
+
+Windows installed CPU run `39415927729` also finishes success on both versions.
+Root independently verifies exactly one intended isolated lifecycle case,
+zero skips/failures/errors, raw daemon exit 3, exact `e70b9d7` source identity
+and all 38 generated asset entries in each artifact metadata record. Runtime
+is Windows AMD64, Python 3.11.9/3.13.16 and Torch 2.14.1+cpu. The passing case
+enforces offline dependency consistency, no Qt/checkout leakage, actual CPU
+training/publication, authenticated installed daemon/client checks, owned Job
+cleanup without forced shutdown, lock release and SQLite integrity.
+
+| Python | Exact wheel SHA-256 | JUnit SHA-256 | Case seconds |
+|---|---|---|---|
+| 3.11 | `b8c5190128d53496b0cdff75454096e70ca8390ede11346d3245a22c7a6e6aba` | `a1da9fbfd013c42faa75b9bf4010a6199df010f9a2d3528f942fe24ac8d44774` | 147.316 |
+| 3.13 | `632819a260b3cbc06b3157c39d8b71e57f197e9556c309923e352c2ef5d972f9` | `1aeed84ae4eb86a8dc3655cf725dc38ffa7712cf249cd4584c69e8177b37c852` | 148.931 |
+
+Authoritative XML/metadata root: `/private/tmp/wavedl-native-e70b9d7.KZdNl1/`.
+Each CI build has its own generated identity; its manifest is not silently
+reclassified as be6. General CPU Tests `39415927698` and full browser run
+`39415927597` remain live after these results; full hosted acceptance and the
+original GPU/site/final-release gates remain open.
+
 ### Current hosted CPU and Windows installed acceptance — 2026-10-20
 
 Hosted CPU Tests run `39408337962` at product commit `2c60886` finishes
