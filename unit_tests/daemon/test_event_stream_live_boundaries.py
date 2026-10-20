@@ -6,6 +6,7 @@ runtime negotiation is deliberately the small accepted-controller test seam.
 """
 
 import asyncio
+import time
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
 from types import SimpleNamespace
@@ -49,7 +50,7 @@ class AcceptedController:
 
 
 @asynccontextmanager
-async def loopback_app(app, *, on_body=None, corrupt_control=None):
+async def loopback_app(app, *, on_body=None, corrupt_control=None, cleanup_timeout=5):
     """Bridge real ASGI into byte-sized HTTP chunks, including split CRLF/UTF-8."""
     tasks, requests, failures = set(), [], []
 
@@ -138,14 +139,28 @@ async def loopback_app(app, *, on_body=None, corrupt_control=None):
     try:
         yield f"http://127.0.0.1:{port}", requests
     finally:
-        listener.close()
-        await listener.wait_closed()
-        pending = tuple(tasks)
-        for task in pending:
-            task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
+
+        async def cleanup():
+            listener.close()
+            await listener.wait_closed()
+            pending = tuple(tasks)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        # Even an already-expired wire deadline must not leave teardown with an
+        # unbounded await. Normal teardown also remains inside that wire budget.
+        await asyncio.wait_for(cleanup(), timeout=cleanup_timeout)
         assert not tasks, "Loopback request tasks leaked"
         assert not failures, failures
+
+
+@asynccontextmanager
+async def wire_phase(app, *, timeout=5, **options):
+    """Bound real listener startup, wire exchange and cleanup, not DB setup."""
+    async with asyncio.timeout(timeout):
+        async with loopback_app(app, cleanup_timeout=timeout, **options) as connection:
+            yield connection
 
 
 def authenticated_app(ingestor, store, broker):
@@ -169,7 +184,7 @@ def test_authenticated_commit_reject_restart_and_sparse_attempt_replay(tmp_path)
             try:
                 ingestor = Ingestor(registry, AcceptedController(), broker, None)
                 app = authenticated_app(ingestor, store, broker)
-                async with loopback_app(app) as (url, _):
+                async with wire_phase(app) as (url, _):
                     client = HttpTransport(url, TOKEN)
                     route = f"/api/runs/{RUN}/events"
                     body = {"attempt": 1, "events": [asdict(event(0))]}
@@ -228,7 +243,7 @@ def test_authenticated_commit_reject_restart_and_sparse_attempt_replay(tmp_path)
                         disconnected.set()
 
                 app = authenticated_app(None, store, broker)
-                async with loopback_app(app, on_body=finish) as (url, requests):
+                async with wire_phase(app, on_body=finish) as (url, requests):
                     received = [
                         item
                         async for item in HttpTransport(url, TOKEN).events(
@@ -247,7 +262,7 @@ def test_authenticated_commit_reject_restart_and_sparse_attempt_replay(tmp_path)
             finally:
                 store.close()
 
-    asyncio.run(asyncio.wait_for(scenario(), timeout=5))
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize(
@@ -276,7 +291,7 @@ def test_real_overflow_and_corrupt_controls_do_not_advance(tmp_path, corrupt_con
 
                 app = authenticated_app(None, store, broker)
                 delivered, committed_cursor = [], (0, -1)
-                async with loopback_app(
+                async with wire_phase(
                     app,
                     on_body=overflow_after_delivery,
                     corrupt_control=corrupt_control,
@@ -312,7 +327,7 @@ def test_real_overflow_and_corrupt_controls_do_not_advance(tmp_path, corrupt_con
                     if b"id: 1:1" in payload:
                         disconnected.set()
 
-                async with loopback_app(app, on_body=finish_reconnect) as (
+                async with wire_phase(app, on_body=finish_reconnect) as (
                     url,
                     requests,
                 ):
@@ -334,4 +349,49 @@ def test_real_overflow_and_corrupt_controls_do_not_advance(tmp_path, corrupt_con
             finally:
                 store.close()
 
-    asyncio.run(asyncio.wait_for(scenario(), timeout=5))
+    asyncio.run(scenario())
+
+
+def test_durable_setup_does_not_consume_wire_phase_deadline(tmp_path):
+    async def scenario():
+        with Registry(tmp_path / "registry.db") as registry:
+            store, broker = EventLogStore(registry.path), EventBroker()
+            try:
+                # Stand in for slow synchronous Windows migrations/fsync. The
+                # original whole-scenario deadline expired at the next await.
+                time.sleep(5.1)
+                app = authenticated_app(None, store, broker)
+                async with wire_phase(app):
+                    pass
+                assert not broker._subscribers
+            finally:
+                store.close()
+
+    asyncio.run(scenario())
+
+
+def test_stalled_wire_phase_times_out_and_reaps_real_stream(tmp_path):
+    async def scenario():
+        with Registry(tmp_path / "registry.db") as registry:
+            registry.apply_events(RUN, 1, [event(0)])
+            store, broker = EventLogStore(registry.path), EventBroker()
+            delivered = []
+            try:
+                app = authenticated_app(None, store, broker)
+                with pytest.raises(TimeoutError):
+                    async with wire_phase(app) as (url, _):
+                        async for item in HttpTransport(url, TOKEN).events(RUN):
+                            delivered.append(item)
+                            # No finish callback: a real subscriber waits for
+                            # another event until the wire deadline cancels it.
+                assert delivered == [event(0)]
+                assert not broker._subscribers
+                assert not [
+                    task
+                    for task in asyncio.all_tasks()
+                    if task is not asyncio.current_task() and not task.done()
+                ]
+            finally:
+                store.close()
+
+    asyncio.run(scenario())

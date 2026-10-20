@@ -139,7 +139,10 @@ class _WindowsInstalledDaemon:
             )
             if record_property is not None:
                 record_property("native_windows_daemon_exit_code", result.returncode)
-            assert type(result.returncode) is int and result.returncode != 259
+            # Native Uvicorn SIGBREAK re-raise was observed as WinCRT exit 3.
+            # Keep the raw status, but never accept arbitrary crashes merely
+            # because the shutdown log was emitted before the failure.
+            assert type(result.returncode) is int and result.returncode in {0, 3}
             assert not result.timed_out and not result.cancelled
             assert not result.stdout_truncated and not result.stderr_truncated
             assert self.api.observed_empty and self.api.forced_kills == 0
@@ -356,9 +359,8 @@ def build_installed(tmp_path_factory, *, wheelhouse=None):
             "pip",
             "install",
             "--no-index",
-            "--ignore-installed",
             *(
-                ["--no-deps", str(wheel)]
+                ["--ignore-installed", "--no-deps", str(wheel)]
                 if wheelhouse is None
                 else [
                     "--only-binary=:all:",

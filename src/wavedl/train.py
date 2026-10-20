@@ -138,6 +138,7 @@ from wavedl.core.checkpoint_selection import (
 from wavedl.core.events import MetricPayload, StatePayload, SupersedePayload
 from wavedl.core.generations import published_generations
 from wavedl.core.layout import RunLayout
+from wavedl.core.stdio import configure_utf8_stdio
 from wavedl.core.training_cli import parse_training_args
 from wavedl.journal import _read_manifest
 from wavedl.models import build_model, get_model, list_models
@@ -595,6 +596,7 @@ def train_single_trial(
 # MAIN TRAINING FUNCTION
 # ==============================================================================
 def main():
+    configure_utf8_stdio()
     args, parser = parse_args()
 
     # Import custom model modules if specified

@@ -38,6 +38,7 @@ def test_native_windows_cpu_matrix_is_separate_bounded_and_read_only():
         "web/**",
         "unit_tests/daemon/test_installed_cli.py",
         "unit_tests/daemon/test_installed_cli_native_helpers.py",
+        "unit_tests/test_launcher_stdio.py",
         "tools/run_user_owned_pytest.py",
         "unit_tests/test_windows_cpu_acceptance_workflow.py",
         ".github/workflows/windows-cpu-acceptance.yml",
@@ -126,7 +127,8 @@ def test_acceptance_is_one_explicit_owned_offline_case_with_no_optional_fallback
     assert contracts["run"] == (
         "python -m pytest --noconftest "
         "unit_tests/test_windows_cpu_acceptance_workflow.py "
-        "unit_tests/daemon/test_installed_cli_native_helpers.py -q"
+        "unit_tests/daemon/test_installed_cli_native_helpers.py "
+        "unit_tests/test_launcher_stdio.py -q"
     )
     assert steps().index(
         selected("Install declared daemon and acceptance dependencies")

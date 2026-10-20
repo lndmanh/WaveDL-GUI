@@ -68,6 +68,7 @@ from wavedl.core.inference_cli import (  # noqa: E402
     validate_import_modules,
 )
 from wavedl.core.layout import OperationKind  # noqa: E402
+from wavedl.core.stdio import configure_utf8_stdio  # noqa: E402
 from wavedl.models import build_model, list_models  # noqa: E402
 from wavedl.operations import (  # noqa: E402
     emit_operation_artifact,
@@ -898,6 +899,7 @@ def plot_results(
 # MAIN
 # ==============================================================================
 def main():
+    configure_utf8_stdio()
     args = parse_args()
     operation, runtime = operation_selection(args)
     requested = runtime.device if args.device == "auto" else args.device

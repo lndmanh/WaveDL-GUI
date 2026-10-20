@@ -27,6 +27,104 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Current Windows installed-runtime findings and corrections — 2026-10-20
+
+The first native Windows installed CPU run `39403557646` at `2ca2a26` fails
+honestly, with one intended case / one failure / zero skips per Python version.
+Python 3.11 stops at isolated `pip check`: Torch requires setuptools >=77 but
+the fresh environment reports bundled 65.5. The fixture's `--ignore-installed`
+is now restricted to the cheap inherited-site/no-dependencies lane; isolated
+offline resolution can replace bundled distributions normally inside its owned
+venv. No host package, dependency constraint or `pip check` assertion is weakened.
+The exact stale-metadata mechanism is inferred from the install policy, not
+proved by a retained failed-venv inventory. Python 3.13 reaches actual installed
+CPU training, then fails on an emoji printed to redirected cp1252 stdout.
+
+The product correction establishes a shared, stdlib-only UTF-8 CLI output
+boundary for launcher, direct training and direct evaluation/plot entry points.
+Configuration occurs before parsing/logging, not at import; Python worker
+environments are copied and explicitly aligned to UTF-8. No stdin, user-data
+encoding or process-global environment is modified. Seven tests exercise
+legacy cp1252/ASCII streams, real Python children and direct entry ordering.
+Real CPU training and checkpoint-backed direct inference under initially strict
+cp1252 redirection pass with intact UTF-8 logs, completed runtime exits and
+finite published predictions under `/private/tmp/wavedl-cp1252-cli.45pmdD/`.
+This is a genuine local legacy-codepage reproduction, not native Windows
+certification or a workflow-only encoding workaround. Independent review finds
+no blocker; native Windows rerun remains required.
+
+Native foundations run `39403557545` passes Linux/macOS and both tmpfs lanes,
+but Windows fails a stale timeout unit-test seam: it mocks Popen although native
+checked execution now uses the Job supervisor. The unit probe now explicitly
+tests both platform seams and pre-spawn bounds. Windows 3.13 additionally times
+out during the test-owned numeric loopback listener's address resolution, before
+the SSE/auth scenario begins; this separate failure is under investigation, not
+a proven product SSE defect or a waived deadline. All 15 mandatory Windows safety
+cases still pass on both versions. Real installed TCP bootstrap/auth/shutdown passes
+on both versions with observed raw exit code 3, completed shutdown, no forced Job
+kill and released resources. The acceptance guard now permits only integer
+0/observed 3 rather than any unknown native exit status; unexpected crashes
+remain failures. Neither of these foundation facts is a Windows ML/GPU pass.
+
+The live-boundary fixture correction separates synchronous durable provisioning
+from each unchanged five-second listener/wire phase. Normal and expired-phase
+cleanup remains explicitly bounded and checked for leaked request tasks/broker
+subscribers. Regression setup deliberately lasts 5.1 seconds outside the wire
+budget; a genuinely stalled authenticated SSE stream still times out at five
+seconds and is reaped. All seven tests pass, with real registry close/reopen,
+durable writes, 401/409 rejection and sparse/overflow replay assertions preserved.
+No network-family workaround, production timeout increase or skip is introduced.
+The cancellation trace alone does not establish which synchronous setup action
+consumed the hosted deadline; the controlled reproduction proves that mechanism
+is sufficient, not that DNS was the cause.
+
+Root independently verifies the UTF-8 product batch with **2,881 core/daemon
+passes / 19 explicit skips**, **44** runtime-operation/hosted-training passes,
+seven stdio tests, and three installed local CLI/TCP/training checks. The full
+core/daemon report predates the extra live-boundary timing regressions; those
+seven tests pass separately. Report paths:
+`/private/tmp/wavedl-utf8-native-regression-20261020.xml`,
+`/private/tmp/wavedl-utf8-operations-regression-20261020.xml`, and
+`/private/tmp/wavedl-utf8-installed-local-20261020.xml`. The last uses inherited
+host dependencies, not a fresh dependency-resolved certificate. Pinned Ruff
+lint/read-only format checks pass 289 scoped files. Native Windows confirmation
+and fresh exact-artifact recertification remain open for this product correction.
+
+The fresh full local browser aggregate at `2ca2a26` independently strict-passes
+**12/12**, including the stronger lost-ACK history, exact artifact fault and
+post-close download check. Report:
+`/private/tmp/wavedl-default12-fresh.A9kOh7/wavedl-browser-acceptance-RSDPn0/summary.json`,
+SHA-256 `b7f2c95f58fd9ce204f04355cdc36831817aa9a0cd15555d4e8f73aa973127d0`.
+All be6 hashes and owned cleanup requirements pass. This run predates the UTF-8
+product change above; it is not silently relabelled as its acceptance. Hosted
+browser `39403557516` is still live and is not promoted to success.
+
+### Current reviewed batch and native MPS application path — 2026-10-20
+
+Commit `2ca2a269b9d22bf70b54ff0f57774b979003acc4` is pushed to the approved
+review branch. Its lint lane passes; hosted browser `39403557516`, CPU Tests
+`39403557671`, native foundations `39403557545` and the new Windows installed
+CPU lane `39403557646` are in progress, not acceptance. Fresh default twelve-case
+local browser execution is also running against its stronger mandatory lost-ACK
+and artifact-fault history checks. Unrelated dirty historical Qt files and the
+two original staged Qt blobs remain unchanged. No tag or publication is created.
+
+The available macOS MPS slice additionally passes the real hosted Local
+application path, not only standalone CLI inference. Authenticated public ASGI
+routes adopt the verified immutable CPU-trained checkpoint, preserve its truthful
+`supervision_lost` state, pin manifest/COMPLETE hashes, plan and submit explicit
+MPS inference, then download finite hash/size-verified predictions. Actual runtime
+provenance reports MPS allocation; both backend and runtime complete with code
+zero. Results match CPU within the same declared tolerance. Root independently
+rechecks journals, immutable source/output inventories and comparison; child PID
+is absent before shutdown, services close, dispatch lock releases and SQLite
+integrity is `ok`. Report:
+`/private/tmp/wavedl-mps-hosted.I9RZ2f/report.json`, SHA-256
+`fe242dfedcaeee6add579d4c6f279e0f7ec451e5a9bce05a793f9f1ed8223592`.
+Fallback is disabled. This is public ASGI + real native MPS Local execution,
+not browser interaction, cancellation, CUDA/distributed GPU-tree or Slurm/site
+acceptance. No new production feature was added to obtain this evidence.
+
 ### Hosted browser failure follow-up — 2026-10-20
 
 Run `39255215031` at `32c25fc` is terminal **failure**, not aggregate acceptance.

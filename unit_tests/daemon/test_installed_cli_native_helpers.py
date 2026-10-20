@@ -92,8 +92,9 @@ def test_windows_daemon_readline_snapshots_only_owned_drain():
     assert instance.process.calls == []
 
 
-def test_windows_daemon_records_actual_exit_without_coercion(capsys):
-    instance = daemon(result(returncode=0xC000013A))
+@pytest.mark.parametrize("returncode", [0, 3])
+def test_windows_daemon_records_actual_exit_without_coercion(capsys, returncode):
+    instance = daemon(result(returncode=returncode))
     signals = []
     properties = []
     instance.api.kernel.GenerateConsoleCtrlEvent = lambda event, pid: (
@@ -103,8 +104,8 @@ def test_windows_daemon_records_actual_exit_without_coercion(capsys):
         b"output",
         b"Application shutdown complete",
     )
-    assert "3221225786" in capsys.readouterr().out
-    assert properties == [("native_windows_daemon_exit_code", 0xC000013A)]
+    assert f"Native installed daemon exit code: {returncode}" in capsys.readouterr().out
+    assert properties == [("native_windows_daemon_exit_code", returncode)]
     assert signals == [(1, 123)]  # Never broadcast to process group zero.
     assert instance.process.calls == [
         ("wait", 15),
@@ -117,7 +118,11 @@ def test_windows_daemon_records_actual_exit_without_coercion(capsys):
 @pytest.mark.parametrize(
     "changes",
     [
+        {"returncode": 1},
         {"returncode": 259},
+        {"returncode": 7},
+        {"returncode": 0xC000013A},
+        {"returncode": True},
         {"stderr": b"shutdown did not finish"},
         {"timed_out": True},
         {"cancelled": True},

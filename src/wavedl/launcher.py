@@ -43,6 +43,11 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from wavedl.core.stdio import (
+    configure_utf8_stdio as _configure_cli_stdio,
+    utf8_stdio_environment as _training_stdio_environment,
+)
+
 
 _GRACE_SECONDS = 30.0
 # A supervisor owns the inherited POSIX group (or Windows Job Object). This is
@@ -587,6 +592,7 @@ def print_summary(
 
 def main() -> int:
     """Main entry point for wavedl-train command."""
+    _configure_cli_stdio()
     # Fast path for utility flags (avoid accelerate launch overhead)
     exit_code = handle_fast_path_args()
     if exit_code is not None:
@@ -618,7 +624,10 @@ def main() -> int:
     from wavedl.launch_runtime import prepare_runtime
 
     train_args, child_environment = prepare_runtime(
-        train_args, args, python=sys.executable, environment=dict(os.environ)
+        train_args,
+        args,
+        python=sys.executable,
+        environment=_training_stdio_environment(dict(os.environ)),
     )
 
     # Build accelerate launch command
