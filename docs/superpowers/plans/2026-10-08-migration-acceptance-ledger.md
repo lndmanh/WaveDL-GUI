@@ -31,9 +31,23 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 Hosted browser run `39408338013` at `2c60886` passes its twelve-case aggregate
 but later fails guided-authoring, invalid-authoring and preset-import runners
-and their dependent report guards. The remaining independent cases continue;
-the full run is not accepted. Exact hosted error attribution awaits terminal
-logs/artifacts, not inferred solely from a matching local failure.
+and their dependent report guards. It finishes **failure**, not full acceptance:
+177 steps succeed, six fail, and four skip. Two skips are later F05 Python/Node
+contract checks gated by prior success; two are post-job setup/cache steps.
+The actual F05 browser scenario and its strict guard pass, but those skipped
+contract steps are not counted as hosted passes.
+
+Root and independent review inspect the completed logs. Each root failure is
+the exact extra `submissions: []` mismatch: wizard guard line 19, validation
+guard line 38 and preset guard line 26 in that recorded source. The dependent
+wizard guard sees an empty report directory; validation/preset guards report
+missing output files. This confirms the local reproduction without attributing
+all assertion failures to one undifferentiated error. Artifact `12260777857`
+has digest `9441fcc90945a0000caad746d91e172270f2f31db26686e2f6656c70c931029d`;
+root evidence is under `/private/tmp/wavedl-browser-39408338013-root.Iotpe8/`.
+Its 82 uploaded files include 73 JSON files and 59 reports with cleanup objects;
+all those recorded cleanup flags pass and error lists are empty. Missing failed
+case reports are not fabricated or counted as successes.
 
 Independent review reproduces a deterministic QA mismatch in all three guards:
 the shared transactional registry snapshot now includes the separate durable
@@ -65,6 +79,25 @@ TCP-listener refusal. These are fresh local macOS/CPU browser scopes, not
 retroactive success for the hosted failures, new GPU/site qualification or final
 T30c/T38/T42 sign-off. The queued corrected CI must run before a hosted pass is
 claimed.
+
+The genuine same-epoch/patience report also passes root's record verifier and
+PNG checks: epoch 1 is running with patience 0/2; epoch 3 completes with patience
+2/2 and best/validation loss `0.9127883911132812`. The observed runtime exits
+zero, its PID is absent and all recorded cleanup checks pass. Report SHA-256:
+`d9f50ef9a7968df3b6e4ba2fa69bdc1d7c164af3287f2f47f3372f7c4cb9fd7c`.
+Root visually inspects the final screenshot. The CI-generated asset manifest
+hash is `8bf068f687ef20510e462d89a0fb702cb0a17e3f88a7e8b50a492f31d65b1605`,
+not the checkout's be6 build. Actual raw manifest bytes were not uploaded by
+that older workflow; on-runner current-file guards pass, but no offline
+current-be6 file-verifier claim is made for those reports.
+
+After that run is terminal, reviewed fixes are pushed to the approved review
+branch at `e70b9d7e87f5dc2060090813301c864733fac0cc`. Fresh browser run
+`39415927597` is live with the keyboard gate and exact raw-manifest retention.
+Fresh static-client `39415927489`, Tests `39415927698`, foundations `39415927594`
+and Windows installed CPU `39415927729` are also live; Lint `39415927702` passes.
+Their final outcomes remain to be inspected; no current workflow was cancelled
+to make this push. Application/runtime/browser asset bytes remain unchanged.
 
 ### Current hosted CPU and Windows installed acceptance — 2026-10-20
 
