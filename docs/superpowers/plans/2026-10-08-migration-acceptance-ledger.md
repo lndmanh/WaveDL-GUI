@@ -27,6 +27,31 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Genuine native macOS MPS training cancellation — 2026-10-20
+
+At local product commit `4315d77da446cd04263dd60b4ee564749405280e`, one bounded
+public authenticated ASGI/HostedServices/LocalBackend run with device `auto`
+actually selects MPS (fallback disabled), trains a builtin CNN and emits finite
+epoch-one metrics before durable cancellation. The observed native tree includes
+startup, Accelerate, training and resource-tracker children. Every observed PID
+and its process group is absent **before service close**. Native backend and batch
+are cancelled with uncertainty false; genuine runtime exit is 130 and wrapper
+exit 143. Exactly one plan, execution, provenance and attempt remain, with
+cancellation requested/delivered and no duplicate attempt-history allocation.
+Root independently checks journals, identities and the frozen run inventory.
+
+Evidence report: `/private/tmp/wavedl-mps-cancel.OF1nqw/report.json`, SHA-256
+`189460bc72b7fd212f840e3e49afa9af61fc7e744674f3bf98d9a9a94fb37d54`.
+The script and synthetic dataset are retained in the same private directory.
+Output/publication inventory stays unchanged for one second after confirmed
+terminal cancellation and native tree disappearance. A second valid generation
+completed during the cancellation-request-to-signal window; no claim of zero
+publication during in-flight cancellation is made. Service thread/pool cleanup,
+released dispatch lock and SQLite integrity pass. This closes a real single-MPS
+macOS training-tree slice, not CUDA, Windows/Linux GPU, distributed GPU, browser,
+real Slurm/site or full F11/T30c/T38/T42 sign-off. No repository edits or installs
+were needed to obtain this runtime evidence.
+
 ### Current Windows installed-runtime findings and corrections — 2026-10-20
 
 The first native Windows installed CPU run `39403557646` at `2ca2a26` fails
