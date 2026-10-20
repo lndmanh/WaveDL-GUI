@@ -113,6 +113,41 @@ function datasetRecord() {
   }, finalRegistry: structuredClone(state)};
 }
 
+function lostAckRecord() {
+  const identity = {planId: '11111111-1111-4111-8111-111111111111',
+    runId: '22222222-2222-4222-8222-222222222222', requestId: '33333333-3333-4333-8333-333333333333'};
+  const source = {plan_id: identity.planId, run_id: identity.runId, request_id: identity.requestId,
+    state: 'submitted', receipt_run_id: identity.runId, receipt_request_id: identity.requestId,
+    supervisor_id: 'a'.repeat(43), pid: 1234};
+  const accepted = {plans: 1, runs: [], control: [{plan_id: identity.planId,
+    submission_requested: 1, cancellation_requested: 0}], submissions: [source], executions: []};
+  const before = structuredClone(accepted);
+  before.control[0].submission_requested = 0;
+  before.submissions = [];
+  const bound = structuredClone(accepted);
+  bound.executions = [{plan_id: identity.planId, run_id: identity.runId,
+    request_id: identity.requestId, supervisor_id: source.supervisor_id, pid: source.pid, attempt: 1}];
+  return {approvedPlan: JSON.stringify({run_id: identity.runId}), lostAckRecovery: {
+    scope: 'Observed durable writer submission and verified initial runtime binding; not training completion or lifetime exactly-once proof',
+    identity, before, accepted, recovered: structuredClone(accepted), bound,
+    acknowledged: structuredClone(bound), acknowledgedUi: {disabled: true, runId: identity.runId},
+  }};
+}
+
+function artifactTamperRecord() {
+  const runId = '11111111-1111-4111-8111-111111111111';
+  const identity = {size: 123, sha256: 'a'.repeat(64)};
+  const artifact = {generation: 'gen-000001', path: 'training_history.csv', ...identity};
+  const path = `/api/runs/${runId}/artifacts/${artifact.generation}/${artifact.path}`;
+  return {artifact, approvedPlan: JSON.stringify({run_id: runId}),
+    artifactTamperStage: 'verified', artifactTamperDownloads: [],
+    artifactTamperReceiptsFrozenAfterCleanup: true,
+    refusalUi: 'Artifact verification failed or download was interrupted. No file was published.',
+    artifactTamperReceipts: [{phase: 'arrival', path}, {phase: 'complete', path, status: 200,
+      tampered: true, original: {...identity}, published: {...identity}, diskAfter: {...identity},
+      wire: {size: identity.size, sha256: 'b'.repeat(64)}}]};
+}
+
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'wavedl-report-guard-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -135,6 +170,8 @@ async function fixture(t) {
       ...(name === 'authoring-parity' ? authoringRecord(workspace) : {}),
       ...(name === 'download-names' ? nativeDownloadRecord() : {}),
       ...(name === 'dataset-parity' ? datasetRecord() : {}),
+      ...(name === 'lost-ack' ? lostAckRecord() : {}),
+      ...(name === 'artifact-tamper' ? artifactTamperRecord() : {}),
       ...(name === 'live-port-reuse' ? {
         initialRuntimeCursor: { runId: 'owned-run', attempt: 1, seq: 3, eventType: 'metric' },
         initialMetricEvidence: { persistedMetricCount: 1, persistedLogCount: 1, producerJournalMatches: true, durableCursors: [{attempt: 1, seq: 3}] },
@@ -193,6 +230,31 @@ test('accepts exactly twelve passed cases tied to the generated build and cleanu
   assert.deepEqual(await verifyWorkspace(f.root, f.manifest), {
     cases: 12, assetManifestSha256: f.hash,
   });
+});
+
+for (const [name, mutate] of [
+  ['missing writer history', r => { delete r.lostAckRecovery; }],
+  ['foreign recovery request', r => { r.lostAckRecovery.recovered.submissions[0].request_id = 'foreign'; }],
+  ['duplicate writer submission', r => { r.lostAckRecovery.accepted.submissions.push(r.lostAckRecovery.accepted.submissions[0]); }],
+  ['unbound final execution', r => { r.lostAckRecovery.bound.executions = []; }],
+  ['rotated runtime attempt', r => { r.lostAckRecovery.acknowledged.executions[0].attempt = 2; }],
+]) test(`aggregate rejects lost ACK ${name}`, async t => {
+  const f = await fixture(t);
+  mutate(f.summary.cases.find(record => record.name === 'lost-ack'));
+  await f.save();
+  await assert.rejects(verifySummary(f.summaryPath, f.manifest));
+});
+
+for (const [name, mutate] of [
+  ['legacy fault without receipt', r => { delete r.artifactTamperReceipts; }],
+  ['metadata consumer fault', r => { r.artifact.path = 'checkpoint_selection.json'; }],
+  ['uncorrupted response', r => { r.artifactTamperReceipts[1].wire.sha256 = r.artifact.sha256; }],
+  ['disk mutation', r => { r.artifactTamperReceipts[1].diskAfter.sha256 = 'c'.repeat(64); }],
+]) test(`aggregate rejects artifact ${name}`, async t => {
+  const f = await fixture(t);
+  mutate(f.summary.cases.find(record => record.name === 'artifact-tamper'));
+  await f.save();
+  await assert.rejects(verifySummary(f.summaryPath, f.manifest));
 });
 
 test('accepts the owned report workspace directly through the CLI path helper', async (t) => {

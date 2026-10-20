@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { deflateSync } from 'node:zlib';
-import { mkdtemp, writeFile, symlink, truncate, rm, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, symlink, truncate, rm, readdir, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -9,6 +9,51 @@ import { createHash } from 'node:crypto';
 import { runInNewContext } from 'node:vm';
 import { pngEvidence, downloadedBytes, nativeDragPoints, parseNativePngName, completedNativePng, redactNativeTabs, diagnosticFileSignature, unexpectedFilePrefix, directoryCheckpoint, datasetCommandBoundaries, datasetExportScope, datasetExportReference, readyDatasetExportReference } from './browser_dataset_parity.mjs';
 import { createBrowserActions } from './browser_actions.mjs';
+import { settledDatasetRefusalExpression } from './browser_dataset_parity.mjs';
+import { retainFailurePrefixes } from './browser_failure_evidence.mjs';
+
+test('Dataset replacement waits through transient loading for a settled refusal without old charts or tabs', () => {
+  const status = { textContent: 'Loading bounded daemon preview…' };
+  const refresh = { textContent: 'Refresh preview', disabled: true };
+  const stop = { textContent: 'Stop preview', disabled: false };
+  let buttons = [refresh, stop], figure = null, tab = null;
+  const panel = {
+    querySelectorAll: selector=>selector === 'button' ? buttons : [status],
+    querySelector: selector=>selector === 'figure' ? figure : tab,
+  };
+  const observe = ()=>runInNewContext(settledDatasetRefusalExpression(), { document: { querySelector: ()=>panel } });
+  assert.equal(observe(), false, 'Cleared charts during loading are not refusal');
+  status.textContent = 'The daemon request failed. Verify connectivity and the operation outcome before retrying.';
+  assert.equal(observe(), false, 'Status alone cannot bypass in-flight public controls');
+  refresh.disabled = false;
+  buttons = [refresh];
+  assert.equal(observe(), true);
+  assert.equal(observe(), true, 'Durable failure remains ready on a later observation');
+  figure = {};
+  assert.equal(observe(), false, 'Old charts must still fail closed');
+  figure = null;
+  tab = {};
+  assert.equal(observe(), false, 'Old tabs must still fail closed');
+  tab = null;
+  status.textContent = '';
+  assert.equal(observe(), false);
+});
+
+test('Dataset failure retention excludes thirty declared downloads without exempting unknown files', async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'wavedl-known-downloads-')));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const expected = Array.from({length:30},(_,index)=>`verified-${index}.png`);
+  for (const name of expected) await writeFile(join(root,name),Buffer.from('verified'));
+  const destinationRoot = await realpath(await mkdtemp(join(tmpdir(), 'wavedl-known-evidence-')));
+  t.after(()=>rm(destinationRoot,{recursive:true,force:true}));
+  const evidence = await retainFailurePrefixes({ downloads: root, destination: join(destinationRoot,'known-only'), expected });
+  assert.equal(evidence.files.length,0);
+  await writeFile(join(root,'unknown-0.html'),Buffer.from('unknown'));
+  const unknown = await retainFailurePrefixes({ downloads: root, destination: join(destinationRoot,'one-unknown'), expected });
+  assert.equal(unknown.files.length,1, 'Unknown download must still be retained');
+  for (let index=1;index<17;index++) await writeFile(join(root,`unknown-${index}.html`),Buffer.from('unknown'));
+  await assert.rejects(retainFailurePrefixes({ downloads: root, destination: join(destinationRoot,'unknown-overflow'), expected }), { code:'EVIDENCE_FILE_BOUND' });
+});
 
 function exportDriver(options = {}) {
   const calls = [];

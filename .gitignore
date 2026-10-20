@@ -138,6 +138,12 @@ tools/*
 !tools/verify_native_foundations_report.py
 !tools/run_user_owned_pytest.py
 !tools/run_web_acceptance.mjs
+!tools/run_header_deadline_browser_acceptance.test.mjs
+!tools/run_catalogue_fault_browser_acceptance.test.mjs
+!tools/browser_lost_ack_evidence.mjs
+!tools/browser_lost_ack_evidence.test.mjs
+!tools/browser_artifact_tamper_evidence.mjs
+!tools/browser_artifact_tamper_evidence.test.mjs
 !tools/run_retained_browser_acceptance.mjs
 !tools/run_retained_browser_acceptance.test.mjs
 !tools/build_retained_browser_fixtures.mjs

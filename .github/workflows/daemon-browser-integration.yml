@@ -27,6 +27,7 @@ on:
       - "tools/run_header_deadline_browser_acceptance.mjs"
       - "tools/verify_header_deadline_browser_report.mjs"
       - "tools/verify_header_deadline_browser_report.test.mjs"
+      - "tools/run_header_deadline_browser_acceptance.test.mjs"
       - "unit_tests/test_header_deadline_fixture.py"
       - "unit_tests/test_header_deadline_workflow.py"
       - "tools/browser_preview_budget_fixture.py"
@@ -57,6 +58,7 @@ on:
       - "tools/run_catalogue_fault_browser_acceptance.mjs"
       - "tools/verify_catalogue_fault_browser_report.mjs"
       - "tools/verify_catalogue_fault_browser_report.test.mjs"
+      - "tools/run_catalogue_fault_browser_acceptance.test.mjs"
       - "tools/browser_pending_cancel_fixture.py"
       - "tools/run_pending_cancel_browser_acceptance.mjs"
       - "tools/verify_pending_cancel_browser_report.mjs"
@@ -146,6 +148,11 @@ on:
       - "tools/verify_supersession_browser_report.test.mjs"
       - "unit_tests/test_supersession_browser_fixture.py"
       - "tools/browser_actions.test.mjs"
+      - "tools/browser_lost_ack_evidence.mjs"
+      - "tools/browser_lost_ack_evidence.test.mjs"
+      - "tools/browser_artifact_tamper_evidence.mjs"
+      - "tools/browser_artifact_tamper_evidence.test.mjs"
+      - "unit_tests/test_browser_artifact_tamper_fixture.py"
       - "tools/browser_training_editor.mjs"
       - "tools/browser_training_editor.test.mjs"
       - "tools/browser_authoring_parity.mjs"
@@ -315,6 +322,7 @@ on:
       - "tools/run_header_deadline_browser_acceptance.mjs"
       - "tools/verify_header_deadline_browser_report.mjs"
       - "tools/verify_header_deadline_browser_report.test.mjs"
+      - "tools/run_header_deadline_browser_acceptance.test.mjs"
       - "unit_tests/test_header_deadline_fixture.py"
       - "unit_tests/test_header_deadline_workflow.py"
       - "tools/browser_preview_budget_fixture.py"
@@ -345,6 +353,7 @@ on:
       - "tools/run_catalogue_fault_browser_acceptance.mjs"
       - "tools/verify_catalogue_fault_browser_report.mjs"
       - "tools/verify_catalogue_fault_browser_report.test.mjs"
+      - "tools/run_catalogue_fault_browser_acceptance.test.mjs"
       - "tools/browser_pending_cancel_fixture.py"
       - "tools/run_pending_cancel_browser_acceptance.mjs"
       - "tools/verify_pending_cancel_browser_report.mjs"
@@ -434,6 +443,11 @@ on:
       - "tools/verify_supersession_browser_report.test.mjs"
       - "unit_tests/test_supersession_browser_fixture.py"
       - "tools/browser_actions.test.mjs"
+      - "tools/browser_lost_ack_evidence.mjs"
+      - "tools/browser_lost_ack_evidence.test.mjs"
+      - "tools/browser_artifact_tamper_evidence.mjs"
+      - "tools/browser_artifact_tamper_evidence.test.mjs"
+      - "unit_tests/test_browser_artifact_tamper_fixture.py"
       - "tools/browser_training_editor.mjs"
       - "tools/browser_training_editor.test.mjs"
       - "tools/browser_authoring_parity.mjs"
@@ -653,7 +667,7 @@ jobs:
           agent-browser skills get core
           agent-browser install --with-deps
       - name: Test the fail-closed evidence guard
-        run: node --test tools/test_verify_browser_ci_report.mjs
+        run: node --test tools/test_verify_browser_ci_report.mjs tools/browser_lost_ack_evidence.test.mjs tools/browser_artifact_tamper_evidence.test.mjs
       - name: Test native browser target-selection contracts
         run: node --test tools/browser_actions.test.mjs
       - name: Test bounded dataset PNG evidence decoding
@@ -693,7 +707,7 @@ jobs:
           python -m pytest --noconftest unit_tests/test_browser_build_replacement_fixture.py unit_tests/test_cached_build_replacement_workflow.py -q
       - name: Test supervised HEADER deadline fixture and evidence contracts
         run: |
-          node --test tools/verify_header_deadline_browser_report.test.mjs
+          node --test tools/verify_header_deadline_browser_report.test.mjs tools/run_header_deadline_browser_acceptance.test.mjs
           python -m pytest unit_tests/test_header_deadline_fixture.py unit_tests/test_header_deadline_workflow.py -q
       - name: Test instrumented native SSE split evidence and workflow contracts
         run: |
@@ -781,8 +795,8 @@ jobs:
           python -m pytest unit_tests/daemon/test_browser_preview_fault_fixture.py -q
       - name: Test cold-offline and pending-cancellation evidence contracts
         run: |
-          node --test tools/verify_cold_offline_browser_report.test.mjs tools/verify_pending_cancel_browser_report.test.mjs tools/verify_catalogue_fault_browser_report.test.mjs
-          python -m pytest unit_tests/test_browser_catalogue_fault_fixture.py unit_tests/test_browser_pending_cancel_fixture.py unit_tests/test_browser_fixture_metadata.py -q
+          node --test tools/verify_cold_offline_browser_report.test.mjs tools/verify_pending_cancel_browser_report.test.mjs tools/verify_catalogue_fault_browser_report.test.mjs tools/run_catalogue_fault_browser_acceptance.test.mjs
+          python -m pytest unit_tests/test_browser_catalogue_fault_fixture.py unit_tests/test_browser_pending_cancel_fixture.py unit_tests/test_browser_fixture_metadata.py unit_tests/test_browser_artifact_tamper_fixture.py -q
       - name: Test 100k-history evidence and numerical journal fixture
         run: |
           node --test tools/verify_history_browser_report.test.mjs

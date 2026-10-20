@@ -22,6 +22,7 @@ import { browserLaunchArgs, browserTemporaryEnvironment } from './browser_launch
 import { verifyCachedBuildReplacementRecord } from './verify_cached_build_replacement_report.mjs';
 import { controllerIdentityScript } from './browser_controller_identity.mjs';
 import { acceptanceDiagnostic } from './browser_acceptance_diagnostic.mjs';
+import { lostAckBindingReady, verifyLostAckEvidence } from './browser_lost_ack_evidence.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const cases = ['baseline', 'offline', 'detach', 'reload', 'cancel', 'lost-ack', 'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity'];
@@ -125,7 +126,8 @@ from pathlib import Path
 p=Path(sys.argv[1])/"state"/"registry.db"
 c=sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True)
 c.row_factory=sqlite3.Row
-print(json.dumps({"runs":[dict(r) for r in c.execute("SELECT run_id,state FROM runs ORDER BY run_id")],"plans":c.execute("SELECT count(*) FROM plans").fetchone()[0],"control":[dict(r) for r in c.execute("SELECT plan_id,submission_requested,cancellation_requested FROM plan_control ORDER BY plan_id")],"executions":[dict(r) for r in c.execute("SELECT plan_id,state,cancel_delivered,coalesce(json_extract(latest_observation_json,'$.status'),json_extract(observation_json,'$.status')) AS observed_status FROM execution_control ORDER BY plan_id")]}))`;
+c.execute("BEGIN")
+print(json.dumps({"runs":[dict(r) for r in c.execute("SELECT run_id,state FROM runs ORDER BY run_id")],"plans":c.execute("SELECT count(*) FROM plans").fetchone()[0],"control":[dict(r) for r in c.execute("SELECT plan_id,submission_requested,cancellation_requested FROM plan_control ORDER BY plan_id")],"submissions":[dict(r) for r in c.execute("SELECT s.plan_id,s.state,p.request_id,json_extract(json_extract(p.plan_json,'$.manifest_json'),'$.run_id') AS run_id,json_extract(s.submission_handle_json,'$.run_id') AS receipt_run_id,json_extract(s.submission_handle_json,'$.request_id') AS receipt_request_id,json_extract(s.submission_handle_json,'$.supervisor_id') AS supervisor_id,json_extract(s.submission_handle_json,'$.pid') AS pid FROM submission_control s JOIN plans p ON p.plan_id=s.plan_id ORDER BY s.plan_id")],"executions":[dict(r) for r in c.execute("SELECT plan_id,attempt,state,cancel_delivered,json_extract(handle_json,'$.run_id') AS run_id,json_extract(handle_json,'$.request_id') AS request_id,json_extract(handle_json,'$.supervisor_id') AS supervisor_id,json_extract(handle_json,'$.pid') AS pid,coalesce(json_extract(latest_observation_json,'$.status'),json_extract(observation_json,'$.status')) AS observed_status FROM execution_control ORDER BY plan_id")]}))`;
   return JSON.parse(await command(python, ['-c', script, root], undefined, timeout));
 }
 
@@ -622,16 +624,36 @@ async function scenario(name) {
       check(after.plans === 1 && after.control.every((r) => !r.submission_requested && !r.cancellation_requested), 'Offline browser delivered no submit/cancel mutation');
       record.fault = 'Chromium offline emulation after real persisted preview (NOT lost submit ACK)';
     } else if (name === 'lost-ack') {
+      const approval = await dom(`JSON.stringify(document.querySelector('#approved-plan-title')?.parentElement.textContent)`);
+      const planId = planned.control[0].plan_id;
+      const requestId = approval.match(/request ([0-9a-f-]{36})/)?.[1];
+      record.lostAckRecovery = {
+        scope: 'Observed durable writer submission and verified initial runtime binding; not training completion or lifetime exactly-once proof',
+        identity: { planId, runId: approvedManifest.run_id, requestId },
+        before: planned,
+      };
       await button('Approve and start this plan');
       await cli('wait', '--text', 'Planning status');
       const accepted = await registry(root);
+      record.lostAckRecovery.accepted = accepted;
+      lostAckBindingReady(accepted, record.lostAckRecovery.identity);
       check(accepted.control[0].submission_requested === 1, 'Backend accepted despite suppressed submit ACK and proxy-style 503');
       await button('Check submission status');
       await cli('wait', '--text', 'Run detail');
       const retried = await registry(root);
-      check(retried.plans === 1 && retried.executions.length === 1 && retried.control[0].plan_id === planned.control[0].plan_id, 'Status recovery follows the original approved plan without duplicate execution');
+      record.lostAckRecovery.recovered = retried;
+      // A writer's native receipt is durable before its verified runtime attempt.
+      // Keep these separate: summing both tables double-counts a bound submission.
+      lostAckBindingReady(retried, record.lostAckRecovery.identity);
+      record.lostAckRecovery.bound = await pollRegistry(root,
+        state => lostAckBindingReady(state, record.lostAckRecovery.identity),
+        'Original writer submission verified runtime binding', 45000);
+      check(true, 'Status recovery follows the original approved plan without duplicate execution');
       await button('New training run');
-      check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.disabled && e.textContent.trim() === 'Submission acknowledged'))`), 'Recovered acknowledgment disables duplicate approval of the existing plan');
+      record.lostAckRecovery.acknowledgedUi = await dom(`JSON.stringify({disabled:Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.disabled && e.textContent.trim() === 'Submission acknowledged'),runId:document.querySelector('[aria-label="Acknowledged training run"]')?.textContent.includes(${JSON.stringify(approvedManifest.run_id)})?${JSON.stringify(approvedManifest.run_id)}:null})`);
+      record.lostAckRecovery.acknowledged = await registry(root);
+      verifyLostAckEvidence(record);
+      check(true, 'Recovered acknowledgment disables duplicate approval of the existing plan');
       record.fault = 'Fixture suppresses one successful backend submit ACK and replaces it with an empty proxy-style 503 after real acceptance';
     } else if (name === 'reload') {
       await cli('reload');
@@ -834,8 +856,10 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
         await button('Results');
         await button('Refresh artifacts');
         await cli('wait', '--text', 'Download');
+        if (name === 'artifact-tamper') record.artifactTamperStage = 'select-published-history-row';
         const row = await dom(`JSON.stringify((() => {
-          const row = document.querySelector('#results-title').closest('section').querySelector('tbody tr');
+          const rows = Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('tbody tr'));
+          const row = ${name === 'artifact-tamper' ? "rows.find(row => row.cells[1]?.textContent.trim() === 'training_history.csv')" : 'rows[0]'};
           return row ? Array.from(row.cells).slice(0, 3).map(cell => cell.textContent.trim()) : null;
         })())`);
         assert(row, 'No real published artifact row');
@@ -848,14 +872,44 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
         assert(identity, 'Artifact absent from completed publication');
         record.artifact = { generation, path: artifactPath, ...identity };
         if (name === 'artifact-tamper') {
+          assert.equal(artifactPath, 'training_history.csv', 'Download fault must not target background checkpoint selection metadata');
+          record.artifactTamperStage = 'download-control-ready';
+          const selector = await actions.readyControl('button', 'Download', false, { scope: artifactScope });
+          await cli('scrollintoview', selector);
+          const targetPath = `/api/runs/${runId}/artifacts/${generation}/${artifactPath}`;
           const faultsBefore = (stdout.match(/Fault: artifact-tampered/g) ?? []).length;
-          await writeFile(join(root, '.artifact-tamper-arm'), 'armed\n', { flag: 'wx', mode: 0o600 });
-          await actions.button('Download', false, { scope: artifactScope });
+          record.artifactTamperStage = 'arm-exact-download';
+          await writeFile(join(root, '.artifact-tamper-arm'), JSON.stringify({ path: targetPath }), { flag: 'wx', mode: 0o600 });
+          record.artifactTamperStage = 'native-download-click';
+          await cli('click', selector);
+          record.artifactTamperStage = 'wait-visible-refusal';
           await cli('wait', '--fn', `document.body.innerText.includes('Artifact verification failed or download was interrupted. No file was published.') || document.body.innerText.includes('The daemon returned an invalid response. Reconnect to verify its identity.')`);
+          record.artifactTamperStage = 'verify-wire-receipt';
+          const receiptPath = join(root, '.artifact-tamper-receipts.jsonl');
+          const receiptDeadline = Date.now() + 5000;
+          let receipts;
+          do {
+            const raw = await readFile(receiptPath, 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; });
+            assert(Buffer.byteLength(raw) <= 1048576, 'Artifact receipt exceeds budget');
+            receipts = raw.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+            if (receipts.some(item => item.phase === 'complete')) break;
+            await delay(50);
+          } while (Date.now() < receiptDeadline);
+          assert.equal(receipts.length, 2, 'Exact one-shot artifact arrival and completion required');
+          assert.deepEqual(receipts[0], { phase: 'arrival', path: targetPath });
+          const receipt = receipts[1];
+          assert.equal(receipt.phase, 'complete'); assert.equal(receipt.path, targetPath);
+          assert.equal(receipt.status, 200); assert.equal(receipt.tampered, true);
+          for (const key of ['original', 'published', 'diskAfter']) assert.deepEqual(receipt[key], identity, 'Original stream and unchanged publication match COMPLETE identity');
+          assert.equal(receipt.wire.size, identity.size); assert.match(receipt.wire.sha256, /^[a-f0-9]{64}$/);
+          assert.notEqual(receipt.wire.sha256, identity.sha256, 'Outgoing response must actually differ from published bytes');
+          record.artifactTamperReceipts = receipts;
           check((stdout.match(/Fault: artifact-tampered/g) ?? []).length > faultsBefore, 'Fixture confirms real artifact response byte was altered for this download');
-          check((await readdir(downloads)).length === 0, 'Same-length mismatched real artifact bytes refused before browser download');
+          record.artifactTamperDownloads = await readdir(downloads);
+          check(record.artifactTamperDownloads.length === 0, 'Same-length mismatched real artifact bytes refused before browser download');
           record.refusalUi = (await cli('get', 'text', 'body')).slice(0, 16000);
           record.fault = 'Fixture flips the first byte of the real backend artifact stream, retaining byte length';
+          record.artifactTamperStage = 'verified';
         } else {
           const tree = await snapshot();
           assert(tree.includes('button "Download"'), 'Download control missing');
@@ -931,6 +985,18 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
       }
     } catch (error) { record.status = 'failed'; record.shutdownError = error.message; }
     active.delete(fixture);
+    if (name === 'artifact-tamper' && record.cleanup.fixtureServicesClosed) {
+      try {
+        const raw = await readFile(join(root, '.artifact-tamper-receipts.jsonl'), 'utf8').catch(error => { if (error.code === 'ENOENT' && record.status === 'failed') return ''; throw error; });
+        assert(Buffer.byteLength(raw) <= 1048576, 'Artifact receipt exceeds budget');
+        const frozen = raw.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+        if (record.artifactTamperReceipts) assert.deepEqual(frozen, record.artifactTamperReceipts, 'No late artifact fault after refusal');
+        record.artifactTamperReceipts = frozen;
+        record.artifactTamperDownloads = await readdir(downloads);
+        assert.deepEqual(record.artifactTamperDownloads, [], 'No late download after browser closure');
+        record.artifactTamperReceiptsFrozenAfterCleanup = true;
+      } catch (error) { record.status = 'failed'; record.cleanup.errors.push(`Artifact fault evidence: ${error.message}`); }
+    }
     if (integrity && record.cleanup.fixtureServicesClosed) {
       try {
         const lines = async file => { const raw = await readFile(join(root, file), 'utf8'); assert(Buffer.byteLength(raw) <= 1048576); return raw.trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); };
@@ -1011,7 +1077,7 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
         const evidence = await retainFailurePrefixes({
           downloads,
           destination: join(workspace, 'dataset-failure-prefixes'),
-          expected: [],
+          expected: record.datasetVerifiedDownloadNames ?? [],
         });
         record.datasetFailurePrefixEvidence = evidence;
         record.cleanup.datasetFailurePrefixEvidenceRetained = true;

@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
-import { browserLaunchArgs } from "./browser_launch_policy.mjs";
+import { browserLaunchArgs, browserTemporaryEnvironment } from "./browser_launch_policy.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 import { verifyCatalogueFaultRecord } from "./verify_catalogue_fault_browser_report.mjs";
 import { boundedFile } from "./verify_retained_browser_report.mjs";
@@ -21,7 +21,7 @@ const destination = process.argv[2] ? resolve(process.argv[2]) : await mkdtemp(j
 await mkdir(destination, { recursive: true, mode: 0o700 });
 assert.deepEqual(await readdir(destination), []);
 const root = join(destination, "fixture"), profile = join(destination, "profile"), credential = join(destination, ".token");
-await mkdir(root); await mkdir(profile);
+await mkdir(root, { mode: 0o700 }); await mkdir(profile, { mode: 0o700 });
 const ownedToken = randomBytes(32).toString("base64url");
 await writeFile(credential, ownedToken, { mode: 0o600, flag: "wx" });
 const env = { ...process.env, PYTHONPATH: join(repo, "src"), OMP_NUM_THREADS: "1", MKL_NUM_THREADS: "1", OPENBLAS_NUM_THREADS: "1" };
@@ -34,7 +34,7 @@ const delay = ms => new Promise(done => setTimeout(done, ms));
 const command = args => {
   r.command = args[0];
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("AGENT_BROWSER_")));
-  return boundedCommand(browser, ["--session", session, ...(args[0] === "open" ? ["--args", browserLaunchArgs] : []), ...args], { cwd: repo, env: { ...environment, AGENT_BROWSER_SESSION: session }, timeout: 35000 });
+  return boundedCommand(browser, ["--session", session, ...(args[0] === "open" ? ["--args", browserLaunchArgs] : []), ...args], { cwd: repo, env: browserTemporaryEnvironment({ ...environment, AGENT_BROWSER_SESSION: session }), timeout: 35000 });
 };
 const dom = async script => JSON.parse(JSON.parse(await command(["eval", "-b", Buffer.from(script).toString("base64")])));
 const actions = createBrowserActions({ cli: (...args) => command(args), dom, snapshot: () => command(["snapshot", "-i"]) });

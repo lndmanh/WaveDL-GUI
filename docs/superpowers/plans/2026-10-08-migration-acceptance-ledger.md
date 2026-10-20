@@ -27,6 +27,119 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Hosted browser failure follow-up — 2026-10-20
+
+Run `39255215031` at `32c25fc` is terminal **failure**, not aggregate acceptance.
+The default twelve-case report has nine passes and three failures: lost-submit
+ACK recovery observed a durable writer submission before runtime binding;
+artifact-tamper timed out after an invalid-response refusal (the exact failed
+command is not retained); dataset replacement refusal sampled transient loading.
+Its failure-prefix collector also misclassified 30 already-verified downloads
+as unknown files and exceeded its unchanged 16-file diagnostic bound. Catalogue
+and HEADER custom runners stopped before browser scenarios; local reproduction
+proves their default `0755` fixture directories violate the private-root
+contract. Cancellation lost-ACK verification additionally rejected a genuine
+pre-binding `observation_unavailable` state despite successful native cancellation.
+The eight failed workflow steps include dependent verifier/aggregate failures,
+not eight separate product defects. Full logs and reports are retained under
+`/tmp/wavedl-hosted-browser-audit.AVSkmO/`.
+
+Reviewed harness follow-ups preserve the product and strict security contracts:
+explicit `0700` catalogue/HEADER fixture and profile setup; original writer
+request/native receipt evidence separate from eventual verified runtime binding;
+settled replacement-refusal observation; and an allowlist containing only
+already byte-verified download names, not a larger unknown-file budget.
+Cancellation permits the two exact unconfirmed pre-binding states, retaining
+successful GET, no runtime/backend authority, no cancellation intent and strict
+ordering/no-reversion checks. Historical reports are not rewritten or promoted.
+
+Fresh local catalogue acceptance passes all nine fault cases and the strict
+verifier, SHA-256
+`0e74e7c2c4ae9f3ad42edf8f57091f8c844628779d4c3c74c45ebbad12e92b8d`
+at `/private/tmp/wavedl-catalogue-private-current.QzobS4/catalogue-fault.json`.
+Fresh HEADER timeout/public-retry acceptance strict-passes at
+`/private/tmp/wavedl-header-private-final.qFbRUY/header-deadline.json`, SHA-256
+`2b9d9bf6cd963fc7274d814ca841be76720c7fc112e4dc2056920b6e9e1474ce`.
+Both use frozen be6 assets and verified owned cleanup. Fresh local lost-ACK
+acceptance actually observes one durable submission with zero bound executions,
+then the original single attempt and disabled duplicate approval; fresh
+dataset-only acceptance verifies all five fixtures/six views, a real replacement
+422, cleared charts/tabs and clean shutdown. Their scoped report paths are
+`/tmp/wavedl-lostack-fresh.tUu7Ac/wavedl-browser-acceptance-UXimYU/` and
+`/private/tmp/wavedl-dataset-refresh-regression.OvSbdD/wavedl-browser-acceptance-eWun00/`.
+No fresh full twelve-case or hosted browser success is inferred from these
+individual corrections; artifact injection is still being isolated and reviewed.
+
+The isolated artifact gate now passes genuine local acceptance with automatic
+plotting still enabled. Its exact one-shot published `training_history.csv`
+target avoids background checkpoint metadata; arrival/completion receipts prove
+original bytes equal publication and unchanged disk, but the equal-length wire
+SHA differs. Receipts freeze after service shutdown, and downloads are rechecked
+after browser closure. The mandatory aggregate guard rejects earlier stdout-only
+proof. Fresh scoped report SHA-256:
+`685e1ab052f57f531f440673e1c7435e92e0bc19ba5e6c5f5a0e6306f06cb073`,
+at `wavedl-browser-acceptance-aiI7e6/artifact-tamper.json` in the private macOS
+temporary directory. This report predates the additive post-close download
+recheck; a fresh full aggregate remains required. Historical command/consumer
+cause is not claimed proven by the newer, better-isolated scenario.
+
+Fresh current-file cancellation proof, after the common fixture update, passes
+without modifying its envelope:
+`wavedl-cancel-ack-gGTcWq/cancellation-lost-ack.json`, SHA-256
+`3027bb0266bb7065216e8aabd2750c7730595dbcdfda5a24421651102c158d9a`.
+Native cancellation is terminal with absent PID and clean owned teardown;
+missing runtime exit remains unknown. Final local regressions pass **1,768 Node
+tests**, **1,916 daemon tests / 11 explicit skips**, and **96 focused Python
+fixture/workflow tests**. Pinned Ruff lint/read-only format checks pass 238 files.
+The tested public app, core and vendored be6 assets are unchanged by these QA
+fixes; the full hosted browser gate is still open.
+
+Windows installed CPU acceptance now has a reviewed, separate Python 3.11/3.13
+workflow for main/review pushes and pull requests. It builds a clean tracked-source
+wheel, verifies Qt exclusion/all asset bytes, resolves an exact constrained
+offline wheelhouse and requires the single installed lifecycle case with zero
+skips. Test children use suspended-assigned native Jobs and explicit environments.
+Graceful daemon shutdown requires an inherited console, reserved native leader
+handle, targeted CTRL_BREAK, empty Job, no forced termination, completed shutdown,
+lock reacquisition and SQLite integrity. Missing console or forced cleanup fails
+acceptance; raw native exit codes are recorded, not coerced to POSIX semantics.
+Dependent build/install stages require success; strict evidence guards/uploads
+remain unconditional. Local helper/workflow tests pass, but actual Windows CPU
+installation/console execution has not yet run. This is not GPU certification.
+
+### Hosted CPU matrix and bounded native MPS inference — 2026-10-19
+
+Hosted Tests run `39255215116` at `32c25fc` is terminal **success** on Python
+3.11/3.12/3.13. Uploaded authoritative JUnit reports each contain **3,945
+passes / 40 explicit skips / zero failures or errors** (3,985 cases). The
+Python 3.11 isolated dependency-resolved wheel case also passes without skips.
+Exact reports: `/private/tmp/wavedl-39255215116-junit.SRJ4ag/`. These are full
+CPU-suite outcomes, not extrapolated from truncated job logs. Hosted browser
+run `39255215031` remains live; it is not yet aggregate acceptance.
+
+Available native macOS MPS hardware additionally passes one bounded standalone
+inference slice: a genuinely CPU-trained builtin CNN checkpoint produces finite
+predictions from five actual MPS forward passes, fallback disabled before Torch
+import. A declared read-only forward observer checks input/parameter/output MPS
+devices and synchronization, returns `None` and never replaces results. CPU
+reference agreement is within rtol `1e-4` / atol `1e-5` (maximum absolute
+difference approximately `1e-6`). Root independently rechecks journals, completed
+exit zero, publication sizes/hashes, unchanged source inventory and numeric
+comparison. Report:
+`/private/tmp/wavedl-mps-inference.aQkmKw/report.json`, SHA-256
+`af11ee232ddedb904060cd6d788bc369801470a3c9977a449a7c96c0fc86d3b1`.
+Runtime is Python 3.11.17 / Torch 2.13.0; all owned child process groups are
+absent afterward. An initial QA cache path named `triton` shadowed an import
+before training; its failed attempt is retained, not a product failure or pass.
+This is standalone native MPS inference only: no browser/daemon API, cancellation,
+CUDA, distributed accelerate or cross-platform GPU-tree/F11 certification.
+
+Native Windows installed-package CPU/daemon-shutdown acceptance is still a
+separate gap: passing dependency-light native foundations does not exercise
+the POSIX-only isolated installation/shutdown test. A reviewed Windows adapter
+and isolated CPU workflow are being prepared; no skipped Windows case is
+promoted to installed/runtime proof.
+
 ### Fresh full twelve-case browser aggregate — 2026-10-19 (32c25fc inputs)
 
 The default unfiltered real-browser runner completes **12/12**, exit zero, in

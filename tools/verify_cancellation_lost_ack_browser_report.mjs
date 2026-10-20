@@ -132,7 +132,7 @@ export function verifyCancellationLostAckReport(report) {
       assert.equal(item.method, 'GET');
       assert.equal(item.originalStatus, 200, 'Unbound prefix requires a successful public GET');
       assert(item.sequence < preProbe.sequence && item.sequence < cancel.sequence, 'Unbound observation must precede the confirmed pre-cancel probe');
-      assert.equal(body.state, 'submission_unknown');
+      assert(body.state === 'submission_unknown' || body.state === 'observation_unavailable', 'Unbound prefix requires an unconfirmed submission or unavailable observation');
       assert.equal(body.uncertainty, true);
       assert.equal(body.cancellation_requested, false);
       assert.equal(body.evidence.current_runtime_attempt, null);

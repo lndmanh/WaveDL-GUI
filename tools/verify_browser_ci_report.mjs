@@ -6,6 +6,8 @@ import { lstat, open, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyLostAckEvidence } from './browser_lost_ack_evidence.mjs';
+import { checkArtifactTamperEvidence } from './browser_artifact_tamper_evidence.mjs';
 
 export const requiredCases = Object.freeze([
   'baseline', 'offline', 'detach', 'reload', 'cancel', 'lost-ack',
@@ -78,6 +80,8 @@ function checkRecord(record, hash, browser, directory) {
   if (record.name === 'live-port-reuse') checkLiveIdentityFence(record);
   if (record.name === 'download-names') checkNativeDownloadNames(record);
   if (record.name === 'dataset-parity') checkDatasetParity(record);
+  if (record.name === 'lost-ack') verifyLostAckEvidence(record);
+  if (record.name === 'artifact-tamper') checkArtifactTamperEvidence(record);
 }
 
 const datasetViews = ['Input distribution', 'Output distribution', 'Samples', 'Correlation', 'Statistics', 'Scatter'];

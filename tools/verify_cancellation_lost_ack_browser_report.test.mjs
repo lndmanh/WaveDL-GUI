@@ -72,26 +72,44 @@ function rewriteWire(item, body) {
     item.deliveredBodyBytes = item.bodyBytes; item.deliveredBodySha256 = item.bodySha256;
   }
 }
-function withPreAdmission() {
+function withPreAdmission(state = 'submission_unknown') {
   const r = proof(), prefix = structuredClone(r.wire[0]);
   for (const item of r.wire) item.sequence++;
   prefix.sequence = 1; prefix.atMs = 250; prefix.browser = true;
-  rewriteWire(prefix, { ...JSON.parse(prefix.rawBody), attempt: null, state: 'submission_unknown', uncertainty: true,
+  rewriteWire(prefix, { ...JSON.parse(prefix.rawBody), attempt: null, state, uncertainty: true,
     evidence: {current_runtime_attempt:null,last_runtime_attempt:null,confidence:'unconfirmed',backend:null,runtime:{hello_seen:false,state:null,exit_seq:-1,outcome:null}},
   });
   r.wire.unshift(prefix); return r;
 }
 test('accepts truthful unbound browser GET prefix before confirmed attempt', () => assert(verifyCancellationLostAckReport(withPreAdmission())));
+test('accepts public observation-unavailable prefix before confirmed attempt', () => assert(verifyCancellationLostAckReport(withPreAdmission('observation_unavailable'))));
+test('accepts submission-unknown then observation-unavailable before attempt allocation', () => {
+  const r = withPreAdmission(), next = structuredClone(r.wire[0]);
+  next.sequence = 2; next.atMs = 275;
+  rewriteWire(next, {...JSON.parse(next.rawBody), state:'observation_unavailable'});
+  for (const item of r.wire.slice(1)) item.sequence++;
+  r.wire.splice(1,0,next);
+  assert(verifyCancellationLostAckReport(r));
+});
 for (const [name, mutate] of [
   ['unsuccessful unbound GET', r => {r.wire[0].originalStatus=503;r.wire[0].deliveredStatus=503;}],
   ['null running attempt', r => {const b=JSON.parse(r.wire[0].rawBody);b.state='running';rewriteWire(r.wire[0],b);}],
+  ['unrecognized unknown state', r => {const b=JSON.parse(r.wire[0].rawBody);b.state='unknown';rewriteWire(r.wire[0],b);}],
+  ['unbound terminal state', r => {const b=JSON.parse(r.wire[0].rawBody);b.state='cancelled';rewriteWire(r.wire[0],b);}],
   ['null cancellation attempt', r => {const b=JSON.parse(r.wire[2].rawBody);b.attempt=null;rewriteWire(r.wire[2],b);}],
   ['null post-confirmed terminal attempt', r => {const b=JSON.parse(r.wire[3].rawBody);b.attempt=null;rewriteWire(r.wire[3],b);}],
   ['null prefix fabricated hello', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.runtime.hello_seen=true;rewriteWire(r.wire[0],b);}],
   ['null prefix fabricated native authority', r => {const b=JSON.parse(r.wire[0].rawBody);b.uncertainty=false;rewriteWire(r.wire[0],b);}],
   ['prefix cancellation already requested', r => {const b=JSON.parse(r.wire[0].rawBody);b.cancellation_requested=true;rewriteWire(r.wire[0],b);}],
+  ['prefix fabricated backend observation', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.backend={status:'running'};rewriteWire(r.wire[0],b);}],
+  ['prefix fabricated current attempt', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.current_runtime_attempt=1;rewriteWire(r.wire[0],b);}],
+  ['prefix fabricated previous attempt', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.last_runtime_attempt=1;rewriteWire(r.wire[0],b);}],
+  ['prefix fabricated confidence', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.confidence='confirmed';rewriteWire(r.wire[0],b);}],
+  ['prefix fabricated runtime state', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.runtime.state='running';rewriteWire(r.wire[0],b);}],
+  ['prefix fabricated runtime exit', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.runtime.exit_seq=3;rewriteWire(r.wire[0],b);}],
+  ['prefix fabricated runtime outcome', r => {const b=JSON.parse(r.wire[0].rawBody);b.evidence.runtime.outcome='cancelled';rewriteWire(r.wire[0],b);}],
   ['prefix return after confirmation', r => {const prefix=structuredClone(r.wire[0]);prefix.sequence=3;prefix.atMs=450;r.wire.splice(2,0,prefix);for(let i=3;i<r.wire.length;i++)r.wire[i].sequence++;}],
-]) test(`rejects ${name}`, () => {const r=withPreAdmission();mutate(r);assert.throws(()=>verifyCancellationLostAckReport(r));});
+]) for (const state of ['submission_unknown', 'observation_unavailable']) test(`rejects ${state}: ${name}`, () => {const r=withPreAdmission(state);mutate(r);assert.throws(()=>verifyCancellationLostAckReport(r));});
 
 for (const [name, mutate] of [
   ["stale assets after run", r => { r.fingerprintsAfter.assetManifestSha256 = "0".repeat(64); }],

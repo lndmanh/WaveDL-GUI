@@ -12,6 +12,7 @@ import signal
 import subprocess
 import sys
 import tarfile
+import time
 import tomllib
 import zipfile
 from email.parser import Parser
@@ -21,12 +22,155 @@ import httpx
 import pytest
 from packaging.requirements import Requirement
 
+from wavedl_daemon.supervision.base import ProcessSpec
+from wavedl_daemon.supervision.windows import WindowsProcess, WindowsSupervisor, _Win32
+
+
+class _InstalledWindowsAPI(_Win32):
+    """Retain native cleanup witnesses without changing supervision policy."""
+
+    def __init__(self):
+        super().__init__()
+        self.forced_kills = 0
+        self.observed_empty = False
+        self.reserved_process = None
+
+    def assign(self, job, process):
+        # Reserve the leader's native identity before assignment/resume. The
+        # supervisor may finish and close its own handle before shutdown starts.
+        current = self.winapi.GetCurrentProcess()
+        self.reserved_process = self.winapi.DuplicateHandle(
+            current,
+            process,
+            current,
+            0,
+            False,
+            2,  # DUPLICATE_SAME_ACCESS
+        )
+        super().assign(job, process)
+
+    def close_reservation(self):
+        if self.reserved_process is not None:
+            handle = self.reserved_process
+            self.reserved_process = None
+            self.close(handle)
+
+    def terminate_job(self, job):
+        self.forced_kills += 1
+        super().terminate_job(job)
+
+    def active(self, job):
+        count = super().active(job)
+        self.observed_empty |= count == 0
+        return count
+
+
+def _start_windows_installed(argv, cwd, environment, *, api=None):
+    return WindowsSupervisor(_api=api).start(
+        ProcessSpec(tuple(argv), Path(cwd), environment, inherit_environment=False),
+        output_limit=8 * 1024 * 1024,
+    )
+
+
+def _require_windows_result(result, argv, timeout):
+    if result.timed_out:
+        raise subprocess.TimeoutExpired(argv, timeout)
+    assert not result.cancelled
+    assert not result.stdout_truncated and not result.stderr_truncated
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    return result.stdout.decode()
+
+
+class _WindowsInstalledDaemon:
+    """One suspended-assigned Job and its existing bounded output drain."""
+
+    def __init__(self, argv, cwd, environment):
+        self.api = _InstalledWindowsAPI()
+        # Do not attach to, detach from, or allocate the runner's console. A
+        # missing console cannot establish targeted graceful shutdown evidence.
+        if not self.api.kernel.GetConsoleCP():
+            raise OSError("Native graceful daemon acceptance requires a console")
+        try:
+            self.process = _start_windows_installed(
+                argv, cwd, environment, api=self.api
+            )
+        except BaseException:
+            self.api.close_reservation()
+            raise
+        assert isinstance(self.process, WindowsProcess)
+        self.position = 0
+
+    async def readline(self):
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            # Read only the owned production drain's captured bytes. A second
+            # pipe reader would race and steal the bootstrap line from it.
+            data = self.process._stdout.data
+            assert isinstance(data, bytearray)
+            snapshot = bytes(data)
+            end = snapshot.find(b"\n", self.position)
+            if end >= 0:
+                line = snapshot[self.position : end + 1]
+                self.position = end + 1
+                return line
+            await asyncio.sleep(0.01)
+        raise TimeoutError("Native installed daemon did not emit readiness")
+
+    async def shutdown(self, record_property=None):
+        try:
+            assert self.api.reserved_process is not None
+            if not self.api.leader_running(self.api.reserved_process):
+                raise AssertionError("Owned native daemon exited before CTRL_BREAK")
+            # A nonzero process-group ID targets only this owned daemon and
+            # descendants. Unlike production best-effort cancellation, errors
+            # 6/87 are acceptance failures, not graceful-shutdown evidence.
+            if not self.api.kernel.GenerateConsoleCtrlEvent(1, self.process.pid):
+                import ctypes
+
+                error = ctypes.get_last_error()
+                raise OSError(f"Targeted native CTRL_BREAK failed: winerror={error}")
+            result = await asyncio.to_thread(self.process.wait, 15)
+            print(f"Native installed daemon exit code: {result.returncode}")
+            print(
+                "Native installed daemon cleanup: "
+                f"job_empty={self.api.observed_empty}, "
+                f"forced_kills={self.api.forced_kills}, "
+                f"timed_out={result.timed_out}, cancelled={result.cancelled}"
+            )
+            if record_property is not None:
+                record_property("native_windows_daemon_exit_code", result.returncode)
+            assert type(result.returncode) is int and result.returncode != 259
+            assert not result.timed_out and not result.cancelled
+            assert not result.stdout_truncated and not result.stderr_truncated
+            assert self.api.observed_empty and self.api.forced_kills == 0
+            assert b"Application shutdown complete" in result.stderr
+            return result.stdout[self.position :], result.stderr
+        finally:
+            # Failure still owns/reaps the entire Job, but never converts that
+            # forceful cleanup into passing graceful-shutdown evidence.
+            try:
+                self.process.cancel(grace_seconds=0)
+                await asyncio.to_thread(self.process.wait)
+            finally:
+                self.api.close_reservation()
+
 
 def checked(argv, *, cwd, environment, timeout=None):
     if timeout is None:
         timeout = int(os.environ.get("WAVEDL_ACCEPTANCE_TIMEOUT", "60"))
     if timeout < 1 or timeout > 300:
         raise ValueError("WAVEDL_ACCEPTANCE_TIMEOUT must be between 1 and 300 seconds")
+    if os.name == "nt":
+        process = _start_windows_installed(argv, cwd, environment)
+        try:
+            result = process.wait(timeout=timeout)
+            token = environment.get("WAVEDL_DAEMON_TOKEN")
+            if token and token.encode() in result.stdout + result.stderr:
+                raise AssertionError("Installed client leaked authentication material")
+            return _require_windows_result(result, argv, timeout)
+        finally:
+            process.cancel(grace_seconds=0)
+            process.wait()
     # A training launcher owns descendants; timeout cleanup must reap its entire
     # process group rather than leaving accelerate/the runtime behind.
     with subprocess.Popen(
@@ -444,8 +588,9 @@ def test_installed_entrypoints_and_lightweight_modules(installed):
     )
 
 
-@pytest.mark.skipif(os.name != "posix", reason="SIGTERM lifecycle requires POSIX")
-def test_isolated_resolved_wheelhouse_console_scripts_and_assets(isolated_resolved):
+def test_isolated_resolved_wheelhouse_console_scripts_and_assets(
+    isolated_resolved, record_property
+):
     """A local wheelhouse proves resolver installation without checkout leakage."""
 
     outside, _venv, binary, python, environment = isolated_resolved
@@ -484,14 +629,12 @@ def test_isolated_resolved_wheelhouse_console_scripts_and_assets(isolated_resolv
     # Calling the CPU exercise directly intentionally does not consult the
     # host's torch availability: this runtime must have resolved its own stack.
     test_installed_standalone_training_requires_no_daemon(isolated_resolved)
-    test_installed_serve_bootstrap_plan_client_and_shutdown(isolated_resolved)
+    test_installed_serve_bootstrap_plan_client_and_shutdown(
+        isolated_resolved, record_property
+    )
 
 
-@pytest.mark.skipif(
-    os.name != "posix",
-    reason="SIGTERM lifecycle requires POSIX; Windows console signal acceptance remains native-gated",
-)
-def test_installed_serve_bootstrap_plan_client_and_shutdown(installed):
+def test_installed_serve_bootstrap_plan_client_and_shutdown(installed, record_property):
     outside, _venv, binary, python, environment = installed
     state = outside / "state"
     (wheel,) = (outside / "wheels").glob("*.whl")
@@ -506,20 +649,36 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed):
         }
 
     async def exercise():
-        process = await asyncio.create_subprocess_exec(
-            str(binary / "wavedl-daemon"),
+        argv = [
+            str(binary / ("wavedl-daemon.exe" if os.name == "nt" else "wavedl-daemon")),
             "serve",
             "--port",
             "0",
             "--state-root",
             str(state),
-            cwd=outside,
-            env=environment,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        ]
+        native = (
+            _WindowsInstalledDaemon(argv, outside, environment)
+            if os.name == "nt"
+            else None
+        )
+        process = (
+            None
+            if native is not None
+            else await asyncio.create_subprocess_exec(
+                *argv,
+                cwd=outside,
+                env=environment,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
         )
         try:
-            line = (await asyncio.wait_for(process.stdout.readline(), 15)).decode()
+            line = (
+                await native.readline()
+                if native is not None
+                else await asyncio.wait_for(process.stdout.readline(), 15)
+            ).decode()
             match = re.search(
                 r"(http://127\.0\.0\.1:\d+)/\?bootstrap=([A-Za-z0-9_-]{43})", line
             )
@@ -578,8 +737,8 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed):
                 )
                 responses = []
                 for _ in range(2):
-                    client_process = await asyncio.create_subprocess_exec(
-                        str(binary / "wavedl"),
+                    client_argv = [
+                        str(binary / ("wavedl.exe" if os.name == "nt" else "wavedl")),
                         "run",
                         "--daemon",
                         base,
@@ -588,6 +747,20 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed):
                         "--idempotency-key",
                         "installed-retry",
                         "--plan-only",
+                    ]
+                    if native is not None:
+                        stdout = await asyncio.to_thread(
+                            checked,
+                            client_argv,
+                            cwd=outside,
+                            environment=environment | {"WAVEDL_DAEMON_TOKEN": token},
+                            timeout=10,
+                        )
+                        assert token not in stdout
+                        responses.append(json.loads(stdout))
+                        continue
+                    client_process = await asyncio.create_subprocess_exec(
+                        *client_argv,
                         cwd=outside,
                         env=environment | {"WAVEDL_DAEMON_TOKEN": token},
                         stdout=asyncio.subprocess.PIPE,
@@ -607,18 +780,24 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed):
                 assert responses[0] == responses[1]
                 assert not (state / "runs" / responses[0]["run_id"]).exists()
         finally:
-            if process.returncode is None:
-                process.terminate()
-            try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), 15)
-            except TimeoutError:
-                process.kill()
-                await asyncio.wait_for(process.communicate(), 5)
-                raise
-            # Uvicorn restores/re-raises SIGTERM after lifespan cleanup. The
-            # signal exit code is not evidence of an abandoned service.
-            assert process.returncode in {0, -signal.SIGTERM}, stderr.decode()
-            assert b"Application shutdown complete" in stderr
+            if native is not None:
+                await native.shutdown(record_property)
+            else:
+                await shutdown_posix(process)
+
+    async def shutdown_posix(process):
+        if process.returncode is None:
+            process.terminate()
+        try:
+            _stdout, stderr = await asyncio.wait_for(process.communicate(), 15)
+        except TimeoutError:
+            process.kill()
+            await asyncio.wait_for(process.communicate(), 5)
+            raise
+        # Uvicorn restores/re-raises SIGTERM after lifespan cleanup. The
+        # signal exit code is not evidence of an abandoned service.
+        assert process.returncode in {0, -signal.SIGTERM}, stderr.decode()
+        assert b"Application shutdown complete" in stderr
 
     asyncio.run(exercise())
     checked(

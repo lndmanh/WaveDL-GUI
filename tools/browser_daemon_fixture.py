@@ -198,6 +198,92 @@ def metadata_integrity_fault(app, root: Path):
     return wrapped
 
 
+def artifact_download_fault(app, root: Path):
+    """Corrupt one exact armed CSV response, never background selection metadata."""
+    claimed = False
+    arm = root / ".artifact-tamper-arm"
+    receipts = root / ".artifact-tamper-receipts.jsonl"
+
+    def append(receipt):
+        descriptor = os.open(receipts, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(descriptor, "a") as stream:
+            if receipts.stat().st_size > 1048576:
+                raise ValueError("Artifact fault evidence exceeds budget")
+            stream.write(json.dumps(receipt) + "\n")
+
+    async def wrapped(scope, receive, send):
+        nonlocal claimed
+        target = None
+        if not claimed and arm.is_file() and not arm.is_symlink():
+            if arm.stat().st_size > 1024:
+                raise ValueError("Artifact fault arm exceeds budget")
+            target = json.loads(arm.read_bytes())
+            if set(target) != {"path"} or not re.fullmatch(
+                r"/api/runs/[0-9a-f-]{36}/artifacts/gen-[0-9]{6,}/training_history\.csv",
+                target["path"],
+            ):
+                raise ValueError("Artifact fault requires exact published history CSV")
+        if (
+            target is None
+            or scope.get("type") != "http"
+            or scope.get("method") != "GET"
+            or scope.get("path") != target["path"]
+        ):
+            await app(scope, receive, send)
+            return
+        claimed = True
+        parts = target["path"].split("/")
+        directory = root / "runs" / parts[3] / "checkpoints" / parts[5]
+        artifact = directory / "training_history.csv"
+        published = json.loads((directory / "COMPLETE.json").read_bytes())["files"][
+            "training_history.csv"
+        ]
+        receipt = {"path": target["path"], "status": None, "tampered": False}
+        original_hash, wire_hash = hashlib.sha256(), hashlib.sha256()
+        size = 0
+        append({"phase": "arrival", "path": target["path"]})
+
+        async def observed(message):
+            nonlocal size
+            if message["type"] == "http.response.start":
+                receipt["status"] = message["status"]
+            if message["type"] == "http.response.body":
+                body = message.get("body", b"")
+                size += len(body)
+                if size > 1048576:
+                    raise ValueError("Artifact fault response exceeds budget")
+                original_hash.update(body)
+                if receipt["status"] == 200 and body and not receipt["tampered"]:
+                    changed = bytearray(body)
+                    changed[0] ^= 1
+                    message = {**message, "body": bytes(changed)}
+                    receipt["tampered"] = True
+                wire_hash.update(message.get("body", b""))
+            await send(message)
+
+        await app(scope, receive, observed)
+        if artifact.stat().st_size > 1048576:
+            raise ValueError("Artifact fault disk evidence exceeds budget")
+        disk = artifact.read_bytes()
+        append(
+            {
+                "phase": "complete",
+                **receipt,
+                "original": {"size": size, "sha256": original_hash.hexdigest()},
+                "wire": {"size": size, "sha256": wire_hash.hexdigest()},
+                "published": published,
+                "diskAfter": {
+                    "size": len(disk),
+                    "sha256": hashlib.sha256(disk).hexdigest(),
+                },
+            }
+        )
+        if receipt["tampered"]:
+            print("Fault: artifact-tampered", flush=True)
+
+    return wrapped
+
+
 def request_cursor_metadata(query_string: bytes) -> dict[str, int]:
     """Retain only bounded numeric replay fields for fixture diagnostics."""
     if len(query_string) > 4096:
@@ -653,10 +739,11 @@ async def _serve_fixture(
         # submission first. Replace one successful acknowledgment with an empty
         # proxy-style 503, not the request. This models lost ACK evidence without a debug endpoint
         # or replacing backend behavior with an API mock.
-        if drop_submit_ack or tamper_artifact:
+        if tamper_artifact:
+            app = artifact_download_fault(app, root)
+        if drop_submit_ack:
             application = app
             ack_dropped = False
-            artifact_arm = root / ".artifact-tamper-arm"
 
             async def faulty_app(scope, receive, send):
                 nonlocal ack_dropped
@@ -668,22 +755,9 @@ async def _serve_fixture(
                     and scope["path"] == "/api/runs"
                 )
                 dropping = False
-                artifact_target = (
-                    tamper_artifact
-                    and artifact_arm.is_file()
-                    and not artifact_arm.is_symlink()
-                    and scope["type"] == "http"
-                    and scope["method"] == "GET"
-                    and scope["path"].startswith("/api/runs/")
-                    and "/artifacts/" in scope["path"]
-                )
-                artifact_success = False
-                tampered = False
 
                 async def fault_send(message):
-                    nonlocal ack_dropped, dropping, artifact_success, tampered
-                    if message["type"] == "http.response.start":
-                        artifact_success = 200 <= message["status"] < 300
+                    nonlocal ack_dropped, dropping
                     if target and message["type"] == "http.response.start":
                         if 200 <= message["status"] < 300:
                             ack_dropped = True
@@ -700,19 +774,6 @@ async def _serve_fixture(
                             }
                     if dropping and message["type"] == "http.response.body":
                         message = {**message, "body": b""}
-                    elif (
-                        artifact_target
-                        and artifact_success
-                        and not tampered
-                        and message["type"] == "http.response.body"
-                        and message.get("body")
-                    ):
-                        # Real backend bytes, same byte length, wrong SHA-256.
-                        body = bytearray(message["body"])
-                        body[0] ^= 1
-                        message = {**message, "body": bytes(body)}
-                        tampered = True
-                        print("Fault: artifact-tampered", flush=True)
                     await send(message)
 
                 await application(scope, receive, fault_send)

@@ -12,6 +12,21 @@ const views = ['Input distribution', 'Output distribution', 'Samples', 'Correlat
 const preview = `document.querySelector('section[aria-label="Dataset visualization"]')`;
 const header = `document.querySelector('section[aria-label="Dataset header summary"]')`;
 
+export function settledDatasetRefusalExpression() {
+  return `(()=>{
+    const panel = ${preview};
+    if (!panel) return false;
+    const statuses = panel.querySelectorAll('[role="status"]');
+    const buttons = Array.from(panel.querySelectorAll('button'));
+    const refresh = buttons.filter(button=>button.textContent.trim() === 'Refresh preview');
+    return statuses.length === 1 && statuses[0].textContent.trim().length > 0
+      && !statuses[0].textContent.includes('Loading')
+      && refresh.length === 1 && !refresh[0].disabled
+      && !buttons.some(button=>button.textContent.trim() === 'Stop preview')
+      && !panel.querySelector('figure') && !panel.querySelector('[role="tab"]');
+  })()`;
+}
+
 export function datasetExportScope(view) {
   assert(views.includes(view), 'Unknown dataset export view');
   const panel = 'section[aria-label="Dataset visualization"] [role="tabpanel"]';
@@ -264,6 +279,7 @@ export async function datasetParity(driver) {
   stage('registry-before');
   const before = await registry(root);
   const expectedOrigin = await dom('JSON.stringify(location.origin)');
+  record.datasetVerifiedDownloadNames = [];
   let allowedDiagnosticFiles = [];
   const checkpoint = (label, boundary)=>directoryCheckpoint(downloads,label,allowedDiagnosticFiles,record,boundary);
   const firstBoundaries = datasetCommandBoundaries({ checkpoint, stage, file: 'samples.npz', view: 'Input distribution' });
@@ -312,6 +328,7 @@ export async function datasetParity(driver) {
   await cli('screenshot', catalogueScreenshot);
   allowedDiagnosticFiles = ['driver-catalogue.png'];
   await checkpoint('after-configured-root-screenshot');
+  record.datasetVerifiedDownloadNames = [...allowedDiagnosticFiles];
   record.datasetCatalogueScreenshot = { filename: 'driver-catalogue.png', path: catalogueScreenshot, purpose: 'Native render diagnostic after configured root selection; not a dataset export or acceptance substitute' };
   stage('configured-root-catalogue-screenshot-complete');
   stage('configured-root-networkidle-before');
@@ -549,6 +566,7 @@ print(json.dumps(results,allow_nan=False))
       assert(png.width === figures[0].canvases[0].width && png.height === figures[0].canvases[0].height, 'Actual PNG dimensions differ from the rendered exported canvas');
       knownDownloads.add(png.filename);
       allowedDiagnosticFiles = [...knownDownloads];
+      record.datasetVerifiedDownloadNames = [...knownDownloads];
       record.datasetVerifiedNativePng = { file: name, view, ...png };
       const afterTabs = redactNativeTabs(JSON.parse(await cli('--json', 'tab', 'list')), expectedOrigin);
       record.datasetPngNativeTabProbe = { file: name, view, before: beforeTabs, after: afterTabs };
@@ -582,7 +600,9 @@ print(json.dumps(results,allow_nan=False))
   // violate a pinned historical selection identity.
   await command(python, ['-c', 'import numpy as np,sys; from pathlib import Path; np.savez(Path(sys.argv[1])/"samples.npz",X=np.full((96,32),"unsupported"),y=np.ones((96,12)))', root]);
   await button('Refresh preview');
-  await cli('wait', '--fn', `${preview}.querySelector('[role="status"]')&&!${preview}.querySelector('figure')&&!${preview}.querySelector('[role="tab"]')`);
+  // Loading also clears charts and exposes role=status. Only the settled,
+  // retryable public failure state establishes that the real refresh refused.
+  await cli('wait', '--fn', settledDatasetRefusalExpression());
   const refusal = await dom(`JSON.stringify(${preview}.querySelector('[role="status"]').textContent.trim())`);
   check(refusal.length > 0 && !refusal.includes('Loading'), 'Unsupported real replacement refuses refresh and clears old charts/tabs');
   record.datasetParity.replacementRefusal = { reason: 'Real selected file replaced with unsupported nonnumeric arrays', visibleMessage: refusal, oldChartsCleared: true };

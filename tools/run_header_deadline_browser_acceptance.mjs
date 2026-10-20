@@ -21,7 +21,7 @@ const destination = process.argv[2] ? resolve(process.argv[2]) : await mkdtemp(j
 await mkdir(destination, { recursive: true, mode: 0o700 });
 assert.deepEqual(await readdir(destination), []);
 const root = join(destination, "fixture"), profile = join(destination, "profile"), credential = join(destination, ".token");
-await mkdir(root); await mkdir(profile);
+await mkdir(root, { mode: 0o700 }); await mkdir(profile, { mode: 0o700 });
 const ownedToken = randomBytes(32).toString("base64url");
 await writeFile(credential, ownedToken, { mode: 0o600, flag: "wx" });
 const env = { ...process.env, PYTHONPATH: join(repo, "src"), OMP_NUM_THREADS: "1", MKL_NUM_THREADS: "1", OPENBLAS_NUM_THREADS: "1" };
