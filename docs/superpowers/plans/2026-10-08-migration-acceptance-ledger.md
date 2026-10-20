@@ -137,15 +137,48 @@ reclassified as be6. General CPU Tests `39415927698` and full browser run
 `39415927597` remain live after these results; full hosted acceptance and the
 original GPU/site/final-release gates remain open.
 
-The Python 3.11 and 3.13 cells of general CPU Tests `39415927698` subsequently
-finish success. Root parses 4,057 cases per version: **4,017 passed / 40 explicit
+General CPU Tests `39415927698` subsequently finishes success on Python 3.11,
+3.12 and 3.13. Root parses 4,057 cases per version: **4,017 passed / 40 explicit
 skips / zero failures or errors**. The separate 3.11 isolated resolved-wheel
 case passes one intended case with zero skips; its JUnit SHA-256 is
 `ca356a5a6cc358222a73a56626ef6c1fb41848fd93b220f21ea99208d039ce40`.
 Reports are under `/private/tmp/wavedl-ci-current-e70b9d7.ne6XOJ/`.
-Python 3.12 remains live at this observation; neither that cell nor the whole
-Tests run is counted as passed prematurely. This is the selected non-slow,
-non-GPU suite, not a hardware/site qualification.
+The final Python 3.12 report SHA-256 is
+`8ce92bc06a457eed60f89b16b512f87eba8fb01aa5605bc23a039bb9c32c0838`;
+its slower completion required no timeout change or workflow restart. This is
+the selected non-slow, non-GPU suite, not a hardware/site qualification.
+
+#### Exact e70 package candidate recertification
+
+Clean-archive `e70b9d7e87f5dc2060090813301c864733fac0cc` wheel and sdist each
+pass isolated offline Linux ARM64/Python 3.13 installed lifecycle acceptance:
+one canonical case, zero skips/failures/errors, container exit zero and no OOM.
+Root independently checks both report outcomes and retained container states,
+the exact artifact bytes and every one of the 38 managed web files against the
+archived be6 manifest. Root also verifies all 1,494 archived tracked file blobs
+against that Git commit; unrelated working-tree files are not substituted.
+
+| Artifact | Exact artifact SHA-256 | JUnit SHA-256 |
+|---|---|---|
+| Wheel | `2af3e36a0fdb499203200f1f030df4cbc70902ec9a4565a1cb36e8b24d469632` | `1052667ff0fd962b1c28e83390dbbd240c12cec050ea5c389a0aa02f39b2c84e` |
+| Sdist | `953322fb0a96973c08c1bdfab4efdd700d61761a227ba1ceb4626131179217e0` | `e33f96ca40cdfe2c08d3b2708c7caeec382a326d5004ac59fb5d60fa8e3cf38a` |
+
+Evidence: `/private/tmp/wavedl-exact-e70b9d7.8Xi5pJ/acceptance-summary.md`.
+Both exclude Qt and use fresh resolver-installed environments without system-site
+packages, the existing complete offline wheelhouse, network disabled, read-only
+root/source/artifacts and fresh native Docker work volumes. Actual standalone
+CPU publication/journals, installed entry points, authenticated daemon/static/
+bootstrap/client checks, idempotent planning, shutdown, lock release and SQLite
+integrity pass. Only this task's stopped containers and volumes are removed after
+capture; no old host venvs, user files or preferences are removed. These exact
+candidate bytes are certified, not later documentation-commit archives.
+
+A further normative build-boundary review finds that checkout-browser scenarios
+and installed-wheel CLI/HTTP checks are separate evidence. They do not by
+themselves establish a native browser using the actual installed daemon outside
+the checkout. A focused installed-wheel/browser journey is being added for that
+original parity-plan requirement; no new product feature or modal requirement
+is invented. Full hosted browser, GPU/site and overall sign-off remain open.
 
 ### Current hosted CPU and Windows installed acceptance — 2026-10-20
 
