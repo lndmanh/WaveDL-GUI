@@ -27,6 +27,39 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Exact Unicode-fixed production artifact recertification — 2026-10-20
+
+Clean-archive product commit `2c60886a3d4010733e7c3166ef8f7901623612e4` now
+passes both exact wheel and exact sdist isolated offline installed lifecycle
+checks, **one canonical case / zero skips** each. Wheel SHA-256:
+`3bd04f9dac300fc2820da5330fbf294a2bef20dabe3c099901aab5661066f3f9`;
+sdist: `32dba935a901642749042fbf29b8518f581f83d0c0e464ac912a910324631c13`.
+Both exclude Qt and match every one of the 38 archived be6 web files. Each
+runtime uses Linux ARM64 / Python 3.13.16, a fresh resolver-installed venv with
+no system-site packages, a complete offline wheelhouse, network disabled,
+read-only root/source/artifacts and a fresh native Docker work volume.
+
+Root independently verifies the exact selected JUnit case and successful
+outcomes. Wheel report SHA-256:
+`7e0fc18e359bc624f5ee10fc10524326103d0a44bce71e52f94654308bb68058`
+(76.112 seconds); sdist report:
+`e48abdcd03a46eb62646b14009ab522a21cc27487983eef0c2696c60d7714952`
+(45.807 seconds). Both containers exit zero with no OOM. Actual CPU checkpoints,
+COMPLETE manifests and journals, installed console scripts, authenticated daemon
+assets/bootstrap/health, plan idempotency, shutdown, dispatch-lock release and
+SQLite integrity/transaction acquisition are verified. Evidence:
+`/private/tmp/wavedl-exact-2c60886.GOY6xe/acceptance-summary.md`.
+
+Only this recertification's stopped containers and native work volumes were
+removed after evidence capture; prior/user resources were untouched. Initial
+low-space preflight stopped safely; a later sufficient-space check permitted
+sequential execution. No host virtual environments were deleted by the refused
+cleanup command. The newer `01f9e7d` changes only installed-acceptance tests and
+this ledger, not product/browser/harness bytes. This report certifies exact
+`2c60886` archive bytes, not byte-identical archives of the later QA-only commit.
+Native Windows 3.11 installed acceptance, full hosted browser, CUDA/distributed
+GPU, real Slurm/site and final overall sign-off remain distinct open gates.
+
 ### Current native foundations and Windows installed runtime — 2026-10-20
 
 At `2c60886a3d4010733e7c3166ef8f7901623612e4`, foundations run `39408337875`
