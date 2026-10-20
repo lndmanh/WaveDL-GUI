@@ -47,15 +47,20 @@ supported. Final daemon/browser package and release validation remains open;
 tagging or publishing requires explicit approval. Dated evidence below records
 its original scope; older Qt-retirement gates are superseded by this direction.
 
-Current verification (2026-10-19): the reviewed daemon/browser implementation
-passes 2,851 local core/daemon tests (19 explicit skips) and 1,704 acceptance-tool
-tests. Exact `32c25fc` wheel/sdist CPU install-and-run checks pass with zero skips.
-The full native foundation matrix passes on Windows, macOS and Linux (Python
-3.11/3.13), and the fresh local twelve-case browser aggregate passes with exact
-assets and owned cleanup. Hosted CPU/browser and real GPU/Slurm-site validation remain
-open; this is not release sign-off. See the
+Current verification (2026-10-20): hosted CPU tests pass on Python 3.11/3.12/3.13
+with 4,010 passes and 40 explicit skips per version. Native Windows isolated
+CPU install-and-run acceptance passes on Python 3.11/3.13, and the full native
+foundation matrix passes on Windows, macOS and Linux. Exact Unicode-fixed
+wheel/sdist offline CPU lifecycle checks pass with zero skips. The hosted browser
+run has passed its twelve-case aggregate; extended failure-path checks are still
+running. Genuine single-device macOS MPS training/cancellation also passes within
+its bounded scope. Full browser, cross-platform/distributed GPU and real
+Slurm-site validation remain open; this is not release sign-off. See the
 [acceptance ledger](docs/superpowers/plans/2026-10-08-migration-acceptance-ledger.md)
 for current source hashes, results, limitations and remaining gates.
+The [runtime qualification runbook](docs/daemon-runtime-qualification.md) records
+the inputs and real hardware/site evidence needed for the remaining GPU/Slurm
+gates; it is not a qualification report.
 
 Latest local validation (2026-10-18): the daemon/browser bundle passes all 12
 strict browser acceptance scenarios, 820 web tests (one skip), and 38 generated
@@ -860,7 +865,8 @@ python -c 'import os, secrets; from pathlib import Path; directory = Path.home()
 ```
 
 Windows credentials require a user-private file ACL; Unix mode bits alone do not
-provide that guarantee. Native Windows acceptance is still pending.
+provide that guarantee. Native Windows foundations and isolated installed CPU
+acceptance pass on Python 3.11/3.13; this does not certify Windows GPU execution.
 
 In the first terminal, start the daemon with that exact absolute path:
 

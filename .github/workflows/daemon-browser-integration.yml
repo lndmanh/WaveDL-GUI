@@ -150,6 +150,10 @@ on:
       - "tools/browser_actions.test.mjs"
       - "tools/browser_lost_ack_evidence.mjs"
       - "tools/browser_lost_ack_evidence.test.mjs"
+      - "tools/run_keyboard_browser_acceptance.mjs"
+      - "tools/verify_keyboard_browser_report.mjs"
+      - "tools/verify_keyboard_browser_report.test.mjs"
+      - "unit_tests/test_keyboard_browser_workflow.py"
       - "tools/browser_artifact_tamper_evidence.mjs"
       - "tools/browser_artifact_tamper_evidence.test.mjs"
       - "unit_tests/test_browser_artifact_tamper_fixture.py"
@@ -445,6 +449,10 @@ on:
       - "tools/browser_actions.test.mjs"
       - "tools/browser_lost_ack_evidence.mjs"
       - "tools/browser_lost_ack_evidence.test.mjs"
+      - "tools/run_keyboard_browser_acceptance.mjs"
+      - "tools/verify_keyboard_browser_report.mjs"
+      - "tools/verify_keyboard_browser_report.test.mjs"
+      - "unit_tests/test_keyboard_browser_workflow.py"
       - "tools/browser_artifact_tamper_evidence.mjs"
       - "tools/browser_artifact_tamper_evidence.test.mjs"
       - "unit_tests/test_browser_artifact_tamper_fixture.py"
@@ -732,6 +740,10 @@ jobs:
         run: node --test tools/run_cv_parity_browser_acceptance.test.mjs tools/verify_cv_parity_browser_report.test.mjs
       - name: Test guided authoring and acknowledgement evidence contracts
         run: node --test tools/run_wizard_progression_browser_acceptance.test.mjs tools/verify_wizard_progression_browser_report.test.mjs
+      - name: Test native keyboard form and inline-confirmation evidence contracts
+        run: |
+          node --test tools/verify_keyboard_browser_report.test.mjs
+          python -m pytest --noconftest unit_tests/test_keyboard_browser_workflow.py
       - name: Test imported preset authority evidence contracts
         run: >-
           node --test tools/browser_preset_import.test.mjs
@@ -1149,6 +1161,14 @@ jobs:
       - name: Require current-package preference recovery and cleanup evidence
         if: always()
         run: node tools/verify_preferences_browser_report.mjs "$TMPDIR/preferences-browser"
+      - name: Run native keyboard form and inline-confirmation acceptance
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -m 700 "$TMPDIR/keyboard-browser"
+          node tools/run_keyboard_browser_acceptance.mjs "$TMPDIR/keyboard-browser"
+      - name: Require native keyboard form, zero-intent and cleanup evidence
+        if: always()
+        run: node tools/verify_keyboard_browser_report.mjs "$TMPDIR/keyboard-browser/keyboard-browser.json"
       - name: Run submitted-plan authoring protection acceptance
         if: ${{ !cancelled() }}
         run: node tools/run_submitted_plan_browser_acceptance.mjs "$TMPDIR/submitted-plan-browser"
@@ -1444,6 +1464,7 @@ jobs:
             ${{ runner.temp }}/wavedl-browser-ci/mapped-autoplot-uncertain-browser/mapped-autoplot.json
             ${{ runner.temp }}/wavedl-browser-ci/adoption-rollover/standalone-adoption-rollover.json
             ${{ runner.temp }}/wavedl-browser-ci/preferences-browser/preferences-browser.json
+            ${{ runner.temp }}/wavedl-browser-ci/keyboard-browser/keyboard-browser.json
             ${{ runner.temp }}/wavedl-browser-ci/submitted-plan-browser/submitted-plan-browser.json
             ${{ runner.temp }}/wavedl-browser-ci/result-operations-browser/result-operations.json
             ${{ runner.temp }}/wavedl-browser-ci/onnx-export-browser/onnx-export.json

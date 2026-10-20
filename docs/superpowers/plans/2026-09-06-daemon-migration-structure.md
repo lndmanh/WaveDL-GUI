@@ -45,6 +45,25 @@ current task/milestone tables supersede conflicting Qt-transition requirements.
 
 ### Current implementation/evidence status — 2026-10-15 (new-app validation)
 
+#### Current CPU/native verification — 2026-10-20
+
+Hosted CPU Tests pass at product `2c60886` on Python 3.11/3.12/3.13, each with
+4,001 passes and 40 explicit skips. Exact Unicode-fixed wheel/sdist offline
+lifecycle acceptance passes with zero skips. Native Windows isolated installed
+CPU acceptance passes on both Python 3.11/3.13 at QA-only `01f9e7d`; all eight
+foundation jobs pass at `2c60886`. Genuine single-device macOS MPS training-tree
+cancellation passes within its bounded scope. These results supersede older
+pending-CPU/Windows labels, not the original functional or reliability gates.
+The current hosted browser run passes its default twelve-case aggregate and is
+still running extended cases. Real-browser native-key-only guided authoring,
+field correction and inline-confirmation evidence now passes its strict current
+be6 report, 31 regression tests and independent review. This does not claim full
+WCAG/assistive-technology certification. The subsequent QA-only `01f9e7d` CPU
+Tests pass with 4,010 passes / 40 skips per version, and all eight foundation jobs
+also pass. Cross-platform/
+distributed GPU, real Slurm/filesystem-site and final T30c/T38/T42 sign-off remain
+open. Exact source, artifact and report identities are in the acceptance ledger.
+
 #### Current hosted/native follow-up — 2026-10-19
 
 The approved review branch now contains the new daemon/browser app without

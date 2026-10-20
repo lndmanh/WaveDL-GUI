@@ -122,6 +122,7 @@ logs/
 # Documentation
 manuscript/
 docs/**
+!docs/daemon-runtime-qualification.md
 !docs/superpowers/
 !docs/superpowers/plans/
 !docs/superpowers/plans/2026-10-08-migration-acceptance-ledger.md
@@ -348,6 +349,9 @@ tools/*
 !tools/run_storage_fault_browser_acceptance.mjs
 !tools/verify_storage_fault_browser_report.mjs
 !tools/verify_storage_fault_browser_report.test.mjs
+!tools/run_keyboard_browser_acceptance.mjs
+!tools/verify_keyboard_browser_report.mjs
+!tools/verify_keyboard_browser_report.test.mjs
 
 *.code-workspace
 

@@ -37,7 +37,7 @@ def test_expensive_acceptance_preserves_failure_diagnostics_but_stops_on_cancel(
         "Verify native retained generations and refused fourth update",
         "Run all twelve mandatory browser acceptance cases",
     }
-    assert len(producers) == 52
+    assert len(producers) == 53
     assert {step["name"] for step in producers if not step.get("if")} == implicit
     for step in producers:
         if step["name"] not in implicit:
@@ -51,7 +51,7 @@ def test_expensive_acceptance_preserves_failure_diagnostics_but_stops_on_cancel(
         if step.get("name", "").startswith(("Require ", "Verify "))
         and step not in producers
     ]
-    assert len(guards) == 59
+    assert len(guards) == 60
     implicit_guards = {
         "Verify installed dependency and CPU data contracts",
         "Require exhaustive field and effective Python export round trips",

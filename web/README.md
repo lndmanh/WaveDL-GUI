@@ -1,7 +1,8 @@
 # WaveDL static workstation
 
-This is the daemon-backed WaveDL browser workstation, still under full parity
-acceptance before replacing Qt. It supports project authoring, immutable plan
+This is the primary UI of the new daemon-backed WaveDL application, still under
+final product/platform acceptance. Qt compatibility and old-user-data migration
+are not required. It supports project authoring, immutable plan
 approval, training/monitoring/cancellation, dataset exploration, verified results,
 evaluation/plots, adoption and preferences. Cached UI is never evidence of a live
 daemon or run status. English and Vietnamese are supported through the active
@@ -39,13 +40,16 @@ requiring the protobuf 2 GiB limit are refused rather than downloaded partially.
 
 ## Run the packaged browser workstation
 
-Install the daemon from this development checkout, generate and vendor the
-assets using the verification commands below, then start:
+The checkout already includes the generated browser assets. Install the daemon
+from the repository root and start it; Node is not required to run this bundle:
 
 ```sh
 python -m pip install -e ".[daemon]"
 wavedl-daemon serve --browse-root datasets=/absolute/path/to/datasets
 ```
+
+If you change browser source, regenerate and vendor its assets using the
+development commands below before testing those changes through the daemon.
 
 Open the single-use bootstrap URL printed by the daemon. The token is stripped
 from the URL before requests begin. Select data and a model, enter the absolute
@@ -130,7 +134,16 @@ node tools/run_web_acceptance.mjs --case=port-reuse
 node tools/run_web_acceptance.mjs --case=live-port-reuse
 node tools/run_web_acceptance.mjs --case=authoring-parity
 node tools/run_web_acceptance.mjs --case=download-names
+node tools/run_keyboard_browser_acceptance.mjs
 ```
+
+The focused keyboard runner uses only native key presses after opening a fresh
+owned browser profile. It exercises guided dataset/model selection, popup Escape
+focus return, invalid-field correction and the inline reset/Keep draft controls,
+while asserting that no plan or execution is created. It prints its report path;
+verify that file with `node tools/verify_keyboard_browser_report.mjs <report>`.
+This is not a full WCAG or assistive-technology audit, and an inline confirmation
+is not treated as a modal dialog with a focus trap.
 
 Set `WAVEDL_PYTHON` to the daemon/ML interpreter and optionally
 `AGENT_BROWSER_BIN` to the installed CLI. Each case creates an exclusively owned,

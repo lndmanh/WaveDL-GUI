@@ -4,6 +4,29 @@ Requirement assessment reviewed by the main agent; not full T38/T42 sign-off.
 This audits the new daemon/browser application, not a Qt transition.
 No legacy migration, deprecation period or Qt-retaining release is required.
 
+## 2026-10-20 verification addendum
+
+The ledger's current top section supersedes the older pending-platform labels
+in this audit. Hosted CPU Tests at product `2c60886` pass on Python 3.11/3.12/3.13,
+each with 4,001 passes and 40 explicit skips. Exact Unicode-fixed wheel/sdist
+offline lifecycle acceptance passes with zero skips. Native Windows installed
+CPU acceptance now passes on both Python 3.11/3.13 at QA-only `01f9e7d`, with one
+intended case and zero skips each; both retain native ownership and graceful
+shutdown checks. The full eight-job foundation matrix passes at `2c60886`.
+Actual single-device macOS MPS training-tree cancellation is also verified within
+its declared boundary, not as cross-platform/distributed GPU acceptance.
+
+A fresh requirements review identified a concrete local evidence gap: chart
+keyboard tests did not establish the required real-browser forms journey. The
+new native-key-only guided-authoring/invalid-field/inline-confirmation probe now
+passes its strict current-be6 report, 31 regression tests and independent review.
+No shipped modal dialog, focus trap or full assistive-technology certification is
+assumed. Source, scope and report hashes are in the ledger. The subsequent QA-only
+`01f9e7d` CPU Tests also pass with 4,010 passes / 40 skips per version and all eight
+foundation jobs pass. The full hosted browser run remains live after passing its
+default twelve-case suite. CUDA/distributed GPU, real Slurm/filesystem-site and
+final T30c/T38/T42 sign-off remain open. No release or publishing is authorized.
+
 ## 2026-10-19 verification addendum
 
 The ledger's newest sections supersede the older unrun-hosted labels below.

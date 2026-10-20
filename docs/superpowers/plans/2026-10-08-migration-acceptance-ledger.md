@@ -27,6 +27,103 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Current hosted CPU and Windows installed acceptance — 2026-10-20
+
+Hosted CPU Tests run `39408337962` at product commit `2c60886` finishes
+success on Python 3.11, 3.12 and 3.13. Root independently parses each uploaded
+JUnit: **4,001 passed / 40 explicit skips / zero failures or errors** per version.
+The separate Python 3.11 dependency-resolved installed-wheel case also passes,
+one intended case and zero skips. Evidence is under
+`/private/tmp/wavedl-ci-current-2c60886.47MXzq/`; its isolated report SHA-256 is
+`65486c39a1d09e26ba94afa7d6d0377b335989b9a6b518a9ed346ea1e14cbb54`.
+This is the selected non-slow/non-GPU suite, not GPU acceptance.
+
+The subsequent QA-only `01f9e7d` Tests run `39410219923` also finishes success
+on all three versions. Root independently parses **4,010 passes / 40 explicit
+skips / zero failures or errors** per version; its separate Python 3.11 isolated
+wheel case passes one intended case with zero skips. Reports:
+`/private/tmp/wavedl-ci-current-01f9e7d.YBsWA9/`; isolated JUnit SHA-256:
+`77d34eadc75bdb3ae1f3ea62555ba3e9c3181927c1d392b4b59784dfb32385be`.
+
+Windows installed CPU run `39410219973` at QA-only commit `01f9e7d` finishes
+success on both Python 3.11.9 and 3.13.16, Windows AMD64 / Torch 2.14.1+cpu.
+Each uploaded JUnit contains exactly the intended isolated installed lifecycle
+case, zero skips/failures/errors and raw native daemon exit 3. The case requires
+offline dependency consistency, actual CPU training/checkpoint publication,
+authenticated installed daemon/static/bootstrap/client checks, no forced
+shutdown, an empty owned Job, released dispatch lock and SQLite integrity.
+Root independently checks those report outcomes and the matching artifact
+metadata. Both clean-built wheels exclude Qt and verify all 38 generated assets.
+
+| Python | Exact wheel SHA-256 | JUnit SHA-256 | Case seconds |
+|---|---|---|---|
+| 3.11 | `5485726b7a57c054ec07bbecb6318d2e63f4dbd4db6a19584c5d15794d618a70` | `e1b3bbd4d8814871536d41b9374c7189ca0049de4542c4f35d97aae74454c730` | 148.934 |
+| 3.13 | `26611806561adc5c8e0a367094698348d6ebe1980861b3c328c53e8f1f348bcf` | `9af34272b46fe611583cd917ab292a1234c673a1e587c3443588949fd5c022f2` | 132.902 |
+
+Evidence: `/private/tmp/wavedl-native-01f9e7d.D00U4r/cpu/`. Each CI cell generates
+its own build identity; these asset manifests are not the frozen checkout's be6
+manifest. Both complete cases take less than 180 seconds on this run: success
+does not establish that the new 300-second dependency-only budget was necessary
+or explain the preceding slow installation. Product/browser/harness bytes remain
+unchanged from `2c60886`; exact archive/wheel identities are not interchangeable.
+
+The subsequent foundation run `39410219936` at the same `01f9e7d` also finishes
+success on all eight jobs. Root independently runs the current strict report
+verifier on both uploaded Windows report pairs: each has all **15 mandatory
+native cases passed, 2,371 total passes and 456 explicit skips**, with no failures
+or errors. Reports are under the same evidence root's `foundation311/` and
+`foundation313/`. This dependency-light foundation scope does not substitute for
+the separate installed CPU case, GPU execution or real-site durability.
+
+The current hosted browser run has passed its default twelve-case suite and
+strict aggregate gate but remains live on its extended cases. Keyboard-only
+forms/inline-confirmation acceptance now passes within the boundary below.
+Full hosted acceptance, CUDA/distributed GPU,
+real Slurm/filesystem-site evidence and final T30c/T38/T42 sign-off remain open.
+The older pending-Windows/CPU statements below retain their dated run scope.
+
+### Current keyboard-only browser authoring evidence — 2026-10-20
+
+The explicit parity requirement for keyboard-accessible forms is exercised by
+`tools/run_keyboard_browser_acceptance.mjs`, with no product or asset changes.
+The final exact reviewed harness passes against frozen be6 assets. Root and an
+independent Sol review verify the strict report and all 31 regression tests.
+Report: `/private/tmp/wavedl-keyboard-accepted.2hF2sy/keyboard-browser.json`,
+SHA-256 `98c8e233831d8b3e9f0061e7a2714b066b5096ab799d2490315f5aae2267afc7`.
+Runner SHA-256:
+`b068ecb0bef6147f714aac14acab99021d97481155f6389004ac88daed25f515`.
+The existing browser workflow now includes an additive strict keyboard gate and
+report-only upload, with matching push/PR paths and contract checks. Root's
+broader workflow review catches and corrects the exact producer/guard totals
+while retaining the established run-after-failure/stop-on-cancellation policy.
+All 78 selected workflow regressions, 2,080 Node contract tests and pinned Ruff
+0.14.10 checks pass. The older live hosted run does not execute this newly added
+gate; its hosted execution remains to be observed separately from local proof.
+
+After page open, all 192 interactions are native key presses, not DOM focus,
+value or event mutations. Tab/Shift+Tab/Enter traverse guided authoring, refuse
+missing data, select the genuine daemon dataset and CNN, open/escape a root
+popup with visible focus return, correct invalid epochs 0 to 17, and use the
+inline reset/Keep draft confirmation while preserving 17. Read-only DOM
+observations establish field labels, visible focus, `aria-invalid` and visible
+field-scoped `role=alert` feedback. All five consistent registry checkpoints
+contain zero plans/runs/execution/submission controls. Browser/session, fixture,
+listener and identity-bound owned-root cleanup are confirmed; reports remain.
+
+The active reset confirmation is inline, not a modal: no modal focus trap or
+automatic restoration is claimed. Field errors have a visible alert but no
+`aria-describedby` association; this is not full WCAG/assistive-technology
+certification, exhaustive all-form coverage, plan approval or training proof.
+Three failed precursor reports remain: an overstrict description-association
+assertion, an accessible-name/visible-text wait mismatch and a premature
+post-correction snapshot. The harness now observes actual alerts and waits for
+settled correction; no application behavior was changed to make those pass.
+
+The [operator runbook](../../daemon-runtime-qualification.md) makes remaining
+GPU/site inputs and original qualification evidence explicit. It is not an
+execution report and does not add a mandatory dedicated runner, narrow support,
+claim HPC readiness or authorize broad cleanup/tagging/publishing.
+
 ### Exact Unicode-fixed production artifact recertification — 2026-10-20
 
 Clean-archive product commit `2c60886a3d4010733e7c3166ef8f7901623612e4` now
@@ -57,8 +154,10 @@ sequential execution. No host virtual environments were deleted by the refused
 cleanup command. The newer `01f9e7d` changes only installed-acceptance tests and
 this ledger, not product/browser/harness bytes. This report certifies exact
 `2c60886` archive bytes, not byte-identical archives of the later QA-only commit.
-Native Windows 3.11 installed acceptance, full hosted browser, CUDA/distributed
-GPU, real Slurm/site and final overall sign-off remain distinct open gates.
+At that prior run boundary, native Windows 3.11 installed acceptance was still
+open; the newer passing Windows run is recorded above. Full hosted browser,
+CUDA/distributed GPU, real Slurm/site and final overall sign-off remain distinct
+open gates.
 
 ### Current native foundations and Windows installed runtime — 2026-10-20
 
@@ -80,8 +179,9 @@ Runtime is native Windows AMD64 / Python 3.13.16 / Torch 2.14.1+cpu. Its JUnit
 records raw daemon exit 3; report and artifact metadata are under
 `/private/tmp/wavedl-native-2c60886.ft8qMl/cpu313/`.
 
-Python 3.11 does not yet pass that separate installed gate: the offline dependency
-installation exceeds its 180-second fixture budget before runtime acceptance.
+That prior Python 3.11 cell did not pass the separate installed gate: the offline
+dependency installation exceeded its 180-second fixture budget before runtime
+acceptance. The newer passing run is recorded above.
 This is not the older setuptools conflict or Unicode failure; the reason for
 slow installation is not established. Only isolated dependency installation
 now receives a separate finite 300-second budget; inherited-site install stays
