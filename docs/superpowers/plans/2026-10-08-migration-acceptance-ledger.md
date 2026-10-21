@@ -324,6 +324,33 @@ SHA-256 `2cef65cfa74d0b0952054e6dfcae421ce3d8ac926bd8dab854ca715215b92ad7`.
 It is still macOS, not hosted Linux, and does not establish the hosted cause.
 No retries or guard changes are used to make either local case pass.
 
+Authenticated live GitHub step output subsequently identifies the exact runner
+assertion: `Unbound prefix requires an unconfirmed submission or unavailable
+observation`. The dependent guard only rejects the resulting failed report.
+This is not evidence of a native-click error. The raw hosted prefix still
+requires inspection when its artifact becomes available.
+
+Independent executable source review establishes a separate concrete verifier
+contract defect: `LocalExecutionBackend.observe()` can return a fresh owned
+`SubmissionObservation(RUNNING)` before a writer binds its runtime attempt.
+The actual reducer then derives `running`/`confirmed`, no hello/state/outcome,
+and the API serializes null current/last runtime attempts with uncertainty
+false. The verifier previously rejected that valid documented API shape.
+A narrow correction accepts only that exact nonterminal native observation
+and empty runtime evidence. Existing uncertain-prefix checks stay strict;
+missing backend evidence, invented runtime authority, cancellation before
+the bound probe and attempt backsliding remain rejected.
+
+Root and independent review pass **83 focused tests** including the actual
+Python reducer contract and negative mutations; all **2,191 Node tooling
+tests pass with zero skips**. One fresh current-source Chrome 155 case and
+strict file guard pass:
+`/private/var/folders/kl/k8qwgt0x2rg5zv3chzgzzwfr0000gn/T/wavedl-cancel-ack-EfcpUC/cancellation-lost-ack.json`,
+SHA-256 `0c391a202fbfe364cc963d24f882f21500b211f6b37721be60d7e1464e520dc8`.
+That case contains no null-attempt prefix; the new branch is exercised by
+source-derived regression tests, not claimed fresh live observation. This
+correction is not yet called the hosted failure fix without its actual prefix.
+
 #### Selected final 6016 wheel/sdist pair — 2026-10-21
 
 One clean archived `6016b0c270d2aa99a64b17321eaf0ffbc382bf55` artifact pair

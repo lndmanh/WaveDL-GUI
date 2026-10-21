@@ -91,6 +91,51 @@ test('accepts submission-unknown then observation-unavailable before attempt all
   r.wire.splice(1,0,next);
   assert(verifyCancellationLostAckReport(r));
 });
+function withNativeRunningPrefix() {
+  const result = spawnSync(process.env.WAVEDL_PYTHON ?? 'python3', ['-c', `
+import json
+from dataclasses import asdict
+from wavedl.core.layout import OperationKind
+from wavedl_daemon.backends.contracts import SubmissionHandle, SubmissionObservation, ObservationStatus
+from wavedl_daemon.runs.reducer import RunIntent, SubmissionState, reduce
+handle = SubmissionHandle('local', '${runId}', '${requestId}', 'owned-owner', '/tmp/owned/run', pid=12345, supervisor_id='owned-supervisor')
+derived = reduce(RunIntent(handle.run_id, OperationKind.TRAIN, None, 'local', SubmissionState.SUBMITTED, handle), [], SubmissionObservation(ObservationStatus.RUNNING))
+print(json.dumps({'state': derived.state.value, 'uncertainty': derived.confidence != 'confirmed', 'evidence': {
+ 'native_pending': False, 'native_identity': None, 'current_runtime_attempt': None, 'last_runtime_attempt': None,
+ 'confidence': derived.confidence, 'reason': derived.reason, 'runtime': asdict(derived.runtime), 'backend': asdict(derived.backend),
+ 'last_observation': None, 'batch': None, 'stage_out': None}}))
+`], { cwd: repository, env: { ...process.env, PYTHONPATH: join(repository, 'src') }, encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr);
+  const r = withPreAdmission();
+  rewriteWire(r.wire[0], { ...JSON.parse(r.wire[0].rawBody), ...JSON.parse(result.stdout) });
+  return r;
+}
+test('accepts real reducer confirmed native running before a runtime attempt binds', () => {
+  assert(verifyCancellationLostAckReport(withNativeRunningPrefix()));
+});
+for (const [name, mutate] of [
+  ['uncertain native lifecycle', b => { b.uncertainty = true; }],
+  ['unconfirmed native confidence', b => { b.evidence.confidence = 'unconfirmed'; }],
+  ['missing native observation', b => { b.evidence.backend = null; }],
+  ['terminal native observation', b => { b.evidence.backend.status = 'terminal'; }],
+  ['native exit code', b => { b.evidence.backend.exit_code = 0; }],
+  ['native signal', b => { b.evidence.backend.signal = 15; }],
+  ['foreign scheduler identity', b => { b.evidence.backend.native_identity = { job_id: 'foreign' }; }],
+  ['unbound scheduler generation', b => { b.evidence.native_pending = true; }],
+  ['foreign execution identity', b => { b.evidence.native_identity = { job_id: 'foreign' }; }],
+  ['fabricated runtime state sequence', b => { b.evidence.runtime.state_seq = 0; }],
+  ['fabricated runtime conflict', b => { b.evidence.runtime.conflicting_exits = true; }],
+  ['runtime hello', b => { b.evidence.runtime.hello_seen = true; }],
+  ['runtime state', b => { b.evidence.runtime.state = 'running'; }],
+  ['runtime outcome', b => { b.evidence.runtime.outcome = { status: 'success' }; }],
+  ['current runtime binding', b => { b.evidence.current_runtime_attempt = 1; }],
+  ['last runtime binding', b => { b.evidence.last_runtime_attempt = 1; }],
+  ['cancellation already requested', b => { b.cancellation_requested = true; }],
+]) test(`rejects native running prefix with ${name}`, () => {
+  const r = withNativeRunningPrefix(), body = JSON.parse(r.wire[0].rawBody);
+  mutate(body); rewriteWire(r.wire[0], body);
+  assert.throws(() => verifyCancellationLostAckReport(r));
+});
 for (const [name, mutate] of [
   ['unsuccessful unbound GET', r => {r.wire[0].originalStatus=503;r.wire[0].deliveredStatus=503;}],
   ['null running attempt', r => {const b=JSON.parse(r.wire[0].rawBody);b.state='running';rewriteWire(r.wire[0],b);}],

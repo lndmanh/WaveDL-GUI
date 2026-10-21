@@ -132,17 +132,28 @@ export function verifyCancellationLostAckReport(report) {
       assert.equal(item.method, 'GET');
       assert.equal(item.originalStatus, 200, 'Unbound prefix requires a successful public GET');
       assert(item.sequence < preProbe.sequence && item.sequence < cancel.sequence, 'Unbound observation must precede the confirmed pre-cancel probe');
-      assert(body.state === 'submission_unknown' || body.state === 'observation_unavailable', 'Unbound prefix requires an unconfirmed submission or unavailable observation');
-      assert.equal(body.uncertainty, true);
+      const nativeRunning = body.state === 'running';
+      if (!nativeRunning) assert(body.state === 'submission_unknown' || body.state === 'observation_unavailable', 'Unbound prefix requires an unconfirmed submission or unavailable observation');
+      assert.equal(body.uncertainty, !nativeRunning);
       assert.equal(body.cancellation_requested, false);
       assert.equal(body.evidence.current_runtime_attempt, null);
       assert.equal(body.evidence.last_runtime_attempt, null);
-      assert.equal(body.evidence.confidence, 'unconfirmed');
+      assert.equal(body.evidence.confidence, nativeRunning ? 'confirmed' : 'unconfirmed');
       assert.equal(body.evidence.runtime.hello_seen, false);
       assert.equal(body.evidence.runtime.state, null);
       assert.equal(body.evidence.runtime.exit_seq, -1);
       assert.equal(body.evidence.runtime.outcome, null);
-      assert.equal(body.evidence.backend, null);
+      if (nativeRunning) {
+        // A local owned submission can be executing before its writer binds a
+        // runtime attempt. This confirms native execution, never runtime hello.
+        assert.equal(body.evidence.native_pending, false);
+        assert.equal(body.evidence.native_identity, null);
+        assert.deepEqual(body.evidence.runtime, { hello_seen: false, state: null,
+          state_seq: -1, exit_seq: -1, outcome: null, conflicting_exits: false });
+        assert.deepEqual(body.evidence.backend, { status: 'running', native_state: null,
+          exit_code: null, signal: null, detail: '', batch: null, stage_out: null,
+          native_identity: null });
+      } else assert.equal(body.evidence.backend, null);
     } else {
       assert.equal(body.attempt, 1);
       attemptBound = true;
