@@ -163,6 +163,20 @@ slice. Original distributed-GPU/full required-target, real Slurm/filesystem-site
 residual build-tool advisory and final release sign-off gates remain open.
 No product code changes, tagging or publication are required or performed here.
 
+#### Bounded residual-advisory alternative check
+
+An isolated clean-source Nuxt 4.6.2 manifest/lock trial does **not** remove the
+remaining roots: both before/after audits report 11 high / zero critical entries.
+Nitro 2.13.5 still reaches `node-forge` 1.4.0 through `listhen` 1.10.1, and
+`braces` 3.0.3 through globby/micromatch. The suggested upgrade is therefore not
+proof of remediation. It changes 196 lock entries and introduces CLI/router/
+nested-Vue changes without an audit benefit, so it is not applied and no full
+build/browser rerun is used to justify it. The passing live manifest/lock/assets
+remain untouched. Evidence:
+`/private/tmp/wavedl-nuxt462-trial.mI5Qts/{audit-before.json,audit-after.json,lock.diff}`.
+Residual release-risk disposition remains explicit rather than silently
+accepted or disguised by an ineffective framework upgrade.
+
 ### Current authoring verifier schema correction — 2026-10-20
 
 Hosted browser run `39408338013` at `2c60886` passes its twelve-case aggregate
