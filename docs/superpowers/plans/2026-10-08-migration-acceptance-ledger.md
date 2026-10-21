@@ -44,7 +44,7 @@ has been added as a prerequisite.
 | Current native foundation and lint gates | Runs `39587573571` (all eight foundation jobs) and `39587573645` succeed |
 | Locked frontend/static build and Windows installed CPU | Exact-6016 runs `39580167318` and `39580167151` succeed in the recorded scopes; `6016 → 7d05` changes only QA/tests/documentation, not product, assets, lock or packaging |
 | Selected wheel/sdist | Exact-6016 pair below passes separate fresh native macOS offline installed lifecycle cases; source blobs, 38 assets and Qt package exclusion independently checked |
-| Real CUDA/distributed GPU | **Open**: genuine execution/publication and F11 complete-owned-tree cancellation/context cleanup need approved native targets |
+| Real CUDA/distributed GPU | Single Colab T4 Linux slice below passes actual training/publication and recorded-tree/context cleanup; **distributed GPU, other required targets and graceful-runtime/no-escalation proof remain open** |
 | Real Slurm/filesystem site | **Open**: actual site versions/configuration, queues/accounting, requeue/attempt lineage, stage-out and shared-storage visibility need approved site access |
 | Release-security disposition | **Open**: 11 high / zero critical build-tool entries remain rooted in unpatched `braces`/`node-forge`; static/Python serving is not authorization to accept that risk |
 
@@ -90,6 +90,72 @@ defines the required nonsecret evidence and safety boundaries. Final
 T30c/T38/T42 reconciliation must incorporate those results and the explicit
 residual-advisory disposition. Tagging/publication still requires separate
 approval; none has been performed.
+
+### Approved Colab T4 qualification slice — 2026-10-21
+
+The user explicitly approves one T4 allocation for at most 30 minutes. The
+official `google-colab-cli` 0.7.5 runs in an isolated local Docker container;
+human OAuth credentials remain in its private named volume, never in repository
+files or evidence exports. No account upgrade, purchase, Drive mount or other
+session termination is performed. A watchdog requests release before the time
+budget expires; the actual test completes and the owned session is explicitly
+released after **705.052176 seconds (11m45s)**. A subsequent server assignment
+check confirms that exact owned allocation is absent, and its local session
+record is absent. The watchdog exits after that release witness.
+
+Hardware: one Tesla T4 / 15,360 MiB, driver 580.82.07, Linux x86_64 kernel
+6.6.122+, Python 3.13.15, PyTorch 2.11.0+cu130 / CUDA 13.0. The selected exact
+6016 wheel SHA-256 remains
+`f223919279c58558492960c687ae47ba7f310c1cfe96122d98849e4dc6676b9f`.
+Its modules load from a fresh owned venv while deliberately inheriting Colab's
+CUDA-enabled stack; no checkout/PYTHONPATH substitution is used. This is **not**
+a no-system-site-packages or fresh dependency-resolution packaging claim.
+
+The first standard-library venv-with-pip creation fails before runtime work.
+A separate new venv without its own pip succeeds using inherited pip; the
+Colab base environment is not modified. The initial dependency check identifies
+only missing Jedi required
+by Colab IPython; that result is retained. Installing Jedi into this owned venv
+repairs the conflict, and a fresh pair of run directories/idempotency keys
+repeats training/cancellation with **`pip check` exit zero**. No failed or
+dependency-conflicted attempt is relabelled as the clean final case.
+
+| Final clean run | Evidence |
+|---|---|
+| Completion `2dd8c035-b587-4296-a440-b9a47b09b457` | CNN on synthetic float32 NPZ, one CUDA process/device 0, workers 0, three finite epochs; runtime and native exit 0, completed without uncertainty, one verified checkpoint generation |
+| Cancellation `1eff8a13-09d8-4a12-a4c1-c6c827f81fb0` | Genuine CUDA hello and finite epoch before explicit cancellation; repeated requests produce one durable intent/delivery, one runtime attempt, confirmed native CANCELLED with wrapper exit 143 |
+| Owned process/context cleanup | Four captured native PIDs (3108, 3110, 3119, 3150), their stable start identities and PGID 3108; actual CUDA process 3119 observed at 190 MiB then absent. All recorded PIDs/group absent; GPU ownership query succeeds |
+| Shutdown/storage/output | Installed daemon exits 130 with shutdown witness, PID absent and TCP listener refused; dispatch lock released, SQLite integrity/write access pass, cancelled output inventory stable across repeated reads |
+
+Both runs' actual journals identify CUDA, allocated device `0` and the exact
+installed interpreter. Root and independent review cross-check finite losses,
+distinct identities, attempt-1 journals, checkpoint `COMPLETE.json` identities,
+manifest/journal hashes and reported outcomes. Artifact weights are hash/size
+verified remotely twice by the case and separate audit; the exported local
+bundle retains their metadata/markers, **not the weight bytes**.
+
+The cancelled journal has **no runtime exit event**. Preserve runtime outcome
+as unknown rather than inventing a cancelled/code-130 runtime exit or claiming
+no signal escalation. Native cancellation and recorded-tree/context absence are
+verified separately. Two valid generations (best and interrupted) exist during
+the cancellation window; no zero-publication-after-intent claim is made.
+The harness's unrelated 118 MiB probe context is not treated as an owned training
+leak or required to become globally zero. Workers 0 does not qualify DataLoader
+workers, and one T4 does not establish distributed GPU or another native OS.
+
+Allowlisted evidence: 27 regular files, with all 26 indexed file sizes/hashes
+independently verified. No OAuth/daemon credentials, bootstrap URLs, private
+daemon log or registry database are exported.
+
+- Evidence archive: `/private/tmp/wavedl-colab-gpu.7CsuBO/evidence.tar.gz`,
+  SHA-256 `008ca79c71bf6cba2686cddd0cb1bba6789b86464c32550844924780c9e28dc7`.
+- Local release witness: `/private/tmp/wavedl-colab-gpu.7CsuBO/release-witness.json`,
+  SHA-256 `f544b563362e6de828d852274f1b52a32994892d221f5f5a53d09c08b64f59a0`.
+
+This closes only the recorded single-T4 CUDA training/publication/native-cleanup
+slice. Original distributed-GPU/full required-target, real Slurm/filesystem-site,
+residual build-tool advisory and final release sign-off gates remain open.
+No product code changes, tagging or publication are required or performed here.
 
 ### Current authoring verifier schema correction — 2026-10-20
 

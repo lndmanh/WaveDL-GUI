@@ -56,7 +56,10 @@ Actual installed-wheel/browser acceptance and the native foundation matrix
 pass. Native Windows isolated CPU acceptance passes on Python 3.11/3.13;
 the selected wheel/sdist pair passes separate offline CPU lifecycle checks.
 Genuine single-device macOS MPS training/cancellation also passes within its
-bounded scope. CUDA/distributed GPU, real Slurm-site qualification and disposition
+bounded scope. An approved Colab T4 also passes single-GPU CUDA training,
+checkpoint publication and native cancellation/process/context cleanup; it
+does not establish a graceful runtime exit. Distributed GPU, real Slurm-site
+qualification and disposition
 of 11 high/zero critical build-tool advisory entries remain open; this is not
 final release sign-off. See the
 [acceptance ledger](docs/superpowers/plans/2026-10-08-migration-acceptance-ledger.md)

@@ -65,6 +65,16 @@ remaining build-tool advisory disposition or final T30c/T38/T42 sign-off.
 Those require approved hardware/site inputs and a release-risk decision;
 tagging/publishing still requires separate approval.
 
+An explicitly approved, bounded Colab T4 session subsequently verifies genuine
+single-GPU CUDA training/publication and native cancellation with all four
+recorded training-tree PIDs and the owned CUDA context absent. Final dependency
+checks pass after repairing missing Jedi only in the fresh qualification venv.
+The inherited Colab CUDA stack is explicit; this is not isolated package or
+multi-GPU qualification. Cancellation has native wrapper exit 143 and no runtime
+exit event, so graceful runtime shutdown is not claimed. The session is released
+after 11m45s, within its approved 30-minute maximum. Exact evidence and remaining
+distributed/site/release limits are recorded in the acceptance ledger.
+
 #### Current CPU/native verification — 2026-10-20
 
 Hosted CPU Tests pass at product `2c60886` on Python 3.11/3.12/3.13, each with
