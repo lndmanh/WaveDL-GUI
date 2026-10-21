@@ -250,6 +250,52 @@ Windows installed CPU `39580167151` are live; lint `39580167374` passes.
 These live handles are not yet acceptance and are not restarted on observation
 timeouts. No merge, tag, release or publication is performed.
 
+#### Exact 6016 static, installed-browser and native CPU evidence — 2026-10-21
+
+Static run `39580167318` finishes **success**. Root and independent review
+inspect artifact `12335702856`, ZIP SHA-256
+`ac6672a9b1c144b35e926d5dcada6a243c3f9ac9a1d0034c40d03986c290e867`.
+Its 35 raw generated files pass the vendor input inventory; these are not
+silently described as the 38-file managed package. Node 24.22.0/npm 11.19.1
+uses the exact reviewed e95 lock, Nuxt 4.5.2/Vue 3.5.43/Vite 8.3.5 and normal
+`nuxt generate`. Typecheck, lint, read-only format checks, **820 web tests / one
+skip**, vendoring and **38 generated-worker tests / zero skips** pass.
+Evidence: `/private/tmp/wavedl-staticweb-review.3RV5kh/` and adjacent CI log.
+
+Installed-browser run `39580167087` also finishes **success**. Root downloads
+artifact `12336460677` (ZIP SHA-256
+`55a99e085640a11238f1608fe05df56d2568722f6bd5af090a96ee123530ca0d`)
+and independently verifies the strict report, source commit, full installed
+asset-map equality and wheel hash. Wheel SHA-256:
+`75a8e045c458ab349d59e5cd1177d27a58c0da3cafdc1d4d80a84563349996ca`;
+generated manifest:
+`42aadafbe001c7fef1b7cc53661230a826e126ab20d8ead87cba6628b6bbf6ab`;
+report SHA-256:
+`837c4e902ab2d4e6570cd84844ff3e03fbbb7ad9694d89365898ac404624f179`.
+Real installed-console CPU training, automatic plotting, checkpoint evaluation
+and immutable predictions download pass; all shutdown, process/group/listener
+absence, storage-release and owned-root cleanup checks pass. Evidence:
+`/private/tmp/wavedl-6016-installed-audit.kJvgcJ/`. This is the patched generated
+Linux build, not the frozen be6 bundle or another job's random build identity.
+
+Windows installed CPU `39580167151` finishes **success on both Python versions**.
+Root and independent review inspect one intended canonical case per version,
+zero skips/failures/errors, raw daemon exit 3 and exact source commit. The case
+enforces genuine CPU checkpoint publication, graceful shutdown, empty owned
+Job without forced kills, released dispatch lock and SQLite integrity/write
+access. Each artifact has 38 generated assets, with job-specific build identity.
+
+| Python | Wheel SHA-256 | JUnit SHA-256 |
+|---|---|---|
+| 3.11 | `ad0a15b959f29868b729ef78e598b3c25552bde9f5658c81fa4e67794773674a` | `cda4e6e546acebc3486b179baec3a0a019ad66e209449af0544a305319dd4e8d` |
+| 3.13 | `90dabe3608e2a5a9fec0672e626d7cc5bf523300989ee5f2006cfcb78af2a2c9` | `5c1fca2c765cb0fd5db968d1b6ea57ddd4ea75f89d0c7265d62fd96cab4fc700` |
+
+Evidence: `/private/tmp/wavedl-win-cpu-review.sFD2ro/`. Foundations run
+`39580167482` likewise finishes all eight jobs successfully. CPU Tests
+`39580167132` and full browser `39580167159` remain live at this update;
+neither is counted as complete. These scoped results do not close CUDA/
+distributed GPU, real Slurm-site/filesystem or final T30c/T38/T42 sign-off.
+
 #### Fresh e70 static and native results
 
 **Terminal browser update — 2026-10-21:** run `39415927597` at exact
