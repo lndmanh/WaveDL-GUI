@@ -12,6 +12,10 @@ import { createBrowserActions } from "./browser_actions.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { observeCursorStorage } from "./browser_cursor_storage.mjs";
 import {
+  clickAuthenticationControlOnce,
+  redactAuthenticationClickError,
+} from "./browser_auth_retirement.mjs";
+import {
   editorFieldObservationExpression,
   editorFieldReadyExpression,
   openTrainingEditor,
@@ -22,8 +26,8 @@ const python = process.env.WAVEDL_PYTHON ?? "python";
 const browser = process.env.AGENT_BROWSER_BIN ?? "agent-browser";
 const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 
-function command(binary, args, { timeout = 35000, env = process.env } = {}) {
-  return boundedCommand(binary, args, { cwd: repo, timeout, env });
+function command(binary, args, { timeout = 35000, env = process.env, redact } = {}) {
+  return boundedCommand(binary, args, { cwd: repo, timeout, env, redact });
 }
 
 async function main() {
@@ -110,6 +114,7 @@ async function main() {
         ...args,
       ],
       {
+        redact: (stderr) => redactAuthenticationClickError(args[0], stderr),
         env: {
           ...Object.fromEntries(
             Object.entries(process.env).filter(([key]) => !key.startsWith("AGENT_BROWSER_")),
@@ -320,39 +325,33 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
       scope: '//section[@aria-labelledby="connection-title"]',
     });
     await writeFile(join(root, ".auth-skew-control"), "401", { flag: "wx", mode: 0o600 });
-    await cli("click", verifyLocator);
-    await waitFor(
-      "document.body.innerText.includes('Credential expired or rejected; enter it again.')",
-      "explicit authentication failure state",
-    );
-    const fault = JSON.parse((await readFile(join(root, ".auth-skew-evidence.jsonl"), "utf8")).trim().split("\n")[0]);
-    const storageExpression = `(${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, ${JSON.stringify(fault.daemonId)}, ${JSON.stringify(manifest.run_id)})`;
-    const revoked = await observe(`({
-      authMessage: document.body.innerText.includes('Credential expired or rejected; enter it again.'),
-      reconnectPrompt: document.body.innerText.includes('Daemon bearer credential'),
-      stalePlan: !!document.querySelector('[aria-label="Approved normalized manifest"]'),
-      staleHistory: !!document.querySelector('[aria-label="Runtime metric history"] canvas'),
-      staleSelectedRun: !!document.querySelector('[aria-label="Selected run"]'),
-      mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Cancel run|Preview persisted plan/.test(e.textContent)).length,
-      storage: ${storageExpression},
-    })`);
-    report.revoked = revoked;
-    assert(
-      revoked.authMessage && revoked.reconnectPrompt,
-      "401 must require explicit reauthentication",
-    );
-    assert(
-      !revoked.stalePlan && !revoked.staleHistory,
-      "401 must retire old plan/history authority",
-    );
-    assert(!revoked.staleSelectedRun, "401 must remove the old selected-run authority");
-    assert.equal(revoked.mutationControls, 0, "401 state must expose no stale mutation controls");
-    assert.equal(revoked.storage.session, 0, "401 must not persist credentials in sessionStorage");
-    assert.equal(revoked.storage.cookies, "", "401 must not persist credentials in cookies");
-    assert(
-      revoked.storage.valid,
-      "401 may retain only scoped numeric cursor watermark entries",
-    );
+    const retirement = await clickAuthenticationControlOnce({
+      click: () => cli("click", verifyLocator),
+      proveRetirement: async () => {
+        await waitFor(
+          "document.body.innerText.includes('Credential expired or rejected; enter it again.')",
+          "explicit authentication failure state",
+        );
+        const faults = (await readFile(join(root, ".auth-skew-evidence.jsonl"), "utf8"))
+          .trim().split("\n").map((line) => JSON.parse(line));
+        const storageExpression = `(${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, ${JSON.stringify(faults[0]?.daemonId)}, ${JSON.stringify(manifest.run_id)})`;
+        const revoked = await observe(`({
+          authMessage: document.body.innerText.includes('Credential expired or rejected; enter it again.'),
+          reconnectPrompt: document.body.innerText.includes('Daemon bearer credential'),
+          stalePlan: !!document.querySelector('[aria-label="Approved normalized manifest"]'),
+          staleHistory: !!document.querySelector('[aria-label="Runtime metric history"] canvas'),
+          staleSelectedRun: !!document.querySelector('[aria-label="Selected run"]'),
+          mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Cancel run|Preview persisted plan/.test(e.textContent)).length,
+          storage: ${storageExpression},
+        })`);
+        report.revoked = revoked;
+        return { faults, revoked, storageExpression };
+      },
+    });
+    const { storageExpression } = retirement;
+    report.authenticationClickAcknowledgement = retirement.acknowledgementLost
+      ? "element-retired-after-delivered-401"
+      : "received";
     report.assertions.push(
       "real authenticated request returned 401 and displayed explicit reauthentication with no stale mutation controls",
     );

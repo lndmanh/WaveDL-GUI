@@ -12,6 +12,7 @@ const emptyStorage = () => ({ local: 0, entries: [], valid: true, session: 0, co
 const fixture = () => ({
   status: "passed",
   scenario: "same-daemon-auth-skew",
+  authenticationClickAcknowledgement: "received",
   approvedRunId: "owned-run",
   assetManifestSha256: "a".repeat(64),
   browserRuntime: { userAgent: "HeadlessChrome/154.0.0.0", headed: false, executable: "managed" },
@@ -89,6 +90,20 @@ const fixture = () => ({
 });
 
 test("dedicated populated auth/skew report passes", () => assert(verifyAuthSkewReport(fixture())));
+
+test("delivered 401 may independently prove the native control retirement race", () => {
+  const report = fixture();
+  report.authenticationClickAcknowledgement = "element-retired-after-delivered-401";
+  assert(verifyAuthSkewReport(report));
+});
+
+for (const acknowledgement of [undefined, "unknown", "retried", "not found"]) {
+  test(`rejects missing or unknown click acknowledgement: ${acknowledgement}`, () => {
+    const report = fixture();
+    report.authenticationClickAcknowledgement = acknowledgement;
+    assert.throws(() => verifyAuthSkewReport(report));
+  });
+}
 const watermark = () => ({
   local: 1, entries: [{ key: "wavedl:cursor:v1:daemon:owned-run", cursor: { attempt: 1, seq: 23 } }],
   valid: true, session: 0, cookies: "",

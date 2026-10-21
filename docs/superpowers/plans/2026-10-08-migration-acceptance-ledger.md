@@ -139,9 +139,51 @@ own durable plan. All 47 focused and 2,143 complete Node tooling tests pass.
 A new standalone Ubuntu installed-browser workflow and its 17 passing source
 contracts enforce the same conjunction, clean wheel staging and explicit
 three-file verified-only evidence upload. Pinned Ruff 0.14.10 lint/read-only
-format checks pass. The new hosted workflow has not yet run; this local proof
-does not close GPU, real-site Slurm, other-platform browser or final release
-sign-off. No legacy migration is added and no release/tag is authorized.
+format checks pass. No legacy migration is added and no release/tag is
+authorized.
+
+The new Ubuntu workflow `39577731926` subsequently finishes **success** at
+exact `4cb1d548f478d5f02f19138f20decde6fe9f377f`. Root downloads artifact
+`12335660972` (ZIP digest
+`9711eecb792484b9df065dad3fad03bbe3bb066ee395f7e54bd634a664186f55`)
+and independently runs the strict verifier and exact full asset-map/build
+identity comparison. Wheel SHA-256:
+`98bb455682453bab8b02be2a4c46ae07dc38fb95404ad75741dd407b20af9fa6`;
+generated asset manifest:
+`70442a12d9a4c65167982869fb269fc6538f6b827e4212634d12609975c9e44f`.
+Report SHA-256:
+`9df9851e888a85d5f929082314fe7394f3c3c6706c4983c939ddb69f007d086b`.
+All recorded shutdown/absence/storage/owned-root cleanup checks pass, with
+daemon exit 130 and no cleanup errors. This is actual local Linux CPU
+installed-console/browser evidence, not just source-contract tests. It does
+not close GPU, real-site Slurm, other-platform browser or final release
+sign-off. The independently generated Linux and frozen native macOS builds
+are not relabelled as one byte-identical candidate.
+
+#### Authentication-control acknowledgement race — 2026-10-21
+
+The terminal e70 authentication failure is reproduced locally. Its fixture
+records a real authenticated handler returning 200 followed by the armed 401;
+the native click command reports `Element not found` as authentication
+retirement removes its target. Other unchanged local runs pass. The focused
+QA correction performs one click only, recognizes only the exact classified
+exit-1/no-signal native missing-element error, and then requires independent
+single-fault delivery plus every original retired-authority/storage check.
+Other driver errors, absent/duplicate faults, stale authority and failed
+observations still fail. No application or browser asset changes are needed.
+
+Root and independent review pass 72 focused tests, including a real
+bounded-command/redactor integration test and negative retirement invariants.
+The final complete Node tooling suite passes **2,173 tests with zero skips**;
+58 neighboring workflow Python contracts and pinned Ruff 0.14.10 read-only
+checks pass. A fresh real CPU/browser scenario passes the strict report guard
+with full cleanup:
+`/var/folders/kl/k8qwgt0x2rg5zv3chzgzzwfr0000gn/T/wavedl-auth-skew-report-25296ab9-2edb-4886-a7ce-ddddfae754ce.json`,
+SHA-256 `e86ae078db47238a41aede06a2259e3bbaa0497ffe4240f35c3755e0c9eb6736`.
+That fresh run records an acknowledged click; the narrow lost-ack branch has
+executable fault-path tests, not a claimed fresh live lost-ack observation.
+Full hosted browser acceptance still requires the corrected workflow to run;
+the earlier failed run is not retroactively classified successful.
 
 #### Fresh e70 static and native results
 

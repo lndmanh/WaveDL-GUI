@@ -355,6 +355,8 @@ tools/*
 !tools/run_installed_browser_acceptance.mjs
 !tools/verify_installed_browser_report.mjs
 !tools/verify_installed_browser_report.test.mjs
+!tools/browser_auth_retirement.mjs
+!tools/browser_auth_retirement.test.mjs
 
 *.code-workspace
 

@@ -206,6 +206,8 @@ on:
       - "tools/verify_adoption_browser_report.mjs"
       - "tools/verify_adoption_browser_report.test.mjs"
       - "tools/browser_auth_skew_fixture.py"
+      - "tools/browser_auth_retirement.mjs"
+      - "tools/browser_auth_retirement.test.mjs"
       - "tools/run_auth_skew_browser_acceptance.mjs"
       - "tools/run_auth_skew_browser_acceptance.test.mjs"
       - "tools/browser_cursor_storage.mjs"
@@ -505,6 +507,8 @@ on:
       - "tools/verify_adoption_browser_report.mjs"
       - "tools/verify_adoption_browser_report.test.mjs"
       - "tools/browser_auth_skew_fixture.py"
+      - "tools/browser_auth_retirement.mjs"
+      - "tools/browser_auth_retirement.test.mjs"
       - "tools/run_auth_skew_browser_acceptance.mjs"
       - "tools/run_auth_skew_browser_acceptance.test.mjs"
       - "tools/browser_cursor_storage.mjs"
@@ -687,7 +691,7 @@ jobs:
       - name: Test browser QA launch policy
         run: node --test tools/browser_launch_policy.test.mjs
       - name: Test standalone adoption, auth/skew and stream report contracts
-        run: node --test tools/verify_adoption_browser_report.test.mjs tools/run_auth_skew_browser_acceptance.test.mjs tools/verify_auth_skew_browser_report.test.mjs tools/verify_stream_browser_report.test.mjs
+        run: node --test tools/verify_adoption_browser_report.test.mjs tools/browser_auth_retirement.test.mjs tools/run_auth_skew_browser_acceptance.test.mjs tools/verify_auth_skew_browser_report.test.mjs tools/verify_stream_browser_report.test.mjs
       - name: Test historical-attempt rollover report contract
         run: node --test tools/verify_adoption_rollover_browser_report.test.mjs
       - name: Test negative adoption evidence and targeted source faults

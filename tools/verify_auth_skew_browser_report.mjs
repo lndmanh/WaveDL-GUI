@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 export function verifyAuthSkewReport(report) {
   assert.equal(report.status, "passed");
   assert.equal(report.scenario, "same-daemon-auth-skew");
+  assert(["received", "element-retired-after-delivered-401"].includes(
+    report.authenticationClickAcknowledgement,
+  ), "Missing or unknown authentication click acknowledgement");
   assert(/^[a-f0-9]{64}$/.test(report.assetManifestSha256));
   assert(/(?:Headless)?Chrome\/\d+/.test(report.browserRuntime?.userAgent));
   assert(typeof report.browserRuntime?.headed === "boolean");

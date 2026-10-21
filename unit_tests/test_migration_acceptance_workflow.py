@@ -188,6 +188,18 @@ def test_cursor_storage_evidence_changes_trigger_browser_lane(workflow, event):
     assert paths.count("tools/verify_auth_skew_browser_report.test.mjs") == 1
 
 
+@pytest.mark.parametrize("event", ["push", "pull_request"])
+def test_auth_retirement_proof_changes_trigger_browser_lane(workflow, event):
+    triggers = workflow.get("on", workflow.get(True))
+    paths = triggers[event]["paths"]
+    assert paths.count("tools/browser_auth_retirement.mjs") == 1
+    assert paths.count("tools/browser_auth_retirement.test.mjs") == 1
+    steps = workflow["jobs"]["chromium-cpu"]["steps"]
+    commands = "\n".join(step.get("run", "") for step in steps)
+    assert "node --test tools/verify_adoption_browser_report.test.mjs " in commands
+    assert "tools/browser_auth_retirement.test.mjs" in commands
+
+
 def test_new_app_ci_excludes_legacy_transition_but_preserves_update_safety(workflow):
     triggers = workflow.get("on", workflow.get(True))
     for event in ("push", "pull_request"):
