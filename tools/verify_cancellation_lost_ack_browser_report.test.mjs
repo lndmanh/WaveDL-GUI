@@ -113,6 +113,12 @@ print(json.dumps({'state': derived.state.value, 'uncertainty': derived.confidenc
 test('accepts real reducer confirmed native running before a runtime attempt binds', () => {
   assert(verifyCancellationLostAckReport(withNativeRunningPrefix()));
 });
+test('accepts the hosted native-running prefix with matching previous observation', () => {
+  const r = withNativeRunningPrefix(), body = JSON.parse(r.wire[0].rawBody);
+  body.evidence.last_observation = structuredClone(body.evidence.backend);
+  rewriteWire(r.wire[0], body);
+  assert(verifyCancellationLostAckReport(r));
+});
 for (const [name, mutate] of [
   ['uncertain native lifecycle', b => { b.uncertainty = true; }],
   ['unconfirmed native confidence', b => { b.evidence.confidence = 'unconfirmed'; }],

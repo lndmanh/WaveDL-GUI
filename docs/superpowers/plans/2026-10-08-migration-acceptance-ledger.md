@@ -351,6 +351,33 @@ That case contains no null-attempt prefix; the new branch is exercised by
 source-derived regression tests, not claimed fresh live observation. This
 correction is not yet called the hosted failure fix without its actual prefix.
 
+**Terminal confirmation:** `39580167159` finishes failure with 185 successful
+steps, only runner 112 and its dependent guard 113 failing, and four skips
+(two later F05 contract steps plus two post-job setup steps). Artifact
+`12339771663` has ZIP SHA-256
+`b7891a3d0147cb81495ef69b6b5f9e8e4f09613924dd6d496aaa6c39b9638ee4`.
+Root downloads its 87 files under
+`/private/tmp/wavedl-6016-browser-terminal.j7lKyH/`: 78 JSON files, including
+63 cleanup objects with no recorded failures. The failed cancellation report
+is SHA-256 `f67e27662f6d982fcf2f56689d4d264b66eba92c8efa1cd0f9892601aca0c68a`.
+Its first authenticated browser GET has exactly the source-derived state:
+attempt null, state running, uncertainty false, confidence confirmed, native
+running observation, empty runtime evidence and null runtime bindings. All
+later cancellation/terminal/cleanup evidence is present. The corrected record
+verifier accepts an in-memory diagnostic copy after clearing only its original
+failure labels; the original report remains failed and unmodified. This is a
+confirmed verifier-contract mismatch, not retroactive CI acceptance.
+
+The same artifact's auth/skew report passes root's record guard and records a
+received click acknowledgement; report SHA-256
+`b2ace9c49811c5597411712e6e22f7c73c5b3e6ef6ff2b6a6aa09ec638fdd11c`.
+The uploaded generated manifest is
+`171376d55389cafde550ca26675a7bb4f49ba69ab107c74af992e25fb24070d9`.
+All other executed browser scenarios and their guards pass. The two skipped
+F05 contracts are not counted as passes. A regression also retains the actual
+hosted prefix's matching previous observation. The correction must still pass
+a fresh hosted workflow; no existing run is cancelled or relabelled successful.
+
 #### Selected final 6016 wheel/sdist pair — 2026-10-21
 
 One clean archived `6016b0c270d2aa99a64b17321eaf0ffbc382bf55` artifact pair
