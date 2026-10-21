@@ -1,6 +1,6 @@
 # WaveDL Daemon/Browser Application — Corrected Task Structure
 
-**Status (2026-10-15):** New daemon/browser application; Qt transition requirements superseded; final product/platform/site/release validation remains open
+**Status (2026-10-21):** New daemon/browser implementation and hosted CPU/browser/package checks pass; original GPU/site qualification and release-security/final sign-off remain open. Qt transition requirements are superseded.
 **Date:** 2026-09-06
 **Spec:** `../specs/2026-09-05-wavedl-daemon-architecture-design.md`
 **Reviews:** `2026-09-05-codex-review-migration-plan.md` (findings F1–F17), plus a
@@ -44,6 +44,26 @@ notes below retain their original historical meaning; this section and the
 current task/milestone tables supersede conflicting Qt-transition requirements.
 
 ### Current implementation/evidence status — 2026-10-15 (new-app validation)
+
+#### Current terminal acceptance reconciliation — 2026-10-21
+
+The final exact-7d05 hosted browser workflow passes all **191 steps with zero
+failures/skips**, including the twelve-case aggregate and extended fault paths.
+Current installed-browser, native foundation and lint gates pass; CPU tests
+pass on Python 3.11/3.12/3.13 with **4,036 passes / 40 explicit skips** each,
+plus a separate canonical isolated-wheel pass with no skips. Exact-6016
+Windows installed CPU/static gates and the selected wheel/sdist acceptance
+remain scoped evidence; subsequent QA/documentation changes do not alter their
+product/asset/lock/packaging source. No additional concrete local product
+implementation deficit is identified by independent review of the 24 rows.
+
+The [current acceptance reconciliation](2026-10-08-migration-acceptance-ledger.md#current-acceptance-reconciliation--2026-10-21)
+records exact runs, artifacts and limits. Earlier live/failing hosted-browser
+statements below are historical. This does **not** waive genuine CUDA/
+distributed-GPU full-tree cancellation, real Slurm/filesystem-site qualification,
+remaining build-tool advisory disposition or final T30c/T38/T42 sign-off.
+Those require approved hardware/site inputs and a release-risk decision;
+tagging/publishing still requires separate approval.
 
 #### Current CPU/native verification — 2026-10-20
 

@@ -47,15 +47,18 @@ supported. Final daemon/browser package and release validation remains open;
 tagging or publishing requires explicit approval. Dated evidence below records
 its original scope; older Qt-retirement gates are superseded by this direction.
 
-Current verification (2026-10-20): hosted CPU tests pass on Python 3.11/3.12/3.13
-with 4,010 passes and 40 explicit skips per version. Native Windows isolated
-CPU install-and-run acceptance passes on Python 3.11/3.13, and the full native
-foundation matrix passes on Windows, macOS and Linux. Exact Unicode-fixed
-wheel/sdist offline CPU lifecycle checks pass with zero skips. The hosted browser
-run has passed its twelve-case aggregate; extended failure-path checks are still
-running. Genuine single-device macOS MPS training/cancellation also passes within
-its bounded scope. Full browser, cross-platform/distributed GPU and real
-Slurm-site validation remain open; this is not release sign-off. See the
+Current verification (2026-10-21): the full hosted browser workflow passes
+**191 steps with zero failures or skips**, including its twelve-case baseline,
+extended failure paths, cancellation recovery and authentication retirement.
+Hosted CPU tests pass on Python 3.11/3.12/3.13 with 4,036 passes and 40 explicit
+skips per version; the separate isolated-wheel gate passes without skips.
+Actual installed-wheel/browser acceptance and the native foundation matrix
+pass. Native Windows isolated CPU acceptance passes on Python 3.11/3.13;
+the selected wheel/sdist pair passes separate offline CPU lifecycle checks.
+Genuine single-device macOS MPS training/cancellation also passes within its
+bounded scope. CUDA/distributed GPU, real Slurm-site qualification and disposition
+of 11 high/zero critical build-tool advisory entries remain open; this is not
+final release sign-off. See the
 [acceptance ledger](docs/superpowers/plans/2026-10-08-migration-acceptance-ledger.md)
 for current source hashes, results, limitations and remaining gates.
 The [runtime qualification runbook](docs/daemon-runtime-qualification.md) records

@@ -27,6 +27,70 @@ native Windows, GPU cancellation, or a real Slurm site's filesystem.
 
 ## Evidence boundary and notation
 
+### Current acceptance reconciliation — 2026-10-21
+
+The new daemon/browser functionality is implemented; no additional concrete
+local product implementation deficit is identified by the final independent
+scope/code review. This is **not overall T30c/T38/T42 sign-off**: the original
+GPU/site qualification and release-security disposition below remain required.
+No Qt compatibility, old-user-data migration or intermediate desktop release
+has been added as a prerequisite.
+
+| Requirement | Current authoritative result |
+|---|---|
+| Full hosted browser workflow | [Run 39587573347](https://github.com/lndmanh/WaveDL-GUI/actions/runs/39587573347) at `7d05a9e4149604f0c44a8d40f0bcbf18f4d59151`: **191 successful steps, zero failures, zero skips** |
+| Current installed-wheel/actual-browser gate | Run `39587573431` succeeds; earlier exact artifact/installed-asset checks are recorded below |
+| Current CPU regression matrix | Run `39587573340` succeeds on Python 3.11/3.12/3.13: each **4,036 passes / 40 explicit skips / zero failures or errors**; separate canonical 3.11 isolated-wheel case **one pass / zero skips** |
+| Current native foundation and lint gates | Runs `39587573571` (all eight foundation jobs) and `39587573645` succeed |
+| Locked frontend/static build and Windows installed CPU | Exact-6016 runs `39580167318` and `39580167151` succeed in the recorded scopes; `6016 → 7d05` changes only QA/tests/documentation, not product, assets, lock or packaging |
+| Selected wheel/sdist | Exact-6016 pair below passes separate fresh native macOS offline installed lifecycle cases; source blobs, 38 assets and Qt package exclusion independently checked |
+| Real CUDA/distributed GPU | **Open**: genuine execution/publication and F11 complete-owned-tree cancellation/context cleanup need approved native targets |
+| Real Slurm/filesystem site | **Open**: actual site versions/configuration, queues/accounting, requeue/attempt lineage, stage-out and shared-storage visibility need approved site access |
+| Release-security disposition | **Open**: 11 high / zero critical build-tool entries remain rooted in unpatched `braces`/`node-forge`; static/Python serving is not authorization to accept that risk |
+
+Root and independent review download final browser artifact `12342898756` and
+independently verify its ZIP SHA-256:
+`55861d462d986363b83bb6038f9b0eeb75fa5e233d985b989240f86df6482ef2`.
+The bundle contains 87 files / 78 JSON files. All 63 cleanup-bearing records
+have no false cleanup flags or nonempty error arrays. The twelve-case summary
+matches each individual case file and the downloaded generated manifest.
+The actual later F05 contract steps also pass this time; prior skipped steps
+are not retroactively relabelled successful.
+
+| Final report | SHA-256 |
+|---|---|
+| Twelve-case aggregate | `1a8fb7a1d53a8f5dee103b4e33ae05429aacb964b786c1ef01b21c1324d70722` |
+| Cancellation lost acknowledgement | `3e89fffb8a78c7cd25e75777f462823a8905a5622fb7225934b6e29924c4bab7` |
+| Authentication/build/protocol retirement | `a127ada02acc1261016f6f7adc0be856d687b384d8f5f5771024e9541771cbad` |
+| Exact generated asset manifest | `555beafd6dd00d9e2b49f4d707737ac395f80e30481b85583fe3a046b60e33f4` |
+
+Both strict record guards pass, their asset maps agree with this CI manifest,
+and cancellation source/harness fingerprints match the exact Git commit.
+This is not an offline local-asset file-guard claim against the different be6
+bundle. The final cancellation run observes two truthful `submission_unknown`
+prefixes; it does not newly exercise the native-running prefix. That branch is
+covered by the actual reducer regression and the preceding failed hosted
+payload's explicit diagnostic validation, without rewriting the failed report.
+Auth records a normally received acknowledgement. All native cancellation,
+public recovery, identity and cleanup requirements remain enforced.
+
+Root evidence: `/private/tmp/wavedl-7d05-browser-final.4opQdf/`;
+independent ZIP/report review: `/private/tmp/wavedl-final-browser-review.5axFMG/`.
+Current CPU JUnits:
+`/var/folders/kl/k8qwgt0x2rg5zv3chzgzzwfr0000gn/T/wavedl-7d05-test-evidence-nw1v0ev5/`.
+Earlier dated statements below that the full hosted browser gate is live or
+failing are superseded by this terminal success, not erased. No further
+byte-recertification is required solely for later QA/documentation commits.
+
+To finish the original qualification scope, an operator must provide approved
+CUDA/multi-GPU and Slurm targets, authorized devices/topology and scheduler
+resources/fault permissions, and allocation-visible Python/dataset/storage
+paths. The [qualification runbook](../../daemon-runtime-qualification.md)
+defines the required nonsecret evidence and safety boundaries. Final
+T30c/T38/T42 reconciliation must incorporate those results and the explicit
+residual-advisory disposition. Tagging/publication still requires separate
+approval; none has been performed.
+
 ### Current authoring verifier schema correction — 2026-10-20
 
 Hosted browser run `39408338013` at `2c60886` passes its twelve-case aggregate
