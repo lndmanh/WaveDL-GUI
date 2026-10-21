@@ -185,6 +185,58 @@ executable fault-path tests, not a claimed fresh live lost-ack observation.
 Full hosted browser acceptance still requires the corrected workflow to run;
 the earlier failed run is not retroactively classified successful.
 
+#### Current build-tool patch and native foundations — 2026-10-21
+
+Fresh registry audit at `2026-10-21T09:42:17Z` reports 13 high / zero critical
+affected dependency entries, superseding the earlier 11-high snapshot. The
+additional entries include `launch-editor` and Vite's bundled implementation:
+the maintainer's [Vite security patch release](https://github.com/vitejs/vite/releases/tag/v8.3.3)
+and [reviewed Windows advisory](https://github.com/advisories/GHSA-587h-7wmj-h5pm)
+identify patched versions. Updating only the separately installed editor package
+would not address Vite's bundled code.
+
+A clean archived trial of `b6e3a05` resolves the compatible current patches:
+Vite 8.3.5, launch-editor 2.14.2, Rolldown 1.2.14 and PostCSS 8.5.31.
+Root applies only the reviewed generated lockfile, SHA-256
+`e95fa34b8f3bdbbb038eedb19ff584d2174b59258a669832e941511d4a756b4a`.
+Nuxt 4.5.2, Vue 3.5.43, the manifest, overrides and frozen be6 package assets
+remain unchanged. Independent graph review verifies all 15 Rolldown and 12
+Oxide platform bindings and no missing/incompatible required edges. The 33
+changed package keys include necessary dependency updates, Oxc relocation,
+unused microdiff removal and bundled WASM rehoisting; this is not described as
+an artificially two-entry lock diff.
+
+The exact isolated candidate passes `npm ci`, typecheck, **820 web tests / one
+explicit skip**, lint, read-only format checks, generation and vendoring. All
+**38 generated-worker tests pass with zero skips**, independently rerun by root
+using explicit Python 3.11. Initial generated-test attempts with other Python
+paths fail for missing dependencies and are not counted as passes. Evidence:
+`/private/tmp/wavedl-buildtool-trial.W0JWog/`. The new trial output is not
+substituted for the frozen vendored package; hosted generation/browser checks
+must validate the new lock in their own exact source/build scope.
+
+The candidate audit again reports **11 high / zero critical**, not clean.
+Remaining roots include [braces](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+and [node-forge](https://github.com/advisories/GHSA-86w9-cpqp-85rv), whose
+advisories report no patched release at inspection. These paths belong to the
+Nuxt/Nitro/developer build-tool graph; the shipped browser is static and served
+by Python, not a deployed Node development server. This source reachability
+assessment is not a complete bundle-security proof or authorized risk
+acceptance. Keep development/build inputs trusted and build services private;
+do not run automatic audit fixes or waive final release disposition.
+
+Exact-4cb foundations run `39577731560` finishes **success on all eight jobs**.
+Root and independent review apply the native guard to both Windows report
+pairs: each has 15 required passes, 2,371 total passes, 456 explicit skips and
+no failures/errors. Each macOS pair has 2,867 passes / 40 skips; each Ubuntu
+pair 2,851 passes / 56 skips. Both real-tmpfs one-case reports pass without
+skips. All six native platform/Python pairs also pass seven live loopback SSE
+and two real TCP daemon tests, retaining their explicit backend/runtime seams.
+This is foundation evidence, not real ML/GPU or Slurm-site qualification.
+Artifacts: `/private/tmp/wavedl-foundations-review.eNrBmj/`. The slower Python
+3.12 job in CPU Tests `39577731609` remains live at this update; no workflow is
+restarted or cancelled to push the next reviewed change.
+
 #### Fresh e70 static and native results
 
 **Terminal browser update — 2026-10-21:** run `39415927597` at exact
