@@ -304,6 +304,26 @@ wheel case passes one intended case without skips. Evidence root:
 Full browser `39580167159` remains live after passing its twelve-case baseline;
 the later auth/skew case and complete extended workflow are not yet accepted.
 
+**Subsequent live failure:** cancellation lost-ack runner step 112 and its
+dependent report guard step 113 fail. The workflow continues, so neither a
+terminal aggregate result nor a product-versus-harness diagnosis is claimed.
+One unchanged independent native macOS run and strict file guard pass
+(`/private/var/folders/kl/k8qwgt0x2rg5zv3chzgzzwfr0000gn/T/wavedl-cancel-ack-JZ40MU/cancellation-lost-ack.json`,
+SHA-256 `ee76fe394a13ecb5cf782613c445637ec6ec4afd61e599db14916e9e23578626`),
+recording one genuine 202-to-503 cancellation POST, native cancellation/PID
+absence and full cleanup. That local result does not explain or supersede the
+hosted failure. No cancellation assertions are weakened while waiting for
+the completed hosted log/report.
+
+A second single unchanged local run uses the isolated patched Vite-generated
+bundle and installed Chrome 155, matching CI's browser major rather than the
+older frozen/Chrome-150 combination. Its strict matching-build guard also
+passes: report
+`/private/var/folders/kl/k8qwgt0x2rg5zv3chzgzzwfr0000gn/T/wavedl-cancel-ack-UrzH1G/cancellation-lost-ack.json`,
+SHA-256 `2cef65cfa74d0b0952054e6dfcae421ce3d8ac926bd8dab854ca715215b92ad7`.
+It is still macOS, not hosted Linux, and does not establish the hosted cause.
+No retries or guard changes are used to make either local case pass.
+
 #### Selected final 6016 wheel/sdist pair — 2026-10-21
 
 One clean archived `6016b0c270d2aa99a64b17321eaf0ffbc382bf55` artifact pair
