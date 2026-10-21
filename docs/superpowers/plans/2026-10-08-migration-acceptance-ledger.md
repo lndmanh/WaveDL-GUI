@@ -99,7 +99,77 @@ and Windows installed CPU `39415927729` are also live; Lint `39415927702` passes
 Their final outcomes remain to be inspected; no current workflow was cancelled
 to make this push. Application/runtime/browser asset bytes remain unchanged.
 
+#### Installed-wheel and real-browser conjunction — 2026-10-21
+
+The original parity/package requirement includes an actual browser against the
+installed wheel outside the checkout. Source-fixture browser runs plus separate
+HTTP installed-package tests did not prove that conjunction. The new bounded
+runner installs an explicitly hashed wheel into a fresh isolated native venv
+using only a complete offline wheelhouse, removes Python path overrides,
+checks actual module/console origins and dependency consistency, and compares
+all installed browser asset bytes with that same wheel. Wheel METADATA and
+clean-environment module discovery both exclude Qt/historical GUI dependencies.
+It launches the installed daemon console, not a checkout ASGI fixture.
+
+Fresh native macOS ARM64/Python 3.11 acceptance passes for a clean archive of
+`d548a67a683fc05fa5c81b9250cabd423b955809`. Wheel SHA-256:
+`a5978e9efa0a2105c6fb38157d234c0ccd94e9100e313684c3e646217bd1daf0`.
+Root independently verifies the strict report, exact 38 installed asset hashes,
+absence of the recorded daemon/runtime PIDs and removed owned venv. Report:
+`/private/tmp/wavedl-installed-report.mqldPh/installed-browser.json`, SHA-256
+`8eb66b86b4c73836e40c40bfb14dfb41d4898733e0018668440508db8f6c1e2b`.
+Its be6 asset identity is distinct from the hosted generated build below.
+
+The actual browser previews and explicitly approves CPU training, waits for
+automatic plotting, selects a published checkpoint, refuses invalid opset
+without writer intent, revokes an abandoned evaluation preview, and completes
+evaluation. Its downloaded predictions match the immutable publication:
+18,109 bytes, SHA-256
+`49900436f7d9bea90ad67c480ac05d1506716c9f0b48169c33a77059f27cd568`.
+The built worker controls the deep route; observed offline API read and invalid
+unauthenticated mutation probes refuse with unchanged durable state. This is
+not a universal interception proof for every API route.
+
+Cleanup verifies application shutdown, daemon exit 130, native PID/process-group
+and listener absence, released dispatch lock and SQLite integrity/write access
+before deleting only inode-bound owned roots. Independent review exposes and
+root fixes a verifier hole that allowed cyclic run-ID reassignment between
+plans; a negative regression now requires each runtime's run ID to match its
+own durable plan. All 47 focused and 2,143 complete Node tooling tests pass.
+A new standalone Ubuntu installed-browser workflow and its 17 passing source
+contracts enforce the same conjunction, clean wheel staging and explicit
+three-file verified-only evidence upload. Pinned Ruff 0.14.10 lint/read-only
+format checks pass. The new hosted workflow has not yet run; this local proof
+does not close GPU, real-site Slurm, other-platform browser or final release
+sign-off. No legacy migration is added and no release/tag is authorized.
+
 #### Fresh e70 static and native results
+
+**Terminal browser update — 2026-10-21:** run `39415927597` at exact
+`e70b9d7e87f5dc2060090813301c864733fac0cc` finishes **failure**. Root reads
+the completed job: 185 successful steps, two failures (154 same-daemon
+authentication/skew runner and 155 its dependent guard), and four skips.
+The F05 Python/Node contract steps 170/171 skip after the earlier failure;
+the actual F05 browser case and its guard pass. The corrected wizard,
+invalid-authoring and preset cases and their guards all pass this time.
+All twelve default cases also record passes; these do not make the complete
+workflow successful.
+
+Artifact `12263914128` has ZIP digest
+`abbc722b8a41a4e14c926221b9f03cc9d3e41f302be7944485cb3466a9118f71`.
+Root downloads its 87 files under
+`/private/tmp/wavedl-e70-terminal-audit.0qzoUy/`: 78 JSON files and 63 reports
+with cleanup objects. The authentication report alone records incomplete
+owned-root/profile/credential/workspace removal and retained artifacts;
+it is not counted as cleanup acceptance. It fails at `authentication-fault`
+after genuine populated training history, with only a suppressed owned-command
+failure, so a product diagnosis is not inferred from that message alone.
+The exact uploaded raw `browser-build-manifest.json` hashes to
+`5408411591ac8627da904f4d05a9d5ddce1b055f94c173e5c9df3e902f4b460b`,
+matching the reports' generated identity, not the checkout be6 identity.
+Earlier references below to this browser run being live are superseded by
+this terminal result. Authentication investigation and final hosted acceptance
+remain open.
 
 Static-client run `39415927489` subsequently finishes success: lint, read-only
 formatting, typecheck, **820 tests passed / one skipped**, generation, vendoring

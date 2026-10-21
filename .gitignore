@@ -352,6 +352,9 @@ tools/*
 !tools/run_keyboard_browser_acceptance.mjs
 !tools/verify_keyboard_browser_report.mjs
 !tools/verify_keyboard_browser_report.test.mjs
+!tools/run_installed_browser_acceptance.mjs
+!tools/verify_installed_browser_report.mjs
+!tools/verify_installed_browser_report.test.mjs
 
 *.code-workspace
 
