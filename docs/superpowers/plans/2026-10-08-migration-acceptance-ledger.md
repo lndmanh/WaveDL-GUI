@@ -296,6 +296,41 @@ Evidence: `/private/tmp/wavedl-win-cpu-review.sFD2ro/`. Foundations run
 neither is counted as complete. These scoped results do not close CUDA/
 distributed GPU, real Slurm-site/filesystem or final T30c/T38/T42 sign-off.
 
+CPU Tests `39580167132` subsequently completes **success**. Root parses each
+current JUnit: 4,076 cases, **4,036 passes / 40 explicit skips / zero failures
+or errors** on Python 3.11, 3.12 and 3.13. Its separate 3.11 isolated resolved
+wheel case passes one intended case without skips. Evidence root:
+`/var/folders/kl/k8qwgt0x2rg5zv3chzgzzwfr0000gn/T/wavedl-6016-test-evidence-ewobuz2_/`.
+Full browser `39580167159` remains live after passing its twelve-case baseline;
+the later auth/skew case and complete extended workflow are not yet accepted.
+
+#### Selected final 6016 wheel/sdist pair — 2026-10-21
+
+One clean archived `6016b0c270d2aa99a64b17321eaf0ffbc382bf55` artifact pair
+passes the existing canonical isolated installed lifecycle test separately
+for wheel and sdist: one intended case each, zero skips/failures/errors.
+These are fresh native macOS ARM64/Python 3.11 offline environments, not
+system-site/editable environments or a new replacement harness. The sdist
+rebuild also uses its own fresh build environment. The case exercises console
+entrypoints, dependency consistency, actual daemon-free CPU publication,
+authenticated installed TCP daemon/client/static routes and shutdown/storage
+release. It is not an additional browser, GPU or site qualification claim.
+
+| Artifact | SHA-256 | JUnit SHA-256 | Actual case seconds |
+|---|---|---|---|
+| Wheel | `f223919279c58558492960c687ae47ba7f310c1cfe96122d98849e4dc6676b9f` | `bc2dbefb25c5a01bbea8505228a2262247faefd5d0eac4c04d84c3e177294764fe1` | 52.984 |
+| Sdist | `0c3890eba20394673673d498d30b03bf3b8a118d547200e9cb51a5287e70df37` | `8e704aa1da08f9a0d9f997ad4d8abd6589ca6e65c4feafe02c56649f694694ab` | 50.099 |
+
+Evidence and artifact root: `/private/tmp/wavedl-final-6016b0c.NJM1gW/`.
+Root independently parses both canonical JUnits, hashes the archives, verifies
+all 1,501 tracked source blobs against the exact Git tree, and compares all 38
+wheel/sdist/source asset bytes. Both packages exclude the historical Qt source
+package. Each venv explicitly disables system-site packages. Their frozen be6
+asset identity differs from the job-generated browser builds above; no
+byte-identical claim across those builds is made. Later documentation-only
+commits do not silently become these certified archive bytes. Final release
+sign-off remains open, and no publication/tagging is performed.
+
 #### Fresh e70 static and native results
 
 **Terminal browser update — 2026-10-21:** run `39415927597` at exact
