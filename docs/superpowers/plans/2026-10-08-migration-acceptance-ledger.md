@@ -237,6 +237,19 @@ Artifacts: `/private/tmp/wavedl-foundations-review.eNrBmj/`. The slower Python
 3.12 job in CPU Tests `39577731609` remains live at this update; no workflow is
 restarted or cancelled to push the next reviewed change.
 
+CPU Tests `39577731609` subsequently finishes **success on all three versions**.
+Root parses each JUnit: 4,074 cases, **4,034 passes / 40 explicit skips / zero
+failures or errors**. The separate Python 3.11 isolated resolved-wheel gate
+passes its single intended case without skips. Evidence root:
+`/var/folders/kl/k8qwgt0x2rg5zv3chzgzzwfr0000gn/T/wavedl-4cb-test-evidence-wzi7kt4o/`.
+After all current runs finish, reviewed auth and security changes are pushed
+together as `6016b0c270d2aa99a64b17321eaf0ffbc382bf55` to the approved review
+branch. Full browser `39580167159`, installed browser `39580167087`, static
+client `39580167318`, CPU Tests `39580167132`, foundations `39580167482` and
+Windows installed CPU `39580167151` are live; lint `39580167374` passes.
+These live handles are not yet acceptance and are not restarted on observation
+timeouts. No merge, tag, release or publication is performed.
+
 #### Fresh e70 static and native results
 
 **Terminal browser update — 2026-10-21:** run `39415927597` at exact
