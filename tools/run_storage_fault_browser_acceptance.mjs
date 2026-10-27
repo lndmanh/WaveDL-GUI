@@ -178,7 +178,7 @@ export async function main(reportPath, mode = "query_only") {
     await cli("wait", "--text", "Connected");
     report.browser = { version, userAgent: await dom("JSON.stringify(navigator.userAgent)") };
     const actions = createBrowserActions({ cli, dom, snapshot: () => cli("snapshot", "-i") });
-    await actions.button("Experiments");
+    await actions.button("Experiments", false, { locator: '[data-testid="nav-experiments"]' });
     for (const phase of [0, 1, 2, 3]) {
       if (phase) await command(python, ["tools/storage_fault_browser_fixture.py", "--root", root, "--mode", mode, "--phase", String(phase)], 35000, pythonEnv);
       await poll(async () => stdout, (value) => value.includes(`Phase: ${phase}\n`), `fixture phase ${phase}`);

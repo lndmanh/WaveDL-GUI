@@ -195,7 +195,7 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   await cli("wait", "--text", "Connected");
   record.bootstrap = await dom(`JSON.stringify({removed:!location.href.includes('bootstrap'),local:Object.keys(localStorage),session:Object.keys(sessionStorage),cookies:document.cookie})`);
   record.stage = "native-ui-training-authoring";
-  await button("New training run");
+  await actions.button("New training run", false, { locator: '[data-testid="nav-project"]' });
   const rootControl = await actions.readyControl("field", "Configured root", false, { locator: 'xpath=//*[@role="combobox" and @aria-label="Configured root"]' });
   await cli("click", rootControl);
   await actions.option("datasets");

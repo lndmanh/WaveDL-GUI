@@ -227,8 +227,7 @@ async function scenario(name) {
     return cli('snapshot', '-i');
   };
   const actions = createBrowserActions({ cli, dom, snapshot });
-  const button = (name, optional = false) => actions.button(name, optional,
-    name === 'Connection' ? { scope: '//nav[@aria-label="Sections"]' } : {});
+  const button = (name, optional = false) => actions.button(name, optional);
   const fill = async (label, value, options = {}) => {
     const before = await registry(root);
     await actions.fill(label, value, options);
@@ -322,7 +321,7 @@ async function scenario(name) {
       record.status = 'passed';
       return;
     }
-    await button('New training run');
+    await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
     if (name === 'wizard-progression') {
       const beforeInvalid = await registry(root);
       await button('Next step');
@@ -615,7 +614,7 @@ async function scenario(name) {
         state => lostAckBindingReady(state, record.lostAckRecovery.identity),
         'Original writer submission verified runtime binding', 45000);
       check(true, 'Status recovery follows the original approved plan without duplicate execution');
-      await button('New training run');
+      await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
       record.lostAckRecovery.acknowledgedUi = await dom(`JSON.stringify({disabled:Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.disabled && e.textContent.trim() === 'Submission acknowledged'),runId:document.querySelector('[aria-label="Acknowledged training run"]')?.textContent.includes(${JSON.stringify(approvedManifest.run_id)})?${JSON.stringify(approvedManifest.run_id)}:null})`);
       record.lostAckRecovery.acknowledged = await registry(root);
       verifyLostAckEvidence(record);
@@ -631,7 +630,7 @@ async function scenario(name) {
       await cli('wait', '--text', 'Run detail');
       if (name === 'wizard-progression') {
         record.wizardSubmitted = await pollRegistry(root, state=>state.plans===1 && state.executions.length===1, 'Single explicitly approved execution', 45000);
-        await button('New training run');
+        await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
         await button('Show full editor');
         const acknowledgement = `Array.from(document.querySelectorAll('button')).find(e=>e.getClientRects().length&&e.textContent.trim()==='Submission acknowledged')`;
         await cli('scrollintoview', 'xpath=//button[normalize-space(.)="Submission acknowledged"]');
@@ -647,7 +646,7 @@ async function scenario(name) {
       check((await registry(root)).control[0].submission_requested === 1, 'Explicit approval records real daemon submission intent');
       if (name === 'detach') {
         record.runningBeforeDetach = await waitRunState(root, 'running');
-        await button('Connection');
+        await actions.button('Connection', false, { locator: '[data-testid="nav-connection"]' });
         await button('Disconnect');
         await cli('wait', '--text', 'Connect securely');
         record.snapshot = await snapshot();
@@ -691,7 +690,7 @@ async function scenario(name) {
             assert.equal(record.partialBestBefore.plans, 1);
             assert.equal(record.partialBestBefore.runs.length, 1);
             assert.equal(record.partialBestBefore.executions.length, 1);
-            await button('Results');
+            await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
             await button('Refresh artifacts');
             await cli('wait', '--text', 'checkpoint_selection.json');
             check(await dom('JSON.stringify(document.body.innerText.includes("Connected"))'), 'Incomplete publications preserve verified connection');
@@ -720,7 +719,7 @@ print(json.dumps(result))`, root]));
             assert.equal(pin.complete_sha256, createHash('sha256').update(await readFile(join(sourceRoot, 'checkpoints', pin.generation, 'COMPLETE.json'))).digest('hex'));
             check(true, 'Plot pins the exact older genuine best manifest and COMPLETE hash');
             await button('Monitor plot run');
-            await button('Results');
+            await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
             await button('Refresh artifacts');
             await cli('wait', '--text', 'View PNG');
             const png = JSON.parse(await command(python, ['-c', `import json,sys,hashlib
@@ -803,7 +802,7 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
         }
         if (name === 'submitted-plan-authoring-protection') {
           await pollRegistry(root, state => state.plans === 2 && state.executions.length === 2 && state.runs.length === 2 && state.runs.every(run => run.state === 'completed') && state.executions.every(execution => execution.observed_status === 'terminal'), 'Both training and automatic plotting backend terminal observations settled before authoring protection', 90000);
-          await submittedPlanProtection({ cli, dom, button, fill, registry, root, record, python, command, repo, approvedManifest, check });
+          await submittedPlanProtection({ cli, dom, button, actions, fill, registry, root, record, python, command, repo, approvedManifest, check });
           record.snapshot = await snapshot(); record.status = 'passed'; return;
         }
         if (name === 'download-names') {
@@ -819,7 +818,7 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
           record.status = 'passed';
           return;
         }
-        await button('Results');
+        await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
         await button('Refresh artifacts');
         await cli('wait', '--text', 'Download');
         if (name === 'artifact-tamper') record.artifactTamperStage = 'select-published-history-row';

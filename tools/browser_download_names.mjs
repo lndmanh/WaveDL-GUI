@@ -65,7 +65,7 @@ export async function downloadNameProvenance(driver) {
   assert(await realpath(downloads) === join(await realpath(dirname(downloads)), basename(downloads)), 'Download directory must resolve inside the caller workspace');
   assert((await readdir(downloads)).length === 0, 'Native filename case requires an empty private download directory');
 
-  await button('Results');
+  await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
   await button('Refresh artifacts');
   await cli('wait', '--text', 'Download');
   const basenameWanted = 'checkpoint_selection.json';

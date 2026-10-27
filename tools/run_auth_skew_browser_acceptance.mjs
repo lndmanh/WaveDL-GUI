@@ -127,8 +127,7 @@ async function main() {
     JSON.parse(JSON.parse(await cli("eval", "-b", Buffer.from(expression).toString("base64"))));
   const observe = async (expression) => dom(`JSON.stringify(${expression})`);
   const actions = createBrowserActions({ cli, dom, snapshot: () => cli("snapshot", "-i") });
-  const button = (name) =>
-    actions.button(name, false, name === "Connection" ? { scope: "//header" } : {});
+  const button = (name) => actions.button(name);
   const waitFor = async (expression, description, timeout = 45000) => {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
@@ -194,7 +193,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
 
     // Establish genuine nonempty authority through the normal labelled editor,
     // persisted approval and CPU runtime before testing retirement.
-    await button("New training run");
+    await actions.button("New training run", false, { locator: '[data-testid="nav-project"]' });
     const rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Configured root"]';
     const preparedRoot = await actions.readyControl("field", "Configured root", false, {
       locator: rootSelector,
@@ -306,10 +305,10 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
       "persisted approved CPU training produced real nonempty selected-run metrics and diagnostics before the 401",
     );
     report.stage = "authentication-fault";
-    await button("Connection");
+    await actions.button("Connection", false, { locator: '[data-testid="nav-connection"]' });
     report.connectionNavigation = await observe(`({
       panelPresent: !!document.querySelector('section[aria-labelledby="connection-title"]'),
-      navCurrent: Array.from(document.querySelectorAll('nav[aria-label="Sections"] button')).find(e => e.getAttribute('aria-current') === 'page')?.textContent.trim(),
+      navCurrent: document.querySelector('[data-testid="nav-connection"][aria-current="page"]')?.textContent.trim(),
       authenticationNotice: document.body.innerText.includes('Credential expired or rejected; enter it again.'),
       identityNotice: document.body.innerText.includes('Connection identity changed'),
     })`);

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export async function submittedPlanProtection({ cli, dom, button, fill, registry, root, record, python, command, repo, approvedManifest, check }) {
+export async function submittedPlanProtection({ cli, dom, button, actions, fill, registry, root, record, python, command, repo, approvedManifest, check }) {
   const options = await readFile(join(repo, 'web/shared/training-options.json'));
   const defaults = Object.fromEntries(JSON.parse(options).map(o => [o.name, o.default]));
   const hash = value => createHash('sha256').update(value).digest('hex');
@@ -67,7 +67,7 @@ print(json.dumps([dict(row) for row in c.execute("SELECT * FROM execution_contro
   record.accepted = await capture(); record.planId = record.accepted.planId;
   record.accepted.manifest = { config: { epochs: approvedManifest.resolved_config.epochs, model: approvedManifest.resolved_config.model, data_path: approvedManifest.resolved_config.data_path }, device: approvedManifest.runtime.device, python: approvedManifest.runtime.python };
   record.authored = { epochs: '3', model: 'cnn', workers: '0', precision: 'no', device: 'cpu', dataPath: approvedManifest.resolved_config.data_path, python: approvedManifest.runtime.python };
-  await button('New training run');
+  await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
   await fill('epochs', '4');
   record.editedUi = await ui(); record.afterEdit = await capture();
   await button('Reset training defaults');

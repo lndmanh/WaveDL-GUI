@@ -16,11 +16,11 @@ export async function onnxExport({ cli, dom, button, actions, registry, pollRegi
   await pollRegistry(root, state => state.plans === 2 && state.runs.length === 2
     && state.runs.every(run => run.state === 'completed'), 'Automatic plot settled', 90000);
   await button('Dismiss', true);
-  await button('Experiments'); await button('Close', true);
+  await actions.button('Experiments', false, { locator: '[data-testid="nav-experiments"]' }); await button('Close', true);
   await actions.button('Refresh', false, { scope: '//section[@aria-label="Runs"]' });
   const trainingRow = `xpath=//button[contains(@class,"run-row")][.//small[normalize-space(.)=${xpathLiteral(approvedManifest.run_id)}]]`;
   await cli('wait', '--fn', `document.evaluate(${JSON.stringify(trainingRow.slice(6))},document,null,XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null).snapshotLength===1`);
-  await cli('click', trainingRow); await button('Results'); await button('Refresh artifacts');
+  await cli('click', trainingRow); await actions.button('Results', false, { locator: '[data-testid="nav-results"]' }); await button('Refresh artifacts');
   await cli('wait', '--fn', `Array.from(document.getElementById('source-generation')?.options ?? []).some(option => option.value && !option.disabled)`);
   const options = await observe('Array.from(document.querySelector("#source-generation").options).filter(o=>o.value&&!o.disabled).map(o=>({value:o.value,label:o.textContent.trim()}))');
   const selected = options.find(option => option.label.endsWith('best'));
@@ -56,7 +56,7 @@ export async function onnxExport({ cli, dom, button, actions, registry, pollRegi
     assert(!run || !['failed', 'cancelled'].includes(run.state), 'Supported CPU ONNX export failed');
     return run?.state === 'completed';
   }, 'Supported CPU ONNX export completed', 90000);
-  await button('Results'); await button('Refresh artifacts');
+  await actions.button('Results', false, { locator: '[data-testid="nav-results"]' }); await button('Refresh artifacts');
   await cli('wait', '--fn', `Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('tbody tr')).some(row=>row.cells[1]?.textContent.trim().endsWith('.onnx'))`);
   const rows = await observe(`Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('tbody tr')).map(row=>Array.from(row.cells).slice(0,3).map(cell=>cell.textContent.trim()))`);
   const onnxRows = rows.filter(row => row[1].endsWith('.onnx'));
