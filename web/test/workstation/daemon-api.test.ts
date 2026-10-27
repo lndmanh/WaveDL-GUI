@@ -15,6 +15,208 @@ const grant = (daemonId = health.daemon_id, suffix = 'g') => ({
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+const matrixId = '11111111-1111-1111-1111-111111111111';
+const matrixRun = {
+  plan_id: matrixId,
+  run_id: matrixId,
+  request_id: matrixId,
+  backend: 'local',
+  operation: 'train',
+  attempt: 1,
+  state: 'running',
+  uncertainty: false,
+  submission_requested: true,
+  cancellation_requested: false,
+  evidence: null,
+};
+const matrixPlan = { plan_id: matrixId, run_id: matrixId, request_id: matrixId, preview: {} };
+const negativeResponses = [
+  ...[
+    null,
+    [],
+    {},
+    { ...health, daemon_id: ' ' },
+    { ...health, protocol_min: 1.5 },
+    { ...health, protocol_max: Number.MAX_SAFE_INTEGER + 1 },
+  ].map((body) => ({
+    method: 'health',
+    body,
+    code: 'response',
+    key: 'invalidDaemonHealthResponse',
+  })),
+  ...[
+    { ...health, protocol_min: 0 },
+    { ...health, protocol_min: 2 },
+    { ...health, protocol_max: 0 },
+  ].map((body) => ({ method: 'health', body, code: 'protocol', key: 'daemonProtocolMismatch' })),
+  ...[null, [], {}, { runs: null }].map((body) => ({
+    method: 'list',
+    body,
+    code: 'response',
+    key: 'invalidRunList',
+  })),
+  ...Object.keys(matrixRun).map((field) => ({
+    method: 'run',
+    body: { ...matrixRun, [field]: [] },
+    code: 'response',
+    key: 'invalidRunResponse',
+  })),
+  ...Object.keys(matrixRun).map((field) => ({
+    method: 'run',
+    body: { ...matrixRun, [field]: undefined },
+    code: 'response',
+    key: 'invalidRunResponse',
+  })),
+  ...[
+    { attempt: 0 },
+    { attempt: 1.5 },
+    { attempt: Number.MAX_SAFE_INTEGER + 1 },
+    { backend: '' },
+    { operation: 'infer' },
+    { state: 'finished' },
+    { run_id: matrixId.toUpperCase().replace('1', 'A') },
+  ].map((update) => ({
+    method: 'run',
+    body: { ...matrixRun, ...update },
+    code: 'response',
+    key: 'invalidRunResponse',
+  })),
+  { method: 'list', body: { runs: [{}] }, code: 'response', key: 'invalidRunResponse' },
+  ...Object.keys(matrixPlan).map((field) => ({
+    method: 'plan',
+    body: { ...matrixPlan, [field]: [] },
+    code: 'response',
+    key: 'invalidPlanResponse',
+  })),
+  ...['bootstrap', 'session'].flatMap((method) =>
+    Object.keys(grant()).map((field) => ({
+      method,
+      body: { ...grant(), [field]: null },
+      code: 'response',
+      key: method === 'bootstrap' ? 'invalidBootstrapResponse' : 'invalidSessionResponse',
+    })),
+  ),
+  ...[
+    ['native_pending', 'true', 'native_pending'],
+    ['current_runtime_attempt', 0, 'current_runtime_attempt'],
+    ['last_runtime_attempt', 0, 'last_runtime_attempt'],
+    ['confidence', 'certain', 'confidence'],
+    ['reason', false, 'reason'],
+    ['runtime', null, 'runtime'],
+    ['runtime', { hello_seen: 1 }, 'hello_seen'],
+    ['runtime', { outcome: { status: 'completed' } }, 'status'],
+    ['batch', { signal: 0 }, 'signal'],
+    ['backend', { status: 'success' }, 'status'],
+    ['stage_out', [], 'stage_out'],
+    ['native_identity', {}, 'native_identity'],
+  ].map(([field, value, diagnostic]) => ({
+    method: 'run',
+    body: { ...matrixRun, evidence: { [String(field)]: value } },
+    code: 'response',
+    key: 'invalidRunEvidence',
+    params: { field: diagnostic },
+  })),
+  ...[
+    ['runtime', { conflicting_exits: 1 }, 'conflicting_exits'],
+    ['runtime', { state: 1 }, 'state'],
+    ['runtime', { state_seq: -2 }, 'state_seq'],
+    ['runtime', { exit_seq: -2 }, 'exit_seq'],
+    ['runtime', { outcome: [] }, 'outcome'],
+    ...['batch', 'stage_out', 'runtime'].flatMap((name) =>
+      [
+        ['status', 'completed'],
+        ['exit_code', 1.5],
+        ['signal', 0],
+        ['detail', false],
+      ].map(([field, value]) => [
+        name,
+        name === 'runtime' ? { outcome: { [String(field)]: value } } : { [String(field)]: value },
+        field,
+      ]),
+    ),
+    ...['backend', 'last_observation'].flatMap((name) =>
+      [
+        ['status', 'success'],
+        ['native_state', 1],
+        ['detail', false],
+        ['attempt', 0],
+        ['native_identity', {}],
+        ['exit_code', 1.5],
+        ['signal', 0],
+        ['batch', []],
+        ['stage_out', { signal: 0 }],
+      ].map(([field, value]) => [
+        name,
+        { [String(field)]: value },
+        field === 'stage_out' ? 'signal' : field,
+      ]),
+    ),
+    ...['run_id', 'request_id', 'cluster', 'owner', 'job_id', 'restart_count'].map((field) => [
+      'native_identity',
+      {
+        run_id: matrixId,
+        request_id: matrixId,
+        cluster: 'site',
+        owner: 'user',
+        job_id: '1',
+        restart_count: 0,
+        [field]: [],
+      },
+      'native_identity',
+    ]),
+    [
+      'native_identity',
+      {
+        run_id: matrixId,
+        request_id: matrixId,
+        cluster: 'site',
+        owner: 'user',
+        job_id: 'invalid',
+        restart_count: 0,
+      },
+      'native_identity',
+    ],
+  ].map(([field, value, diagnostic]) => ({
+    method: 'run',
+    body: { ...matrixRun, evidence: { [String(field)]: value } },
+    code: 'response',
+    key: 'invalidRunEvidence',
+    params: { field: diagnostic },
+  })),
+  {
+    method: 'run',
+    body: { ...matrixRun, evidence: { native_pending: true, current_runtime_attempt: 1 } },
+    code: 'response',
+    key: 'pendingRuntimeConflict',
+  },
+];
+
+describe('malformed response diagnostic compatibility matrix', () => {
+  it.each(negativeResponses)('$method $key $body', async ({ method, body, code, key, ...rest }) => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(method === 'health' || !String(url).endsWith('/health') ? body : health),
+    );
+    api.setToken(token);
+    const operation =
+      method === 'health'
+        ? api.health()
+        : method === 'list'
+          ? api.listRuns()
+          : method === 'plan'
+            ? api.plan({}, 'matrix')
+            : method === 'bootstrap'
+              ? api.exchangeBootstrapCode('code')
+              : method === 'session'
+                ? api.rotateSession()
+                : api.getRun(matrixId);
+    await expect(operation).rejects.toMatchObject({
+      code,
+      clientMessageKey: key,
+      ...('params' in rest ? { clientMessageParams: rest.params } : {}),
+    });
+  });
+});
+
 describe('daemon transport', () => {
   it('builds API errors from catalog keys while preserving classification metadata', () => {
     const failure = DaemonApiError.fromKey('http', 'daemonRequestFailed', {

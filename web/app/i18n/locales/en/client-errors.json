@@ -52,8 +52,6 @@
   "autoPlotAckMismatch": "Automatic plot acknowledgment does not match the persisted plan",
   "autoPlotAcknowledged": "Daemon acknowledged the diagnostic plot run.",
   "autoPlotAlreadySubmitted": "Auto-plot belongs to a submitted training workflow.",
-  "autoPlotIntentMissing": "Auto-plot has no eligible captured intent.",
-  "autoPlotMustUseItsPersistedPlan": "Auto-plot must use its persisted plan.",
   "invalidDaemonCatalogResponse": "Invalid daemon catalog response",
   "catalogSelectionStale": "Select again from the current verified daemon.",
   "invalidBrowseLocation": "Invalid browse location.",
