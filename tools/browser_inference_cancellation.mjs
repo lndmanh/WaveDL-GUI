@@ -25,11 +25,11 @@ export async function inferenceCancellation({
   await pollRegistry(root, state => state.plans === 2 && state.runs.length === 2
     && state.runs.every(run => run.state === 'completed'), 'Source and automatic plot completed', 90000);
   await button('Dismiss', true);
-  await button('Experiments');
+  await actions.button('Experiments', false, { locator: '[data-testid="nav-experiments"]' });
   await button('Close', true);
   await actions.button('Refresh', false, { scope: '//section[@aria-label="Runs"]' });
   await cli('click', `xpath=//button[contains(@class,"run-row")][.//small[normalize-space(.)=${JSON.stringify(approvedManifest.run_id)}]]`);
-  await button('Results');
+  await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
   await button('Refresh artifacts');
   record.inferenceCancellationStage = "select-source";
   // Ordinary input amplification, not a mock or paused runtime: evaluation

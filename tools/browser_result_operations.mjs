@@ -14,14 +14,14 @@ export async function resultOperations({ cli, dom, button, actions, registry, po
   // Automatic plotting selects its own run. Re-select the completed training
   // run explicitly before opening the result-operation surface.
   await button('Dismiss', true);
-  await button('Experiments');
+  await actions.button('Experiments', false, { locator: '[data-testid="nav-experiments"]' });
   await button('Close', true);
   await actions.button('Refresh', false, { scope: '//section[@aria-label="Runs"]' });
   record.resultOperationStage = 'select-training-run';
   const trainingRow = `xpath=//button[contains(@class,"run-row")][.//small[normalize-space(.)=${JSON.stringify(approvedManifest.run_id)}]]`;
   await cli('wait', '--fn', `document.evaluate(${JSON.stringify(trainingRow.slice(6))},document,null,XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null).snapshotLength===1`);
   await cli('click', trainingRow);
-  await button('Results');
+  await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
   await button('Refresh artifacts');
   record.resultOperationStage = 'verified-checkpoint-options';
   await cli('wait', '--fn', `Array.from(document.getElementById('source-generation')?.options ?? []).some(option => option.value && !option.disabled)`);
@@ -74,7 +74,7 @@ export async function resultOperations({ cli, dom, button, actions, registry, po
     assert(!run || !['failed','cancelled'].includes(run.state), 'Explicit CPU evaluation failed');
     return run?.state === 'completed';
   }, 'Explicit CPU evaluation completed', 90000);
-  await button('Results');
+  await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
   await button('Refresh artifacts');
   const evidence = JSON.parse(await command(python, ['-c', `import hashlib,json,sqlite3,sys
 from pathlib import Path

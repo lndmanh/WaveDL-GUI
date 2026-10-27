@@ -17,12 +17,12 @@ export async function cvParity({
   assert.equal(before.plans, 1, "CV completion must not automatically choose any fold for plotting");
   assert.equal(before.runs.length, 1);
   record.noAutomaticFoldPlot = before;
-  await button("Experiments");
+  await actions.button("Experiments", false, { locator: '[data-testid="nav-experiments"]' });
   await actions.button("Refresh", false, { scope: '//section[@aria-label="Runs"]' });
   const row = `xpath=//button[contains(@class,"run-row")][.//small[normalize-space(.)=${xpathLiteral(approvedManifest.run_id)}]]`;
   await cli("wait", "--fn", `document.evaluate(${JSON.stringify(row.slice(6))},document,null,XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null).snapshotLength===1`);
   await cli("click", row);
-  await button("Results");
+  await actions.button("Results", false, { locator: '[data-testid="nav-results"]' });
   await button("Refresh artifacts");
   await cli("wait", "--fn", `Array.from(document.querySelector("#source-generation")?.options ?? []).some(o=>o.value&&!o.disabled)`);
   const options = await observe(
@@ -62,7 +62,7 @@ export async function cvParity({
   assert.equal(previewed.plans, before.plans + 1);
   await actions.button("Approve and start this plan", false, { scope });
   await pollRegistry(root, (state) => state.runs.some((run) => run.run_id === plan.run_id && run.state === "completed"), "CV fold evaluation completed", 90000);
-  await button("Results"); await button("Refresh artifacts");
+  await actions.button("Results", false, { locator: '[data-testid="nav-results"]' }); await button("Refresh artifacts");
   await cli("wait", "--fn", `Array.from(document.querySelector("#results-title").closest("section").querySelectorAll("tbody tr")).some(r=>r.cells[1]?.textContent.trim().endsWith(".csv"))`);
   const rows = await observe('Array.from(document.querySelector("#results-title").closest("section").querySelectorAll("tbody tr")).map(r=>Array.from(r.cells).slice(0,3).map(c=>c.textContent.trim()))');
   const predictionRows = rows.filter((r) => r[1] === "predictions.csv");

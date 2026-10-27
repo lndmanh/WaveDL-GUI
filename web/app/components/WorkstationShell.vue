@@ -5,38 +5,28 @@ import { Activity, Database, FileChartColumn, Layers, Plus, Settings2, Waves } f
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ConnectionStatus } from '../lib/connection-session';
+import {
+  WORKSTATION_SECTIONS,
+  WORKSTATION_SHELL_TEST_IDS,
+  workstationNavTestId,
+  type WorkstationSection,
+} from '../lib/shell-test-ids';
 
-type Section =
-  | 'experiments'
-  | 'project'
-  | 'datasets'
-  | 'results'
-  | 'settings'
-  | 'adopt'
-  | 'connection';
+type Section = WorkstationSection;
 defineProps<{ status: ConnectionStatus; section: Section }>();
 const emit = defineEmits<{ navigate: [section: Section] }>();
 
 const navigation = [
-  { label: 'Experiments', icon: Layers, section: 'experiments' },
-  { label: 'New training run', icon: Plus, section: 'project' },
-  { label: 'Datasets', icon: Database, section: 'datasets' },
-  { label: 'Results', icon: FileChartColumn, section: 'results' },
-  { label: 'Adopt standalone run', icon: Plus, section: 'adopt' },
-  { label: 'Connection', icon: Settings2, section: 'connection' },
-  { label: 'Settings', icon: Settings2, section: 'settings' },
-];
-function navigate(value: string | null) {
-  if (
-    value === 'experiments' ||
-    value === 'project' ||
-    value === 'datasets' ||
-    value === 'results' ||
-    value === 'adopt' ||
-    value === 'settings' ||
-    value === 'connection'
-  )
-    emit('navigate', value);
+  { label: 'Experiments', icon: Layers, section: WORKSTATION_SECTIONS.experiments },
+  { label: 'New training run', icon: Plus, section: WORKSTATION_SECTIONS.project },
+  { label: 'Datasets', icon: Database, section: WORKSTATION_SECTIONS.datasets },
+  { label: 'Results', icon: FileChartColumn, section: WORKSTATION_SECTIONS.results },
+  { label: 'Adopt standalone run', icon: Plus, section: WORKSTATION_SECTIONS.adopt },
+  { label: 'Connection', icon: Settings2, section: WORKSTATION_SECTIONS.connection },
+  { label: 'Settings', icon: Settings2, section: WORKSTATION_SECTIONS.settings },
+] as const;
+function navigate(value: Section) {
+  emit('navigate', value);
 }
 const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
 </script>
@@ -47,13 +37,18 @@ const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
     <aside class="sidebar" :aria-label="translateKnownMessage('Workstation navigation')">
       <div class="brand"><Waves aria-hidden="true" /><span>WaveDL</span></div>
       <p class="sidebar-label">{{ translateKnownMessage('WORKSPACE') }}</p>
-      <nav class="navigation" :aria-label="translateKnownMessage('Sections')">
+      <nav
+        class="navigation"
+        :aria-label="translateKnownMessage('Sections')"
+        :data-testid="WORKSTATION_SHELL_TEST_IDS.navigation"
+      >
         <Button
           v-for="item in navigation"
           :key="item.section"
           :variant="item.section === section ? 'secondary' : 'ghost'"
           :disabled="item.section === null"
           :aria-current="item.section === section ? 'page' : undefined"
+          :data-testid="workstationNavTestId(item.section)"
           @click="navigate(item.section)"
         >
           <component :is="item.icon" data-icon="inline-start" aria-hidden="true" />
@@ -75,7 +70,7 @@ const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
       <header class="toolbar">
         <span class="toolbar-title">{{ translateKnownMessage('Workstation') }}</span>
         <div class="toolbar-actions">
-          <Badge variant="outline">{{
+          <Badge variant="outline" :data-testid="WORKSTATION_SHELL_TEST_IDS.connectionStatus">{{
             status === 'connected'
               ? translateKnownMessage('Connected')
               : status === 'connecting'
@@ -93,7 +88,14 @@ const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
           >
         </div>
       </header>
-      <main id="workspace" class="content" tabindex="-1"><slot /></main>
+      <main
+        id="workspace"
+        class="content"
+        tabindex="-1"
+        :data-testid="WORKSTATION_SHELL_TEST_IDS.content"
+      >
+        <slot />
+      </main>
       <footer class="footer">
         {{ translateKnownMessage('WaveDL daemon interface · Development foundation') }}
       </footer>

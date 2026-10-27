@@ -287,7 +287,8 @@ export async function datasetParity(driver) {
   const firstObserve = (operation, run)=>firstViewCompleted ? run() : firstBoundaries(operation, run);
   await checkpoint('before-datasets-navigation');
   stage('datasets-navigation-target-description-before');
-  record.datasetNavigationTargets = await actions.describe('button', 'Datasets');
+  const datasetsNavigation = { locator: '[data-testid="nav-datasets"]' };
+  record.datasetNavigationTargets = await actions.describe('button', 'Datasets', datasetsNavigation);
   stage('datasets-navigation-target-description-complete');
   stage('datasets-navigation-frame-diagnostic-before');
   record.datasetNavigationFrames = await dom(`(async()=>{
@@ -300,10 +301,10 @@ export async function datasetParity(driver) {
   })()`);
   stage('datasets-navigation-frame-diagnostic-complete', { outcome: record.datasetNavigationFrames.outcome });
   stage('datasets-navigation-direct-actionability-before');
-  record.datasetNavigationActionable = await dom(`(async()=>JSON.stringify(await (${actionableExpression('button', 'Datasets')})))()`);
+  record.datasetNavigationActionable = await dom(`(async()=>JSON.stringify(await (${actionableExpression('button', 'Datasets', datasetsNavigation)})))()`);
   stage('datasets-navigation-direct-actionability-complete', { actionable: record.datasetNavigationActionable });
   stage('datasets-navigation-before');
-  await button('Datasets');
+  await actions.button('Datasets', false, datasetsNavigation);
   await checkpoint('after-datasets-navigation');
   stage('datasets-navigation-clicked');
   await cli('wait', '--text', 'Explore daemon datasets');

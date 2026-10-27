@@ -57,7 +57,7 @@ export async function authoringParity(driver) {
   record.guidedSelectionsPreserved = await dom(`JSON.stringify(Array.from(document.querySelectorAll('p')).some(e=>e.textContent.trim().startsWith('Dataset: ')&&e.textContent.includes('/samples.npz'))&&Array.from(document.querySelectorAll('p')).some(e=>e.textContent.trim().startsWith('Model: cnn')))`);
   check(record.guidedSelectionsPreserved, 'Guided backward/forward navigation preserved genuine daemon dataset and catalogue model');
 
-  await button('Settings');
+  await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
   await cli('wait', '--text', 'Browser preferences, not daemon administration.');
   record.downloadSettingsGuidance = await dom(`JSON.stringify(document.querySelector('#downloads-heading')?.closest('section')?.innerText)`);
   check(record.downloadSettingsGuidance.includes('Your browser chooses where'), 'Settings honestly exposes browser-owned download guidance, not an invented workstation folder preference');
@@ -65,7 +65,7 @@ export async function authoringParity(driver) {
   await fill('epochs', '19');
   await button('Save training defaults');
   await cli('wait', '--text', 'Defaults saved for new drafts on this daemon.');
-  await button('New training run');
+  await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
   check((await values(['epochs']))[0] === '10000', 'Saved new-run preference did not mutate the existing project draft');
 
   const authored = { epochs: 11, patience: 4, batch_size: 8, lr: 0.003,
@@ -96,10 +96,10 @@ export async function authoringParity(driver) {
   const afterResetDownload = await exportYaml('authoring-after-reset.yaml');
   check(afterResetDownload.config.data_path === beforeResetDownload.config.data_path && afterResetDownload.config.model === beforeResetDownload.config.model && afterResetDownload.config.epochs === defaults.epochs, 'Actual reset exports preserve dataset/model and restore bundled defaults in the unchanged browser download directory');
   await access(beforeResetDownload.path); await access(afterResetDownload.path);
-  await button('Settings');
+  await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
   await expand('Training and optional W&B defaults');
   check((await values(['epochs']))[0] === '19', 'Project reset preserved separately saved browser new-run preference');
-  await button('New training run');
+  await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
   await author();
   await expand('Standalone configuration export');
 
