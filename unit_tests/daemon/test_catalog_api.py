@@ -233,6 +233,14 @@ def test_daemon_owned_catalog_preserves_complete_descriptive_payload():
     )
 
 
+def test_model_metadata_ids_match_registered_model_ids():
+    from wavedl.models import list_models
+
+    metadata_ids = {model["id"] for model in CatalogService({}).models()["models"]}
+    assert len(metadata_ids) == 71
+    assert metadata_ids == set(list_models())
+
+
 def test_model_catalog_imports_neither_torch_nor_gui():
     source = "from wavedl_daemon.runs.catalog import CatalogService; import sys; CatalogService({}).models(); assert not any(name == 'torch' or name.startswith(('torch.', 'PySide6', 'qfluentwidgets', 'wavedl_gui')) for name in sys.modules)"
     result = subprocess.run(
@@ -245,13 +253,14 @@ def test_model_catalog_imports_neither_torch_nor_gui():
     assert result.returncode == 0, result.stderr
 
 
-def test_metadata_ast_is_never_executed(tmp_path):
-    source = tmp_path / "models.py"
-    source.write_text(
-        "raise RuntimeError('must not execute')\nMODEL_CATEGORIES = {}\n_MODEL_DATA = [{'id': 'safe'}]\n"
-    )
+def test_metadata_is_loaded_as_json_not_executed_as_code(tmp_path):
+    source = tmp_path / "models.json"
+    source.write_text('{"categories": {}, "models": [{"id": "safe"}]}')
     result = CatalogService({}, model_metadata_path=source).models()
     assert result["models"] == [{"id": "safe"}]
+    source.write_text("raise RuntimeError('must not execute')")
+    with pytest.raises(json.JSONDecodeError):
+        CatalogService({}, model_metadata_path=source).models()
 
 
 def test_browse_explicit_roots_no_hostpaths_stable_pages_and_specialfiles(tmp_path):

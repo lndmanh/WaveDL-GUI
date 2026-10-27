@@ -2,7 +2,7 @@ import type { ModelDescription } from '../lib/catalog-api';
 import { defineMessages, translateMessage, type WorkstationLocale } from './core';
 
 /**
- * Presentation-only translations of src/wavedl_daemon/runs/model_metadata.py.
+ * Presentation-only translations of src/wavedl_daemon/runs/model_metadata.json.
  * The complete English description and best-for text are exact source signatures.
  * Never replace daemon metadata, infer installed capability, or translate an ID.
  */

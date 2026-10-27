@@ -17,7 +17,13 @@ include = ["wavedl", "wavedl.*", "wavedl_daemon", "wavedl_daemon.*"]
 version = {attr = "wavedl.__version__"}
 
 [tool.setuptools.package-data]
-wavedl_daemon = ["web_assets/**/*", "web_assets/*", "web_assets/.wavedl-assets.json", "web_assets/.wavedl-immutable.json"]
+wavedl_daemon = [
+    "web_assets/**/*",
+    "web_assets/*",
+    "web_assets/.wavedl-assets.json",
+    "web_assets/.wavedl-immutable.json",
+    "runs/model_metadata.json",
+]
 
 [project]
 name = "wavedl"

@@ -60,7 +60,7 @@ from wavedl_daemon.storage.submissions import SUBMISSION_MIGRATION
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator, Sequence
+    from collections.abc import Iterable, Iterator, Sequence
 
     from wavedl.core.protocol import Envelope
     from wavedl_daemon.storage.ownership import DispatchLock
@@ -103,12 +103,7 @@ _RUN_COLUMNS = ", ".join(RunRecord.__dataclass_fields__)
 
 
 def default_projection(record: RunRecord | None, event: Envelope) -> RunRecord:
-    """A deliberately small fold; T9's reducer supersedes it.
-
-    T8a owns transactions and cursors, not semantics. Keeping the projection
-    injectable means the reducer can be developed and reviewed on its own rather
-    than being smuggled in here.
-    """
+    """Build the registry's lightweight run record from an event."""
     current = record or RunRecord(run_id=event.run_id)
     state = current.state
     if event.type == "hello":
@@ -351,8 +346,6 @@ class Registry:
         run_id: str,
         attempt: int,
         events: Iterable[Envelope],
-        *,
-        project: Callable[[RunRecord | None, Envelope], RunRecord] = default_projection,
     ) -> int:
         """Fold events into the projection and advance the cursor, atomically.
 
@@ -372,7 +365,7 @@ class Registry:
             previous = event.seq
 
         with self._transaction():
-            return self._fold_events(run_id, attempt, batch, project)
+            return self._fold_events(run_id, attempt, batch)
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
@@ -387,7 +380,7 @@ class Registry:
                 self._connection.execute("ROLLBACK")
             raise
 
-    def _fold_events(self, run_id, attempt, batch, project) -> int:
+    def _fold_events(self, run_id, attempt, batch, operation: str | None = None) -> int:
         position = self.cursor(run_id, attempt)
         record = self.get(run_id)
         applied = position
@@ -395,9 +388,9 @@ class Registry:
             append_in_transaction(self._connection, event)
             if event.seq <= position:
                 continue
-            record = project(record, event)
-            if not isinstance(record, RunRecord) or record.run_id != run_id:
-                raise ProtocolError("Projection returned a foreign run record")
+            record = default_projection(record, event)
+            if operation is not None:
+                record = replace(record, operation=operation)
             apply_metric_event(self._connection, event)
             applied = event.seq
         if applied != position:
@@ -478,12 +471,6 @@ class Registry:
                     self.rebuild_diagnostics.append((manifest_path, str(exc)[:160]))
                     continue
 
-            def project(record, event, operation=operation):
-                projected = default_projection(record, event)
-                if operation is not None:
-                    projected = replace(projected, operation=operation)
-                return projected
-
             reader = JournalReader(journal, run_id=run_id, attempt=attempt)
             if operation is not None:
                 for generation in published_generations(layout):
@@ -512,7 +499,7 @@ class Registry:
                     continue
                 self._connection.execute("SAVEPOINT rebuild_event")
                 try:
-                    self._fold_events(run_id, attempt, events, project)
+                    self._fold_events(run_id, attempt, events, operation)
                 except ProtocolError as exc:
                     self._connection.execute("ROLLBACK TO rebuild_event")
                     self.rebuild_diagnostics.append((journal, str(exc)[:160]))

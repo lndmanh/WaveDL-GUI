@@ -376,7 +376,7 @@ def build_installed(tmp_path_factory, *, wheelhouse=None):
         "wavedl/runtime.py",
         "wavedl/train.py",
         "wavedl_daemon/runs/catalog.py",
-        "wavedl_daemon/runs/model_metadata.py",
+        "wavedl_daemon/runs/model_metadata.json",
     } <= names
     assert_no_qt_wheel(wheel)
     checked(
@@ -419,7 +419,7 @@ def sdist_inventory(path):
         assert not any("wavedl_gui" in Path(name).parts for name in names), (
             "The sdist must not ship the retired Qt application"
         )
-        assert f"{root}/src/wavedl_daemon/runs/model_metadata.py" in names
+        assert f"{root}/src/wavedl_daemon/runs/model_metadata.json" in names
         metadata = archive.getmember(f"{root}/PKG-INFO")
         assert metadata.isfile(), "Sdist metadata must be an ordinary file"
         package_metadata = Parser().parsestr(
