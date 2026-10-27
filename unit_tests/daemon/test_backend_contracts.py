@@ -2,14 +2,16 @@
 
 import hashlib
 import json
+import os
 from copy import deepcopy
 from dataclasses import FrozenInstanceError, asdict, replace
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
 from wavedl.core.layout import OperationKind, RunLayout
-from wavedl.core.manifest import RuntimeSelection, build_manifest
+from wavedl.core.manifest import Manifest, RuntimeSelection, build_manifest
 from wavedl.core.scheduler_attempt import SchedulerIdentity
 from wavedl_daemon.backends.contracts import (
     BackendObservation,
@@ -27,6 +29,13 @@ from wavedl_daemon.backends.contracts import (
 )
 
 
+CONTRACT_FIXTURE = Path(__file__).with_name("fixtures") / "contracts_codec.json"
+
+
+def contract_fixture():
+    return json.loads(CONTRACT_FIXTURE.read_text())
+
+
 def make_plan(tmp_path):
     manifest = build_manifest(
         RunLayout(tmp_path / "run", str(uuid4())),
@@ -40,6 +49,106 @@ def make_plan(tmp_path):
         _json(asdict(manifest)),
         argv=(manifest.runtime.python, "-m", "wavedl.train"),
         environment=(("TEST", "1"),),
+    )
+
+
+def frozen_contract_plan(*, allocation_mode="reserved"):
+    run_id = "00000000-0000-4000-8000-000000000001"
+    root = Path("/tmp/wavedl-contract-fixture")
+    run_dir = root / "run" / run_id
+    manifest = Manifest(
+        run_id=run_id,
+        operation=OperationKind.TRAIN,
+        resolved_config={
+            "model": "cnn",
+            "epochs": 2,
+            "output_dir": str(run_dir),
+        },
+        runtime=RuntimeSelection(
+            "/opt/wavedl/bin/python", "selected", "cpu", {"TEST": "1"}
+        ),
+        submission_directory=str(root),
+        working_directory=str(run_dir),
+        run_directory=str(run_dir),
+        storage_map=(),
+        path_fields=(),
+    )
+    return Plan(
+        "local",
+        _json(manifest.to_dict()),
+        argv=("/opt/wavedl/bin/python", "-m", "wavedl.train"),
+        environment=(("TEST", "1"),),
+        allocation_mode=allocation_mode,
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fixture pins POSIX absolute paths")
+def test_contract_codec_fixtures_pin_plan_bytes_hash_and_reserved_omission(tmp_path):
+    import sqlite3
+
+    from wavedl_daemon.storage.ownership import acquire_dispatch_lock
+    from wavedl_daemon.storage.plans import PLAN_MIGRATION, PlanStore
+    from wavedl_daemon.storage.schema import migrate
+    from wavedl_daemon.storage.submissions import validate_writer_receipt
+
+    fixture = contract_fixture()
+    reserved = frozen_contract_plan()
+    assert reserved.to_json() == fixture["plan_json"]
+    assert Plan.from_json(fixture["plan_json"]).to_json() == fixture["plan_json"]
+    assert "allocation_mode" not in json.loads(fixture["plan_json"])
+    assert (
+        hashlib.sha256(reserved.to_json().encode("utf-8")).hexdigest()
+        == fixture["plan_sha256"]
+    )
+    database = tmp_path / "registry.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA user_version=1")
+    migrate(database, [PLAN_MIGRATION])
+    with (
+        acquire_dispatch_lock(database.parent / "dispatch.lock") as lock,
+        PlanStore(database, dispatch_lock=lock) as store,
+    ):
+        record = store.put(
+            reserved, idempotency_key="codec-fixture", request_payload={}
+        )
+    assert record.plan_json == fixture["plan_json"]
+    assert record.plan.to_json() == record.plan_json
+
+    writer = frozen_contract_plan(allocation_mode="writer")
+    assert writer.to_json() == fixture["writer_plan_json"]
+    assert (
+        Plan.from_json(fixture["writer_plan_json"]).to_json()
+        == fixture["writer_plan_json"]
+    )
+    assert (
+        hashlib.sha256(writer.to_json().encode("utf-8")).hexdigest()
+        == fixture["writer_plan_sha256"]
+    )
+    assert json.loads(fixture["writer_plan_json"])["allocation_mode"] == "writer"
+
+    request_id = "00000000-0000-4000-8000-000000000002"
+    receipt = SubmissionHandle(
+        "slurm",
+        writer.run_id,
+        request_id,
+        "fixture-owner",
+        writer.run_dir,
+        job_id="42;alpha",
+        raw_json=_json(
+            {
+                "cluster": "alpha",
+                "comment": request_id,
+                "job_name": f"wavedl-{request_id}",
+                "restart_count": 0,
+                "operation": "train",
+                "allocation_mode": "writer",
+                "plan_sha256": fixture["writer_plan_sha256"],
+            }
+        ),
+    )
+    assert (
+        validate_writer_receipt(receipt, writer)["plan_sha256"]
+        == fixture["writer_plan_sha256"]
     )
 
 

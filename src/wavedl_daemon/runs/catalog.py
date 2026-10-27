@@ -6,9 +6,9 @@ file payloads, follows child symlinks, or expands an unbounded directory into me
 
 from __future__ import annotations
 
-import ast
 import asyncio
 import errno
+import io
 import json
 import re
 from contextlib import ExitStack
@@ -61,28 +61,17 @@ class CatalogService:
             self.roots[key] = path.resolve()
         self.max_entries = max_entries
         self._metadata_path = model_metadata_path or Path(__file__).with_name(
-            "model_metadata.py"
+            "model_metadata.json"
         )
         self._models_json = None
 
     def models(self) -> dict:
-        """Load static literal metadata without importing GUI or the ML stack."""
+        """Load static JSON metadata without importing GUI or the ML stack."""
         if self._models_json is None:
             raw = read_regular_file(self._metadata_path, limit=256 * 1024)
-            module = ast.parse(raw)
-            literals = {}
-            for node in module.body:
-                if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                    target = node.targets[0]
-                    if isinstance(target, ast.Name) and target.id in {
-                        "MODEL_CATEGORIES",
-                        "_MODEL_DATA",
-                    }:
-                        literals[target.id] = ast.literal_eval(node.value)
-            categories, models = (
-                literals.get("MODEL_CATEGORIES"),
-                literals.get("_MODEL_DATA"),
-            )
+            metadata = json.load(io.BytesIO(raw))
+            categories = metadata.get("categories") if type(metadata) is dict else None
+            models = metadata.get("models") if type(metadata) is dict else None
             if (
                 type(categories) is not dict
                 or type(models) is not list

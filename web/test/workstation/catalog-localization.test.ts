@@ -41,21 +41,19 @@ const cnn: ModelDescription = {
 describe('catalogue localization preserves daemon authority', () => {
   it('covers all 71 complete bundled descriptions and best-for source signatures', () => {
     const source = readFileSync(
-      resolve(process.cwd(), '../src/wavedl_daemon/runs/model_metadata.py'),
+      resolve(process.cwd(), '../src/wavedl_daemon/runs/model_metadata.json'),
       'utf8',
     );
-    const models = [
-      ...source.matchAll(
-        /"id": "([^"]+)"[\s\S]*?"description": "([^"]*)"[\s\S]*?"best_for": "([^"]*)"/g,
-      ),
-    ];
+    const { models } = JSON.parse(source) as {
+      models: { id: string; description: string; best_for: string }[];
+    };
     expect(models).toHaveLength(71);
     expect(Object.keys(bundledModelMessages.en)).toHaveLength(142);
     for (const model of models) {
-      expect(bundledModelMessages.en[`${model[1]}.description`]).toBe(model[2]);
-      expect(bundledModelMessages.en[`${model[1]}.bestFor`]).toBe(model[3]);
-      expect(bundledModelMessages.vi[`${model[1]}.description`]).not.toBe(model[2]);
-      expect(bundledModelMessages.vi[`${model[1]}.bestFor`]).not.toBe(model[3]);
+      expect(bundledModelMessages.en[`${model.id}.description`]).toBe(model.description);
+      expect(bundledModelMessages.en[`${model.id}.bestFor`]).toBe(model.best_for);
+      expect(bundledModelMessages.vi[`${model.id}.description`]).not.toBe(model.description);
+      expect(bundledModelMessages.vi[`${model.id}.bestFor`]).not.toBe(model.best_for);
     }
   });
 

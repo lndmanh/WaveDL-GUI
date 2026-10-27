@@ -775,14 +775,15 @@ def test_missing_submission_proof_fails_before_claim(layout):
 
 
 def test_actual_slurm_submission_receipt_is_valid_startup_proof(tmp_path):
+    from unittest.mock import Mock
     from uuid import uuid4
 
-    from unit_tests.daemon.test_slurm_submission import Runner, result
     from wavedl.core.layout import OperationKind
     from wavedl.core.manifest import RuntimeSelection, build_manifest
     from wavedl_daemon.backends.slurm_plan import SlurmPlanner, SlurmSite
     from wavedl_daemon.backends.slurm_submission import SlurmSubmission
     from wavedl_daemon.storage.ownership import DispatchLock
+    from wavedl_daemon.supervision.base import ProcessResult
 
     run_id, request_id = str(uuid4()), str(uuid4())
     manifest = build_manifest(
@@ -793,7 +794,8 @@ def test_actual_slurm_submission_receipt_is_valid_startup_proof(tmp_path):
         submission_cwd=tmp_path,
     )
     plan = SlurmPlanner(SlurmSite(partition="cpu", cluster="alpha")).plan(manifest)
-    runner = Runner(result(b"123;alpha\n"))
+    runner = Mock()
+    runner.run.return_value = ProcessResult(0, b"123;alpha\n", b"")
     with DispatchLock(tmp_path / "dispatch.lock") as lock:
         backend = SlurmSubmission(runner, owner="alice", dispatch_lock=lock)
         backend.submit(plan, request_id=request_id, attempt=2)
@@ -810,7 +812,7 @@ def test_actual_slurm_submission_receipt_is_valid_startup_proof(tmp_path):
         initial_attempt=2,
     )
     assert bound.attempt == 2
-    assert len(runner.calls) == 1
+    assert runner.run.call_count == 1
 
 
 @pytest.mark.parametrize(

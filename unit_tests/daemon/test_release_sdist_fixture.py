@@ -16,7 +16,7 @@ MODULES = (
     "wavedl/runtime.py",
     "wavedl/train.py",
     "wavedl_daemon/runs/catalog.py",
-    "wavedl_daemon/runs/model_metadata.py",
+    "wavedl_daemon/runs/model_metadata.json",
 )
 ASSETS = {
     name: name.encode()
@@ -33,7 +33,7 @@ def make_sdist(path):
         files = {
             "PKG-INFO": b"Version: 1.0.0\n",
             "pyproject.toml": b'[project.scripts]\nwavedl = "wavedl.client:main"\n',
-            "src/wavedl_daemon/runs/model_metadata.py": b"# metadata\n",
+            "src/wavedl_daemon/runs/model_metadata.json": b'{"models": []}\n',
         }
         files.update(
             {f"src/wavedl_daemon/web_assets/{k}": v for k, v in ASSETS.items()}

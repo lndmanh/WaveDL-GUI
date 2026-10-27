@@ -21,7 +21,7 @@ def test_explicit_release_wheel_is_copied_unchanged(tmp_path, monkeypatch, resol
             "wavedl/runtime.py",
             "wavedl/train.py",
             "wavedl_daemon/runs/catalog.py",
-            "wavedl_daemon/runs/model_metadata.py",
+            "wavedl_daemon/runs/model_metadata.json",
         ):
             archive.writestr(name, b"# exact release bytes\n")
         archive.writestr("wavedl-1.0.0.dist-info/METADATA", "Version: 1.0.0\n")
