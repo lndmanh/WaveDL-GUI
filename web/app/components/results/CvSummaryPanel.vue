@@ -4,10 +4,9 @@ import { Button } from '@/components/ui/button';
 import type { Artifact } from '../../lib/artifact-client';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { loadCvSummary, type CvMetric, type CvSummary } from '../../lib/cv-summary';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { cvSummaryMessages } from '../../i18n/cv-summary';
+import { useI18n } from 'vue-i18n';
 const props = defineProps<{ session: ConnectionSession; artifacts: readonly Artifact[] }>();
-const { t, locale } = useWorkstationI18n(cvSummaryMessages);
+const { t, locale } = useI18n({ useScope: 'global' });
 const id = useId();
 const publications = computed(() =>
   props.artifacts.filter((artifact) => artifact.path === 'cv_summary.json'),
@@ -69,7 +68,7 @@ async function load() {
 }
 function number(value: CvMetric) {
   return value === null
-    ? t('unavailable')
+    ? t('cv.unavailable')
     : new Intl.NumberFormat(locale.value === 'vi' ? 'vi-VN' : 'en-US', {
         maximumSignificantDigits: 6,
       }).format(value);
@@ -77,9 +76,9 @@ function number(value: CvMetric) {
 const overall = computed(() =>
   summary.value
     ? [
-        { label: t('r2'), mean: summary.value.r2_mean, std: summary.value.r2_std },
-        { label: t('mae'), mean: summary.value.mae_mean, std: summary.value.mae_std },
-        { label: t('loss'), mean: summary.value.val_loss_mean, std: summary.value.val_loss_std },
+        { label: t('cv.r2'), mean: summary.value.r2_mean, std: summary.value.r2_std },
+        { label: t('cv.mae'), mean: summary.value.mae_mean, std: summary.value.mae_std },
+        { label: t('cv.loss'), mean: summary.value.val_loss_mean, std: summary.value.val_loss_std },
       ]
     : [],
 );
@@ -89,32 +88,32 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <section v-if="publications.length" class="flex flex-col gap-4" :aria-labelledby="`${id}-title`">
-    <h3 :id="`${id}-title`" class="text-lg font-semibold">{{ t('title') }}</h3>
-    <p class="text-sm text-muted-foreground">{{ t('help') }}</p>
-    <label :for="`${id}-source`">{{ t('publication') }}</label>
+    <h3 :id="`${id}-title`" class="text-lg font-semibold">{{ t('cv.title') }}</h3>
+    <p class="text-sm text-muted-foreground">{{ t('cv.help') }}</p>
+    <label :for="`${id}-source`">{{ t('cv.publication') }}</label>
     <select
       :id="`${id}-source`"
       :disabled="busy"
       :value="selected?.generation ?? ''"
       @change="choose"
     >
-      <option value="">{{ t('choose') }}</option>
+      <option value="">{{ t('cv.choose') }}</option>
       <option
         v-for="artifact in publications"
         :key="artifact.generation"
         :value="artifact.generation"
       >
-        {{ t('source', { generation: artifact.generation, attempt: artifact.attempt }) }}
+        {{ t('cv.source', { generation: artifact.generation, attempt: artifact.attempt }) }}
       </option>
     </select>
     <Button variant="outline" :disabled="!selected || busy" @click="load">{{
-      busy ? t('loading') : t('load')
+      busy ? t('cv.loading') : t('cv.load')
     }}</Button>
-    <p v-if="failed" role="alert">{{ t('failed') }}</p>
+    <p v-if="failed" role="alert">{{ t('cv.failed') }}</p>
     <template v-if="summary">
       <p>
         {{
-          t('timestamp', {
+          t('cv.timestamp', {
             timestamp: new Date(summary.timestamp).toLocaleString(
               locale === 'vi' ? 'vi-VN' : 'en-US',
             ),
@@ -125,14 +124,14 @@ onBeforeUnmount(() => {
         <table class="w-full text-left text-sm">
           <caption>
             {{
-              t('overall')
+              t('cv.overall')
             }}
           </caption>
           <thead>
             <tr>
-              <th>{{ t('metric') }}</th>
-              <th>{{ t('mean') }}</th>
-              <th>{{ t('std') }}</th>
+              <th>{{ t('cv.metric') }}</th>
+              <th>{{ t('cv.mean') }}</th>
+              <th>{{ t('cv.std') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -148,18 +147,18 @@ onBeforeUnmount(() => {
         <table class="w-full text-left text-sm">
           <caption>
             {{
-              t('folds')
+              t('cv.folds')
             }}
           </caption>
           <thead>
             <tr>
-              <th>{{ t('fold') }}</th>
-              <th>{{ t('r2') }}</th>
-              <th>{{ t('mae') }}</th>
-              <th>{{ t('normalized') }}</th>
-              <th>{{ t('loss') }}</th>
-              <th>{{ t('bestEpoch') }}</th>
-              <th>{{ t('epochs') }}</th>
+              <th>{{ t('cv.fold') }}</th>
+              <th>{{ t('cv.r2') }}</th>
+              <th>{{ t('cv.mae') }}</th>
+              <th>{{ t('cv.normalized') }}</th>
+              <th>{{ t('cv.loss') }}</th>
+              <th>{{ t('cv.bestEpoch') }}</th>
+              <th>{{ t('cv.epochs') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -179,11 +178,11 @@ onBeforeUnmount(() => {
         <table class="w-full text-left text-sm">
           <caption>
             {{
-              t('targets')
+              t('cv.targets')
             }}
             ·
             {{
-              t('fold')
+              t('cv.fold')
             }}
             {{
               fold.fold
@@ -191,14 +190,14 @@ onBeforeUnmount(() => {
           </caption>
           <thead>
             <tr>
-              <th>{{ t('metric') }}</th>
-              <th>{{ t('r2') }}</th>
-              <th>{{ t('mae') }}</th>
+              <th>{{ t('cv.metric') }}</th>
+              <th>{{ t('cv.r2') }}</th>
+              <th>{{ t('cv.mae') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="target in fold.targets" :key="target.index">
-              <th>{{ t('parameter', { index: target.index }) }}</th>
+              <th>{{ t('cv.parameter', { index: target.index }) }}</th>
               <td>{{ number(target.r2) }}</td>
               <td>{{ number(target.mae) }}</td>
             </tr>

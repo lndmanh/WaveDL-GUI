@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../composables/useWorkstationI18n';
-import { shellSettingsMessages } from '../i18n/shell-settings';
+import { useI18n } from 'vue-i18n';
 import { Activity, Database, FileChartColumn, Layers, Plus, Settings2, Waves } from '@lucide/vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ConnectionStatus } from '../lib/connection-session';
+import { workstationNavigationMessageKeys } from '../i18n/dynamic-keys';
 import {
   WORKSTATION_SECTIONS,
   WORKSTATION_SHELL_TEST_IDS,
@@ -17,29 +17,57 @@ defineProps<{ status: ConnectionStatus; section: Section }>();
 const emit = defineEmits<{ navigate: [section: Section] }>();
 
 const navigation = [
-  { label: 'Experiments', icon: Layers, section: WORKSTATION_SECTIONS.experiments },
-  { label: 'New training run', icon: Plus, section: WORKSTATION_SECTIONS.project },
-  { label: 'Datasets', icon: Database, section: WORKSTATION_SECTIONS.datasets },
-  { label: 'Results', icon: FileChartColumn, section: WORKSTATION_SECTIONS.results },
-  { label: 'Adopt standalone run', icon: Plus, section: WORKSTATION_SECTIONS.adopt },
-  { label: 'Connection', icon: Settings2, section: WORKSTATION_SECTIONS.connection },
-  { label: 'Settings', icon: Settings2, section: WORKSTATION_SECTIONS.settings },
+  {
+    label: workstationNavigationMessageKeys.experiments,
+    icon: Layers,
+    section: WORKSTATION_SECTIONS.experiments,
+  },
+  {
+    label: workstationNavigationMessageKeys.project,
+    icon: Plus,
+    section: WORKSTATION_SECTIONS.project,
+  },
+  {
+    label: workstationNavigationMessageKeys.datasets,
+    icon: Database,
+    section: WORKSTATION_SECTIONS.datasets,
+  },
+  {
+    label: workstationNavigationMessageKeys.results,
+    icon: FileChartColumn,
+    section: WORKSTATION_SECTIONS.results,
+  },
+  {
+    label: workstationNavigationMessageKeys.adopt,
+    icon: Plus,
+    section: WORKSTATION_SECTIONS.adopt,
+  },
+  {
+    label: workstationNavigationMessageKeys.connection,
+    icon: Settings2,
+    section: WORKSTATION_SECTIONS.connection,
+  },
+  {
+    label: workstationNavigationMessageKeys.settings,
+    icon: Settings2,
+    section: WORKSTATION_SECTIONS.settings,
+  },
 ] as const;
 function navigate(value: Section) {
   emit('navigate', value);
 }
-const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
+const { t } = useI18n({ useScope: 'global' });
 </script>
 
 <template>
-  <a class="skip-link" href="#workspace">{{ translateKnownMessage('Skip to workspace') }}</a>
+  <a class="skip-link" href="#workspace">{{ t('shell.skipToWorkspace') }}</a>
   <div class="workstation">
-    <aside class="sidebar" :aria-label="translateKnownMessage('Workstation navigation')">
+    <aside class="sidebar" :aria-label="t('shell.workstationNavigation')">
       <div class="brand"><Waves aria-hidden="true" /><span>WaveDL</span></div>
-      <p class="sidebar-label">{{ translateKnownMessage('WORKSPACE') }}</p>
+      <p class="sidebar-label">{{ t('shell.workspace') }}</p>
       <nav
         class="navigation"
-        :aria-label="translateKnownMessage('Sections')"
+        :aria-label="t('shell.sections')"
         :data-testid="WORKSTATION_SHELL_TEST_IDS.navigation"
       >
         <Button
@@ -52,39 +80,35 @@ const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
           @click="navigate(item.section)"
         >
           <component :is="item.icon" data-icon="inline-start" aria-hidden="true" />
-          {{ translateKnownMessage(item.label) }}
+          {{ t(item.label) }}
         </Button>
       </nav>
       <p class="sidebar-note">
-        {{ translateKnownMessage('Your compute. Your workspace.') }}<br />{{
-          translateKnownMessage('Execution belongs to the daemon.')
-        }}
+        {{ t('shell.yourComputeYourWorkspace') }}<br />{{ t('shell.executionBelongsToTheDaemon') }}
       </p>
       <div class="sidebar-footer">
-        <Activity aria-hidden="true" /><span>{{
-          translateKnownMessage('Local-first computation')
-        }}</span>
+        <Activity aria-hidden="true" /><span>{{ t('shell.localFirstComputation') }}</span>
       </div>
     </aside>
     <div class="workspace">
       <header class="toolbar">
-        <span class="toolbar-title">{{ translateKnownMessage('Workstation') }}</span>
+        <span class="toolbar-title">{{ t('shell.workstation') }}</span>
         <div class="toolbar-actions">
           <Badge variant="outline" :data-testid="WORKSTATION_SHELL_TEST_IDS.connectionStatus">{{
             status === 'connected'
-              ? translateKnownMessage('Connected')
+              ? t('shell.connected')
               : status === 'connecting'
-                ? translateKnownMessage('Connecting')
+                ? t('shell.connecting')
                 : status === 'offline'
-                  ? translateKnownMessage('Offline')
-                  : translateKnownMessage('Not connected')
+                  ? t('shell.offline')
+                  : t('shell.notConnected')
           }}</Badge>
           <Button
             v-if="section !== 'connection'"
             variant="ghost"
             size="sm"
             @click="emit('navigate', 'connection')"
-            >{{ translateKnownMessage('Connection') }}</Button
+            >{{ t('shell.connection') }}</Button
           >
         </div>
       </header>
@@ -97,7 +121,7 @@ const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
         <slot />
       </main>
       <footer class="footer">
-        {{ translateKnownMessage('WaveDL daemon interface · Development foundation') }}
+        {{ t('shell.workspaceSubtitle') }}
       </footer>
     </div>
   </div>

@@ -1,4 +1,5 @@
 import { onScopeDispose, shallowRef } from 'vue';
+import { clientError, type ClientMessage } from '../i18n/client-messages';
 import { DaemonApi, DaemonApiError, type RunView } from '../lib/daemon-api';
 import { CursorStore } from '../lib/event-stream';
 import { RunMonitor, type RunMonitorSnapshot } from '../lib/run-monitor';
@@ -7,7 +8,7 @@ export function useRuns(api: DaemonApi, reportFailure: (error: DaemonApiError) =
   const runs = shallowRef<readonly RunView[]>([]);
   const selected = shallowRef<RunMonitorSnapshot | null>(null);
   const loading = shallowRef(false);
-  const message = shallowRef('');
+  const message = shallowRef<ClientMessage | Error>('');
   const page = shallowRef(0);
   const staleRunIds = shallowRef<ReadonlySet<string>>(new Set());
   const lastRefreshed = shallowRef<string | null>(null);
@@ -42,7 +43,8 @@ export function useRuns(api: DaemonApi, reportFailure: (error: DaemonApiError) =
       }
     } catch (error) {
       if (!controller.signal.aborted && !disposed) {
-        message.value = error instanceof DaemonApiError ? error.message : 'Unable to refresh runs.';
+        message.value =
+          error instanceof DaemonApiError ? error : clientError('unableToRefreshRuns');
         staleRunIds.value = new Set(runs.value.map((run) => run.run_id));
         if (error instanceof DaemonApiError) reportFailure(error);
       }

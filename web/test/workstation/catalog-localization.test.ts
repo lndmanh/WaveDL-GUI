@@ -1,14 +1,20 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { flushPromises, mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { Select } from '@/components/ui/select';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import { bundledModelMessages, modelPresentation } from '../../app/i18n/model-descriptions';
+import {
+  bundledModelMessages,
+  hashModelSource,
+  modelPresentation,
+  type ModelMessageKey,
+} from '../../app/i18n/model-descriptions';
 import type { WorkstationLocale } from '../../app/i18n/core';
 import { CatalogApi, type ModelDescription } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
@@ -34,12 +40,19 @@ const cnn: ModelDescription = {
   category: 'Classic CNNs',
   supportedDims: [1, 2, 3],
   pretrained: false,
-  description: bundledModelMessages.en['cnn.description'] ?? '',
-  bestFor: bundledModelMessages.en['cnn.bestFor'] ?? '',
+  description:
+    "A vanilla convolutional neural network stacking Conv-BN-ReLU blocks with max-pooling for spatial reduction. Originating from LeCun's foundational work on gradient-based learning (1989), this architecture serves as the simplest deep learning baseline. It lacks modern enhancements like skip connections or attention, trading representational power for minimal complexity and fast iteration.",
+  bestFor: 'Quick baselines and prototyping across all data types',
 };
 
+function translateModel(key: ModelMessageKey): string {
+  const [, id, field] = key.split('.');
+  const model = bundledModelMessages.vi[id as keyof typeof bundledModelMessages.vi];
+  return model?.[field as 'description' | 'bestFor'] ?? key;
+}
+
 describe('catalogue localization preserves daemon authority', () => {
-  it('covers all 71 complete bundled descriptions and best-for source signatures', () => {
+  it('covers all complete bundled translations and exact daemon source signatures', () => {
     const source = readFileSync(
       resolve(process.cwd(), '../src/wavedl_daemon/runs/model_metadata.json'),
       'utf8',
@@ -48,12 +61,35 @@ describe('catalogue localization preserves daemon authority', () => {
       models: { id: string; description: string; best_for: string }[];
     };
     expect(models).toHaveLength(71);
-    expect(Object.keys(bundledModelMessages.en)).toHaveLength(142);
+    expect(Object.keys(bundledModelMessages.vi)).toHaveLength(models.length);
+    expect(Object.keys(bundledModelMessages.sourceHashes)).toHaveLength(models.length);
     for (const model of models) {
-      expect(bundledModelMessages.en[`${model.id}.description`]).toBe(model.description);
-      expect(bundledModelMessages.en[`${model.id}.bestFor`]).toBe(model.best_for);
-      expect(bundledModelMessages.vi[`${model.id}.description`]).not.toBe(model.description);
-      expect(bundledModelMessages.vi[`${model.id}.bestFor`]).not.toBe(model.best_for);
+      const sourceHashes =
+        bundledModelMessages.sourceHashes[
+          model.id as keyof typeof bundledModelMessages.sourceHashes
+        ];
+      expect(sourceHashes).toEqual({
+        description: hashModelSource(model.description),
+        bestFor: hashModelSource(model.best_for),
+      });
+      const translation = bundledModelMessages.vi[model.id as keyof typeof bundledModelMessages.vi];
+      expect(translation.description).not.toBe(model.description);
+      expect(translation.bestFor).not.toBe(model.best_for);
+      expect(
+        modelPresentation(
+          {
+            id: model.id,
+            displayName: model.id,
+            category: 'test',
+            supportedDims: [1],
+            pretrained: false,
+            description: model.description,
+            bestFor: model.best_for,
+          },
+          'vi',
+          translateModel,
+        ).untranslated,
+      ).toBe(false);
     }
   });
 
@@ -63,20 +99,30 @@ describe('catalogue localization preserves daemon authority', () => {
       { ...cnn, description: 'A custom daemon override <script>東京</script>' },
       { ...cnn, bestFor: 'My specialized experiment' },
     ]) {
-      expect(modelPresentation(model, 'vi')).toEqual({
+      expect(modelPresentation(model, 'vi', translateModel)).toEqual({
         description: model.description,
         bestFor: model.bestFor,
         untranslated: true,
       });
-      expect(modelPresentation(model, 'en')).toEqual({
+      expect(modelPresentation(model, 'en', translateModel)).toEqual({
         description: model.description,
         bestFor: model.bestFor,
         untranslated: false,
       });
     }
-    expect(modelPresentation(cnn, 'vi').description).toContain('Conv-BN-ReLU');
-    expect(modelPresentation(cnn, 'vi').description).toContain('1989');
-    expect(modelPresentation(cnn, 'vi').untranslated).toBe(false);
+    expect(modelPresentation(cnn, 'vi', translateModel).description).toContain('Conv-BN-ReLU');
+    expect(modelPresentation(cnn, 'vi', translateModel).description).toContain('1989');
+    expect(modelPresentation(cnn, 'vi', translateModel).untranslated).toBe(false);
+  });
+
+  it('keeps the daemon description when one character changes', () => {
+    const description = `${cnn.description.slice(0, -1)}x`;
+    expect(description).not.toBe(cnn.description);
+    expect(modelPresentation({ ...cnn, description }, 'vi', translateModel)).toEqual({
+      description,
+      bestFor: cnn.bestFor,
+      untranslated: true,
+    });
   });
 
   it('reactively translates mounted model browsing while preserving search, unknown text and scoped selection', async () => {

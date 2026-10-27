@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useClientMessages } from '../../composables/useClientMessages';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
+import { useI18n } from 'vue-i18n';
 import { Field as VeeField } from 'vee-validate';
 import { shallowRef } from 'vue';
 import { Input } from '@/components/ui/input';
@@ -10,7 +9,7 @@ import { Field, FieldLabel, FieldError } from '@/components/ui/field';
 import { reservedRuntimeVariable } from '../../../shared/schemas/training-request';
 
 const { clientMessage } = useClientMessages();
-const { t, translateKnownMessage } = useWorkstationI18n(projectMessages);
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ environment: Record<string, string>; disabled: boolean }>();
 const emit = defineEmits<{ update: [value: Record<string, string>] }>();
 const name = shallowRef('');
@@ -21,8 +20,7 @@ function add() {
     reservedRuntimeVariable(name.value) ||
     name.value in props.environment
   ) {
-    error.value =
-      'Use a unique environment name; scheduler and launcher identity are daemon-owned.';
+    error.value = 'project.environmentNameInvalid';
     return;
   }
   emit('update', { ...props.environment, [name.value]: '' });
@@ -39,15 +37,11 @@ function remove(key: string) {
 <template>
   <details>
     <summary class="cursor-pointer font-medium">
-      {{ translateKnownMessage('Explicit runtime environment') }}
+      {{ t('project.explicitRuntimeEnvironment') }}
     </summary>
     <div class="mt-4 flex flex-col gap-4">
       <p>
-        {{
-          translateKnownMessage(
-            'These values are in the persisted execution plan. Do not enter credentials here; configure secrets on the daemon host.',
-          )
-        }}
+        {{ t('project.environmentHelp') }}
       </p>
       <VeeField
         v-for="(_, key) in environment"
@@ -66,18 +60,16 @@ function remove(key: string) {
             variant="outline"
             :disabled="disabled"
             @click="remove(key)"
-            >{{ t('Remove {name}', { name: key }) }}</Button
+            >{{ t('project.removeName', { name: key }) }}</Button
           ></Field
         ></VeeField
       >
       <Field
-        ><FieldLabel for="new-env-name">{{
-          translateKnownMessage('New environment variable')
-        }}</FieldLabel
+        ><FieldLabel for="new-env-name">{{ t('project.newEnvironmentVariable') }}</FieldLabel
         ><Input id="new-env-name" v-model="name" :disabled="disabled" :aria-invalid="!!error" />
-        <p v-if="error" role="alert">{{ translateKnownMessage(error) }}</p>
+        <p v-if="error" role="alert">{{ t(error) }}</p>
         <Button type="button" variant="outline" :disabled="disabled" @click="add">{{
-          translateKnownMessage('Add variable')
+          t('project.addVariable')
         }}</Button></Field
       >
     </div>

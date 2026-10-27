@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import ResultsContainer from '../../app/components/results/ResultsContainer.vue';
 import { ConnectionSession } from './session-fixture';

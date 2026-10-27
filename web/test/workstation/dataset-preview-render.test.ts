@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
 import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PreviewPlot from '../../app/components/datasets/PreviewPlot.vue';

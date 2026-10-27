@@ -1,3 +1,4 @@
+import { clientRangeError } from '../i18n/client-messages';
 import type uPlot from 'uplot';
 import type { MetricRecord } from './metric-history';
 
@@ -36,7 +37,7 @@ export function buildPlotSeries(
   channel: PlotChannel,
 ): PlotSeries {
   if (records.length > MAX_PLOT_RECORDS)
-    throw new RangeError(`Chart capacity exceeded (${MAX_PLOT_RECORDS} metric records).`);
+    throw clientRangeError('chartCapacityExceeded', { limit: MAX_PLOT_RECORDS });
   const selected = fields[channel];
   const rows = new Map<number, Map<string, Cell>>();
   for (const record of records) {

@@ -1,21 +1,20 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { runMessages } from '../../i18n/runs';
+import { useI18n } from 'vue-i18n';
 import type { RuntimeMetricSummary } from '../../lib/metric-history';
-const { t } = useWorkstationI18n(runMessages);
+const { t } = useI18n({ useScope: 'global' });
 defineProps<{ parameters: RuntimeMetricSummary['parameters'] }>();
 </script>
 <template>
-  <section :aria-label="t('perParam')" class="flex flex-col gap-2">
-    <h4>{{ t('perParam') }}</h4>
+  <section :aria-label="t('runs.perParam')" class="flex flex-col gap-2">
+    <h4>{{ t('runs.perParam') }}</h4>
     <dl class="flex flex-wrap gap-4">
       <div v-for="parameter in parameters" :key="parameter.name">
         <dt>{{ parameter.name }}</dt>
-        <dd>{{ parameter.value === null ? t('unavailable') : parameter.value }}</dd>
+        <dd>{{ parameter.value === null ? t('runs.unavailable') : parameter.value }}</dd>
       </div>
     </dl>
     <p v-if="!parameters.length" class="text-muted-foreground text-sm">
-      {{ t('noPerParam') }}
+      {{ t('runs.noPerParam') }}
     </p>
   </section>
 </template>

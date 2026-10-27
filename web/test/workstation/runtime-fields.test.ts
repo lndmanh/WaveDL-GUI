@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';

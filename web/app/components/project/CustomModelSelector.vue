@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useClientMessages } from '../../composables/useClientMessages';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
+import { useI18n } from 'vue-i18n';
 import { onBeforeUnmount, shallowRef, toRaw } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
 import { Button } from '@/components/ui/button';
@@ -12,7 +11,7 @@ import { CatalogApi, type ModelSelection } from '../../lib/catalog-api';
 import type { ConnectionSession } from '../../lib/connection-session';
 
 const { clientMessage } = useClientMessages();
-const { translateKnownMessage } = useWorkstationI18n(projectMessages);
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ session: ConnectionSession; disabled: boolean }>();
 const emit = defineEmits<{ select: [selection: ModelSelection] }>();
 const { handleSubmit } = useForm({
@@ -34,8 +33,7 @@ const select = handleSubmit(async (value) => {
     );
     emit('select', selection);
   } catch {
-    message.value =
-      'Custom identifier could not be selected. Verify the daemon connection and retry.';
+    message.value = 'project.customModelFailed';
   } finally {
     busy.value = false;
     pending = null;
@@ -46,28 +44,24 @@ onBeforeUnmount(() => pending?.abort());
 <template>
   <details>
     <summary class="cursor-pointer font-medium">
-      {{ translateKnownMessage('Use a custom registered model') }}
+      {{ t('project.useACustomRegisteredModel') }}
     </summary>
     <form class="mt-4 flex flex-col gap-4" @submit="select">
       <VeeField v-slot="{ field, errors }" name="modelId"
         ><Field :data-invalid="!!errors.length"
-          ><FieldLabel for="custom-model-id">{{
-            translateKnownMessage('Custom model registry ID')
-          }}</FieldLabel
+          ><FieldLabel for="custom-model-id">{{ t('project.customModelRegistryId') }}</FieldLabel
           ><Input
             id="custom-model-id"
             v-bind="field"
             :disabled="disabled || busy"
             :aria-invalid="!!errors.length" /><FieldDescription>{{
-            translateKnownMessage(
-              'This explicit ID is unverified—not a catalogue entry. Configure import modules in advanced training options and ensure they register this ID in your selected Python environment. Only execution can establish compatibility.',
-            )
+            t('project.customModelHelp')
           }}</FieldDescription
           ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field></VeeField
       ><Button type="submit" variant="outline" class="self-start" :disabled="disabled || busy">{{
-        translateKnownMessage('Use custom model identifier')
+        t('project.useCustomModelIdentifier')
       }}</Button>
-      <p v-if="message" role="status">{{ translateKnownMessage(message) }}</p>
+      <p v-if="message" role="status">{{ t(message) }}</p>
     </form>
   </details>
 </template>

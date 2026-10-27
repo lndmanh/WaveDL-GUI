@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import { ConnectionSession, ConnectionSessionError } from './connection-session';
 import { toRaw } from 'vue';
 import { DaemonApiError, isUuid, object, parseJson } from './daemon-api';
@@ -19,7 +20,7 @@ export async function pngPreviewBlob(blob: Blob): Promise<Blob> {
     header.slice(0, 8).join(',') !== '137,80,78,71,13,10,26,10' ||
     header.slice(12, 16).join(',') !== '73,72,68,82'
   )
-    throw new Error('Not a raster PNG.');
+    throw clientError('notARasterPng', {});
   const view = new DataView(header.buffer);
   const width = view.getUint32(16);
   const height = view.getUint32(20);
@@ -31,12 +32,12 @@ export async function pngPreviewBlob(blob: Blob): Promise<Blob> {
     height > 8192 ||
     width * height > 16 * 1024 * 1024
   )
-    throw new Error('PNG exceeds the browser preview pixel budget.');
+    throw clientError('pngPixelBudget', {});
   return new Blob([blob], { type: 'image/png' });
 }
 const scopes = new WeakMap<Artifact, { session: ConnectionSession; revision: number }>();
 const fail = (): never => {
-  throw new DaemonApiError('response', 'Invalid published artifact inventory');
+  throw DaemonApiError.fromKey('response', 'invalidArtifactInventory');
 };
 function exact(value: Record<string, unknown>, keys: string[]): boolean {
   return Object.keys(value).sort().join(',') === [...keys].sort().join(',');
@@ -114,7 +115,7 @@ export class ArtifactClient {
     this.session = toRaw(session);
   }
   async list(runId: string, signal?: AbortSignal): Promise<readonly Artifact[]> {
-    if (!isUuid(runId)) throw new Error('Invalid run identity');
+    if (!isUuid(runId)) throw clientError('invalidRunIdentity', {});
     const revision = this.session.snapshot().revision;
     const records = await this.session.perform(
       async (api, scoped) =>
@@ -122,7 +123,7 @@ export class ArtifactClient {
       { signal },
     );
     if (revision !== this.session.snapshot().revision || !this.session.api)
-      throw new ConnectionSessionError('stale', 'Refresh artifacts on the current connection.');
+      throw ConnectionSessionError.fromKey('stale', 'artifactRefreshRequired');
     for (const record of records) scopes.set(record, { session: this.session, revision });
     return Object.freeze(records);
   }
@@ -134,14 +135,11 @@ export class ArtifactClient {
       scope.revision !== this.session.snapshot().revision ||
       !this.session.api
     )
-      throw new ConnectionSessionError('stale', 'Refresh artifacts on the current connection.');
+      throw ConnectionSessionError.fromKey('stale', 'artifactRefreshRequired');
   }
   async verifiedBlob(artifact: Artifact, signal?: AbortSignal): Promise<Blob> {
     this.assertSelection(artifact);
-    if (artifact.size > BLOB_BUDGET)
-      throw new Error(
-        'This artifact exceeds the 64 MiB browser memory budget. Use the CLI to export it.',
-      );
+    if (artifact.size > BLOB_BUDGET) throw clientError('artifactMemoryBudget', {});
     return this.session.perform(
       async (api, scoped) => {
         this.assertSelection(artifact);
@@ -156,7 +154,7 @@ export class ArtifactClient {
           response.headers.get('content-length') !== String(artifact.size)
         ) {
           await response.body?.cancel();
-          throw new DaemonApiError('response', 'Artifact response does not match its inventory.');
+          throw DaemonApiError.fromKey('response', 'artifactInventoryMismatch');
         }
         const reader = response.body.getReader();
         const bytes = new Uint8Array(artifact.size);
@@ -172,19 +170,19 @@ export class ArtifactClient {
             const { done, value } = await reader.read();
             if (done) break;
             if (offset + value.length > artifact.size)
-              throw new DaemonApiError('response', 'Artifact exceeds declared size.');
+              throw DaemonApiError.fromKey('response', 'artifactExceedsDeclaredSize');
             bytes.set(value, offset);
             offset += value.length;
           }
           if (offset !== artifact.size)
-            throw new DaemonApiError('response', 'Artifact is truncated.');
+            throw DaemonApiError.fromKey('response', 'artifactIsTruncated');
           const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
           const hash = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
           scoped.throwIfAborted();
           api.assertResponseCurrent(response);
           this.assertSelection(artifact);
           if (hash !== artifact.sha256)
-            throw new DaemonApiError('response', 'Artifact checksum changed.');
+            throw DaemonApiError.fromKey('response', 'artifactChecksumChanged');
           return new Blob([bytes], { type: 'application/octet-stream' });
         } finally {
           scoped.removeEventListener('abort', abort);
@@ -197,7 +195,7 @@ export class ArtifactClient {
   }
   async selectionMetadata(artifact: Artifact, signal?: AbortSignal): Promise<SelectionMetadata> {
     if (artifact.path !== 'checkpoint_selection.json' || artifact.size > 4096)
-      throw new Error('Select bounded checkpoint classification metadata.');
+      throw clientError('checkpointMetadataRequired', {});
     const blob = await this.verifiedBlob(artifact, signal);
     return parseSelectionMetadata(parseJson(await blob.text()));
   }

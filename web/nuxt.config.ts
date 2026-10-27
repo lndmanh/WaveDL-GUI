@@ -15,6 +15,22 @@ if (readFileSync(identityPath, 'utf8') !== identitySource)
 // no Nitro API or backend.
 export default defineNuxtConfig({
   ssr: false,
+  modules: ['@nuxtjs/i18n'],
+  i18n: {
+    strategy: 'no_prefix',
+    detectBrowserLanguage: false,
+    locales: ['en', 'vi'],
+    defaultLocale: 'en',
+    vueI18n: './i18n.config.ts',
+    bundle: { runtimeOnly: false, fullInstall: false },
+  },
+  hooks: {
+    'nitro:config'(nitro) {
+      // Both locales are static imports in vueI18n. The daemon has no Nitro
+      // runtime, so do not generate the module's unused messages endpoint.
+      nitro.handlers = nitro.handlers?.filter((handler) => !handler.route?.startsWith('/_i18n/'));
+    },
+  },
   components: false,
   imports: { scan: false },
   css: ['@/assets/css/tailwind.css'],

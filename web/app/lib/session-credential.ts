@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import { z } from 'zod';
 import { parseJson } from './daemon-api';
 
@@ -69,7 +70,7 @@ function browserStorage(area: SessionCredentialStorageArea): SessionCredentialSt
 
 function boundedText(value: string): string {
   if (new TextEncoder().encode(value).byteLength > SESSION_CREDENTIAL_LIMIT)
-    throw new Error('Session credential exceeds storage bound.');
+    throw clientError('sessionCredentialTooLarge', {});
   return value;
 }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, toRaw, useId, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -14,22 +15,20 @@ import { Field, FieldLabel } from '@/components/ui/field';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { CatalogApi, type BrowsePage, type DataSelection } from '../../lib/catalog-api';
 import BrowseEntries from './BrowseEntries.vue';
-import { catalogMessages } from '../../i18n/catalog';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
+const { t } = useI18n({ useScope: 'global' });
 const props = withDefaults(
   defineProps<{ session: ConnectionSession; allowDirectory?: boolean; label?: string }>(),
-  { allowDirectory: false, label: 'Daemon files' },
+  { allowDirectory: false },
 );
 const emit = defineEmits<{ select: [selection: DataSelection] }>();
-const { t, translateKnownMessage } = useWorkstationI18n(catalogMessages);
-const displayLabel = computed(() => translateKnownMessage(props.label));
+const displayLabel = computed(() => props.label ?? t('catalog.daemonFiles'));
 const rootControlId = useId();
 const roots = shallowRef<readonly string[]>([]);
 const page = shallowRef<BrowsePage | null>(null);
 const root = shallowRef('');
 const path = shallowRef('');
 const busy = shallowRef(false);
-const message = shallowRef('');
+const message = shallowRef<'' | 'catalog.browseUnavailable' | 'catalog.chooseFile'>('');
 let revision = 0;
 let request: AbortController | null = null;
 let unsubscribe: (() => void) | undefined;
@@ -52,9 +51,7 @@ async function work<T>(
     const value = await callback(new CatalogApi(toRaw(props.session)), request.signal);
     if (current === revision) accept(value);
   } catch {
-    if (current === revision)
-      message.value =
-        'Catalogue unavailable. Verify your connection or choose another allowed location.';
+    if (current === revision) message.value = 'catalog.browseUnavailable';
   } finally {
     if (current === revision) {
       busy.value = false;
@@ -93,7 +90,7 @@ function select(name?: string) {
     (api, signal) => api.resolve(root.value, selectedPath, signal),
     (value) => {
       if (value.kind === 'directory' && !props.allowDirectory) {
-        message.value = 'Choose a file, not a directory.';
+        message.value = 'catalog.chooseFile';
         return;
       }
       emit('select', value);
@@ -128,9 +125,7 @@ watch(
             roots.value = value;
           },
         );
-      } else if (state.status !== 'disconnected')
-        message.value =
-          'Catalogue unavailable. Verify your connection or choose another allowed location.';
+      } else if (state.status !== 'disconnected') message.value = 'catalog.browseUnavailable';
     });
   },
   { immediate: true },
@@ -143,19 +138,19 @@ onBeforeUnmount(() => {
 <template>
   <section class="flex flex-col gap-4" :aria-label="displayLabel">
     <h2>{{ displayLabel }}</h2>
-    <p>{{ t('browseSafety') }}</p>
+    <p>{{ t('catalog.browseSafety') }}</p>
     <p v-if="!busy && !roots.length && !message" role="status">
-      {{ t('noRoots') }}
+      {{ t('catalog.noRoots') }}
     </p>
     <Field>
-      <FieldLabel :for="rootControlId">{{ t('root') }}</FieldLabel>
+      <FieldLabel :for="rootControlId">{{ t('catalog.root') }}</FieldLabel>
       <Select
         :model-value="root"
         :disabled="busy || !roots.length"
         @update:model-value="(value) => browse(String(value), '')"
       >
-        <SelectTrigger :id="rootControlId" :aria-label="t('root')"
-          ><SelectValue :placeholder="t('chooseRoot')"
+        <SelectTrigger :id="rootControlId" :aria-label="t('catalog.root')"
+          ><SelectValue :placeholder="t('catalog.chooseRoot')"
         /></SelectTrigger>
         <SelectContent
           ><SelectGroup
@@ -167,23 +162,23 @@ onBeforeUnmount(() => {
       </Select>
     </Field>
     <Alert v-if="message" role="alert"
-      ><AlertTitle>{{ t('browseStatus') }}</AlertTitle
-      ><AlertDescription>{{ translateKnownMessage(message) }}</AlertDescription></Alert
+      ><AlertTitle>{{ t('catalog.browseStatus') }}</AlertTitle
+      ><AlertDescription>{{ t(message) }}</AlertDescription></Alert
     >
-    <p v-if="busy" role="status">{{ t('readingCatalog') }}</p>
+    <p v-if="busy" role="status">{{ t('catalog.readingCatalog') }}</p>
     <div v-if="root" class="flex flex-wrap items-center gap-3">
       <p>{{ root }} / {{ path }}</p>
       <Button
         variant="outline"
         :disabled="busy || !path"
         @click="browse(root, path.split('/').slice(0, -1).join('/'))"
-        >{{ t('parent') }}</Button
+        >{{ t('catalog.parent') }}</Button
       >
       <Button v-if="allowDirectory" variant="outline" :disabled="busy || !page" @click="select()">{{
-        t('selectDirectory')
+        t('catalog.selectDirectory')
       }}</Button>
       <Button variant="outline" :disabled="busy" @click="browse()">{{
-        t('refreshDirectory')
+        t('catalog.refreshDirectory')
       }}</Button>
     </div>
     <BrowseEntries
@@ -195,9 +190,9 @@ onBeforeUnmount(() => {
       @select="select"
       @page="(offset) => browse(root, path, offset)"
     />
-    <Button v-if="busy" variant="outline" @click="cancel">{{ t('stopBrowsing') }}</Button>
+    <Button v-if="busy" variant="outline" @click="cancel">{{ t('catalog.stopBrowsing') }}</Button>
     <Button v-else variant="outline" class="self-start" @click="loadRoots">{{
-      t('reloadRoots')
+      t('catalog.reloadRoots')
     }}</Button>
   </section>
 </template>

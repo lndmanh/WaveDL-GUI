@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../composables/useWorkstationI18n';
-import { shellSettingsMessages } from '../i18n/shell-settings';
+import { useI18n } from 'vue-i18n';
+import { useClientMessages } from '../composables/useClientMessages';
 import { computed, watch } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
 import {
@@ -29,6 +29,8 @@ const { handleSubmit, resetForm, setFieldError } = useForm<DaemonCredentialValue
   initialValues: { token: '' },
   validationSchema: daemonCredentialSchema,
 });
+const { t } = useI18n({ useScope: 'global' });
+const { clientMessage } = useClientMessages();
 const keepSignedIn = computed(() => props.keepSignedIn);
 const busy = computed(
   () => props.state.status === 'connecting' || props.state.status === 'offline',
@@ -48,37 +50,30 @@ watch(
   () => props.state.status,
   (status) => {
     if (status === 'authentication' && props.state.message)
-      setFieldError('token', props.state.message);
+      setFieldError('token', clientMessage(props.state.message));
   },
 );
-const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
 </script>
 
 <template>
   <section class="connection-panel" aria-labelledby="connection-title">
-    <p class="eyebrow">{{ translateKnownMessage('YOUR COMPUTE. YOUR WORKSPACE.') }}</p>
+    <p class="eyebrow">{{ t('shell.yourComputeYourWorkspace2') }}</p>
     <h1 id="connection-title" class="heading">
-      {{ translateKnownMessage('Connect to your daemon.') }}
+      {{ t('shell.connectToYourDaemon') }}
     </h1>
     <p class="introduction">
-      {{
-        translateKnownMessage(
-          'Your daemon runs the experiments. This browser connects only to its current origin. An expiring session token stays in this tab unless you choose to keep it on this browser; your master credential is never saved.',
-        )
-      }}
+      {{ t('shell.connectionHelp') }}
     </p>
     <Alert v-if="state.message" role="alert" class="mb-6">
       <AlertTitle>{{
-        state.status === 'skew'
-          ? translateKnownMessage('Connection identity changed')
-          : translateKnownMessage('Connection status')
+        state.status === 'skew' ? t('shell.connectionIdentityChanged') : t('shell.connectionStatus')
       }}</AlertTitle>
-      <AlertDescription>{{ translateKnownMessage(state.message) }}</AlertDescription>
+      <AlertDescription>{{ clientMessage(state.message) }}</AlertDescription>
     </Alert>
     <div v-if="connected && state.health" class="flex flex-col gap-4" aria-live="polite">
       <p>
         {{
-          t('Connected to {daemonId} · build {buildId}', {
+          t('shell.connectedToDaemonidBuildBuildid', {
             daemonId: state.health.daemon_id,
             buildId: state.health.build_id,
           })
@@ -86,20 +81,16 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
       </p>
       <div class="flex flex-wrap gap-3">
         <Button variant="outline" @click="emit('refresh')">{{
-          translateKnownMessage('Verify connection')
+          t('shell.verifyConnection')
         }}</Button>
-        <Button variant="outline" @click="emit('detach')">{{
-          translateKnownMessage('Disconnect')
-        }}</Button>
+        <Button variant="outline" @click="emit('detach')">{{ t('shell.disconnect') }}</Button>
       </div>
     </div>
     <form v-else class="flex flex-col gap-5" @submit="submit">
       <FieldGroup>
         <VeeField v-slot="{ field, errors }" name="token">
           <Field :data-invalid="!!errors.length" :data-disabled="busy">
-            <FieldLabel for="daemon-bearer">{{
-              translateKnownMessage('Daemon master credential')
-            }}</FieldLabel>
+            <FieldLabel for="daemon-bearer">{{ t('shell.daemonMasterCredential') }}</FieldLabel>
             <Input
               id="daemon-bearer"
               v-bind="field"
@@ -110,20 +101,16 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
               aria-describedby="daemon-bearer-help"
             />
             <FieldDescription id="daemon-bearer-help">{{
-              translateKnownMessage(
-                'Paste the credential provided by WaveDL. It is exchanged for an expiring session token and never saved.',
-              )
+              t('shell.credentialHelp')
             }}</FieldDescription>
-            <FieldError v-if="errors.length" :errors="errors.map(translateKnownMessage)" />
+            <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
           </Field>
         </VeeField>
       </FieldGroup>
       <div class="flex flex-wrap gap-3">
         <Button type="submit" :disabled="busy"
           ><Cable data-icon="inline-start" aria-hidden="true" />{{
-            state.status === 'connecting'
-              ? translateKnownMessage('Connecting…')
-              : translateKnownMessage('Connect securely')
+            state.status === 'connecting' ? t('shell.connecting2') : t('shell.connectSecurely')
           }}</Button
         >
         <Button
@@ -132,7 +119,7 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
           variant="outline"
           :disabled="state.status === 'connecting'"
           @click="emit('detach')"
-          >{{ translateKnownMessage('Disconnect and clear scope') }}</Button
+          >{{ t('shell.disconnectAndClearScope') }}</Button
         >
       </div>
     </form>
@@ -145,22 +132,14 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
         @update:model-value="emit('update:keepSignedIn', $event === true)"
       />
       <div class="grid gap-1">
-        <FieldLabel for="keep-signed-in">{{
-          translateKnownMessage('Keep me signed in on this browser')
-        }}</FieldLabel>
+        <FieldLabel for="keep-signed-in">{{ t('shell.keepMeSignedInOnThisBrowser') }}</FieldLabel>
         <FieldDescription id="keep-signed-in-help">{{
-          translateKnownMessage(
-            'Saves only the expiring session token in this browser. Your master credential is never saved.',
-          )
+          t('shell.sessionStorageHelp')
         }}</FieldDescription>
       </div>
     </Field>
     <p class="offline-note">
-      {{
-        translateKnownMessage(
-          'Disconnecting never cancels running jobs. An offline page cannot confirm live status or perform actions. A changed daemon identity requires an explicit disconnect before starting a new scope.',
-        )
-      }}
+      {{ t('shell.disconnectHelp') }}
     </p>
   </section>
 </template>

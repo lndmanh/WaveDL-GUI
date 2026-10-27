@@ -1,0 +1,186 @@
+{
+  "model": {
+    "label": "model",
+    "description": "Model architecture to train. Available: ()"
+  },
+  "import_modules": {
+    "label": "import modules",
+    "description": "Python modules to import before training (for custom models)"
+  },
+  "pretrained": {
+    "label": "pretrained",
+    "description": "Use ImageNet pretrained weights (only for *_pretrained model variants). Default: train from scratch."
+  },
+  "batch_size": {
+    "label": "batch size",
+    "description": "Batch size per GPU"
+  },
+  "lr": {
+    "label": "lr",
+    "description": "Initial learning rate"
+  },
+  "epochs": {
+    "label": "epochs",
+    "description": "Maximum training epochs"
+  },
+  "patience": {
+    "label": "patience",
+    "description": "Early stopping patience"
+  },
+  "weight_decay": {
+    "label": "weight decay",
+    "description": "Weight decay"
+  },
+  "grad_clip": {
+    "label": "grad clip",
+    "description": "Gradient clipping norm"
+  },
+  "grad_accum_steps": {
+    "label": "grad accum steps",
+    "description": "Gradient accumulation steps. Effective batch = batch_size x grad_accum_steps x num_gpus"
+  },
+  "loss": {
+    "label": "loss",
+    "description": "Loss function for training. Available: ()"
+  },
+  "huber_delta": {
+    "label": "huber delta",
+    "description": "Delta for Huber loss"
+  },
+  "loss_weights": {
+    "label": "loss weights",
+    "description": "Comma-separated weights for weighted_mse (e.g., '1.0,2.0,1.0')"
+  },
+  "optimizer": {
+    "label": "optimizer",
+    "description": "Optimizer for training. Available: ()"
+  },
+  "momentum": {
+    "label": "momentum",
+    "description": "Momentum for SGD/RMSprop"
+  },
+  "nesterov": {
+    "label": "nesterov",
+    "description": "Use Nesterov momentum (SGD)"
+  },
+  "betas": {
+    "label": "betas",
+    "description": "Betas for Adam variants (comma-separated)"
+  },
+  "scheduler": {
+    "label": "scheduler",
+    "description": "LR scheduler. Available: ()"
+  },
+  "scheduler_patience": {
+    "label": "scheduler patience",
+    "description": "Patience for ReduceLROnPlateau"
+  },
+  "min_lr": {
+    "label": "min lr",
+    "description": "Minimum learning rate"
+  },
+  "scheduler_factor": {
+    "label": "scheduler factor",
+    "description": "LR reduction factor"
+  },
+  "warmup_epochs": {
+    "label": "warmup epochs",
+    "description": "Warmup epochs for linear_warmup"
+  },
+  "step_size": {
+    "label": "step size",
+    "description": "Step size for StepLR"
+  },
+  "milestones": {
+    "label": "milestones",
+    "description": "Comma-separated epochs for MultiStepLR (e.g., '30,60,90')"
+  },
+  "data_path": {
+    "label": "data path",
+    "description": "Path to NPZ dataset"
+  },
+  "workers": {
+    "label": "workers",
+    "description": "DataLoader workers per GPU (-1=auto-detect based on CPU cores)"
+  },
+  "seed": {
+    "label": "seed",
+    "description": "Random seed"
+  },
+  "deterministic": {
+    "label": "deterministic",
+    "description": "Enable deterministic mode for reproducibility (slower, disables TF32/cuDNN benchmark)"
+  },
+  "cache_validate": {
+    "label": "cache validate",
+    "description": "Cache validation mode: sha256 (full hash), fast (partial), size (quick)"
+  },
+  "single_channel": {
+    "label": "single channel",
+    "description": "Confirm data is single-channel (suppress ambiguous shape warnings for shallow 3D volumes)"
+  },
+  "cv": {
+    "label": "cv",
+    "description": "Enable K-fold cross-validation with K folds (0=disabled)"
+  },
+  "cv_stratify": {
+    "label": "cv stratify",
+    "description": "Use stratified splitting for cross-validation"
+  },
+  "cv_bins": {
+    "label": "cv bins",
+    "description": "Number of bins for stratified CV (only with --cv_stratify)"
+  },
+  "resume": {
+    "label": "resume",
+    "description": "Checkpoint directory to resume from"
+  },
+  "save_every": {
+    "label": "save every",
+    "description": "Save checkpoint every N epochs (0=disable)"
+  },
+  "fresh": {
+    "label": "fresh",
+    "description": "Force fresh training, ignore existing checkpoints"
+  },
+  "compile": {
+    "label": "compile",
+    "description": "Enable torch.compile (PyTorch 2.x)"
+  },
+  "precision": {
+    "label": "precision",
+    "description": "Mixed precision mode"
+  },
+  "constraint": {
+    "label": "constraint",
+    "description": "Soft constraint expressions: 'y0 - y1*y2' (penalize violations)"
+  },
+  "constraint_file": {
+    "label": "constraint file",
+    "description": "Python file with constraint(pred, inputs) function"
+  },
+  "constraint_weight": {
+    "label": "constraint weight",
+    "description": "Weight(s) for soft constraints (one per constraint, or single shared weight)"
+  },
+  "constraint_reduction": {
+    "label": "constraint reduction",
+    "description": "Reduction mode for constraint penalties"
+  },
+  "wandb": {
+    "label": "wandb",
+    "description": "Enable Weights & Biases logging"
+  },
+  "wandb_watch": {
+    "label": "wandb watch",
+    "description": "Enable WandB gradient watching (adds overhead, useful for debugging)"
+  },
+  "project_name": {
+    "label": "project name",
+    "description": "WandB project name"
+  },
+  "run_name": {
+    "label": "run name",
+    "description": "WandB run name"
+  }
+}

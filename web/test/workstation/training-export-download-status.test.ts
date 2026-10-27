@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TrainingExport from '../../app/components/project/TrainingExport.vue';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';

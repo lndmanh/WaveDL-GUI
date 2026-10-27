@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import { trainingRequestSchema, type TrainingRequest } from '../../shared/schemas/training-request';
 import {
   inferenceDefaults,
@@ -46,7 +47,7 @@ export class AutoPlotWorkflow {
       capture.approvedPlan.request_id !== capture.run.request_id ||
       capture.approvedPlan.plan_id !== capture.run.plan_id
     )
-      throw new Error('Auto-plot belongs to a submitted training workflow.');
+      throw clientError('autoPlotAlreadySubmitted', {});
     this.#capture = structuredClone({ ...capture, request });
   }
   get state() {
@@ -137,12 +138,11 @@ export class AutoPlotWorkflow {
     return structuredClone(this.#intent);
   }
   planned(): void {
-    if (this.#state !== 'armed' || !this.#intent)
-      throw new Error('Auto-plot has no eligible captured intent.');
+    if (this.#state !== 'armed' || !this.#intent) throw clientError('autoPlotIntentMissing', {});
     this.#state = 'planned';
   }
   submitted(): void {
-    if (this.#state !== 'planned') throw new Error('Auto-plot must use its persisted plan.');
+    if (this.#state !== 'planned') throw clientError('autoPlotMustUseItsPersistedPlan', {});
     this.#state = 'submitted';
   }
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
-import { runMessages } from '../../i18n/runs';
+import { useI18n } from 'vue-i18n';
+import { useClientMessages } from '../../composables/useClientMessages';
+import { runStateMessageKeys } from '../../i18n/dynamic-keys';
 import DatasetInfoPanel from '../datasets/DatasetInfoPanel.vue';
 import { computed, onBeforeUnmount, shallowRef, watch, toRaw } from 'vue';
 import { useForm } from 'vee-validate';
@@ -36,22 +36,10 @@ import ProjectGuide from './ProjectGuide.vue';
 import { applyTrainingPreset, trainingPresetSchema } from '../../lib/training-presets';
 import type { z } from 'zod';
 
-const { locale, t, translateKnownMessage } = useWorkstationI18n(projectMessages);
-const { t: runMessage } = useWorkstationI18n(runMessages);
+const { locale, t } = useI18n({ useScope: 'global' });
+const { clientMessage } = useClientMessages();
 function stateLabel(state: RunView['state']): string {
-  if (locale.value === 'en') return state;
-  switch (state) {
-    case 'submission_unknown':
-      return runMessage('submissionUnknown');
-    case 'terminal_unknown':
-      return runMessage('terminalUnknown');
-    case 'observation_unavailable':
-      return runMessage('observationUnavailable');
-    case 'supervision_lost':
-      return runMessage('supervisionLost');
-    default:
-      return runMessage(state);
-  }
+  return locale.value === 'en' ? state : t(runStateMessageKeys[state]);
 }
 const props = defineProps<{ session: ConnectionSession }>();
 const emit = defineEmits<{
@@ -88,13 +76,17 @@ const message = shallowRef('');
 const reportedRun = shallowRef<RunView | null>(null);
 const displayMessage = computed(() =>
   message.value === 'reported' && reportedRun.value
-    ? t('Daemon reports {state}{submission}.', {
+    ? t('project.daemonReportsStateSubmission', {
         state: stateLabel(reportedRun.value.state),
-        submission: translateKnownMessage(
-          reportedRun.value.submission_requested ? '; submission requested' : '; not submitted yet',
+        submission: t(
+          reportedRun.value.submission_requested
+            ? 'project.submissionRequested'
+            : 'project.notSubmittedYet',
         ),
       })
-    : translateKnownMessage(message.value),
+    : message.value.startsWith('project.')
+      ? t(message.value)
+      : clientMessage(message.value),
 );
 const connected = shallowRef(false);
 const resetConfirmation = shallowRef(false);
@@ -183,11 +175,11 @@ async function nextStep() {
   const current = epoch;
   const currentStep = step.value;
   if (step.value === 0 && !data.value) {
-    message.value = 'Choose a dataset from the current daemon.';
+    message.value = 'project.datasetRequired';
     return;
   }
   if (step.value === 1 && !model.value) {
-    message.value = 'Choose a catalogue model or explicit custom identifier.';
+    message.value = 'project.modelRequired';
     return;
   }
   if (step.value === 3) {
@@ -196,7 +188,7 @@ async function nextStep() {
       const result = await validate();
       if (current !== epoch || step.value !== currentStep) return;
       if (!result.valid) {
-        message.value = 'Review training and runtime validation errors before approval.';
+        message.value = 'project.approvalValidationRequired';
         return;
       }
     } finally {
@@ -226,8 +218,8 @@ async function work(
         error instanceof ConnectionSessionError &&
         error.code === 'request' &&
         error.status === 400
-          ? 'The daemon refused this plan. Correct the settings and preview again.'
-          : 'The request was not acknowledged; server work may already exist. Reconnect if needed, then retry preview with this unchanged draft, or check/retry the approved submission. Never create a replacement draft merely to retry.';
+          ? 'project.planRefused'
+          : 'project.submissionAckUnknown';
     }
   } finally {
     if (current === epoch) {
@@ -242,14 +234,13 @@ function preview(event?: Event) {
     async (draft) => {
       if (current !== epoch) return;
       if (!data.value || !model.value) {
-        message.value = 'Choose a dataset and model from this daemon first.';
+        message.value = 'project.selectionRequired';
         return;
       }
       try {
         workflow.prepare(draft, data.value, model.value);
       } catch {
-        message.value =
-          'Selection or configuration is stale. Select again from the verified daemon.';
+        message.value = 'project.selectionStale';
         return;
       }
       await work('preview', async (signal, isCurrent) => {
@@ -261,7 +252,7 @@ function preview(event?: Event) {
     },
     () => {
       if (current !== epoch) return;
-      message.value = 'Review the validation errors before requesting a plan.';
+      message.value = 'project.planValidationRequired';
     },
   )(event);
 }
@@ -272,7 +263,7 @@ function submit() {
     if (!isCurrent()) return;
     acknowledged.value = run;
     if (guided.value) step.value = 5;
-    message.value = 'Daemon acknowledged this exact plan.';
+    message.value = 'project.daemonAcknowledgedThisExactPlan';
     emit('submitted', run);
     if (approved && isCurrent()) emit('submittedPlan', run, approved);
   });
@@ -311,23 +302,15 @@ onBeforeUnmount(() => {
   <section class="mx-auto flex w-full max-w-5xl flex-col gap-8" aria-labelledby="project-title">
     <header>
       <h1 id="project-title" class="text-3xl font-medium">
-        {{ translateKnownMessage('Build a training run') }}
+        {{ t('project.buildATrainingRun') }}
       </h1>
       <p class="mt-3 text-muted-foreground">
-        {{
-          translateKnownMessage(
-            'Author a draft, review a persisted daemon plan, then explicitly approve it. Nothing starts automatically.',
-          )
-        }}
+        {{ t('project.authoringHelp') }}
       </p>
     </header>
     <Alert v-if="!connected"
-      ><AlertTitle>{{ translateKnownMessage('Verified connection required') }}</AlertTitle
-      ><AlertDescription>{{
-        translateKnownMessage(
-          'Connect to the daemon before choosing files, planning or submitting.',
-        )
-      }}</AlertDescription></Alert
+      ><AlertTitle>{{ t('project.verifiedConnectionRequired') }}</AlertTitle
+      ><AlertDescription>{{ t('project.connectionRequired') }}</AlertDescription></Alert
     >
     <ProjectGuide
       :enabled="guided"
@@ -338,25 +321,25 @@ onBeforeUnmount(() => {
       @next="nextStep"
     />
     <Alert v-if="message" role="alert"
-      ><AlertTitle>{{ translateKnownMessage('Planning status') }}</AlertTitle
+      ><AlertTitle>{{ t('project.planningStatus') }}</AlertTitle
       ><AlertDescription>{{ displayMessage }}</AlertDescription></Alert
     >
     <div v-show="!guided || step === 0" class="flex flex-col gap-3">
       <details :open="guided">
         <summary class="cursor-pointer font-medium">
-          {{ translateKnownMessage('Choose daemon dataset') }}
+          {{ t('project.chooseDaemonDataset') }}
         </summary>
         <BrowseContainer
           :session="session"
-          :label="translateKnownMessage('Training dataset')"
+          :label="t('project.trainingDataset')"
           @select="selectData"
         />
       </details>
       <p>
         {{
-          t('Dataset: {path}{daemon}. Browser files are not uploaded.', {
-            path: data?.path ?? translateKnownMessage('Not selected'),
-            daemon: data ? t(' · daemon {id}', { id: data.daemonId }) : '',
+          t('project.datasetSelectionSummary', {
+            path: data?.path ?? t('project.notSelected'),
+            daemon: data ? t('project.daemonId', { id: data.daemonId }) : '',
           })
         }}
       </p>
@@ -365,7 +348,7 @@ onBeforeUnmount(() => {
     <div v-show="!guided || step === 1" class="flex flex-col gap-3">
       <details :open="guided">
         <summary class="cursor-pointer font-medium">
-          {{ translateKnownMessage('Choose model') }}
+          {{ t('project.chooseModel') }}
         </summary>
         <ModelSelector
           :session="session"
@@ -381,14 +364,10 @@ onBeforeUnmount(() => {
       />
       <p>
         {{
-          t(
-            'Model: {model}{custom}. Catalogue descriptions do not certify runtime compatibility.',
-            {
-              model: model?.model ?? translateKnownMessage('Not selected'),
-              custom:
-                model?.source === 'custom' ? translateKnownMessage(' · custom, unverified') : '',
-            },
-          )
+          t('project.modelSelectionSummary', {
+            model: model?.model ?? t('project.notSelected'),
+            custom: model?.source === 'custom' ? t('project.customUnverified') : '',
+          })
         }}
       </p>
     </div>
@@ -414,35 +393,31 @@ onBeforeUnmount(() => {
       </div>
       <div class="flex flex-wrap gap-3">
         <Button type="submit" :disabled="!canPreview">{{
-          translateKnownMessage(busy ? 'Waiting for daemon…' : 'Preview persisted plan')
+          t(busy ? 'project.waitingForDaemon' : 'project.previewPersistedPlan')
         }}</Button
         ><Button
           type="button"
           variant="outline"
           :disabled="busy"
           @click="resetConfirmation = true"
-          >{{ translateKnownMessage('Reset training defaults') }}</Button
+          >{{ t('project.resetTrainingDefaults') }}</Button
         ><Button v-if="busy" type="button" variant="outline" @click="invalidate">{{
-          translateKnownMessage('Stop waiting')
+          t('project.stopWaiting')
         }}</Button>
       </div>
       <div
         v-if="resetConfirmation"
         role="group"
-        :aria-label="translateKnownMessage('Confirm reset')"
+        :aria-label="t('project.confirmReset')"
         class="flex flex-col gap-3"
       >
         <p>
-          {{
-            translateKnownMessage(
-              'Reset training options? Your dataset, model and execution environment remain selected. This invalidates the preview, never changes an existing run.',
-            )
-          }}
+          {{ t('project.resetHelp') }}
         </p>
         <div class="flex gap-3">
-          <Button type="button" @click="reset">{{ translateKnownMessage('Confirm reset') }}</Button
+          <Button type="button" @click="reset">{{ t('project.confirmReset') }}</Button
           ><Button type="button" variant="outline" @click="resetConfirmation = false">{{
-            translateKnownMessage('Keep draft')
+            t('project.keepDraft')
           }}</Button>
         </div>
       </div>
@@ -459,21 +434,21 @@ onBeforeUnmount(() => {
     <section
       v-if="acknowledged && (!guided || step === 5)"
       class="flex flex-col gap-3"
-      :aria-label="translateKnownMessage('Acknowledged training run')"
+      :aria-label="t('project.acknowledgedTrainingRun')"
     >
       <h2 class="text-xl font-medium">
-        {{ translateKnownMessage('Daemon acknowledged the run') }}
+        {{ t('project.daemonAcknowledgedTheRun') }}
       </h2>
       <p>
         {{
-          t(
-            '{run} · {state}. This acknowledgment is not proof of training completion; open the run monitor for current evidence.',
-            { run: acknowledged.run_id, state: stateLabel(acknowledged.state) },
-          )
+          t('project.submissionAckHelp', {
+            run: acknowledged.run_id,
+            state: stateLabel(acknowledged.state),
+          })
         }}
       </p>
       <Button type="button" variant="outline" class="self-start" @click="openAcknowledged">{{
-        translateKnownMessage('Open acknowledged run')
+        t('project.openAcknowledgedRun')
       }}</Button>
     </section>
   </section>

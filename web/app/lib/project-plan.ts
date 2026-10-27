@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import { trainingRequestSchema, type TrainingRequest } from '../../shared/schemas/training-request';
 import { CatalogApi, type DataSelection, type ModelSelection } from './catalog-api';
 import type { ConnectionSession } from './connection-session';
@@ -38,7 +39,7 @@ export class ProjectPlan {
       draft.config.data_path !== data.path ||
       draft.config.model !== model.model
     )
-      throw new Error('Select the matching daemon dataset and model.');
+      throw clientError('trainingSelectionMismatch', {});
     const request = trainingRequestSchema.parse(draft);
     if (!request.storage_map?.length) delete request.storage_map;
     const fingerprint = JSON.stringify(request);
@@ -50,7 +51,7 @@ export class ProjectPlan {
     this.#request = request;
   }
   async preview(signal?: AbortSignal): Promise<PlanView> {
-    if (!this.#request) throw new Error('Validate the training draft first.');
+    if (!this.#request) throw clientError('validateTheTrainingDraftFirst', {});
     const request = this.#request;
     const key = this.#key;
     const epoch = this.#epoch;
@@ -58,24 +59,24 @@ export class ProjectPlan {
       signal,
     });
     if (epoch !== this.#epoch || key !== this.#key || request !== this.#request)
-      throw new Error('Draft changed while planning; preview again.');
+      throw clientError('planningDraftChanged', {});
     this.#revision = this.session.snapshot().revision;
     this.#approved = plan;
     return plan;
   }
   async submit(signal?: AbortSignal): Promise<RunView> {
     const plan = this.approved;
-    if (!plan) throw new Error('Preview this draft on the current connection first.');
+    if (!plan) throw clientError('trainingPreviewRequired', {});
     return this.session.perform((api, scoped) => api.submit(plan, scoped), { signal });
   }
   async status(signal?: AbortSignal): Promise<RunView> {
     const plan = this.approved;
-    if (!plan) throw new Error('Preview again before checking submission.');
+    if (!plan) throw clientError('submissionPreviewRequired', {});
     return this.session.perform(
       async (api, scoped) => {
         const run = await api.getRun(plan.run_id, scoped);
         if (run.plan_id !== plan.plan_id || run.request_id !== plan.request_id)
-          throw new DaemonApiError('identity', 'Run status does not belong to the approved plan.');
+          throw DaemonApiError.fromKey('identity', 'runPlanMismatch');
         return run;
       },
       { signal },

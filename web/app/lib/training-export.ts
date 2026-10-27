@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import options from '../../shared/training-options.json';
 import { trainingRequestSchema, type TrainingRequest } from '../../shared/schemas/training-request';
 
@@ -18,24 +19,14 @@ export function quotePosix(value: string): string {
 /** A standalone host command is not a daemon plan or a scheduler submission. */
 export function trainingCommand(draft: TrainingRequest): string {
   const request = trainingRequestSchema.parse(draft);
-  if (!request.runtime.python.startsWith('/'))
-    throw new Error(
-      'This exporter quotes POSIX shell commands only. Windows host commands require a Windows-specific exporter; use the YAML configuration.',
-    );
+  if (!request.runtime.python.startsWith('/')) throw clientError('exportWindowsHost', {});
   if (request.topology.num_machines !== 1 || request.topology.machine_rank !== 0)
-    throw new Error(
-      'Multi-node standalone commands require explicit rendezvous and are not exported by this editor.',
-    );
+    throw clientError('exportMultiNode', {});
   if (!['cpu', 'cuda'].includes(request.runtime.device))
-    throw new Error('Choose explicit CPU or CUDA for a reproducible standalone command.');
-  if (request.runtime.mode === 'container')
-    throw new Error(
-      'Container startup is operator-owned; a standalone host command cannot reproduce it.',
-    );
+    throw clientError('exportDeviceRequired', {});
+  if (request.runtime.mode === 'container') throw clientError('exportContainerStartup', {});
   if (Object.keys(request.runtime.environment).length)
-    throw new Error(
-      'Explicit environment values are not exported because they may contain secrets. Configure them safely on the host, or clear them before exporting a command.',
-    );
+    throw clientError('envValuesNotExported', {});
   const argv = [
     request.runtime.python,
     '-m',
@@ -48,16 +39,14 @@ export function trainingCommand(draft: TrainingRequest): string {
   if (request.runtime.device === 'cpu') argv.push('--cpu');
   for (const option of options) {
     const entry = Object.entries(request.config).find(([name]) => name === option.name);
-    if (!entry) throw new Error('Incomplete training schema.');
+    if (!entry) throw clientError('incompleteTrainingSchema', {});
     const value = entry[1];
     if (value === null || value === false || (Array.isArray(value) && !value.length)) continue;
     const flag = option.name === 'import_modules' ? '--import' : `--${option.name}`;
     if (value === true) argv.push(flag);
     else if (Array.isArray(value)) {
       if (value.some((item) => typeof item === 'string' && item.startsWith('-')))
-        throw new Error(
-          'Standalone CLI list entries cannot start with an option prefix; use the YAML export.',
-        );
+        throw clientError('exportOptionPrefix', {});
       argv.push(flag, ...value.map(String));
     } else argv.push(`${flag}=${value}`);
   }

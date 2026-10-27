@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';

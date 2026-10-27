@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { shellSettingsMessages } from '../../i18n/shell-settings';
+import { useI18n } from 'vue-i18n';
+import { useClientMessages } from '../../composables/useClientMessages';
 import { onMounted, onUnmounted, shallowRef } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
 import { Button } from '@/components/ui/button';
@@ -13,9 +13,11 @@ import {
   applyAppearance,
   type AppearancePreferences,
 } from '../../lib/preferences';
+import { appearanceControlMessageKeys } from '../../i18n/dynamic-keys';
 
 const props = defineProps<{ appearance?: AppearancePreferences }>();
 const emit = defineEmits<{ changed: [value: AppearancePreferences] }>();
+const { clientMessage } = useClientMessages();
 const message = shallowRef('');
 const { handleSubmit, resetForm } = useForm({
   validationSchema: appearanceSchema,
@@ -41,9 +43,7 @@ const submit = handleSubmit((value) => {
   const saved = saveAppearance(parsed);
   applyAppearance(parsed, document.documentElement, media?.matches ?? false);
   emit('changed', parsed);
-  message.value = saved
-    ? 'Browser preferences saved.'
-    : 'Applied for this session. Browser storage is unavailable.';
+  message.value = saved ? 'shell.browserPreferencesSaved' : 'shell.appearanceSessionOnly';
 });
 function reload() {
   resetForm({ values: applied });
@@ -52,26 +52,26 @@ function reload() {
 const controls = [
   {
     name: 'theme',
-    label: 'Appearance',
+    label: appearanceControlMessageKeys.appearance,
     options: [
-      { value: 'system', label: 'System' },
-      { value: 'light', label: 'Light' },
-      { value: 'dark', label: 'Dark' },
+      { value: 'system', label: appearanceControlMessageKeys.system },
+      { value: 'light', label: appearanceControlMessageKeys.light },
+      { value: 'dark', label: appearanceControlMessageKeys.dark },
     ],
   },
   {
     name: 'accent',
-    label: 'Accent',
+    label: appearanceControlMessageKeys.accent,
     options: [
-      { value: 'neutral', label: 'Neutral' },
-      { value: 'blue', label: 'Blue' },
-      { value: 'violet', label: 'Violet' },
-      { value: 'green', label: 'Green' },
+      { value: 'neutral', label: appearanceControlMessageKeys.neutral },
+      { value: 'blue', label: appearanceControlMessageKeys.blue },
+      { value: 'violet', label: appearanceControlMessageKeys.violet },
+      { value: 'green', label: appearanceControlMessageKeys.green },
     ],
   },
   {
     name: 'zoom',
-    label: 'Interface scale',
+    label: appearanceControlMessageKeys.interfaceScale,
     options: [
       { value: 90, label: '90%' },
       { value: 100, label: '100%' },
@@ -80,12 +80,12 @@ const controls = [
     ],
   },
 ];
-const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
+const { t } = useI18n({ useScope: 'global' });
 </script>
 <template>
   <section aria-labelledby="appearance-heading" class="flex flex-col gap-4">
     <h2 id="appearance-heading" class="font-medium">
-      {{ translateKnownMessage('Appearance and guidance') }}
+      {{ t('shell.appearanceAndGuidance') }}
     </h2>
     <form class="flex flex-col gap-4" @submit.prevent="submit">
       <FieldGroup>
@@ -96,9 +96,7 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
           :name="control.name"
         >
           <Field :data-invalid="!!errors.length">
-            <FieldLabel :for="`preference-${control.name}`">{{
-              translateKnownMessage(control.label)
-            }}</FieldLabel>
+            <FieldLabel :for="`preference-${control.name}`">{{ t(control.label) }}</FieldLabel>
             <select
               :id="`preference-${control.name}`"
               :name="field.name"
@@ -109,17 +107,15 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
               @change="controlChange(control.name, $event, field.onChange)"
             >
               <option v-for="option in control.options" :key="option.value" :value="option.value">
-                {{ translateKnownMessage(option.label) }}
+                {{ option.label.includes('.') ? t(option.label) : option.label }}
               </option>
             </select>
-            <FieldError v-if="errors.length" :errors="errors.map(translateKnownMessage)" />
+            <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
           </Field>
         </VeeField>
         <VeeField v-slot="{ field, errors }" name="language">
           <Field :data-invalid="!!errors.length">
-            <FieldLabel for="preference-language">{{
-              translateKnownMessage('Language')
-            }}</FieldLabel>
+            <FieldLabel for="preference-language">{{ t('shell.language') }}</FieldLabel>
             <select
               id="preference-language"
               class="preference-select"
@@ -132,42 +128,34 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
               <option value="en">English</option>
               <option value="vi">Tiếng Việt</option>
             </select>
-            <FieldDescription>{{
-              t('Choose the language used throughout this workstation.')
-            }}</FieldDescription>
+            <FieldDescription>{{ t('shell.languageHelp') }}</FieldDescription>
           </Field>
         </VeeField>
         <VeeField v-slot="{ field, errors }" name="showProjectGuide">
           <Field orientation="horizontal" :data-invalid="!!errors.length">
             <Checkbox
               id="preference-guide"
-              :aria-label="translateKnownMessage('Show the new-project guide')"
+              :aria-label="t('shell.showTheNewProjectGuide')"
               :model-value="field.value"
               @update:model-value="field.onChange"
               @blur="field.onBlur"
             />
-            <FieldLabel for="preference-guide">{{
-              translateKnownMessage('Show the new-project guide')
-            }}</FieldLabel>
-            <FieldError v-if="errors.length" :errors="errors.map(translateKnownMessage)" />
+            <FieldLabel for="preference-guide">{{ t('shell.showTheNewProjectGuide') }}</FieldLabel>
+            <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
           </Field>
         </VeeField>
       </FieldGroup>
       <div class="flex flex-wrap gap-2">
-        <Button type="submit">{{ translateKnownMessage('Save appearance') }}</Button
+        <Button type="submit">{{ t('shell.saveAppearance') }}</Button
         ><Button type="button" variant="outline" @click="reload">{{
-          translateKnownMessage('Discard changes')
+          t('shell.discardChanges')
         }}</Button>
       </div>
       <p role="status" class="text-sm text-muted-foreground">
-        {{ translateKnownMessage(message) }}
+        {{ message ? t(message) : '' }}
       </p>
       <p class="text-sm text-muted-foreground">
-        {{
-          translateKnownMessage(
-            'Changes apply immediately in this browser. They do not restart or reconfigure the daemon.',
-          )
-        }}
+        {{ t('shell.appearanceHelp') }}
       </p>
     </form>
   </section>

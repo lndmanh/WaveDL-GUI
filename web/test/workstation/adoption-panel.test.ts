@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { toRaw } from 'vue';
 import AdoptRunPanel from '../../app/components/runs/AdoptRunPanel.vue';

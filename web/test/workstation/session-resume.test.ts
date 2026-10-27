@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionSession } from '../../app/lib/connection-session';
+import { translateClientDiagnostic } from '../../app/i18n/client-messages';
 import {
   loadSessionCredential,
   SESSION_CREDENTIAL_KEY,
@@ -178,10 +179,12 @@ describe('resumable browser session', () => {
     window.sessionStorage.setItem(SESSION_CREDENTIAL_KEY, JSON.stringify(credential));
     const expired = session(async () => json({ detail: 'ignored' }, 401));
     expect(await expired.resume(credential)).toBe(false);
-    expect(expired.snapshot()).toMatchObject({
-      status: 'authentication',
-      message: 'Your session ended. Sign in again.',
-    });
+    expect(expired.snapshot().status).toBe('authentication');
+    const expiredMessage = expired.snapshot().message;
+    if (expiredMessage === null) throw new Error('Expected a coded authentication notice');
+    expect(translateClientDiagnostic('en', expiredMessage)).toBe(
+      'Your session ended. Sign in again.',
+    );
     expect(window.sessionStorage.getItem(SESSION_CREDENTIAL_KEY)).toBeNull();
 
     const master = 'master-only-secret';
@@ -195,10 +198,12 @@ describe('resumable browser session', () => {
     await expect(
       active.perform((api, signal) => api.read('/api/private', signal)),
     ).rejects.toMatchObject({ code: 'authentication' });
-    expect(active.snapshot()).toMatchObject({
-      status: 'authentication',
-      message: 'Your session ended. Sign in again.',
-    });
+    expect(active.snapshot().status).toBe('authentication');
+    const activeMessage = active.snapshot().message;
+    if (activeMessage === null) throw new Error('Expected a coded authentication notice');
+    expect(translateClientDiagnostic('en', activeMessage)).toBe(
+      'Your session ended. Sign in again.',
+    );
     expect(window.sessionStorage.getItem(SESSION_CREDENTIAL_KEY)).toBeNull();
   });
 
@@ -206,10 +211,12 @@ describe('resumable browser session', () => {
     window.localStorage.setItem(SESSION_CREDENTIAL_KEY, JSON.stringify(credential));
     const owner = session(async () => json({ detail: 'ignored' }, 409));
     expect(await owner.resume(credential, true)).toBe(false);
-    expect(owner.snapshot()).toMatchObject({
-      status: 'skew',
-      message: 'A different WaveDL daemon is now serving this address. Sign in again.',
-    });
+    expect(owner.snapshot().status).toBe('skew');
+    const message = owner.snapshot().message;
+    if (message === null) throw new Error('Expected a coded identity notice');
+    expect(translateClientDiagnostic('en', message)).toBe(
+      'A different WaveDL daemon is now serving this address. Sign in again.',
+    );
     expect(window.localStorage.getItem(SESSION_CREDENTIAL_KEY)).toBeNull();
   });
 

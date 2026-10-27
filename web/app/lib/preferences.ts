@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import { z } from 'zod';
 import { parseJson } from './daemon-api';
 import {
@@ -67,12 +68,12 @@ const keepSignedInKey = 'wavedl.keep-signed-in.v1';
 const keepSignedInSchema = z.boolean();
 function trainingKey(daemonId: string): string {
   if (!daemonId || daemonId.length > 256 || [...daemonId].some((char) => char.charCodeAt(0) < 32))
-    throw new Error('Invalid daemon identity.');
+    throw clientError('invalidDaemonIdentity', {});
   return `wavedl.training-defaults.v1.${encodeURIComponent(daemonId)}`;
 }
 function boundedText(value: string): string {
   if (new TextEncoder().encode(value).byteLength > PREFERENCES_LIMIT)
-    throw new Error('Preferences exceed the 64 KiB limit.');
+    throw clientError('preferencesExceedThe64KibLimit', {});
   return value;
 }
 export function loadAppearance(storage = browserStorage()): AppearancePreferences {

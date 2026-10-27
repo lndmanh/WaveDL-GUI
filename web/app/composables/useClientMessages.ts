@@ -1,10 +1,14 @@
-import { clientMessages, translateClientMessage } from '../i18n/client-messages';
-import { useWorkstationI18n } from './useWorkstationI18n';
+import { useI18n } from 'vue-i18n';
+import { isClientDiagnostic, type ClientMessage } from '../i18n/client-messages';
 
 /** Use only at client-diagnostic render boundaries, never for daemon logs/details. */
 export function useClientMessages() {
-  const { locale } = useWorkstationI18n(clientMessages);
+  const { t } = useI18n({ useScope: 'global' });
   return {
-    clientMessage: (rawEnglish: string): string => translateClientMessage(locale.value, rawEnglish),
+    clientMessage: (message: ClientMessage | Error): string => {
+      if (isClientDiagnostic(message))
+        return t(`clientErrors.${message.clientMessageKey}`, message.clientMessageParams ?? {});
+      return message instanceof Error ? message.message : message;
+    },
   };
 }

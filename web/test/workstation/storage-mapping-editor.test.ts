@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, shallowRef, watch } from 'vue';
 import { useForm } from 'vee-validate';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,8 +8,6 @@ import StorageMappingFields from '../../app/components/project/StorageMappingFie
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
 import ResultOperationForm from '../../app/components/results/ResultOperationForm.vue';
 import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../app/i18n/core';
 import { storageMapSchema } from '../../shared/schemas/storage-mapping';
 import {
   trainingDefaults,
@@ -158,7 +157,7 @@ describe('explicit storage mapping authoring', () => {
   });
 
   it('integrates with both real forms, preserves mappings through presets/reset, and renders configured rows with unique IDs', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const fetcher = vi.fn(async () => {
       throw new Error('Disconnected');
     });
@@ -168,16 +167,13 @@ describe('explicit storage mapping authoring', () => {
       fetcher,
     });
     const host = defineComponent({
-      setup() {
-        provideWorkstationLocale(locale);
-        return () =>
-          h('main', [
-            h(ProjectContainer, { session }),
-            h(ResultOperationForm, { session, artifacts: [] }),
-          ]);
-      },
+      setup: () => () =>
+        h('main', [
+          h(ProjectContainer, { session }),
+          h(ResultOperationForm, { session, artifacts: [] }),
+        ]),
     });
-    const wrapper = mount(host);
+    const wrapper = mount(host, undefined, i18n);
     await flushPromises();
     const editors = wrapper.findAllComponents(StorageMappingFields);
     expect(editors).toHaveLength(2);
@@ -204,7 +200,7 @@ describe('explicit storage mapping authoring', () => {
     await confirm.trigger('click');
     expect(editors[0]?.props('mappings')).toEqual(mappings);
     const calls = fetcher.mock.calls.length;
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await nextTick();
     await flushPromises();
     expect(fetcher.mock.calls).toHaveLength(calls);
@@ -216,7 +212,7 @@ describe('explicit storage mapping authoring', () => {
   });
 
   it('mounts without introducing storage_map, authors blank pairs and local guidance, and keeps coexisting IDs unique across language changes', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const snapshots: TrainingRequest[] = [];
     const Form = defineComponent({
       setup() {
@@ -235,12 +231,9 @@ describe('explicit storage mapping authoring', () => {
       },
     });
     const host = defineComponent({
-      setup() {
-        provideWorkstationLocale(locale);
-        return () => h('main', [h(Form), h(Form)]);
-      },
+      setup: () => () => h('main', [h(Form), h(Form)]),
     });
-    const wrapper = mount(host);
+    const wrapper = mount(host, undefined, i18n);
     await flushPromises();
     expect(snapshots.every((value) => !Object.hasOwn(value, 'storage_map'))).toBe(true);
     for (const editor of wrapper.findAllComponents(StorageMappingFields))
@@ -256,7 +249,7 @@ describe('explicit storage mapping authoring', () => {
     expect(ids).toHaveLength(4);
     expect(new Set(ids).size).toBe(4);
     for (const id of ids) expect(wrapper.get(`label[for="${id}"]`).text()).not.toBe('');
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await nextTick();
     expect(wrapper.findAll('input').map((input) => input.attributes('id'))).toEqual(ids);
     expect(wrapper.text()).toContain('Gốc máy chủ');
@@ -347,10 +340,9 @@ describe('explicit storage mapping authoring', () => {
   it('invalidates approved preview on form edits while retaining the API approval snapshot; locale changes do not request anything', async () => {
     const { session, data, model, bodies, fetcher } = await setup();
     const workflow = new ProjectPlan(session);
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const host = defineComponent({
       setup() {
-        provideWorkstationLocale(locale);
         const { values, setFieldValue } = useForm<TrainingRequest>({
           initialValues: { ...draft(), storage_map: mappings },
           validationSchema: trainingRequestSchema,
@@ -367,7 +359,7 @@ describe('explicit storage mapping authoring', () => {
           });
       },
     });
-    const wrapper = mount(host);
+    const wrapper = mount(host, undefined, i18n);
     await flushPromises();
     const approved = await workflow.preview();
     const api = session.api;
@@ -375,7 +367,7 @@ describe('explicit storage mapping authoring', () => {
     const snapshot = api.approvedRequest(approved);
     expect(snapshot.storage_map).toEqual(mappings);
     const calls = fetcher.mock.calls.length;
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await nextTick();
     expect(fetcher.mock.calls).toHaveLength(calls);
     expect(workflow.approved).toBe(approved);

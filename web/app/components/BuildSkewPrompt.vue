@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useWorkstationI18n } from '../composables/useWorkstationI18n';
-import { shellSettingsMessages } from '../i18n/shell-settings';
+import { useI18n } from 'vue-i18n';
 
 defineProps<{ visible: boolean }>();
-const { translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
+const { t } = useI18n({ useScope: 'global' });
 
 function reload(): void {
   location.reload();
@@ -14,9 +13,9 @@ function reload(): void {
 
 <template>
   <Alert v-if="visible" class="build-skew-prompt" role="status" aria-live="polite">
-    <AlertTitle>{{ translateKnownMessage('A newer WaveDL build is available') }}</AlertTitle>
+    <AlertTitle>{{ t('shell.updateAvailable') }}</AlertTitle>
     <AlertDescription>
-      <Button type="button" size="sm" @click="reload">{{ translateKnownMessage('Reload') }}</Button>
+      <Button type="button" size="sm" @click="reload">{{ t('shell.reload') }}</Button>
     </AlertDescription>
   </Alert>
 </template>

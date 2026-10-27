@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
+import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
-import { runMessages } from '../../i18n/runs';
 import { computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,14 +13,17 @@ import LogPanel from './LogPanel.vue';
 import MetricSummary from './MetricSummary.vue';
 import MetricsChart from './MetricsChart.vue';
 import EvaluationResultsPanel from '../results/EvaluationResultsPanel.vue';
-const { t, translateKnownMessage } = useWorkstationI18n(runMessages);
+import {
+  runBackendMessageKeys,
+  runCancellationMessageKeys,
+  runOperationMessageKeys,
+  runStreamMessageKeys,
+} from '../../i18n/dynamic-keys';
+const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 function backendLabel(backend: string): string {
-  return backend === 'local'
-    ? t('backendLocal')
-    : backend === 'slurm'
-      ? t('backendSlurm')
-      : backend;
+  const key = runBackendMessageKeys[backend as keyof typeof runBackendMessageKeys];
+  return key === undefined ? backend : t(key);
 }
 const props = defineProps<{ snapshot: RunMonitorSnapshot }>();
 defineEmits<{ cancel: []; replay: []; close: [] }>();
@@ -43,41 +45,43 @@ const canCancel = computed(() =>
 );
 </script>
 <template>
-  <section class="run-detail" :aria-label="t('selected')">
+  <section class="run-detail" :aria-label="t('runs.selected')">
     <div class="toolbar">
-      <h2>{{ t('detail') }}</h2>
-      <Button variant="outline" @click="$emit('close')">{{ t('close') }}</Button>
+      <h2>{{ t('runs.detail') }}</h2>
+      <Button variant="outline" @click="$emit('close')">{{ t('runs.close') }}</Button>
     </div>
     <template v-if="snapshot.run"
       ><p class="identity">{{ snapshot.run.run_id }}</p>
       <StateBadge :run="snapshot.run" :stale="snapshot.freshness !== 'fresh'" />
       <p>
         {{ backendLabel(snapshot.run.backend) }} ·
-        {{ translateKnownMessage(snapshot.run.operation) }} ·
+        {{ t(runOperationMessageKeys[snapshot.run.operation]) }} ·
         {{
           pending
-            ? t('nativePending')
-            : t('attempt', { attempt: snapshot.run.attempt ?? t('notAllocated') })
+            ? t('runs.nativePending')
+            : t('runs.attempt', { attempt: snapshot.run.attempt ?? t('runs.notAllocated') })
         }}
       </p>
       <p v-if="pending">
-        {{ t('pendingNote') }}
+        {{ t('runs.pendingNote') }}
       </p></template
     >
-    <p>{{ t('eventConnection', { status: translateKnownMessage(snapshot.stream) }) }}</p>
+    <p>{{ t('runs.eventConnection', { status: t(runStreamMessageKeys[snapshot.stream]) }) }}</p>
     <p v-if="snapshot.freshness !== 'fresh'" role="status">
-      {{ t('lifecycleNote') }}
+      {{ t('runs.lifecycleNote') }}
     </p>
     <p v-if="snapshot.message" role="status">
-      {{ translateKnownMessage(clientMessage(snapshot.message)) }}
+      {{ clientMessage(snapshot.message) }}
     </p>
     <p v-if="snapshot.cancellation !== 'idle'" role="status">
-      {{ t('cancellation', { status: translateKnownMessage(snapshot.cancellation) }) }}
+      {{ t('runs.cancellation', { status: t(runCancellationMessageKeys[snapshot.cancellation]) }) }}
     </p>
     <div class="toolbar">
       <Button variant="outline" :disabled="!canCancel" @click="$emit('cancel')">
-        {{ snapshot.cancellation === 'sending' ? t('requesting') : t('requestCancel') }}</Button
-      ><Button variant="outline" @click="$emit('replay')">{{ t('replay') }}</Button>
+        {{
+          snapshot.cancellation === 'sending' ? t('runs.requesting') : t('runs.requestCancel')
+        }}</Button
+      ><Button variant="outline" @click="$emit('replay')">{{ t('runs.replay') }}</Button>
     </div>
     <MetricSummary :summary="metricSummary" :unconfirmed="metricsUnconfirmed" />
     <MetricsChart :records="chartRecords" :unavailable="metricsUnavailable" />

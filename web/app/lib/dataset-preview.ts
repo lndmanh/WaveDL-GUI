@@ -121,7 +121,7 @@ export function parseDatasetPreview(
   view: PreviewView,
 ): DatasetPreview {
   const fail = (): never => {
-    throw new DaemonApiError('response', 'Invalid bounded dataset preview response.');
+    throw DaemonApiError.fromKey('response', 'invalidDatasetPreview');
   };
   let bytes: number;
   try {
@@ -243,10 +243,7 @@ export class DatasetPreviewApi {
         !/\.(npz|mat|h5|hdf5)$/i.test(selection.relativePath) ||
         !PREVIEW_VIEWS.includes(view)
       )
-        throw new ConnectionSessionError(
-          'request',
-          'Select a supported dataset file from this daemon.',
-        );
+        throw ConnectionSessionError.fromKey('request', 'datasetSelectionRequired');
     } catch (error) {
       return Promise.reject(error);
     }

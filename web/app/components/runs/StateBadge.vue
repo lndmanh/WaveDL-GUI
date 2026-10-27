@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { runMessages } from '../../i18n/runs';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Badge } from '@/components/ui/badge';
 import type { RunView } from '../../lib/daemon-api';
-const { t, translateKnownMessage } = useWorkstationI18n(runMessages);
+import { runStateMessageKeys } from '../../i18n/dynamic-keys';
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ run: RunView; stale?: boolean }>();
-const label = computed(() => translateKnownMessage(props.run.state.replaceAll('_', ' ')));
+const label = computed(() => t(runStateMessageKeys[props.run.state]));
 </script>
 <template>
   <Badge :variant="run.uncertainty || stale ? 'outline' : 'secondary'"
-    >{{ label }}<span v-if="stale">{{ t('stale') }}</span
-    ><span v-else-if="run.uncertainty">{{ t('uncertain') }}</span></Badge
+    >{{ label }}<span v-if="stale">{{ t('runs.stale') }}</span
+    ><span v-else-if="run.uncertainty">{{ t('runs.uncertain') }}</span></Badge
   >
 </template>

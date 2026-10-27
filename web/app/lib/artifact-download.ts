@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import type { Artifact } from './artifact-client';
 import { isUuid } from './daemon-api';
 
@@ -36,7 +37,7 @@ export async function artifactDownloadName(
     !/^gen-\d{6,}$/.test(artifact.generation) ||
     artifact.generation.length > 64
   )
-    throw new Error('Artifact provenance cannot fit a safe download filename.');
+    throw clientError('artifactProvenanceTooLong', {});
   const prefix = `${artifact.runId}_${artifact.generation}_`;
   const budget = Math.min(180, 255 - encoder.encode(prefix).byteLength);
   const paths = [
@@ -75,6 +76,6 @@ export async function artifactDownloadName(
   // truncated/hash-suffixed label. Chained aliases or digest collisions refuse
   // export rather than delegating filename collision handling to the browser.
   if (!selected || names.slice(1).some((name) => name && nativeKey(name) === nativeKey(selected)))
-    throw new Error('Artifact paths cannot fit distinct safe download filenames.');
+    throw clientError('artifactNamesTooLong', {});
   return prefix + selected;
 }

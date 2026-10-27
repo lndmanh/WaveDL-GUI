@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { Button } from '@/components/ui/button';
 import { Folder, File } from '@lucide/vue';
 import type { BrowsePage } from '../../lib/catalog-api';
-import { catalogMessages } from '../../i18n/catalog';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-const { t } = useWorkstationI18n(catalogMessages);
+const { t } = useI18n({ useScope: 'global' });
+const entryKindKeys: Readonly<Record<'file' | 'directory', string>> = {
+  file: 'catalog.file',
+  directory: 'catalog.directory',
+};
 defineProps<{ page: BrowsePage; busy: boolean; allowDirectory: boolean }>();
 const emit = defineEmits<{
   open: [name: string];
@@ -14,8 +17,8 @@ const emit = defineEmits<{
 </script>
 <template>
   <div class="flex flex-col gap-3">
-    <p v-if="!page.entries.length" role="status">{{ t('emptyDirectory') }}</p>
-    <ul class="flex flex-col gap-2" :aria-label="t('entries')">
+    <p v-if="!page.entries.length" role="status">{{ t('catalog.emptyDirectory') }}</p>
+    <ul class="flex flex-col gap-2" :aria-label="t('catalog.entries')">
       <li
         v-for="entry in page.entries"
         :key="entry.name"
@@ -35,9 +38,11 @@ const emit = defineEmits<{
           variant="outline"
           size="sm"
           :disabled="busy"
-          :aria-label="t('selectEntry', { kind: t(entry.kind), name: entry.name })"
+          :aria-label="
+            t('catalog.selectEntry', { kind: t(entryKindKeys[entry.kind]), name: entry.name })
+          "
           @click="emit('select', entry.name)"
-          >{{ t('selectKind', { kind: t(entry.kind) }) }}</Button
+          >{{ t('catalog.selectKind', { kind: t(entryKindKeys[entry.kind]) }) }}</Button
         >
       </li>
     </ul>
@@ -46,11 +51,11 @@ const emit = defineEmits<{
         variant="outline"
         :disabled="busy || page.offset === 0"
         @click="emit('page', Math.max(0, page.offset - page.limit))"
-        >{{ t('previousEntries') }}</Button
+        >{{ t('catalog.previousEntries') }}</Button
       >
       <p>
         {{
-          t('entryCount', {
+          t('catalog.entryCount', {
             start: page.total ? page.offset + 1 : 0,
             end: page.offset + page.entries.length,
             total: page.total,
@@ -61,7 +66,7 @@ const emit = defineEmits<{
         variant="outline"
         :disabled="busy || page.offset + page.limit >= page.total"
         @click="emit('page', page.offset + page.limit)"
-        >{{ t('nextEntries') }}</Button
+        >{{ t('catalog.nextEntries') }}</Button
       >
     </div>
   </div>

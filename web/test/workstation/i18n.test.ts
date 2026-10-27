@@ -1,84 +1,36 @@
 // @vitest-environment happy-dom
-import { mount } from '@vue/test-utils';
-import { computed, defineComponent, h, isReadonly, nextTick, onMounted, shallowRef } from 'vue';
+import { computed, defineComponent, h, nextTick, onMounted, shallowRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { describe, expect, it } from 'vitest';
-import {
-  defineMessages,
-  translateKnownMessage,
-  translateMessage,
-  type WorkstationLocale,
-} from '../../app/i18n/core';
-import {
-  provideWorkstationLocale,
-  useWorkstationI18n,
-} from '../../app/composables/useWorkstationI18n';
-
-const messages = defineMessages(
-  { save: 'Save', count: '{count} jobs for {name}', failed: 'Request failed.' },
-  { save: 'Lưu', count: '{count} tác vụ cho {name}', failed: 'Yêu cầu thất bại.' },
-);
+import { mountWithI18n as mount } from './mountWithI18n';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
 
 describe('workstation locale foundation', () => {
-  it('translates typed messages and named parameters without interpreting parameter text', () => {
-    expect(translateMessage(messages, 'en', 'save')).toBe('Save');
-    expect(translateMessage(messages, 'vi', 'save')).toBe('Lưu');
-    expect(translateMessage(messages, 'vi', 'count', { count: 3, name: '{count}<script>' })).toBe(
-      '3 tác vụ cho {count}<script>',
-    );
-    expect(() => translateMessage(messages, 'vi', 'count')).toThrow(
-      'Missing workstation message parameter',
-    );
-    expect(() =>
-      translateMessage(messages, 'vi', 'count', Object.create({ count: 3, name: 'inherited' })),
-    ).toThrow('Missing workstation message parameter');
+  it('interpolates parameters as plain text, without reinterpreting their contents', () => {
+    const Consumer = defineComponent({
+      setup() {
+        const { t } = useI18n({ useScope: 'global' });
+        return () => h('p', t('catalog.chooseModelName', { name: '{name}<script>東京</script>' }));
+      },
+    });
+    const wrapper = mount(Consumer);
+    expect(wrapper.text()).toBe('Choose {name}<script>東京</script>');
+    expect(wrapper.find('script').exists()).toBe(false);
+    wrapper.unmount();
   });
 
-  it('rejects mismatched keys and placeholder sets and takes immutable catalog snapshots', () => {
-    const en: Record<string, string> = { save: 'Save' };
-    expect(() => defineMessages(en, {})).toThrow('language keys');
-    expect(() => defineMessages(en, { save: 'Lưu', extra: 'Extra' })).toThrow('language keys');
-    expect(() => defineMessages({ count: '{count}' }, { count: '{name}' })).toThrow('placeholders');
-    const vi = { save: 'Lưu' };
-    const catalog = defineMessages(en, vi);
-    en.save = 'Changed';
-    vi.save = 'Changed';
-    expect(translateMessage(catalog, 'en', 'save')).toBe('Save');
-    expect(translateMessage(catalog, 'vi', 'save')).toBe('Lưu');
-    expect(Object.isFrozen(catalog.en)).toBe(true);
-  });
-
-  it('only translates exact known static English client messages', () => {
-    expect(translateKnownMessage(messages, 'vi', 'Request failed.')).toBe('Yêu cầu thất bại.');
-    for (const raw of [
-      'daemon: Request failed.',
-      '/private/Save/model.npz',
-      'Request failed.\n',
-      '{count} jobs for {name}',
-      'backend error 東京',
-    ])
-      expect(translateKnownMessage(messages, 'vi', raw)).toBe(raw);
-  });
-
-  it('defaults isolated consumers to English without cross-instance state', () => {
-    const first = useWorkstationI18n(messages);
-    const second = useWorkstationI18n(messages);
-    expect(first.t('save')).toBe('Save');
-    expect(first.locale).not.toBe(second.locale);
-    expect(isReadonly(first.locale)).toBe(true);
-  });
-
-  it('updates translations reactively without remounting or resetting draft input', async () => {
+  it('updates translations without remounting or resetting an unsaved draft and writes no cookie', async () => {
     const language = shallowRef<WorkstationLocale>('en');
     let mounts = 0;
     const Consumer = defineComponent({
       setup() {
-        const { t, locale, translateKnownMessage: known } = useWorkstationI18n(messages);
+        const { t } = useI18n({ useScope: 'global' });
         const draft = shallowRef('my experiment');
-        const label = computed(() => t('save'));
+        const label = computed(() => t('catalog.chooseModel'));
         onMounted(() => {
           mounts += 1;
         });
-        expect(isReadonly(locale)).toBe(true);
         return () =>
           h('section', [
             h('input', {
@@ -88,7 +40,6 @@ describe('workstation locale foundation', () => {
               },
             }),
             h('button', label.value),
-            h('p', known('Request failed.')),
           ]);
       },
     });
@@ -102,14 +53,30 @@ describe('workstation locale foundation', () => {
     await wrapper.get('input').setValue('unsaved draft');
     language.value = 'vi';
     await nextTick();
-    expect(wrapper.get('button').text()).toBe('Lưu');
-    expect(wrapper.get('p').text()).toBe('Yêu cầu thất bại.');
+    expect(wrapper.get('button').text()).toBe('Chọn mô hình');
     expect(wrapper.get('input').element.value).toBe('unsaved draft');
     language.value = 'en';
     await nextTick();
-    expect(wrapper.get('button').text()).toBe('Save');
-    expect(wrapper.get('input').element.value).toBe('unsaved draft');
+    expect(wrapper.get('button').text()).toBe('Choose a model');
     expect(mounts).toBe(1);
+    expect(document.cookie).toBe('');
     wrapper.unmount();
+  });
+
+  it('uses isolated composers for independent mounts', () => {
+    const Consumer = defineComponent({
+      props: { vietnamese: Boolean },
+      setup(props) {
+        const { t, locale } = useI18n({ useScope: 'global' });
+        if (props.vietnamese) locale.value = 'vi';
+        return () => h('p', t('catalog.chooseModel'));
+      },
+    });
+    const vi = mount(Consumer, { props: { vietnamese: true } });
+    const en = mount(Consumer);
+    expect(vi.text()).toBe('Chọn mô hình');
+    expect(en.text()).toBe('Choose a model');
+    vi.unmount();
+    en.unmount();
   });
 });

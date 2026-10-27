@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, ref } from 'vue';
 import { useForm } from 'vee-validate';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../app/i18n/core';
-import { resultsMessages } from '../../app/i18n/results';
+import { clientError } from '../../app/i18n/client-messages';
+import enResults from '../../app/i18n/locales/en/results.json';
+import viResults from '../../app/i18n/locales/vi/results.json';
 import ArtifactList from '../../app/components/results/ArtifactList.vue';
 import InferenceFields from '../../app/components/results/InferenceFields.vue';
 import AutomaticPlotStatus from '../../app/components/results/AutomaticPlotStatus.vue';
@@ -22,7 +23,7 @@ function json(body: object) {
 
 describe('results and adoption language presentation', () => {
   it('reactively translates artifact and automatic plot controls without changing emitted identity', async () => {
-    const locale = ref<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const plotState = ref<AutomaticPlotState>({
       status: 'error',
       message: 'raw runtime diagnostic 42',
@@ -38,20 +39,17 @@ describe('results and adoption language presentation', () => {
       sha256: 'a'.repeat(64),
     };
     const Host = defineComponent({
-      setup() {
-        provideWorkstationLocale(locale);
-        return () =>
-          h('main', [
-            h(ArtifactList, { artifacts: [artifact], busy: false }),
-            h(AutomaticPlotStatus, {
-              state: plotState.value,
-            }),
-          ]);
-      },
+      setup: () => () =>
+        h('main', [
+          h(ArtifactList, { artifacts: [artifact], busy: false }),
+          h(AutomaticPlotStatus, {
+            state: plotState.value,
+          }),
+        ]),
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     expect(wrapper.text()).toContain('Download');
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await flushPromises();
     expect(wrapper.text()).toContain('Tải xuống');
     expect(wrapper.text()).toContain('Thử lại biểu đồ tự động');
@@ -65,7 +63,7 @@ describe('results and adoption language presentation', () => {
     expect(plots.emitted('retry')).toEqual([[]]);
     plotState.value = {
       status: 'submitted',
-      message: 'Daemon acknowledged the diagnostic plot run.',
+      message: clientError('autoPlotAcknowledged'),
       plotRunId: 'unchanged-run-id',
     };
     await flushPromises();
@@ -76,19 +74,18 @@ describe('results and adoption language presentation', () => {
   });
 
   it('changes inference labels without resetting edited values or machine enum values', async () => {
-    const locale = ref<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const Host = defineComponent({
       setup() {
-        provideWorkstationLocale(locale);
         useForm({ initialValues: { config: structuredClone(inferenceDefaults) } });
         return () => h('form', [h(InferenceFields, { disabled: false })]);
       },
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     await wrapper.get('#inference-batch_size').setValue('42');
     await wrapper.get('#inference-input_key').setValue('raw_input_key');
     await wrapper.get('#inference-import-modules').setValue('custom_registration');
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await flushPromises();
     expect(wrapper.text()).toContain('Kích thước lô suy luận');
     expect(wrapper.get<HTMLInputElement>('#inference-batch_size').element.value).toBe('42');
@@ -105,7 +102,7 @@ describe('results and adoption language presentation', () => {
   });
 
   it('preserves acknowledgement uncertainty and the exact retained adoption body/key across a locale switch', async () => {
-    const locale = ref<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const requests: { body: BodyInit | null | undefined; key: string | null }[] = [];
     const session = new ConnectionSession({
       origin: window.location.origin,
@@ -129,19 +126,16 @@ describe('results and adoption language presentation', () => {
     await session.connect('token');
     const directory = await new CatalogApi(session).resolve('runs', 'raw-source');
     const Host = defineComponent({
-      setup() {
-        provideWorkstationLocale(locale);
-        return () => h(AdoptRunPanel, { session });
-      },
+      setup: () => () => h(AdoptRunPanel, { session }),
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
     const panel = wrapper.getComponent(AdoptRunPanel);
     panel.getComponent(BrowseContainer).vm.$emit('select', directory);
     await panel.get('form').trigger('submit');
     await vi.waitFor(() => expect(requests).toHaveLength(1));
     await vi.waitFor(() => expect(panel.text()).toContain('Retained request:'));
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await flushPromises();
     expect(panel.attributes('aria-label')).toBe('Tiếp nhận lần chạy độc lập');
     expect(panel.text()).toContain('Yêu cầu được giữ lại: /runs/raw-source');
@@ -161,9 +155,7 @@ describe('results and adoption language presentation', () => {
   });
 
   it('keeps every results catalog key and interpolation placeholder paired', () => {
-    expect(Object.keys(resultsMessages.vi)).toEqual(Object.keys(resultsMessages.en));
-    for (const key in resultsMessages.en) {
-      expect(key in resultsMessages.vi).toBe(true);
-    }
+    expect(Object.keys(viResults)).toEqual(Object.keys(enResults));
+    for (const key in enResults) expect(key in viResults).toBe(true);
   });
 });

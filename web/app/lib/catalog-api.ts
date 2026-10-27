@@ -42,7 +42,7 @@ const catalogues = new WeakMap<
   { session: ConnectionSession; revision: number }
 >();
 const fail = (): never => {
-  throw new DaemonApiError('response', 'Invalid daemon catalog response');
+  throw DaemonApiError.fromKey('response', 'invalidDaemonCatalogResponse');
 };
 function text(value: unknown, max = 8192): value is string {
   return typeof value === 'string' && value.length <= max && !value.includes('\0');
@@ -90,7 +90,7 @@ export class CatalogApi {
       !this.session.api ||
       selection.daemonId !== this.session.api.daemonId
     )
-      throw new ConnectionSessionError('stale', 'Select again from the current verified daemon.');
+      throw ConnectionSessionError.fromKey('stale', 'catalogSelectionStale');
   }
   #selection<T extends Selection>(selection: T): T {
     scopes.set(selection, { session: this.session, revision: this.session.snapshot().revision });
@@ -120,7 +120,7 @@ export class CatalogApi {
   }
   browse(root: string, path = '', offset = 0, signal?: AbortSignal): Promise<BrowsePage> {
     if (!rootId(root) || !relativePath(path) || !integer(offset, 10000))
-      return Promise.reject(new ConnectionSessionError('request', 'Invalid browse location.'));
+      return Promise.reject(ConnectionSessionError.fromKey('request', 'invalidBrowseLocation'));
     const limit = 100;
     return this.session.perform(
       async (api, requestSignal) => {
@@ -172,7 +172,7 @@ export class CatalogApi {
   }
   resolve(root: string, path: string, signal?: AbortSignal): Promise<DataSelection> {
     if (!rootId(root) || !relativePath(path))
-      return Promise.reject(new ConnectionSessionError('request', 'Invalid browse selection.'));
+      return Promise.reject(ConnectionSessionError.fromKey('request', 'invalidBrowseSelection'));
     return this.session.perform(
       async (api, requestSignal) => {
         const body = await api.mutate(
@@ -282,18 +282,13 @@ export class CatalogApi {
       scope.revision !== this.session.snapshot().revision ||
       !catalogue.includes(model)
     )
-      throw new ConnectionSessionError('stale', 'Reload the model catalogue before selecting.');
+      throw ConnectionSessionError.fromKey('stale', 'modelCatalogReloadRequired');
     return this.#selection({ model: model.id, daemonId });
   }
   /** Explicit registry identifier only: required imports belong to the run request. */
   selectCustomModel(modelId: string, signal?: AbortSignal): Promise<ModelSelection> {
     if (typeof modelId !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(modelId))
-      return Promise.reject(
-        new ConnectionSessionError(
-          'request',
-          'Enter a bounded model registry identifier, not a path or expression.',
-        ),
-      );
+      return Promise.reject(ConnectionSessionError.fromKey('request', 'modelIdInvalid'));
     return this.session.perform(
       async (api, requestSignal) => {
         const health = await api.health(requestSignal);

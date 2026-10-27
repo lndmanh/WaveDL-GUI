@@ -40,7 +40,7 @@ export function parseDatasetInspection(
   selection: Pick<DataSelection, 'relativePath'>,
 ): DatasetInspection {
   const fail = (): never => {
-    throw new DaemonApiError('response', 'Dataset header metadata cannot be mapped safely.');
+    throw DaemonApiError.fromKey('response', 'datasetHeaderUnsafe');
   };
   let bytes: number;
   try {
@@ -103,10 +103,7 @@ export class DatasetInspectionApi {
     try {
       new CatalogApi(this.session).assertSelection(selection);
       if (selection.kind !== 'file' || !/\.(npz|mat|h5|hdf5)$/i.test(selection.relativePath))
-        throw new ConnectionSessionError(
-          'request',
-          'Select a supported dataset file from this daemon.',
-        );
+        throw ConnectionSessionError.fromKey('request', 'datasetSelectionRequired');
     } catch (error) {
       return Promise.reject(error);
     }

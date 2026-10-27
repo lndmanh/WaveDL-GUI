@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick, shallowRef } from 'vue';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
+import { defineComponent, h, nextTick } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { useForm } from 'vee-validate';
 import { z } from 'zod';
@@ -18,17 +19,26 @@ import CustomModelSelector from '../../app/components/project/CustomModelSelecto
 import PlanApproval from '../../app/components/project/PlanApproval.vue';
 import TrainingExport from '../../app/components/project/TrainingExport.vue';
 import TrainingDefaultsSettings from '../../app/components/settings/TrainingDefaultsSettings.vue';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import { trainingFieldMessageKeys, trainingFieldMessages } from '../../app/i18n/training-fields';
-import { translateMessage, type WorkstationLocale } from '../../app/i18n/core';
+import { trainingFieldMessageKeys } from '../../app/i18n/dynamic-keys';
+import enTrainingFields from '../../app/i18n/locales/en/training-fields.json';
+import viTrainingFields from '../../app/i18n/locales/vi/training-fields.json';
 import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import { trainingCommand, trainingYaml } from '../../app/lib/training-export';
 
+const englishTrainingFields = enTrainingFields as Record<
+  string,
+  { label: string; description: string }
+>;
+const vietnameseTrainingFields = viTrainingFields as Record<
+  string,
+  { label: string; description: string }
+>;
+
 describe('project presentation localization', () => {
   it('keeps coexisting hidden project and settings control IDs unique and checkbox names reactive', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const owner = new ConnectionSession({
       origin: window.location.origin,
       buildId: '1.8.1',
@@ -37,16 +47,13 @@ describe('project presentation localization', () => {
       },
     });
     const host = defineComponent({
-      setup() {
-        provideWorkstationLocale(locale);
-        return () =>
-          h('main', [
-            h('div', { style: { display: 'none' } }, [h(ProjectContainer, { session: owner })]),
-            h(TrainingDefaultsSettings, { daemonId: 'daemon-one' }),
-          ]);
-      },
+      setup: () => () =>
+        h('main', [
+          h('div', { style: { display: 'none' } }, [h(ProjectContainer, { session: owner })]),
+          h(TrainingDefaultsSettings, { daemonId: 'daemon-one' }),
+        ]),
     });
-    const wrapper = mount(host, { attachTo: document.body });
+    const wrapper = mount(host, { attachTo: document.body }, i18n);
     await flushPromises();
     const controls = wrapper.findAll('[id*="-training-"]');
     const ids = controls.map((control) => control.attributes('id'));
@@ -58,7 +65,7 @@ describe('project presentation localization', () => {
       expect(checkbox.attributes('aria-label')).toBe(label.text());
       expect(label.text()).not.toBe('');
     }
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await nextTick();
     expect(controls.map((control) => control.attributes('id'))).toEqual(ids);
     for (const checkbox of wrapper.findAll('[role="checkbox"][id*="-training-"]')) {
@@ -69,7 +76,7 @@ describe('project presentation localization', () => {
     }
     for (const checkbox of wrapper.findAll('[role="checkbox"][id$="-training-deterministic"]'))
       expect(checkbox.attributes('aria-label')).toBe('Chế độ xác định');
-    locale.value = 'en';
+    i18n.global.locale.value = 'en';
     await nextTick();
     for (const checkbox of wrapper.findAll('[role="checkbox"][id$="-training-deterministic"]'))
       expect(checkbox.attributes('aria-label')).toBe('deterministic');
@@ -85,21 +92,24 @@ describe('project presentation localization', () => {
     for (const [name, keys] of Object.entries(trainingFieldMessageKeys)) {
       const option = options.find((option) => option.name === name);
       expect(option).toBeDefined();
-      expect(trainingFieldMessages.en[keys.label]).toBe(name.replaceAll('_', ' '));
-      expect(trainingFieldMessages.en[keys.description]).toBe(option?.description);
-      expect(trainingFieldMessages.vi[keys.label]).not.toBe(trainingFieldMessages.en[keys.label]);
-      expect(trainingFieldMessages.vi[keys.description]).not.toBe(
-        trainingFieldMessages.en[keys.description],
+      expect(keys).toEqual({
+        label: `training.${name}.label`,
+        description: `training.${name}.description`,
+      });
+      expect(englishTrainingFields[name]?.label).toBe(name.replaceAll('_', ' '));
+      expect(englishTrainingFields[name]?.description).toBe(option?.description);
+      expect(vietnameseTrainingFields[name]?.label).not.toBe(englishTrainingFields[name]?.label);
+      expect(vietnameseTrainingFields[name]?.description).not.toBe(
+        englishTrainingFields[name]?.description,
       );
     }
   });
 
   it('reactively translates all editable controls while retaining draft values and CLI option values', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     let snapshot = () => '';
     const host = defineComponent({
       setup() {
-        provideWorkstationLocale(locale);
         const { values } = useForm({
           initialValues: { config: structuredClone(trainingDefaults) },
           validationSchema: z.object({ config: trainingConfigSchema }),
@@ -108,29 +118,25 @@ describe('project presentation localization', () => {
         return () => h(TrainingFields, { disabled: false });
       },
     });
-    const wrapper = mount(host);
+    const wrapper = mount(host, undefined, i18n);
     await flushPromises();
     await wrapper.get('[id$="-training-batch_size"]').setValue('37');
     const draft = snapshot();
     const values = wrapper.findAll('option').map((option) => option.attributes('value'));
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await nextTick();
     for (const option of trainingFieldMetadata) {
-      const keys = Object.entries(trainingFieldMessageKeys).find(
-        ([name]) => name === option.name,
-      )?.[1];
+      const keys = trainingFieldMessageKeys[option.name];
       if (!keys) throw new Error(`Missing field ${option.name}`);
       expect(wrapper.get(`label[for$="-training-${option.name}"]`).text()).toBe(
-        translateMessage(trainingFieldMessages, 'vi', keys.label),
+        vietnameseTrainingFields[option.name]?.label,
       );
-      expect(wrapper.text()).toContain(
-        translateMessage(trainingFieldMessages, 'vi', keys.description),
-      );
+      expect(wrapper.text()).toContain(vietnameseTrainingFields[option.name]?.description);
     }
     expect(snapshot()).toBe(draft);
     expect(wrapper.findAll('option').map((option) => option.attributes('value'))).toEqual(values);
     expect(wrapper.text()).toContain('không bao giờ xóa dữ liệu lần chạy trước');
-    locale.value = 'en';
+    i18n.global.locale.value = 'en';
     await nextTick();
     expect(wrapper.get('label[for$="-training-batch_size"]').text()).toBe('batch size');
     expect(snapshot()).toBe(draft);
@@ -138,7 +144,7 @@ describe('project presentation localization', () => {
   });
 
   it('keeps a persisted approval and exact submission body across a live locale switch', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const ids = {
       plan_id: '11111111-1111-4111-8111-111111111111',
       run_id: '22222222-2222-4222-8222-222222222222',
@@ -194,14 +200,15 @@ describe('project presentation localization', () => {
     const model = await catalogue.selectCustomModel('custom_model');
     const invalidate = vi.spyOn(ProjectPlan.prototype, 'invalidate');
     const host = defineComponent({
-      setup() {
-        provideWorkstationLocale(locale);
-        return () => h(ProjectContainer, { session: owner });
+      setup: () => () => h(ProjectContainer, { session: owner }),
+    });
+    const wrapper = mount(
+      host,
+      {
+        global: { stubs: { BrowseContainer: true, ModelSelector: true, DatasetInfoPanel: true } },
       },
-    });
-    const wrapper = mount(host, {
-      global: { stubs: { BrowseContainer: true, ModelSelector: true, DatasetInfoPanel: true } },
-    });
+      i18n,
+    );
     wrapper.getComponent(BrowseContainer).vm.$emit('select', data);
     wrapper.getComponent(CustomModelSelector).vm.$emit('select', model);
     await nextTick();
@@ -218,7 +225,7 @@ describe('project presentation localization', () => {
     const command = trainingCommand(draft);
     const invalidations = invalidate.mock.calls.length;
     const requests = calls.length;
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await nextTick();
     expect(invalidate.mock.calls.length).toBe(invalidations);
     expect(calls).toHaveLength(requests);
@@ -243,7 +250,7 @@ describe('project presentation localization', () => {
   });
 
   it('translates a stored exporter rejection live without changing the draft or exposing credentials', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const draft = trainingRequestSchema.parse({
       backend: 'local',
       operation: 'train',
@@ -253,17 +260,14 @@ describe('project presentation localization', () => {
     });
     const original = JSON.stringify(draft);
     const host = defineComponent({
-      setup() {
-        provideWorkstationLocale(locale);
-        return () => h(TrainingExport, { draft, disabled: false });
-      },
+      setup: () => () => h(TrainingExport, { draft, disabled: false }),
     });
-    const wrapper = mount(host);
+    const wrapper = mount(host, undefined, i18n);
     await wrapper.findAll('button')[1]?.trigger('click');
     expect(wrapper.get('[role="status"]').text()).toBe(
       'Choose explicit CPU or CUDA for a reproducible standalone command.',
     );
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await nextTick();
     expect(wrapper.get('[role="status"]').text()).toContain('Chọn rõ CPU hoặc CUDA');
     expect(JSON.stringify(draft)).toBe(original);

@@ -1,21 +1,26 @@
 <script setup lang="ts">
 import { useClientMessages } from '../../composables/useClientMessages';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
+import { useI18n } from 'vue-i18n';
 import { shallowRef, onBeforeUnmount } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Field, FieldLabel, FieldDescription, FieldError } from '@/components/ui/field';
 import { trainingPresets, trainingPresetSchema } from '../../lib/training-presets';
+import { trainingPresetMessageKeysFor } from '../../i18n/dynamic-keys';
 
 const { clientMessage } = useClientMessages();
-const { translateKnownMessage } = useWorkstationI18n(projectMessages);
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ disabled: boolean }>();
 const emit = defineEmits<{ apply: [preset: z.infer<typeof trainingPresetSchema>] }>();
 const { handleSubmit } = useForm({
   initialValues: { preset: 'balanced' },
   validationSchema: z.strictObject({ preset: z.enum(['fast', 'balanced', 'high_accuracy']) }),
+});
+const presets = trainingPresets.map((preset) => {
+  const messageKeys = trainingPresetMessageKeysFor(preset.id);
+  if (!messageKeys) throw new Error('Missing training preset localization.');
+  return { ...preset, messageKeys };
 });
 const message = shallowRef('');
 let importRevision = 0;
@@ -34,35 +39,29 @@ async function importPreset(event: Event) {
   input.value = '';
   if (!file || props.disabled) return;
   if (file.size > 65536) {
-    message.value = 'Preset exceeds the 64 KiB limit.';
+    message.value = 'project.presetExceedsThe64KibLimit';
     return;
   }
   try {
     const preset = trainingPresetSchema.parse(JSON.parse(await file.text()));
     if (props.disabled || revision !== importRevision) return;
     emit('apply', preset);
-    message.value = 'Validated preset applied to the draft. Review it before planning.';
+    message.value = 'project.presetApplied';
   } catch {
-    if (revision === importRevision)
-      message.value =
-        'Invalid preset. Use a JSON object containing only typed training fields, without dataset, model, runtime or output paths.';
+    if (revision === importRevision) message.value = 'project.presetInvalid';
   }
 }
 </script>
 <template>
-  <section class="flex flex-col gap-4" :aria-label="translateKnownMessage('Training presets')">
-    <h2 class="text-xl font-medium">{{ translateKnownMessage('Training presets') }}</h2>
+  <section class="flex flex-col gap-4" :aria-label="t('project.trainingPresets')">
+    <h2 class="text-xl font-medium">{{ t('project.trainingPresets') }}</h2>
     <p>
-      {{
-        translateKnownMessage(
-          'Presets update this same draft. Dataset, model and execution settings stay selected; any plan approval is invalidated. Timings and accuracy depend on your data and hardware.',
-        )
-      }}
+      {{ t('project.presetsHelp') }}
     </p>
     <form class="flex flex-col gap-3" @submit="apply">
       <VeeField v-slot="{ field, errors }" name="preset"
         ><Field :data-invalid="!!errors.length"
-          ><FieldLabel for="training-preset">{{ translateKnownMessage('Preset') }}</FieldLabel
+          ><FieldLabel for="training-preset">{{ t('project.preset') }}</FieldLabel
           ><select
             id="training-preset"
             v-bind="field"
@@ -70,18 +69,17 @@ async function importPreset(event: Event) {
             :aria-invalid="!!errors.length"
             class="rounded-md border p-2"
           >
-            <option v-for="preset in trainingPresets" :key="preset.id" :value="preset.id">
-              {{ translateKnownMessage(preset.label) }} —
-              {{ translateKnownMessage(preset.description) }}
+            <option v-for="preset in presets" :key="preset.id" :value="preset.id">
+              {{ t(preset.messageKeys.label) }} — {{ t(preset.messageKeys.description) }}
             </option></select
           ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field></VeeField
       ><Button type="submit" variant="outline" class="self-start" :disabled="disabled">{{
-        translateKnownMessage('Apply preset to draft')
+        t('project.applyPresetToDraft')
       }}</Button>
     </form>
     <Field
       ><FieldLabel for="training-preset-import">{{
-        translateKnownMessage('Import JSON training preset')
+        t('project.importJsonTrainingPreset')
       }}</FieldLabel
       ><input
         id="training-preset-import"
@@ -89,12 +87,8 @@ async function importPreset(event: Event) {
         accept="application/json,.json"
         :disabled="disabled"
         @change="importPreset"
-      /><FieldDescription>{{
-        translateKnownMessage(
-          'Configuration only, 64 KiB maximum. This is not a dataset upload; the selected daemon dataset stays unchanged. Runtime environment and credentials cannot be imported. YAML export is supported separately.',
-        )
-      }}</FieldDescription></Field
+      /><FieldDescription>{{ t('project.presetImportHelp') }}</FieldDescription></Field
     >
-    <p v-if="message" role="status">{{ translateKnownMessage(message) }}</p>
+    <p v-if="message" role="status">{{ t(message) }}</p>
   </section>
 </template>

@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { datasetMessages } from '../../i18n/datasets';
+import { useI18n } from 'vue-i18n';
 import { usePreviewExport } from '../../composables/usePreviewExport';
 import { onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { Button } from '@/components/ui/button';
 
-const { t, translateKnownMessage, locale } = useWorkstationI18n(datasetMessages);
+const { t, locale } = useI18n({ useScope: 'global' });
 
 const props = defineProps<{
   title: string;
@@ -53,7 +52,7 @@ function render(preserveView = false) {
         height: 260,
         scales: { x: { time: false } },
         series: [
-          { label: t('value') },
+          { label: t('datasets.value') },
           {
             label: props.title,
             stroke: props.scatter ? undefined : '#007aff',
@@ -141,20 +140,20 @@ onBeforeUnmount(() => {
       @pointercancel="endPan"
       @lostpointercapture="endPan"
     />
-    <p v-if="message" role="status">{{ translateKnownMessage(message) }}</p>
+    <p v-if="message" role="status">{{ t('datasets.chartUnavailable') }}</p>
     <p v-if="exportMessage" role="status" aria-live="polite">
-      {{ translateKnownMessage(exportMessage) }}
+      {{ t(exportMessage) }}
     </p>
     <div class="flex flex-wrap gap-2">
       <Button variant="ghost" size="sm" :disabled="!plot" @click="reset">{{
-        t('resetZoom')
+        t('datasets.resetZoom')
       }}</Button>
       <Button variant="ghost" size="sm" :disabled="!plot || exporting" @click="exportPng">{{
-        t('exportPng')
+        t('datasets.exportPng')
       }}</Button>
     </div>
     <p class="text-muted-foreground text-xs">
-      {{ t('plotHelp') }}
+      {{ t('datasets.plotHelp') }}
     </p>
   </figure>
 </template>

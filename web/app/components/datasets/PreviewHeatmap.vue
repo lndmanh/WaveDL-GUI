@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { datasetMessages } from '../../i18n/datasets';
+import { useI18n } from 'vue-i18n';
 import { usePreviewExport } from '../../composables/usePreviewExport';
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 
-const { t, translateKnownMessage } = useWorkstationI18n(datasetMessages);
+const { t } = useI18n({ useScope: 'global' });
 
 const props = defineProps<{
   matrix: readonly (readonly (number | null)[])[];
@@ -19,10 +18,10 @@ const offsetY = shallowRef(0);
 const hoveredCell = shallowRef<{ row: number; column: number; value: number | null } | null>(null);
 const hovered = computed(() =>
   hoveredCell.value
-    ? t('heatmapHover', {
+    ? t('datasets.heatmapHover', {
         row: hoveredCell.value.row,
         column: hoveredCell.value.column,
-        value: hoveredCell.value.value ?? t('missingLower'),
+        value: hoveredCell.value.value ?? t('datasets.missingLower'),
       })
     : '',
 );
@@ -143,7 +142,7 @@ onBeforeUnmount(() => {
 <template>
   <figure class="heatmap">
     <figcaption>{{ title }}</figcaption>
-    <p v-if="correlation" class="text-muted-foreground text-xs">{{ t('colorScale') }}</p>
+    <p v-if="correlation" class="text-muted-foreground text-xs">{{ t('datasets.colorScale') }}</p>
     <canvas
       ref="canvas"
       width="800"
@@ -160,15 +159,15 @@ onBeforeUnmount(() => {
       @lostpointercapture="end"
     />
     <p class="text-muted-foreground text-xs">
-      {{ hovered || t('heatmapHelp') }}
+      {{ hovered || t('datasets.heatmapHelp') }}
     </p>
     <p v-if="exportMessage" role="status" aria-live="polite">
-      {{ translateKnownMessage(exportMessage) }}
+      {{ t(exportMessage) }}
     </p>
     <div class="flex gap-2">
-      <Button variant="ghost" size="sm" @click="reset">{{ t('resetView') }}</Button>
+      <Button variant="ghost" size="sm" @click="reset">{{ t('datasets.resetView') }}</Button>
       <Button variant="ghost" size="sm" :disabled="exporting" @click="exportPng">{{
-        t('exportPng')
+        t('datasets.exportPng')
       }}</Button>
     </div>
   </figure>

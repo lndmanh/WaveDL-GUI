@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
+import { useI18n } from 'vue-i18n';
 import { trainingFieldMetadata } from '../../../shared/schemas/training-request';
+import { projectTrainingGroupMessageKeys } from '../../i18n/dynamic-keys';
 import TrainingOptionField from './TrainingOptionField.vue';
 
-const { translateKnownMessage } = useWorkstationI18n(projectMessages);
+const { t } = useI18n({ useScope: 'global' });
 defineProps<{ disabled: boolean }>();
 const main = [
   'batch_size',
@@ -24,7 +24,7 @@ const main = [
 const basics = trainingFieldMetadata.filter((option) => main.includes(option.name));
 const groups = [
   {
-    title: 'Optimizer, loss and scheduling',
+    title: projectTrainingGroupMessageKeys[0],
     names: [
       'weight_decay',
       'grad_clip',
@@ -43,7 +43,7 @@ const groups = [
     ],
   },
   {
-    title: 'Data, checkpoints and cross-validation',
+    title: projectTrainingGroupMessageKeys[1],
     names: [
       'workers',
       'cache_validate',
@@ -55,7 +55,7 @@ const groups = [
     ],
   },
   {
-    title: 'Custom models and physical constraints',
+    title: projectTrainingGroupMessageKeys[2],
     names: [
       'import_modules',
       'pretrained',
@@ -66,14 +66,14 @@ const groups = [
     ],
   },
   {
-    title: 'Optional experiment logging',
+    title: projectTrainingGroupMessageKeys[3],
     names: ['wandb', 'wandb_watch', 'project_name', 'run_name'],
   },
 ];
 </script>
 <template>
   <fieldset class="flex flex-col gap-5">
-    <legend class="mb-4 font-medium">{{ translateKnownMessage('Training') }}</legend>
+    <legend class="mb-4 font-medium">{{ t('project.training') }}</legend>
     <div class="grid gap-5 sm:grid-cols-2">
       <TrainingOptionField
         v-for="option in basics"
@@ -83,7 +83,7 @@ const groups = [
       />
     </div>
     <details v-for="group in groups" :key="group.title" class="border-t pt-4">
-      <summary class="cursor-pointer font-medium">{{ translateKnownMessage(group.title) }}</summary>
+      <summary class="cursor-pointer font-medium">{{ t(group.title) }}</summary>
       <div class="mt-5 grid gap-5 sm:grid-cols-2">
         <TrainingOptionField
           v-for="name in group.names"
@@ -94,11 +94,7 @@ const groups = [
       </div>
     </details>
     <p class="text-sm text-muted-foreground">
-      {{
-        translateKnownMessage(
-          'Resume and constraint-file paths belong to the daemon host. Import modules and constraint code run in your selected Python environment. W&B credentials are configured on that host, never stored in this form. Each run uses an isolated cache; this page never deletes previous run data.',
-        )
-      }}
+      {{ t('project.hostPathsHelp') }}
     </p>
   </fieldset>
 </template>

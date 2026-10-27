@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { runMessages } from '../../i18n/runs';
+import { useI18n } from 'vue-i18n';
 import { computed } from 'vue';
 import type { RunView } from '../../lib/daemon-api';
 import type { RunEvent } from '../../lib/event-stream';
 import { evaluationResults } from '../../lib/evaluation-results';
+import { evaluationMetricMessageKeys } from '../../i18n/dynamic-keys';
 
-const { t, translateKnownMessage } = useWorkstationI18n(runMessages);
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{
   run: RunView | null;
   events: readonly RunEvent[];
@@ -19,8 +19,11 @@ const metrics = computed(() => {
 const rows = computed(() =>
   Object.entries(metrics.value ?? {}).map(([name, value]) => ({
     name,
-    label: translateKnownMessage(name.replaceAll('_', ' ')),
-    value: value === null ? t('notAvailable') : JSON.stringify(value),
+    label:
+      evaluationMetricMessageKeys[name as keyof typeof evaluationMetricMessageKeys] === undefined
+        ? name.replaceAll('_', ' ')
+        : t(evaluationMetricMessageKeys[name as keyof typeof evaluationMetricMessageKeys]),
+    value: value === null ? t('runs.notAvailable') : JSON.stringify(value),
   })),
 );
 </script>
@@ -28,9 +31,9 @@ const rows = computed(() =>
 <template>
   <section v-if="metrics" class="flex flex-col gap-4" aria-labelledby="evaluation-title">
     <div>
-      <h3 id="evaluation-title" class="text-lg font-semibold">{{ t('evaluation') }}</h3>
+      <h3 id="evaluation-title" class="text-lg font-semibold">{{ t('runs.evaluation') }}</h3>
       <p class="text-sm text-muted-foreground">
-        {{ t('structuredResults', { attempt: run?.attempt ?? '' }) }}
+        {{ t('runs.structuredResults', { attempt: run?.attempt ?? '' }) }}
       </p>
     </div>
     <dl class="grid gap-3 sm:grid-cols-2">

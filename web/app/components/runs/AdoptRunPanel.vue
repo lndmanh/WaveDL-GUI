@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { resultsMessages } from '../../i18n/results';
+import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
 import { computed, onBeforeUnmount, shallowRef, toRaw, useId, watch } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
@@ -13,7 +12,7 @@ import type { ConnectionSession } from '../../lib/connection-session';
 import type { DataSelection } from '../../lib/catalog-api';
 import BrowseContainer from '../catalog/BrowseContainer.vue';
 
-const { t, translateKnownMessage } = useWorkstationI18n(resultsMessages);
+const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 const props = defineProps<{ session: ConnectionSession }>();
 const emit = defineEmits<{ adoptedRunId: [runId: string] }>();
@@ -24,7 +23,7 @@ const { handleSubmit } = useForm({
 });
 const directory = shallowRef<DataSelection | null>(null);
 const status = shallowRef<AdoptionStatus>('draft');
-const message = shallowRef('');
+const message = shallowRef<string | Error>('');
 const connected = shallowRef(false);
 const busy = shallowRef(false);
 const frozenPath = shallowRef('');
@@ -36,7 +35,7 @@ let alive = true;
 function select(value: DataSelection) {
   if (busy.value) return;
   if (value.kind !== 'directory') {
-    message.value = 'Choose the run directory, not a file.';
+    message.value = 'results.chooseDirectory';
     return;
   }
   directory.value = value;
@@ -67,8 +66,7 @@ function submit(event: Event) {
         toRaw(props.session) !== currentWorkflow.session
       )
         return;
-      message.value =
-        'Daemon ownership confirmed. This does not establish live supervision, runtime capability, or successful completion. No process was submitted or cancelled.';
+      message.value = 'results.adopted';
       emit('adoptedRunId', result.run_id);
     } catch (error) {
       if (
@@ -76,10 +74,7 @@ function submit(event: Event) {
         workflow.value === currentWorkflow &&
         toRaw(props.session) === currentWorkflow.session
       )
-        message.value =
-          error instanceof AdoptionError
-            ? error.message
-            : 'Choose a current daemon directory and positive attempt before adoption.';
+        message.value = error instanceof AdoptionError ? error : 'results.adoptionInvalid';
     } finally {
       if (
         alive &&
@@ -121,31 +116,31 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="flex flex-col gap-5" :aria-label="t('adoptAria')" :aria-busy="busy">
+  <section class="flex flex-col gap-5" :aria-label="t('results.adoptAria')" :aria-busy="busy">
     <header>
-      <h2 class="text-lg font-semibold">{{ t('adoptTitle') }}</h2>
-      <p class="text-sm text-muted-foreground">{{ t('adoptHelp') }}</p>
+      <h2 class="text-lg font-semibold">{{ t('results.adoptTitle') }}</h2>
+      <p class="text-sm text-muted-foreground">{{ t('results.adoptHelp') }}</p>
     </header>
     <BrowseContainer
       :session="session"
       allow-directory
-      :label="t('standaloneDirectory')"
+      :label="t('results.standaloneDirectory')"
       @select="select"
     />
     <p v-if="directory" class="break-all text-sm">
-      {{ t('selectedDirectory', { path: directory.path }) }}
+      {{ t('results.selectedDirectory', { path: directory.path }) }}
     </p>
     <p
       v-if="frozenPath && status === 'acknowledgement_unknown'"
       role="status"
       class="break-all text-sm"
     >
-      {{ t('retainedRequest', { path: frozenPath, attempt: frozenAttempt ?? '' }) }}
+      {{ t('results.retainedRequest', { path: frozenPath, attempt: frozenAttempt ?? '' }) }}
     </p>
     <form class="flex flex-col gap-4" @submit.prevent="submit">
       <VeeField v-slot="{ field, errors }" name="attempt">
         <Field :data-invalid="!!errors.length">
-          <FieldLabel :for="attemptId">{{ t('runtimeAttempt') }}</FieldLabel>
+          <FieldLabel :for="attemptId">{{ t('results.runtimeAttempt') }}</FieldLabel>
           <Input
             :id="attemptId"
             v-bind="field"
@@ -155,23 +150,24 @@ onBeforeUnmount(() => {
             :disabled="busy || status === 'acknowledgement_unknown'"
             :aria-invalid="!!errors.length"
           />
-          <FieldDescription>{{ t('attemptHelp') }}</FieldDescription>
-          <FieldError
-            v-if="errors.length"
-            :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))"
-          />
+          <FieldDescription>{{ t('results.attemptHelp') }}</FieldDescription>
+          <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
         </Field>
       </VeeField>
       <Button type="submit" :disabled="!canAdopt">{{
         busy
-          ? t('waiting')
+          ? t('results.waiting')
           : status === 'acknowledgement_unknown'
-            ? t('retryAdoption')
-            : t('confirmAdoption')
+            ? t('results.retryAdoption')
+            : t('results.confirmAdoption')
       }}</Button>
     </form>
     <p v-if="message" :role="status === 'confirmed' ? 'status' : 'alert'" class="text-sm">
-      {{ translateKnownMessage(clientMessage(message)) }}
+      {{
+        typeof message === 'string' && message.startsWith('results.')
+          ? t(message)
+          : clientMessage(message)
+      }}
     </p>
   </section>
 </template>

@@ -1,3 +1,4 @@
+import { clientError, type ClientMessage } from '../i18n/client-messages';
 import { DaemonApiError, object, type RunView } from './daemon-api';
 import {
   CursorStore,
@@ -19,7 +20,7 @@ export interface RunMonitorSnapshot {
   events: readonly RunEvent[];
   liveEvents: readonly RunEvent[];
   stream: 'connecting' | 'live' | 'reconnecting' | 'stopped' | 'error';
-  message: string;
+  message: ClientMessage | Error;
   cancellation: 'idle' | 'sending' | 'requested' | 'unknown';
   truncated: boolean;
   metrics: readonly MetricRecord[];
@@ -48,10 +49,8 @@ function scope(run: RunView): string {
 function pending(run: RunView): boolean {
   return run.evidence?.native_pending === true;
 }
-function message(error: unknown): string {
-  return error instanceof DaemonApiError
-    ? error.message
-    : 'Connection interrupted; lifecycle is not confirmed.';
+function message(error: unknown): ClientMessage | Error {
+  return error instanceof DaemonApiError ? error : clientError('lifecycleUnconfirmed');
 }
 function fatal(error: unknown): boolean {
   return (
@@ -107,7 +106,7 @@ export class RunMonitor {
   ) {
     this.#history = new MetricHistory(runId);
     if (cursorStore && cursorStore.runId !== runId)
-      throw new DaemonApiError('identity', 'Event cursor belongs to another run');
+      throw DaemonApiError.fromKey('identity', 'eventCursorBelongsToAnotherRun');
     if (cursorStore) this.#persistence = 'ready';
   }
   snapshot(): RunMonitorSnapshot {
@@ -173,7 +172,7 @@ export class RunMonitor {
   }
   #verifyOwnership(run: RunView): void {
     if (run.run_id !== this.runId)
-      throw new DaemonApiError('identity', 'Run response belongs to another run');
+      throw DaemonApiError.fromKey('identity', 'runResponseBelongsToAnotherRun');
     const prior = this.#snapshot.run;
     if (
       prior &&
@@ -182,7 +181,7 @@ export class RunMonitor {
         prior.backend !== run.backend ||
         prior.operation !== run.operation)
     ) {
-      throw new DaemonApiError('identity', 'Run ownership or operation changed');
+      throw DaemonApiError.fromKey('identity', 'runOwnershipOrOperationChanged');
     }
     const identity = run.evidence?.native_identity;
     if (identity !== undefined && identity !== null) {
@@ -200,7 +199,7 @@ export class RunMonitor {
         !Number.isSafeInteger(identity.restart_count) ||
         identity.restart_count < 0
       )
-        throw new DaemonApiError('identity', 'Invalid native generation ownership');
+        throw DaemonApiError.fromKey('identity', 'invalidNativeGenerationOwnership');
       const previous = this.#nativeIdentity;
       if (
         previous &&
@@ -208,7 +207,7 @@ export class RunMonitor {
           identity.job_id !== previous.job_id ||
           identity.owner !== previous.owner)
       )
-        throw new DaemonApiError('identity', 'Native generation ownership changed or regressed');
+        throw DaemonApiError.fromKey('identity', 'nativeGenerationConflict');
     }
   }
   #cancellationConfirmed(): boolean {
@@ -225,14 +224,14 @@ export class RunMonitor {
       prior?.attempt !== undefined &&
       (run.attempt === null || run.attempt < prior.attempt)
     ) {
-      throw new DaemonApiError('protocol', 'Runtime attempt regressed');
+      throw DaemonApiError.fromKey('protocol', 'runtimeAttemptRegressed');
     }
     const identity = run.evidence?.native_identity;
     if (this.#nativeIdentity && (identity === undefined || identity === null)) {
-      throw new DaemonApiError('identity', 'Verified native generation disappeared');
+      throw DaemonApiError.fromKey('identity', 'nativeGenerationMissing');
     }
     if (run.evidence?.native_pending === true && (identity === undefined || identity === null)) {
-      throw new DaemonApiError('identity', 'Pending native generation lacks identity');
+      throw DaemonApiError.fromKey('identity', 'nativeIdentityMissing');
     }
     if (identity !== undefined && identity !== null) {
       // Narrow the validated JSON fields before retaining the native head.
@@ -243,10 +242,10 @@ export class RunMonitor {
         typeof identity.owner !== 'string' ||
         typeof identity.restart_count !== 'number'
       )
-        throw new DaemonApiError('identity', 'Invalid native generation ownership');
+        throw DaemonApiError.fromKey('identity', 'invalidNativeGenerationOwnership');
       const previous = this.#nativeIdentity;
       if (previous && identity.restart_count < previous.restart_count) {
-        throw new DaemonApiError('identity', 'Native generation ownership changed or regressed');
+        throw DaemonApiError.fromKey('identity', 'nativeGenerationConflict');
       }
       this.#nativeIdentity = {
         cluster: identity.cluster,
@@ -259,7 +258,7 @@ export class RunMonitor {
       run.evidence?.native_pending !== undefined &&
       typeof run.evidence.native_pending !== 'boolean'
     ) {
-      throw new DaemonApiError('protocol', 'Invalid native pending flag');
+      throw DaemonApiError.fromKey('protocol', 'invalidNativePendingFlag');
     }
     const changed = this.#snapshot.run !== null && scope(this.#snapshot.run) !== scope(run);
     this.#history.setScope(run);
@@ -366,7 +365,7 @@ export class RunMonitor {
           await response.body?.cancel().catch(() => undefined);
           break;
         }
-        if (!response.body) throw new DaemonApiError('response', 'Missing event stream');
+        if (!response.body) throw DaemonApiError.fromKey('response', 'missingEventStream');
         const reader = response.body.getReader();
         const parser = new EventStreamParser(
           this.runId,
@@ -379,7 +378,7 @@ export class RunMonitor {
               this.#persistTimer = setTimeout(() => this.#flushCursor(), 250);
           },
           () => {
-            throw new Error('Stream requires replay');
+            throw clientError('streamRequiresReplay', {});
           },
           this.#abort.signal,
         );
@@ -462,7 +461,7 @@ export class RunMonitor {
           cancellation: this.#cancellationConfirmed() ? 'requested' : 'unknown',
           message: this.#cancellationConfirmed()
             ? this.#snapshot.message
-            : 'Cancellation response lost. Refresh or retry; the daemon may have accepted the request.',
+            : clientError('cancellationAckUnknown'),
         });
       if (fatal(error)) {
         this.#abort.abort();

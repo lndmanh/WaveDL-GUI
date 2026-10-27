@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
 import { describe, expect, it } from 'vitest';
 import AutomaticPlotStatus from '../../app/components/results/AutomaticPlotStatus.vue';
 

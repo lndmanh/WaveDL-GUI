@@ -1,3 +1,8 @@
+import {
+  clientRangeError,
+  type ClientErrorKey,
+  type ClientErrorParams,
+} from '../i18n/client-messages';
 import { DaemonApiError, object, validateJson, type JsonObject, type RunView } from './daemon-api';
 import type { RunEvent } from './event-stream';
 
@@ -71,8 +76,8 @@ const numericFields = new Set([
   'total_time',
 ]);
 const integerFields = new Set(['epoch', 'total_epochs', 'patience_counter', 'max_patience']);
-function fail(message: string): never {
-  throw new DaemonApiError('protocol', message);
+function fail(clientMessageKey: ClientErrorKey, clientMessageParams?: ClientErrorParams): never {
+  throw DaemonApiError.fromKey('protocol', clientMessageKey, { params: clientMessageParams });
 }
 function integer(value: unknown, minimum = 0): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
@@ -201,18 +206,18 @@ function metric(
     !integer(payload.step) ||
     (payload.unit !== undefined && typeof payload.unit !== 'string')
   )
-    fail('Invalid metric payload');
+    fail('invalidMetricPayload');
   const details = payload.metrics ?? {};
-  if (!object(details)) fail('Invalid metric details');
+  if (!object(details)) fail('invalidMetricDetails');
   validateJson(details);
   for (const [key, value] of Object.entries(details)) {
     if ((numericFields.has(key) || key.startsWith('MAE_Phys_P')) && !numeric(value))
-      fail(`Invalid numeric metric ${key}`);
-    if (integerFields.has(key) && !integer(value)) fail(`Invalid integer metric ${key}`);
+      fail('invalidNumericMetric', { field: key });
+    if (integerFields.has(key) && !integer(value)) fail('invalidIntegerMetric', { field: key });
     if (key === 'mae_per_param' && (!Array.isArray(value) || !value.every(numeric)))
-      fail('Invalid per-parameter metrics');
+      fail('invalidPerParameterMetrics');
     if (key === 'per_param_mae' && (!object(value) || !Object.values(value).every(numeric)))
-      fail('Invalid per-parameter metrics');
+      fail('invalidPerParameterMetrics');
   }
   return {
     name: payload.name,
@@ -249,8 +254,7 @@ export class MetricHistory {
     options: { maxPoints?: number } = {},
   ) {
     this.maxPoints = options.maxPoints ?? 200_000;
-    if (!integer(this.maxPoints, 1))
-      throw new RangeError('maxPoints must be a positive safe integer');
+    if (!integer(this.maxPoints, 1)) throw clientRangeError('invalidMaxPoints');
   }
   get size(): number {
     return this.#records.length;
@@ -259,27 +263,26 @@ export class MetricHistory {
     return this.#head;
   }
   setScope(view: RunView): void {
-    if (view.run_id !== this.runId) fail('Metric scope belongs to another run');
+    if (view.run_id !== this.runId) fail('metricScopeBelongsToAnotherRun');
     this.#scope = view.attempt;
     this.#pending = view.evidence?.native_pending === true;
   }
   acknowledgeGeneration(sourceAttempt: number, step: number, generation: string): void {
     if (!integer(sourceAttempt, 1) || !integer(step) || !generation)
-      fail('Invalid verified generation');
-    if (this.#published.size >= this.maxPoints) fail('Metric generation capacity exceeded');
+      fail('invalidVerifiedGeneration');
+    if (this.#published.size >= this.maxPoints) fail('metricGenerationCapacityExceeded');
     this.#published.add(JSON.stringify([sourceAttempt, step, generation]));
     this.#known.add(sourceAttempt);
   }
   apply(event: RunEvent): void {
     if (event.run_id !== this.runId || !integer(event.attempt, 1) || !integer(event.seq))
-      fail('Invalid metric event ownership');
+      fail('invalidMetricEventOwnership');
     if (event.seq <= (this.#cursors.get(event.attempt) ?? -1)) return;
     if (!this.#cursors.has(event.attempt) && this.#cursors.size >= this.maxPoints)
-      fail('Metric attempt capacity exceeded');
+      fail('metricAttemptCapacityExceeded');
     if (event.type === 'metric') {
       const checked = metric(event.payload);
-      if (this.size >= this.maxPoints)
-        fail('Metric history capacity exceeded; replay with a larger limit');
+      if (this.size >= this.maxPoints) fail('metricHistoryCapacity');
       const active = event.attempt >= this.#head;
       const record: MetricRecord = {
         ...checked,
@@ -317,7 +320,7 @@ export class MetricHistory {
         !payload.generation ||
         (payload.source_seq !== undefined && !integer(payload.source_seq))
       )
-        fail('Invalid supersession boundary');
+        fail('invalidSupersessionBoundary');
       const seq = payload.source_seq ?? null;
       const first = this.#steps.get(payload.source_attempt)?.get(payload.step);
       if (
@@ -327,8 +330,8 @@ export class MetricHistory {
         ) &&
         !(payload.step === 0 && this.#known.has(payload.source_attempt))
       )
-        fail('Supersession references an absent step');
-      if (this.#lineage.has(event.attempt)) fail('Attempt already has a supersession boundary');
+        fail('supersessionStepMissing');
+      if (this.#lineage.has(event.attempt)) fail('supersessionAlreadySet');
       this.#lineage.set(event.attempt, {
         attempt: payload.source_attempt,
         step: payload.step,

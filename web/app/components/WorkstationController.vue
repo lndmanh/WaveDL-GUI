@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onScopeDispose, shallowRef, watch } from 'vue';
 import { useHead } from '#app';
+import { provideWorkstationLocale } from '../composables/useWorkstationI18n';
 import type { DaemonApiError, RunView } from '../lib/daemon-api';
 import { CLIENT_BUILD_ID } from '../lib/build-identity';
 import { useDaemonConnection } from '../composables/useDaemonConnection';
 import { useAutomaticPlots } from '../composables/useAutomaticPlots';
-import { provideWorkstationLocale } from '../composables/useWorkstationI18n';
 import WorkstationShell from './WorkstationShell.vue';
 import ConnectionPanel from './ConnectionPanel.vue';
 import RunsWorkspace from './runs/RunsWorkspace.vue';

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
 import { defineComponent, h } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DaemonApi, type RunView } from '../../app/lib/daemon-api';
@@ -114,7 +114,10 @@ describe('mounted run workspace authority', () => {
     list.mockRejectedValueOnce(new Error('list interrupted'));
     await state.refresh();
     expect(state.staleRunIds.value.has(id)).toBe(true);
-    expect(state.message.value).toBe('Unable to refresh runs.');
+    expect(state.message.value).toMatchObject({
+      clientMessageKey: 'unableToRefreshRuns',
+      message: 'Unable to refresh runs.',
+    });
   });
   it('fences delayed list replies from overwriting newer monitored lifecycle', async () => {
     vi.useFakeTimers();

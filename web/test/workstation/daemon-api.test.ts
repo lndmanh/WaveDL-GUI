@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConnectionSession } from '../../app/lib/connection-session';
 import { DaemonApi, DaemonApiError, parseJson, stripBootstrapUrl } from '../../app/lib/daemon-api';
+import { translateClientDiagnostic } from '../../app/i18n/client-messages';
 
 const token = 'a'.repeat(64);
 const origin = 'http://127.0.0.1:8765';
@@ -15,6 +16,28 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 describe('daemon transport', () => {
+  it('builds API errors from catalog keys while preserving classification metadata', () => {
+    const failure = DaemonApiError.fromKey('http', 'daemonRequestFailed', {
+      status: 503,
+      params: { status: 503 },
+    });
+    expect(failure).toBeInstanceOf(DaemonApiError);
+    expect(failure).toMatchObject({
+      code: 'http',
+      message: 'Daemon request failed (503)',
+      status: 503,
+      buildMismatch: false,
+      daemonIdentityChanged: false,
+      clientMessageKey: 'daemonRequestFailed',
+      clientMessageParams: { status: 503 },
+    });
+
+    const mismatch = DaemonApiError.fromKey('identity', 'daemonPinsChanged', {
+      buildMismatch: true,
+    });
+    expect(mismatch).toMatchObject({ code: 'identity', buildMismatch: true });
+  });
+
   it('does not expose a rejected credential on any own or inherited error property', async () => {
     const api = new DaemonApi(origin, {}, async () => json({}, 401));
     api.setToken(token);
@@ -368,10 +391,12 @@ describe('daemon transport', () => {
     await expect(
       owner.perform((api, signal) => api.read('/api/models', signal)),
     ).rejects.toMatchObject({ code: 'identity' });
-    expect(owner.snapshot()).toMatchObject({
-      status: 'skew',
-      message: 'A different WaveDL daemon is now serving this address. Sign in again.',
-    });
+    expect(owner.snapshot().status).toBe('skew');
+    const message = owner.snapshot().message;
+    if (message === null) throw new Error('Expected a coded connection notice');
+    expect(translateClientDiagnostic('en', message)).toBe(
+      'A different WaveDL daemon is now serving this address. Sign in again.',
+    );
     expect(owner.api).toBeNull();
     owner.dispose();
   });
