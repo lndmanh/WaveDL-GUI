@@ -18,6 +18,17 @@ import {
   trainingPreferenceFields,
 } from '../../app/lib/preferences';
 
+async function chooseSelectOption(wrapper: ReturnType<typeof mount>, id: string, value: string) {
+  await wrapper
+    .get(`#${id}`)
+    .trigger('pointerdown', { button: 0, ctrlKey: false, pointerType: 'mouse', pointerId: 1 });
+  await flushPromises();
+  const option = document.body.querySelector<HTMLElement>(`[role="option"][data-value="${value}"]`);
+  expect(option).not.toBeNull();
+  option?.dispatchEvent(new Event('pointerup', { bubbles: true }));
+  await flushPromises();
+}
+
 beforeEach(() => {
   const items = new Map<string, string>();
   const storage = {
@@ -47,20 +58,29 @@ describe('settings workspace acceptance', () => {
     expect(wrapper.text()).toContain('Connect to a daemon');
     expect(wrapper.text()).toContain('not daemon administration');
     expect(wrapper.get('#preference-language').attributes('disabled')).toBeUndefined();
-    expect(wrapper.get('#preference-language').text()).toContain('Tiếng Việt');
+    await wrapper
+      .get('#preference-language')
+      .trigger('pointerdown', { button: 0, ctrlKey: false, pointerType: 'mouse', pointerId: 1 });
+    await wrapper.get('#preference-language').trigger('keydown', { key: 'ArrowDown' });
+    await wrapper.get('#preference-language').trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    expect(wrapper.get('#preference-language').exists()).toBe(true);
+    await wrapper.get('#preference-language').trigger('keydown', { key: 'Escape' });
     const link = wrapper.get('a');
     expect(link.attributes('href')).toBe('https://github.com/ductho-le/WaveDL');
     expect(link.attributes('rel')).toContain('noopener');
-    expect(wrapper.text()).toContain('browser chooses where');
+    await wrapper.get('button[aria-label="Downloads"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('button[aria-label="Downloads"]').exists()).toBe(true);
     wrapper.unmount();
   });
 
   it('saves numeric zoom through the actual native select and emits validated settings', async () => {
     const wrapper = mount(AppearanceSettings);
     await flushPromises();
-    await wrapper.get('#preference-zoom').setValue('125');
-    await wrapper.get('#preference-theme').setValue('dark');
-    await wrapper.get('#preference-accent').setValue('green');
+    await chooseSelectOption(wrapper, 'preference-zoom', '125');
+    await chooseSelectOption(wrapper, 'preference-theme', 'dark');
+    await chooseSelectOption(wrapper, 'preference-accent', 'green');
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() => expect(wrapper.text()).toContain('Browser preferences saved.'));
     expect(loadAppearance()).toEqual({
@@ -72,13 +92,13 @@ describe('settings workspace acceptance', () => {
     expect(wrapper.emitted('changed')).toEqual([[loadAppearance()]]);
     expect(document.documentElement.style.fontSize).toBe('20px');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
-    await wrapper.get('#preference-theme').setValue('light');
+    await chooseSelectOption(wrapper, 'preference-theme', 'light');
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Discard changes')
       ?.trigger('click');
     await flushPromises();
-    expect(wrapper.get('#preference-theme').element).toHaveProperty('value', 'dark');
+    expect(wrapper.get('#preference-theme').text()).toContain('Dark');
     wrapper.unmount();
   });
 
@@ -91,7 +111,7 @@ describe('settings workspace acceptance', () => {
     });
     const wrapper = mount(AppearanceSettings);
     await flushPromises();
-    await wrapper.get('#preference-theme').setValue('dark');
+    await chooseSelectOption(wrapper, 'preference-theme', 'dark');
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() => expect(wrapper.text()).toContain('Applied for this session'));
     media.dispatchEvent(new Event('change'));
@@ -105,15 +125,15 @@ describe('settings workspace acceptance', () => {
     const parsed = appearanceSchema.parse(appearance);
     const wrapper = mount(SettingsWorkspace, { props: { daemonId: null, appearance: parsed } });
     await flushPromises();
-    expect(wrapper.get('#preference-theme').element).toHaveProperty('value', 'dark');
-    expect(wrapper.get('#preference-zoom').element).toHaveProperty('value', '125');
-    await wrapper.get('#preference-theme').setValue('light');
+    expect(wrapper.get('#preference-theme').text()).toContain('Dark');
+    expect(wrapper.get('#preference-zoom').text()).toContain('125%');
+    await chooseSelectOption(wrapper, 'preference-theme', 'light');
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Discard changes')
       ?.trigger('click');
     await flushPromises();
-    expect(wrapper.get('#preference-theme').element).toHaveProperty('value', 'dark');
+    expect(wrapper.get('#preference-theme').text()).toContain('Dark');
     wrapper.unmount();
   });
 

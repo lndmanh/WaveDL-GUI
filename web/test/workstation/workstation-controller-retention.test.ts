@@ -78,14 +78,27 @@ vi.mock('../../app/composables/useAutomaticPlots', async () => {
 const messages = { en: { label: 'Selected publication' }, vi: { label: 'Bản công bố đã chọn' } };
 const sections = ['experiments', 'datasets', 'results', 'settings'] as const;
 const Shell = defineComponent({
-  emits: ['navigate'],
-  setup(_props, { emit, slots }) {
+  props: { overlay: String },
+  emits: ['navigate', 'update:overlay'],
+  setup(props, { emit, slots }) {
     return () =>
       h('main', [
         ...sections.map((section) =>
-          h('button', { 'data-nav': section, onClick: () => emit('navigate', section) }, section),
+          h(
+            'button',
+            {
+              'data-nav': section,
+              // The shell frame opens Settings as an overlay and navigates only canvas sections.
+              onClick: () =>
+                section === 'settings'
+                  ? emit('update:overlay', section)
+                  : (emit('update:overlay', null), emit('navigate', section)),
+            },
+            section,
+          ),
         ),
         slots.default?.(),
+        props.overlay === 'settings' ? slots.settings?.() : [],
       ]);
   },
 });

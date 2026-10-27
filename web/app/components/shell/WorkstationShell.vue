@@ -1,0 +1,198 @@
+<script setup lang="ts">
+import { computed, nextTick, onMounted, onScopeDispose } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { X, Import } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import ShellRail from './ShellRail.vue';
+import ShellCanvas from './ShellCanvas.vue';
+import ShellHeader from './ShellHeader.vue';
+import ShellCompanion from './ShellCompanion.vue';
+import ShellDock from './ShellDock.vue';
+import ShellCommandPalette from './ShellCommandPalette.vue';
+import { useShellLayout } from '../../composables/useShellLayout';
+import type { ConnectionStatus } from '../../lib/connection-session';
+import {
+  workstationNavTestId,
+  type PrimaryWorkstationSection,
+  type WorkstationSection,
+} from '../../lib/shell-test-ids';
+type Overlay = 'connection' | 'settings' | 'adopt';
+const props = defineProps<{
+  status: ConnectionStatus;
+  section: PrimaryWorkstationSection;
+  overlay: Overlay | null;
+}>();
+const emit = defineEmits<{
+  navigate: [section: PrimaryWorkstationSection];
+  'update:overlay': [overlay: Overlay | null];
+}>();
+const { t } = useI18n({ useScope: 'global' });
+const layout = useShellLayout();
+const { isDockedLayout, isRailVisible, commandPaletteOpen: paletteOpen } = layout;
+const connectionAnnouncement = computed(() =>
+  props.status === 'connected'
+    ? t('shell.connected')
+    : props.status === 'connecting'
+      ? t('shell.connecting')
+      : props.status === 'offline'
+        ? t('shell.offline')
+        : t('shell.notConnected'),
+);
+let overlayOpener: HTMLElement | null = null;
+let focusObserver: MutationObserver | null = null;
+const overlayTitle = computed(() =>
+  props.overlay === 'adopt'
+    ? t('shell.adoptStandaloneRun')
+    : props.overlay === 'settings'
+      ? t('shell.settings')
+      : t('shell.connection'),
+);
+function setOverlay(value: Overlay | null) {
+  if (
+    value &&
+    !props.overlay &&
+    typeof document !== 'undefined' &&
+    document.activeElement instanceof HTMLElement
+  )
+    overlayOpener = document.activeElement;
+  emit('update:overlay', value);
+}
+function restoreOverlayFocus(event: Event) {
+  focusObserver?.disconnect();
+  event.preventDefault();
+  if (overlayOpener?.isConnected) overlayOpener.focus();
+}
+function focusOverlay(event: Event) {
+  event.preventDefault();
+  void nextTick(() => {
+    const body = document.querySelector<HTMLElement>('.shell-overlay-body');
+    if (!body) return;
+    const focusFirst = () => {
+      const control =
+        body.querySelector<HTMLElement>('[role="combobox"]') ??
+        body.querySelector<HTMLElement>(
+          'input:not([disabled]), button:not([disabled]), [tabindex="0"]',
+        );
+      if (!control) return false;
+      control.focus();
+      focusObserver?.disconnect();
+      return true;
+    };
+    if (focusFirst()) return;
+    body.focus();
+    focusObserver = new MutationObserver(focusFirst);
+    focusObserver.observe(body, { childList: true, subtree: true });
+  });
+}
+function navigate(section: WorkstationSection) {
+  paletteOpen.value = false;
+  if (section === 'connection' || section === 'settings' || section === 'adopt')
+    setOverlay(section);
+  else {
+    setOverlay(null);
+    emit('navigate', section);
+  }
+}
+function shortcut(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    setOverlay(null);
+    paletteOpen.value = !paletteOpen.value;
+  }
+}
+function updateViewport() {
+  layout.setDockedLayout(window.innerWidth >= 1024);
+}
+onMounted(() => {
+  updateViewport();
+  window.addEventListener('keydown', shortcut);
+  window.addEventListener('resize', updateViewport);
+});
+onScopeDispose(() => {
+  focusObserver?.disconnect();
+  window.removeEventListener('keydown', shortcut);
+  window.removeEventListener('resize', updateViewport);
+});
+</script>
+<template>
+  <div data-shell class="shell-ground h-dvh flex min-h-0 min-w-0 overflow-hidden">
+    <span class="sr-only" aria-live="polite" aria-atomic="true">{{ connectionAnnouncement }}</span>
+    <a class="shell-skip-link" href="#workspace">{{ t('shell.skipToWorkspace') }}</a>
+    <div class="shell-frame flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <ShellRail
+        v-if="isDockedLayout && isRailVisible"
+        :section="section"
+        :status="status"
+        @navigate="navigate"
+        @command="paletteOpen = true"
+      />
+      <ShellCanvas
+        ><template #header
+          ><ShellHeader
+            :section="section"
+            :status="status"
+            @navigate="navigate"
+            @command="paletteOpen = true"
+            @toggle-panel="layout.togglePanel()"
+            ><template #actions
+              ><slot name="actions" /><Button
+                v-if="section === 'experiments'"
+                variant="outline"
+                :size="isDockedLayout ? 'sm' : 'icon'"
+                :data-testid="workstationNavTestId('adopt')"
+                :data-compact="isDockedLayout ? undefined : 'true'"
+                :aria-label="t('shell.adoptStandaloneRun')"
+                :title="t('shell.adoptStandaloneRun')"
+                @click="navigate('adopt')"
+                ><Import aria-hidden="true" /><span :class="{ 'sr-only': !isDockedLayout }">{{
+                  t('shell.adoptStandaloneRun')
+                }}</span></Button
+              ></template
+            ></ShellHeader
+          ></template
+        ><slot
+      /></ShellCanvas>
+      <ShellCompanion />
+    </div>
+    <ShellDock
+      v-if="!isDockedLayout"
+      data-testid="workstation-nav"
+      :section="section"
+      :status="status"
+      @navigate="navigate"
+      @command="paletteOpen = true"
+    />
+    <ShellCommandPalette v-model:open="paletteOpen" @navigate="navigate" />
+    <Dialog :open="props.overlay !== null" @update:open="!$event && setOverlay(null)"
+      ><DialogContent
+        class="shell-overlay"
+        :class="{
+          'shell-overlay-wide': props.overlay === 'settings' || props.overlay === 'adopt',
+          'shell-overlay-connection': props.overlay === 'connection',
+        }"
+        :show-close-button="false"
+        :aria-describedby="undefined"
+        @open-auto-focus="focusOverlay"
+        @close-auto-focus="restoreOverlayFocus"
+        ><div class="shell-overlay-header">
+          <DialogTitle :class="{ 'sr-only': props.overlay !== 'settings' }">{{
+            overlayTitle
+          }}</DialogTitle>
+          <DialogClose as-child
+            ><Button
+              class="shell-overlay-close"
+              variant="ghost"
+              size="icon"
+              :aria-label="t('shell.closeOverlay')"
+              ><X aria-hidden="true" /></Button
+          ></DialogClose>
+        </div>
+        <div class="shell-overlay-body" tabindex="-1">
+          <slot v-if="props.overlay === 'connection'" name="connection" /><slot
+            v-else-if="props.overlay === 'settings'"
+            name="settings"
+          /><slot v-else-if="props.overlay === 'adopt'" name="adopt" /></div></DialogContent
+    ></Dialog>
+  </div>
+</template>
