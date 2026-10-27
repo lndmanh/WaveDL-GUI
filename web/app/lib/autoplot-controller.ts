@@ -6,6 +6,11 @@ import {
   type TrainingRequest,
 } from '../../shared/schemas/training-request';
 import {
+  inferenceDefaults,
+  resultRequestSchema,
+  type ResultRequest,
+} from '../../shared/schemas/result-request';
+import {
   object,
   parseJson,
   type DaemonApi,
@@ -22,7 +27,10 @@ import {
 import type { ConnectionSession } from './connection-session';
 import { ArtifactClient, type Artifact, type SelectionMetadata } from './artifact-client';
 import { checkpointOptions, type CheckpointOption } from './result-operations';
-import { AutoPlotWorkflow, type AutoPlotIntent } from './autoplot-workflow';
+interface AutoPlotIntent {
+  readonly request: ResultRequest;
+  readonly idempotencyKey: string;
+}
 
 /** Extract only the exact approved manifest, never current form or run-list data. */
 export function automaticPlotRequest(
@@ -162,7 +170,7 @@ export class AutoPlotController {
     message: '',
   });
   readonly session: ConnectionSession;
-  #workflow: AutoPlotWorkflow | null = null;
+  #request: TrainingRequest | null = null;
   #run: RunView | null = null;
   #intent: AutoPlotIntent | null = null;
   #plan: PlanView | null = null;
@@ -193,7 +201,7 @@ export class AutoPlotController {
         throw clientError('invalidAutomaticPlotDeadline', {});
     this.#unsubscribe = this.session.subscribe((state) => {
       if (
-        this.#workflow &&
+        this.#run &&
         (state.status !== 'connected' ||
           state.revision !== this.#revision ||
           state.health?.daemon_id !== this.#daemonId)
@@ -226,13 +234,15 @@ export class AutoPlotController {
       this.#sourceApi = api;
       this.#daemonId = state.health.daemon_id;
       this.#scope = new AbortController();
-      this.#workflow = new AutoPlotWorkflow({
-        daemonId: this.#daemonId,
-        revision: this.#revision,
-        run: toRaw(run),
-        approvedPlan: toRaw(plan),
-        request,
-      });
+      if (
+        !run.submission_requested ||
+        run.operation !== 'train' ||
+        plan.run_id !== run.run_id ||
+        plan.request_id !== run.request_id ||
+        plan.plan_id !== run.plan_id
+      )
+        throw clientError('autoPlotAlreadySubmitted', {});
+      this.#request = structuredClone(request);
       this.#run = structuredClone(toRaw(run));
       this.#observedAttempt = run.attempt;
       if (!this.#acceptScope(run)) throw clientError('unsupportedCapturedNativeScope', {});
@@ -300,7 +310,7 @@ export class AutoPlotController {
     }
   }
   async observeFresh(run: RunView): Promise<void> {
-    if (this.#busy || this.state.value.status !== 'armed' || !this.#workflow || !this.#run) return;
+    if (this.#busy || this.state.value.status !== 'armed' || !this.#run) return;
     if (!this.#current(this.#scope.signal)) return;
     if (
       run.run_id !== this.#run.run_id ||
@@ -379,14 +389,7 @@ export class AutoPlotController {
         };
         return;
       }
-      this.#intent = this.#workflow.observe({
-        daemonId: this.#daemonId,
-        connected: true,
-        revision: this.#revision,
-        freshness: 'fresh',
-        run,
-        publications,
-      });
+      this.#intent = this.#deriveIntent(run, publications[0]);
       if (!this.#intent) return;
       const selected = publications[0];
       if (!selected) return;
@@ -425,8 +428,48 @@ export class AutoPlotController {
       if (this.#scope.signal === parent) this.#busy = false;
     }
   }
+  #deriveIntent(run: RunView, selected: CheckpointOption | undefined): AutoPlotIntent | null {
+    const captured = this.#request;
+    const sourceRun = this.#run;
+    if (
+      !captured ||
+      !sourceRun ||
+      !selected?.selectable ||
+      selected.classification.kind !== 'best' ||
+      selected.artifact.runId !== run.run_id ||
+      selected.artifact.attempt !== run.attempt ||
+      captured.config.cv > 0 ||
+      run.cancellation_requested ||
+      run.backend !== captured.backend
+    )
+      return null;
+    // observeFresh has already selected the newest complete, verified best.
+    // Once this intent exists, retries execute it directly with the same key.
+    const source = selected.artifact;
+    const config = captured.config;
+    return {
+      request: resultRequestSchema.parse({
+        backend: captured.backend,
+        operation: 'plot',
+        runtime: captured.runtime,
+        topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
+        ...(captured.storage_map === undefined ? {} : { storage_map: captured.storage_map }),
+        checkpoint_source: { run_id: run.run_id, generation: source.generation },
+        config: {
+          ...inferenceDefaults,
+          data_path: config.data_path,
+          model: config.model,
+          import_modules: config.import_modules,
+          batch_size: config.batch_size,
+          workers: Math.max(0, config.workers),
+          plot: true,
+        },
+      }),
+      idempotencyKey: `web-autoplot-v1:${sourceRun.run_id}:${sourceRun.request_id}:${source.generation}`,
+    };
+  }
   async #execute(signal: AbortSignal): Promise<void> {
-    if (!this.#intent || !this.#workflow || !this.#current(signal)) return;
+    if (!this.#intent || !this.#current(signal)) return;
     this.state.value = { ...this.state.value, status: 'planning' };
     const intent = this.#intent;
     if (!this.#plan) {
@@ -437,7 +480,6 @@ export class AutoPlotController {
       if (!this.#current(signal)) return;
       if (!(await this.#validatePlotPlan(plan, intent, signal)) || !this.#current(signal)) return;
       this.#plan = plan;
-      this.#workflow.planned();
     } else {
       const plan = this.#plan;
       const observed = await this.session.perform(
@@ -620,7 +662,6 @@ export class AutoPlotController {
       !run.submission_requested
     )
       throw clientError('autoPlotAckMismatch', {});
-    this.#workflow?.submitted();
     this.state.value = {
       status: 'submitted',
       plotRunId: run.run_id,
@@ -633,7 +674,7 @@ export class AutoPlotController {
     if (
       this.#busy ||
       this.state.value.status !== 'error' ||
-      !this.#workflow ||
+      !this.#run ||
       !this.#current(this.#scope.signal)
     )
       return;
@@ -674,8 +715,7 @@ export class AutoPlotController {
   }
   stop(): void {
     this.#scope.abort();
-    this.#workflow?.stop();
-    this.#workflow = null;
+    this.#request = null;
     this.#run = null;
     this.#intent = null;
     this.#sourceAttempt = null;

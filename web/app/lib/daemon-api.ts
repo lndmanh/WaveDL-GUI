@@ -1,4 +1,17 @@
 /** Browser-only, same-origin daemon transport. Browser authority is session-scoped. */
+import type { z } from 'zod';
+import {
+  RUN_STATES,
+  evidenceShape,
+  healthSchema,
+  observationSchema,
+  outcomeSchema,
+  planSchema,
+  runListSchema,
+  runViewSchema,
+  runtimeSchema,
+  sessionGrantSchema,
+} from './daemon-api-schemas';
 import { clientError, type ClientErrorKey, type ClientErrorParams } from '../i18n/client-messages';
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -20,22 +33,7 @@ export interface IdentityPins {
   buildId?: string;
   protocolVersion?: number;
 }
-export const RUN_STATES = [
-  'planned',
-  'pending',
-  'submission_unknown',
-  'submitted',
-  'queued',
-  'held',
-  'running',
-  'stopping',
-  'completed',
-  'failed',
-  'cancelled',
-  'terminal_unknown',
-  'observation_unavailable',
-  'supervision_lost',
-] as const;
+export { RUN_STATES };
 export type RunState = (typeof RUN_STATES)[number];
 export interface RunView {
   plan_id: string;
@@ -114,101 +112,28 @@ function freezeJson(item: Json): void {
     Object.freeze(item);
   }
 }
-function runState(value: unknown): value is RunState {
-  return RUN_STATES.some((state) => state === value);
-}
-function nativeIdentity(value: Json, runId: string, requestId: string): boolean {
-  if (!jsonObject(value)) return false;
-  return (
-    value.run_id === runId &&
-    value.request_id === requestId &&
-    typeof value.cluster === 'string' &&
-    /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(value.cluster) &&
-    typeof value.owner === 'string' &&
-    /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(value.owner) &&
-    typeof value.job_id === 'string' &&
-    /^[1-9][0-9]{0,18}$/.test(value.job_id) &&
-    BigInt(value.job_id) <= 9223372036854775807n &&
-    typeof value.restart_count === 'number' &&
-    Number.isSafeInteger(value.restart_count) &&
-    value.restart_count >= 0
-  );
-}
 function runEvidence(value: JsonObject, runId: string, requestId: string): void {
-  const valid = (name: string, check: (field: Json) => boolean): void => {
-    const field = value[name];
-    if (field !== undefined && !check(field))
-      throw DaemonApiError.fromKey('response', 'invalidRunEvidence', { params: { field: name } });
-  };
-  valid('native_pending', (field) => typeof field === 'boolean');
-  valid('native_identity', (field) => field === null || nativeIdentity(field, runId, requestId));
-  for (const name of ['current_runtime_attempt', 'last_runtime_attempt']) {
-    valid(
-      name,
-      (field) =>
-        field === null || (typeof field === 'number' && Number.isSafeInteger(field) && field >= 1),
-    );
-  }
-  valid('confidence', (field) => field === 'confirmed' || field === 'unconfirmed');
-  valid('reason', (field) => typeof field === 'string');
-  for (const name of ['runtime', 'backend', 'last_observation', 'batch', 'stage_out']) {
-    valid(name, (field) => (name !== 'runtime' && field === null) || jsonObject(field));
-  }
-  const checkObject = (
-    record: JsonObject,
-    checks: Record<string, (field: Json) => boolean>,
-  ): void => {
-    for (const [name, check] of Object.entries(checks)) {
-      const field = record[name];
-      if (field !== undefined && !check(field))
-        throw DaemonApiError.fromKey('response', 'invalidRunEvidence', { params: { field: name } });
+  const check = (schema: z.ZodType, input: unknown, outer?: string): void => {
+    const result = schema.safeParse(input);
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      // Native identity failures have always named the containing field, not
+      // a member of the scheduler identity. Other nested diagnostics name leaves.
+      const path = issue?.path ?? [];
+      const field = outer ?? (path.includes('native_identity') ? 'native_identity' : path.at(-1));
+      throw DaemonApiError.fromKey('response', 'invalidRunEvidence', {
+        params: { field: String(field) },
+      });
     }
   };
-  const integer = (field: Json): boolean =>
-    typeof field === 'number' && Number.isSafeInteger(field);
-  const optionalInteger = (field: Json): boolean => field === null || integer(field);
-  const outcome = (field: Json): boolean => {
-    if (field === null) return true;
-    if (!jsonObject(field)) return false;
-    checkObject(field, {
-      status: (item) =>
-        typeof item === 'string' && ['success', 'failed', 'cancelled', 'unknown'].includes(item),
-      exit_code: optionalInteger,
-      signal: (item) => item === null || (integer(item) && typeof item === 'number' && item > 0),
-      detail: (item) => typeof item === 'string',
-    });
-    return true;
-  };
-  if (jsonObject(value.runtime))
-    checkObject(value.runtime, {
-      hello_seen: (field) => typeof field === 'boolean',
-      conflicting_exits: (field) => typeof field === 'boolean',
-      state: (field) => field === null || typeof field === 'string',
-      state_seq: (field) => integer(field) && typeof field === 'number' && field >= -1,
-      exit_seq: (field) => integer(field) && typeof field === 'number' && field >= -1,
-      outcome,
-    });
-  for (const name of ['batch', 'stage_out']) valid(name, outcome);
-  for (const name of ['backend', 'last_observation']) {
-    const observation = value[name];
-    if (!jsonObject(observation)) continue;
-    checkObject(observation, {
-      status: (field) =>
-        typeof field === 'string' &&
-        ['queued', 'held', 'running', 'terminal', 'absent', 'error', 'supervision_lost'].includes(
-          field,
-        ),
-      native_state: (field) => field === null || typeof field === 'string',
-      detail: (field) => typeof field === 'string',
-      attempt: (field) => integer(field) && typeof field === 'number' && field > 0,
-      native_identity: (field) => field === null || nativeIdentity(field, runId, requestId),
-      exit_code: optionalInteger,
-      signal: (field) =>
-        field === null || (integer(field) && typeof field === 'number' && field > 0),
-      batch: outcome,
-      stage_out: outcome,
-    });
-  }
+  // Preserve the historical validation order and its first-error diagnostic.
+  const shape = evidenceShape(runId, requestId);
+  for (const [name, schema] of Object.entries(shape.shape)) check(schema, value[name], name);
+  if (value.runtime !== undefined) check(runtimeSchema, value.runtime);
+  for (const name of ['batch', 'stage_out'])
+    if (value[name] !== undefined) check(outcomeSchema, value[name]);
+  for (const name of ['backend', 'last_observation'])
+    if (value[name] != null) check(observationSchema(runId, requestId), value[name]);
   if (
     value.native_pending === true &&
     value.current_runtime_attempt !== undefined &&
@@ -218,41 +143,12 @@ function runEvidence(value: JsonObject, runId: string, requestId: string): void 
   }
 }
 function runView(value: Json, expectedRunId?: string): RunView {
-  if (
-    !jsonObject(value) ||
-    !isUuid(value.plan_id) ||
-    !isUuid(value.run_id) ||
-    !isUuid(value.request_id) ||
-    (expectedRunId !== undefined && value.run_id !== expectedRunId) ||
-    typeof value.backend !== 'string' ||
-    !value.backend ||
-    (value.operation !== 'train' && value.operation !== 'test' && value.operation !== 'plot') ||
-    (value.attempt !== null &&
-      (typeof value.attempt !== 'number' ||
-        !Number.isSafeInteger(value.attempt) ||
-        value.attempt < 1)) ||
-    !runState(value.state) ||
-    typeof value.uncertainty !== 'boolean' ||
-    typeof value.submission_requested !== 'boolean' ||
-    typeof value.cancellation_requested !== 'boolean' ||
-    (value.evidence !== null && !jsonObject(value.evidence))
-  ) {
+  const result = runViewSchema.safeParse(value);
+  if (!result.success || (expectedRunId !== undefined && result.data.run_id !== expectedRunId))
     throw DaemonApiError.fromKey('response', 'invalidRunResponse');
-  }
-  if (value.evidence !== null) runEvidence(value.evidence, value.run_id, value.request_id);
-  return {
-    plan_id: value.plan_id,
-    run_id: value.run_id,
-    request_id: value.request_id,
-    backend: value.backend,
-    operation: value.operation,
-    attempt: value.attempt,
-    state: value.state,
-    uncertainty: value.uncertainty,
-    submission_requested: value.submission_requested,
-    cancellation_requested: value.cancellation_requested,
-    evidence: value.evidence,
-  };
+  const run = result.data;
+  if (run.evidence !== null) runEvidence(run.evidence, run.run_id, run.request_id);
+  return run;
 }
 
 /** Bound arbitrary JSON, while allowing the server's full finite metric domain. */
@@ -336,24 +232,8 @@ export function stripBootstrapUrl(input: string): {
 }
 
 function sessionGrant(value: Json): SessionGrant | null {
-  if (
-    !object(value) ||
-    value.token_type !== 'Bearer' ||
-    typeof value.access_token !== 'string' ||
-    !sessionToken(value.access_token) ||
-    typeof value.expires_at !== 'number' ||
-    !Number.isSafeInteger(value.expires_at) ||
-    value.expires_at <= 0 ||
-    typeof value.daemon_id !== 'string' ||
-    !/^[\x21-\x7e]{1,256}$/.test(value.daemon_id)
-  )
-    return null;
-  return {
-    access_token: value.access_token,
-    token_type: 'Bearer',
-    expires_at: value.expires_at,
-    daemon_id: value.daemon_id,
-  };
+  const result = sessionGrantSchema.safeParse(value);
+  return result.success && sessionToken(result.data.access_token) ? result.data : null;
 }
 function sessionToken(value: string): boolean {
   return /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -551,18 +431,11 @@ export class DaemonApi {
     });
   }
   async health(signal?: AbortSignal): Promise<Health> {
-    const body = await this.#json(await this.#request('/api/health', 'GET', undefined, signal));
-    if (
-      !object(body) ||
-      typeof body.daemon_id !== 'string' ||
-      !/^[\x21-\x7e]{1,256}$/.test(body.daemon_id) ||
-      typeof body.build_id !== 'string' ||
-      !/^[\x21-\x7e]{1,256}$/.test(body.build_id) ||
-      !Number.isSafeInteger(body.protocol_min) ||
-      !Number.isSafeInteger(body.protocol_max)
-    ) {
-      throw DaemonApiError.fromKey('response', 'invalidDaemonHealthResponse');
-    }
+    const result = healthSchema.safeParse(
+      await this.#json(await this.#request('/api/health', 'GET', undefined, signal)),
+    );
+    if (!result.success) throw DaemonApiError.fromKey('response', 'invalidDaemonHealthResponse');
+    const body = result.data;
     const minimum = body.protocol_min;
     const maximum = body.protocol_max;
     if (
@@ -628,9 +501,9 @@ export class DaemonApi {
     const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (options.state) query.set('state', options.state);
     const value = await this.read(`/api/runs?${query}`, options.signal);
-    if (!jsonObject(value) || !Array.isArray(value.runs))
-      throw DaemonApiError.fromKey('response', 'invalidRunList');
-    return value.runs.map((item) => runView(item));
+    const result = runListSchema.safeParse(value);
+    if (!result.success) throw DaemonApiError.fromKey('response', 'invalidRunList');
+    return result.data.runs.map((item) => runView(item as Json));
   }
   async getRun(runId: string, signal?: AbortSignal): Promise<RunView> {
     if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
@@ -646,24 +519,18 @@ export class DaemonApi {
     const value = await this.mutate('/api/runs/plan', snapshot, { idempotencyKey, signal });
     if (revision !== this.#scopeRevision)
       throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
-    if (
-      !jsonObject(value) ||
-      !isUuid(value.plan_id) ||
-      !isUuid(value.run_id) ||
-      !isUuid(value.request_id) ||
-      !jsonObject(value.preview)
-    ) {
-      throw DaemonApiError.fromKey('response', 'invalidPlanResponse');
-    }
+    const result = planSchema.safeParse(value);
+    if (!result.success) throw DaemonApiError.fromKey('response', 'invalidPlanResponse');
+    const plan = result.data;
     // Approval is memory-only and belongs to this exact verified connection.
     // A persisted plan must be re-planned with its original idempotency key;
     // never manufacture a DTO to bypass a fresh preview/identity check.
-    freezeJson(value.preview);
+    freezeJson(plan.preview);
     const approved = Object.freeze({
-      plan_id: value.plan_id,
-      run_id: value.run_id,
-      request_id: value.request_id,
-      preview: value.preview,
+      plan_id: plan.plan_id,
+      run_id: plan.run_id,
+      request_id: plan.request_id,
+      preview: plan.preview,
     });
     if (!this.#daemonId || !this.#buildId)
       throw DaemonApiError.fromKey('identity', 'planLacksAVerifiedDaemonIdentity');
