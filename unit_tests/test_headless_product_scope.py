@@ -8,7 +8,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RETIRED_TESTS = ["test_gui_*.py", "daemon/test_installed_gui_http.py"]
 
 
 def test_distribution_declares_only_supported_packages_and_entrypoints():
@@ -24,35 +23,6 @@ def test_distribution_declares_only_supported_packages_and_entrypoints():
     assert "wavedl-gui" not in scripts
     assert scripts["wavedl-daemon"] == "wavedl_daemon.cli:main"
     assert scripts["wavedl"] == "wavedl.client:main"
-
-
-def test_only_retired_desktop_test_modules_are_excluded_from_collection():
-    module = ast.parse((ROOT / "unit_tests/conftest.py").read_text())
-    values = [
-        ast.literal_eval(node.value)
-        for node in module.body
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "collect_ignore_glob"
-            for target in node.targets
-        )
-    ]
-    assert values == [RETIRED_TESTS]
-
-
-def test_daemon_only_collection_excludes_retired_desktop_smoke():
-    """The dependency-light daemon invocation must not need the parent conftest."""
-    module = ast.parse((ROOT / "unit_tests/daemon/conftest.py").read_text())
-    values = [
-        ast.literal_eval(node.value)
-        for node in module.body
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "collect_ignore"
-            for target in node.targets
-        )
-    ]
-    assert values == [["test_installed_gui_http.py"]]
 
 
 def test_supported_runtime_has_no_desktop_imports():

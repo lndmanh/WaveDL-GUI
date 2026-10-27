@@ -30,22 +30,22 @@
 
 </div>
 
-### Product direction — 2026-10-15
+### Product direction — 2026-10-27
 
 WaveDL is a new daemon/browser application with a daemon-free training CLI.
-The local browser client is the primary interface. Legacy Qt compatibility,
-old-user-data migration, a deprecation period and an intermediate release
-retaining Qt are not product requirements. Qt source may remain temporarily in
-this dirty checkout as unshipped historical material; it is not the active
-application, and this statement does not claim its physical deletion.
+The local browser client is the primary interface. The Qt desktop application
+has been physically removed from the repository; its source history is preserved
+at tag `archive/qt-desktop-2026-10-27`. Legacy Qt compatibility, old-user-data
+migration, a deprecation period and an intermediate release retaining Qt are not
+product requirements.
 
-The 24 workstation capabilities remain functional product requirements, not a
-Qt backward-compatibility matrix. API/protocol, durable-state, crash-recovery,
-security and browser acceptance safeguards remain required. Real HPC-site
-filesystem/Slurm validation is required before declaring that deployment
-supported. Final daemon/browser package and release validation remains open;
-tagging or publishing requires explicit approval. Dated evidence below records
-its original scope; older Qt-retirement gates are superseded by this direction.
+The 23 workstation capabilities remain functional product requirements.
+API/protocol, durable-state, crash-recovery, security and browser acceptance
+safeguards remain required. Real HPC-site filesystem/Slurm validation is
+required before declaring that deployment supported. Final daemon/browser
+package and release validation remains open; tagging or publishing requires
+explicit approval. Dated evidence below retains its original scope; historical
+Qt-retirement gates do not describe the current source tree.
 
 Current verification (2026-10-21): the full hosted browser workflow passes
 **191 steps with zero failures or skips**, including its twelve-case baseline,

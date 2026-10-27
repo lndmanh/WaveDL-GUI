@@ -9,13 +9,6 @@ from threading import Thread
 import pytest
 
 
-# ``pytest unit_tests/daemon --confcutdir=unit_tests/daemon`` intentionally
-# prevents the repository-level conftest from loading. Keep the retired Qt
-# wheel smoke out of that focused daemon invocation as well; the supported
-# daemon/browser suite must remain dependency-light and runnable without Qt.
-collect_ignore = ["test_installed_gui_http.py"]
-
-
 @pytest.fixture
 def paused_process():
     """Provide a bounded readiness handshake with deterministic cleanup."""

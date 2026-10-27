@@ -33,16 +33,6 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-# The unreleased product is the daemon/browser app. These retained historical
-# desktop tests are not part of its supported test suite; core/daemon/browser
-# regression tests remain collected normally. Preserve the dirty Qt source and
-# tests in the checkout without importing or shipping that retired client.
-collect_ignore_glob = [
-    "test_gui_*.py",
-    "daemon/test_installed_gui_http.py",
-]
-
-
 # ==============================================================================
 # RANDOM SEED CONTROL
 # ==============================================================================

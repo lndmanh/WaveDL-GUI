@@ -12,7 +12,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["wavedl", "wavedl.*", "wavedl_daemon", "wavedl_daemon.*"]
-exclude = ["wavedl_gui", "wavedl_gui.*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "wavedl.__version__"}
