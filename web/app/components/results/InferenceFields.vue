@@ -1,31 +1,36 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { resultsMessages } from '../../i18n/results';
+import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
 import { Field as VeeField } from 'vee-validate';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldLabel, FieldError, FieldDescription, FieldGroup } from '@/components/ui/field';
-const { t, translateKnownMessage } = useWorkstationI18n(resultsMessages);
+import { inferenceFieldMessageKeys } from '../../i18n/dynamic-keys';
+const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 defineProps<{ disabled: boolean }>();
 const numbers = [
-  { name: 'batch_size', label: 'Inference batch size', min: 1, nullable: false },
-  { name: 'workers', label: 'Data loader workers', min: 0, nullable: false },
-  { name: 'input_channels', label: 'Input channel override', min: 1, nullable: true },
-  { name: 'out_size', label: 'Output size override', min: 1, nullable: true },
-  { name: 'export_opset', label: 'ONNX opset (11–17)', min: 11, nullable: false },
+  { name: 'batch_size', label: inferenceFieldMessageKeys.batchSize, min: 1, nullable: false },
+  { name: 'workers', label: inferenceFieldMessageKeys.workers, min: 0, nullable: false },
+  {
+    name: 'input_channels',
+    label: inferenceFieldMessageKeys.inputChannels,
+    min: 1,
+    nullable: true,
+  },
+  { name: 'out_size', label: inferenceFieldMessageKeys.outputSize, min: 1, nullable: true },
+  { name: 'export_opset', label: inferenceFieldMessageKeys.opset, min: 11, nullable: false },
 ];
 const texts = [
-  { name: 'model', label: 'Optional explicit model identifier' },
-  { name: 'input_key', label: 'Input array key override' },
-  { name: 'output_key', label: 'Output array key override' },
+  { name: 'model', label: inferenceFieldMessageKeys.model },
+  { name: 'input_key', label: inferenceFieldMessageKeys.inputKey },
+  { name: 'output_key', label: inferenceFieldMessageKeys.outputKey },
 ];
 const flags = [
-  { name: 'save_predictions', label: 'Publish predictions CSV' },
-  { name: 'plot', label: 'Generate plots during evaluation' },
-  { name: 'verbose', label: 'Verbose per-sample output' },
-  { name: 'no_denorm', label: 'Export normalized ONNX outputs (no de-normalization)' },
+  { name: 'save_predictions', label: inferenceFieldMessageKeys.predictions },
+  { name: 'plot', label: inferenceFieldMessageKeys.plot },
+  { name: 'verbose', label: inferenceFieldMessageKeys.verbose },
+  { name: 'no_denorm', label: inferenceFieldMessageKeys.normalized },
 ];
 function numberValue(value: string | number, nullable: boolean): number | null {
   return value === '' ? (nullable ? null : Number.NaN) : Number(value);
@@ -49,9 +54,7 @@ function formatValue(event: Event): string {
       v-slot="{ field, errors }"
       :name="`config.${item.name}`"
       ><Field :data-invalid="!!errors.length"
-        ><FieldLabel :for="`inference-${item.name}`">{{
-          translateKnownMessage(item.label)
-        }}</FieldLabel
+        ><FieldLabel :for="`inference-${item.name}`">{{ t(item.label) }}</FieldLabel
         ><Input
           :id="`inference-${item.name}`"
           type="number"
@@ -61,7 +64,7 @@ function formatValue(event: Event): string {
           :aria-invalid="!!errors.length"
           @update:model-value="field.onChange(numberValue($event, item.nullable))" /><FieldError
           v-if="errors.length"
-          :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+          :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField
       v-for="item in texts"
@@ -69,9 +72,7 @@ function formatValue(event: Event): string {
       v-slot="{ field, errors }"
       :name="`config.${item.name}`"
       ><Field :data-invalid="!!errors.length"
-        ><FieldLabel :for="`inference-${item.name}`">{{
-          translateKnownMessage(item.label)
-        }}</FieldLabel
+        ><FieldLabel :for="`inference-${item.name}`">{{ t(item.label) }}</FieldLabel
         ><Input
           :id="`inference-${item.name}`"
           :model-value="field.value ?? ''"
@@ -80,11 +81,11 @@ function formatValue(event: Event): string {
           @update:model-value="field.onChange(nullableText($event))"
           @blur="field.onBlur" /><FieldError
           v-if="errors.length"
-          :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+          :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField v-slot="{ field, errors }" name="config.format"
       ><Field :data-invalid="!!errors.length"
-        ><FieldLabel for="inference-format">{{ t('datasetFormat') }}</FieldLabel
+        ><FieldLabel for="inference-format">{{ t('results.datasetFormat') }}</FieldLabel
         ><select
           id="inference-format"
           :value="field.value"
@@ -93,15 +94,13 @@ function formatValue(event: Event): string {
           @change="field.onChange(formatValue($event))"
         >
           <option v-for="value in ['auto', 'npz', 'mat', 'hdf5']" :key="value" :value="value">
-            {{ value === 'auto' ? t('auto') : value }}
+            {{ value === 'auto' ? t('results.auto') : value }}
           </option></select
-        ><FieldError
-          v-if="errors.length"
-          :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+        ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField v-slot="{ field, errors }" name="config.import_modules">
       <Field :data-invalid="!!errors.length" :data-disabled="disabled">
-        <FieldLabel for="inference-import-modules">{{ t('importModules') }}</FieldLabel>
+        <FieldLabel for="inference-import-modules">{{ t('results.importModules') }}</FieldLabel>
         <Input
           id="inference-import-modules"
           :model-value="field.value?.join(', ') ?? ''"
@@ -110,16 +109,13 @@ function formatValue(event: Event): string {
           @update:model-value="field.onChange(listValue($event) ?? [])"
           @blur="field.onBlur"
         />
-        <FieldDescription>{{ t('importModulesHelp') }}</FieldDescription>
-        <FieldError
-          v-if="errors.length"
-          :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))"
-        />
+        <FieldDescription>{{ t('results.importModulesHelp') }}</FieldDescription>
+        <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
       </Field>
     </VeeField>
     <VeeField v-slot="{ field, errors }" name="config.param_names"
       ><Field :data-invalid="!!errors.length"
-        ><FieldLabel for="inference-parameters">{{ t('parameters') }}</FieldLabel
+        ><FieldLabel for="inference-parameters">{{ t('results.parameters') }}</FieldLabel
         ><Input
           id="inference-parameters"
           :model-value="field.value?.join(', ') ?? ''"
@@ -128,21 +124,19 @@ function formatValue(event: Event): string {
           @update:model-value="field.onChange(listValue($event))"
           @blur="field.onBlur" /><FieldError
           v-if="errors.length"
-          :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+          :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField v-slot="{ field, errors }" name="config.plot_format"
       ><Field :data-invalid="!!errors.length"
-        ><FieldLabel for="inference-plot-formats">{{ t('formats') }}</FieldLabel
+        ><FieldLabel for="inference-plot-formats">{{ t('results.formats') }}</FieldLabel
         ><Input
           id="inference-plot-formats"
           :model-value="field.value?.join(', ') ?? ''"
           :disabled="disabled"
           :aria-invalid="!!errors.length"
           @update:model-value="field.onChange(listValue($event))"
-          @blur="field.onBlur" /><FieldDescription>{{ t('formatHelp') }}</FieldDescription
-        ><FieldError
-          v-if="errors.length"
-          :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+          @blur="field.onBlur" /><FieldDescription>{{ t('results.formatHelp') }}</FieldDescription
+        ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField
       v-for="item in flags"
@@ -152,16 +146,14 @@ function formatValue(event: Event): string {
       ><Field orientation="horizontal" :data-invalid="!!errors.length"
         ><Checkbox
           :id="`inference-${item.name}`"
-          :aria-label="translateKnownMessage(item.label)"
+          :aria-label="t(item.label)"
           :model-value="field.value"
           :disabled="disabled"
           :aria-invalid="!!errors.length"
           @update:model-value="field.onChange($event === true)" /><FieldLabel
           :for="`inference-${item.name}`"
-          >{{ translateKnownMessage(item.label) }}</FieldLabel
-        ><FieldError
-          v-if="errors.length"
-          :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+          >{{ t(item.label) }}</FieldLabel
+        ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
   </FieldGroup>
 </template>

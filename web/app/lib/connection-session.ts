@@ -1,4 +1,10 @@
 import {
+  clientError,
+  type ClientErrorKey,
+  type ClientErrorParams,
+  type ClientMessage,
+} from '../i18n/client-messages';
+import {
   DaemonApi,
   DaemonApiError,
   stripBootstrapUrl,
@@ -24,7 +30,7 @@ export type ConnectionStatus =
 export interface ConnectionState {
   status: ConnectionStatus;
   health: Health | null;
-  message: string | null;
+  message: ClientMessage | Error | null;
   revision: number;
   buildMismatch: boolean;
 }
@@ -51,9 +57,20 @@ export class ConnectionSessionError extends Error {
       | 'request',
     message: string,
     public readonly status?: number,
+    public readonly clientMessageKey?: ClientErrorKey,
+    public readonly clientMessageParams?: ClientErrorParams,
   ) {
     super(message);
     this.name = 'ConnectionSessionError';
+  }
+
+  static fromKey(
+    code: ConnectionSessionError['code'],
+    key: ClientErrorKey,
+    options: { status?: number; params?: ClientErrorParams } = {},
+  ): ConnectionSessionError {
+    const { status, params } = options;
+    return new ConnectionSessionError(code, clientError(key, params).message, status, key, params);
   }
 }
 
@@ -84,7 +101,7 @@ export class ConnectionSession {
     this.#fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
     this.#timeoutMs = options.timeoutMs ?? 15_000;
     if (!Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs < 1)
-      throw new Error('Invalid connection deadline');
+      throw clientError('invalidConnectionDeadline', {});
     this.#online = options.online ?? true;
     if (!this.#online) this.#state = Object.freeze({ ...this.#state, status: 'offline' });
   }
@@ -101,7 +118,7 @@ export class ConnectionSession {
   }
   #publish(
     status: ConnectionStatus,
-    message: string | null = null,
+    message: ClientMessage | Error | null = null,
     health: Health | null = null,
     buildMismatch = false,
   ): void {
@@ -156,9 +173,7 @@ export class ConnectionSession {
     this.#revoke();
     this.#publish(
       online ? 'disconnected' : 'offline',
-      online
-        ? 'Reconnect explicitly to verify the daemon again.'
-        : 'Offline: live status and actions are unavailable.',
+      online ? clientError('reconnectRequired') : clientError('connectionOffline'),
     );
   }
   async connect(token: string, keepSignedIn = false): Promise<boolean> {
@@ -168,7 +183,7 @@ export class ConnectionSession {
         const health = await api.health(signal);
         const grant = await api.rotateSession(signal);
         if (grant.access_token === token) {
-          throw new DaemonApiError('response', 'The daemon returned its master credential.');
+          throw DaemonApiError.fromKey('response', 'masterCredentialReturned');
         }
         api.setRotatedToken(grant.access_token);
         this.#assertGrantIdentity(grant, health);
@@ -193,7 +208,7 @@ export class ConnectionSession {
   }
   async resume(credential: SessionCredential, keepSignedIn = false): Promise<boolean> {
     if (credential.origin !== this.#origin) {
-      this.#fail(new DaemonApiError('identity', 'Daemon identity changed'));
+      this.#fail(DaemonApiError.fromKey('identity', 'daemonIdentityChanged'));
       return false;
     }
     this.#daemonId = credential.daemonId;
@@ -244,7 +259,7 @@ export class ConnectionSession {
     keepSignedIn = false,
   ): Promise<boolean> {
     if (invalid || !code) {
-      this.#fail(new DaemonApiError('authentication', 'Enter the daemon bearer credential.'));
+      this.#fail(DaemonApiError.fromKey('authentication', 'credentialRequired'));
       return false;
     }
     return this.#connect(async (api, signal) => {
@@ -376,7 +391,10 @@ export class ConnectionSession {
   }
   #assertGrantIdentity(grant: SessionGrant, health: Health): void {
     if (grant.daemon_id !== health.daemon_id)
-      throw new DaemonApiError('identity', 'Daemon identity changed', 409, false, true);
+      throw DaemonApiError.fromKey('identity', 'daemonIdentityChanged', {
+        status: 409,
+        daemonIdentityChanged: true,
+      });
   }
   async perform<T>(
     work: (api: DaemonApi, signal: AbortSignal) => Promise<T>,
@@ -385,10 +403,7 @@ export class ConnectionSession {
     const api = this.api;
     const scope = this.#scope;
     if (!this.#online || !api || !scope)
-      throw new ConnectionSessionError(
-        'unavailable',
-        'Connect to a verified daemon before using live actions.',
-      );
+      throw ConnectionSessionError.fromKey('unavailable', 'connectionRequired');
     const revision = this.#state.revision;
     const signal = options.signal ? AbortSignal.any([scope.signal, options.signal]) : scope.signal;
     try {
@@ -398,17 +413,11 @@ export class ConnectionSession {
         options.timeoutMs ?? this.#timeoutMs,
       );
       if (revision !== this.#state.revision || signal.aborted)
-        throw new ConnectionSessionError(
-          'stale',
-          'The connection scope changed; discard this result.',
-        );
+        throw ConnectionSessionError.fromKey('stale', 'connectionScopeChanged');
       return result;
     } catch (error) {
       if (revision !== this.#state.revision || signal.aborted)
-        throw new ConnectionSessionError(
-          'stale',
-          'The connection scope changed; discard this result.',
-        );
+        throw ConnectionSessionError.fromKey('stale', 'connectionScopeChanged');
       this.reportFailure(error instanceof Error ? error : undefined);
       throw this.#safeError(error instanceof Error ? error : undefined);
     }
@@ -419,19 +428,14 @@ export class ConnectionSession {
     timeoutMs: number,
   ): Promise<T> {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 0)
-      throw new ConnectionSessionError('request', 'Invalid request deadline.');
+      throw ConnectionSessionError.fromKey('request', 'invalidRequestDeadline');
     const controller = new AbortController();
     const signal = AbortSignal.any([scope, controller.signal]);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let rejectAbort: (() => void) | undefined;
     const aborted = new Promise<never>((_resolve, reject) => {
       rejectAbort = () =>
-        reject(
-          new ConnectionSessionError(
-            'request',
-            'The request was interrupted or timed out; verify its outcome before retrying.',
-          ),
-        );
+        reject(ConnectionSessionError.fromKey('request', 'requestOutcomeUnknown'));
       signal.addEventListener('abort', rejectAbort, { once: true });
       if (signal.aborted) rejectAbort();
     });
@@ -448,42 +452,29 @@ export class ConnectionSession {
     if (error instanceof ConnectionSessionError) return error;
     if (error instanceof DaemonApiError) {
       if (error.code === 'authentication')
-        return new ConnectionSessionError('authentication', 'Your session ended. Sign in again.');
+        return ConnectionSessionError.fromKey('authentication', 'yourSessionEndedSignInAgain');
       if (error.code === 'identity')
         return error.daemonIdentityChanged
-          ? new ConnectionSessionError(
-              'identity',
-              'A different WaveDL daemon is now serving this address. Sign in again.',
-              error.status,
-            )
-          : new ConnectionSessionError(
-              'identity',
-              'Daemon identity changed. Sign in again to verify this daemon.',
-              error.status,
-            );
+          ? ConnectionSessionError.fromKey('identity', 'daemonReplaced', { status: error.status })
+          : ConnectionSessionError.fromKey('identity', 'daemonIdentityUnverified', {
+              status: error.status,
+            });
       if (error.code === 'protocol')
-        return new ConnectionSessionError(
-          'skew',
-          'Daemon identity, build or protocol changed. Update the client or explicitly disconnect before changing daemon scope.',
-        );
+        return ConnectionSessionError.fromKey('skew', 'daemonScopeChanged');
       if (error.code === 'response')
-        return new ConnectionSessionError(
-          'response',
-          'The daemon returned an invalid response. Reconnect to verify its identity.',
-        );
+        return ConnectionSessionError.fromKey('response', 'daemonResponseInvalid');
     }
-    return new ConnectionSessionError(
-      'request',
-      'The daemon request failed. Verify connectivity and the operation outcome before retrying.',
-      error instanceof DaemonApiError &&
+    return ConnectionSessionError.fromKey('request', 'daemonUnavailable', {
+      status:
+        error instanceof DaemonApiError &&
         error.code === 'http' &&
         typeof error.status === 'number' &&
         Number.isInteger(error.status) &&
         error.status >= 400 &&
         error.status <= 599
-        ? error.status
-        : undefined,
-    );
+          ? error.status
+          : undefined,
+    });
   }
   #fail(error?: Error, rejectedToken?: string): void {
     const safe = this.#safeError(error);
@@ -500,7 +491,7 @@ export class ConnectionSession {
         : safe.code === 'identity' || safe.code === 'skew'
           ? 'skew'
           : 'error',
-      safe.message,
+      safe,
       null,
       error instanceof DaemonApiError && error.buildMismatch,
     );

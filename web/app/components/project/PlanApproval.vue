@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
+import { useI18n } from 'vue-i18n';
 import { computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { validateJson, type PlanView, type Json } from '../../lib/daemon-api';
 
-const { t, translateKnownMessage } = useWorkstationI18n(projectMessages);
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ plan: PlanView; busy: boolean; acknowledged?: boolean }>();
 defineEmits<{ submit: []; status: [] }>();
 const preview = computed(() => JSON.stringify(props.plan.preview, null, 2));
@@ -24,11 +23,11 @@ const manifest = computed(() => {
 <template>
   <section aria-labelledby="approved-plan-title" class="flex flex-col gap-4 border-t pt-6">
     <h2 id="approved-plan-title" class="text-xl font-medium">
-      {{ translateKnownMessage('Persisted plan for approval') }}
+      {{ t('project.persistedPlanForApproval') }}
     </h2>
     <p>
       {{
-        t('Run {run} · request {request} · plan {plan}', {
+        t('project.runRunRequestRequestPlanPlan', {
           run: plan.run_id,
           request: plan.request_id,
           plan: plan.plan_id,
@@ -36,42 +35,32 @@ const manifest = computed(() => {
       }}
     </p>
     <p>
-      {{
-        translateKnownMessage(
-          "This is the daemon's immutable normalized configuration, manifest, paths, command and warnings—not a prediction from your draft. Read it before starting. Submission sends only this exact plan ID.",
-        )
-      }}
+      {{ t('project.planManifestHelp') }}
     </p>
     <pre
       v-if="manifest"
       class="max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs"
       tabindex="0"
-      :aria-label="translateKnownMessage('Approved normalized manifest')"
+      :aria-label="t('project.approvedNormalizedManifest')"
       >{{ manifest }}</pre>
     <details>
-      <summary>{{ translateKnownMessage('Full persisted execution plan') }}</summary>
+      <summary>{{ t('project.fullPersistedExecutionPlan') }}</summary>
       <pre
         class="max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs"
         tabindex="0"
-        :aria-label="translateKnownMessage('Persisted execution plan')"
+        :aria-label="t('project.persistedExecutionPlan')"
         >{{ preview }}</pre>
     </details>
     <div class="flex flex-wrap gap-3">
       <Button type="button" :disabled="busy || acknowledged" @click="$emit('submit')">{{
-        translateKnownMessage(
-          acknowledged ? 'Submission acknowledged' : 'Approve and start this plan',
-        )
+        t(acknowledged ? 'project.submissionAcknowledged' : 'project.approveAndStartThisPlan')
       }}</Button
       ><Button type="button" variant="outline" :disabled="busy" @click="$emit('status')">{{
-        translateKnownMessage('Check submission status')
+        t('project.checkSubmissionStatus')
       }}</Button>
     </div>
     <p class="text-sm text-muted-foreground">
-      {{
-        translateKnownMessage(
-          'If acknowledgment is lost, check status or retry this same approved plan. Leaving this page stops browser waiting, never cancels server work.',
-        )
-      }}
+      {{ t('project.planRetryHelp') }}
     </p>
   </section>
 </template>

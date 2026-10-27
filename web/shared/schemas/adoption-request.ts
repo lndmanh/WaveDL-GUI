@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { validationMessage } from '../../app/i18n/client-messages';
 
 export const adoptionFormSchema = z.object({
   attempt: z.coerce
     .number()
     .int()
-    .positive('Choose a positive runtime attempt.')
+    .positive({ error: () => validationMessage('chooseAPositiveRuntimeAttempt') })
     .max(Number.MAX_SAFE_INTEGER),
 });
 

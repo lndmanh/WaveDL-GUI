@@ -1,18 +1,18 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
-import { computed, defineComponent, h, shallowRef } from 'vue';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
+import { defineComponent, h, shallowRef } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkstationShell from '../../app/components/WorkstationShell.vue';
 import ConnectionPanel from '../../app/components/ConnectionPanel.vue';
 import SettingsWorkspace from '../../app/components/settings/SettingsWorkspace.vue';
 import TrainingDefaultsSettings from '../../app/components/settings/TrainingDefaultsSettings.vue';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import {
   defaultAppearance,
   loadAppearance,
   type AppearancePreferences,
 } from '../../app/lib/preferences';
-import type { WorkstationLocale } from '../../app/i18n/core';
+import { clientError, configureValidationLocale } from '../../app/i18n/client-messages';
 
 beforeEach(() => {
   const items = new Map<string, string>();
@@ -31,16 +31,17 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  configureValidationLocale('en');
   document.documentElement.classList.remove('dark');
   document.documentElement.removeAttribute('style');
 });
 
 describe('shell and settings live localization', () => {
   it('saves language through the existing event and switches mounted shell without resetting fields', async () => {
+    const i18n = createTestI18n('en');
     const appearance = shallowRef<AppearancePreferences>({ ...defaultAppearance });
     const Host = defineComponent({
       setup() {
-        provideWorkstationLocale(computed(() => appearance.value.language));
         return () =>
           h(
             WorkstationShell,
@@ -52,13 +53,14 @@ describe('shell and settings live localization', () => {
                   appearance: appearance.value,
                   onAppearanceChanged: (value: AppearancePreferences) => {
                     appearance.value = value;
+                    i18n.global.locale.value = value.language;
                   },
                 }),
             },
           );
       },
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
     const initial = wrapper.get('#preference-theme').element;
     expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
@@ -88,24 +90,25 @@ describe('shell and settings live localization', () => {
   });
 
   it('applies Vietnamese for the session when storage rejects saving, and translates the stored notice on switch', async () => {
+    const i18n = createTestI18n('en');
     vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota');
     });
     const appearance = shallowRef<AppearancePreferences>({ ...defaultAppearance });
     const Host = defineComponent({
       setup() {
-        provideWorkstationLocale(computed(() => appearance.value.language));
         return () =>
           h(SettingsWorkspace, {
             daemonId: null,
             appearance: appearance.value,
             onAppearanceChanged: (value: AppearancePreferences) => {
               appearance.value = value;
+              i18n.global.locale.value = value.language;
             },
           });
       },
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
     await wrapper.get('#preference-language').setValue('vi');
     await wrapper.get('form').trigger('submit');
@@ -114,17 +117,17 @@ describe('shell and settings live localization', () => {
     );
     expect(loadAppearance().language).toBe('en');
     appearance.value = { ...appearance.value, language: 'en' };
+    i18n.global.locale.value = 'en';
     await flushPromises();
     expect(wrapper.text()).toContain('Applied for this session. Browser storage is unavailable.');
     wrapper.unmount();
   });
 
   it('switches connection notices and validation while preserving an entered credential', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
-    const message = shallowRef('Your session ended. Sign in again.');
+    const i18n = createTestI18n('en');
+    const message = shallowRef(clientError('yourSessionEndedSignInAgain'));
     const Host = defineComponent({
       setup() {
-        provideWorkstationLocale(locale);
         return () =>
           h(ConnectionPanel, {
             state: {
@@ -136,14 +139,15 @@ describe('shell and settings live localization', () => {
           });
       },
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
     await wrapper.get('#daemon-bearer').setValue('private-token');
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
+    configureValidationLocale('vi');
     await flushPromises();
     expect(wrapper.text()).toContain('Phiên của bạn đã kết thúc. Hãy đăng nhập lại.');
     expect(wrapper.get('#daemon-bearer').element).toHaveProperty('value', 'private-token');
-    message.value = 'A different WaveDL daemon is now serving this address. Sign in again.';
+    message.value = clientError('daemonReplaced');
     await flushPromises();
     expect(wrapper.text()).toContain(
       'Một daemon WaveDL khác đang phục vụ địa chỉ này. Hãy đăng nhập lại.',
@@ -157,14 +161,13 @@ describe('shell and settings live localization', () => {
   });
 
   it('translates saved training notices at render time without resetting unsaved defaults', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const Host = defineComponent({
       setup() {
-        provideWorkstationLocale(locale);
         return () => h(TrainingDefaultsSettings, { daemonId: 'stable-daemon' });
       },
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
     await wrapper.get('[id$="-training-epochs"]').setValue('17');
     await wrapper.get('form').trigger('submit');
@@ -172,7 +175,7 @@ describe('shell and settings live localization', () => {
       expect(wrapper.text()).toContain('Defaults saved for new drafts on this daemon.'),
     );
     await wrapper.get('[id$="-training-epochs"]').setValue('29');
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await flushPromises();
     expect(wrapper.text()).toContain('Đã lưu mặc định cho bản nháp mới trên daemon này.');
     expect(wrapper.get('[id$="-training-epochs"]').element).toHaveProperty('value', '29');

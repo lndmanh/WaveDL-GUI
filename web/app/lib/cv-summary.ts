@@ -1,3 +1,4 @@
+import { clientError } from '../i18n/client-messages';
 import { ArtifactClient, type Artifact } from './artifact-client';
 import type { ConnectionSession } from './connection-session';
 import { object, parseJson } from './daemon-api';
@@ -26,7 +27,7 @@ export interface CvSummary {
   fold_results: readonly CvFold[];
 }
 const invalid = (): never => {
-  throw new Error('Invalid cross-validation summary.');
+  throw clientError('invalidCrossValidationSummary', {});
 };
 function metric(value: unknown): CvMetric {
   return value === null || (typeof value === 'number' && Number.isFinite(value))
@@ -160,7 +161,7 @@ export async function loadCvSummary(
   const client = new ArtifactClient(session);
   client.assertSelection(artifact);
   if (artifact.path !== 'cv_summary.json' || artifact.size > CV_SUMMARY_BUDGET)
-    throw new Error('Select a cross-validation summary within the 1 MiB limit.');
+    throw clientError('cvSummaryTooLarge', {});
   const blob = await client.verifiedBlob(artifact, signal);
   signal?.throwIfAborted();
   const text = await blob.text();

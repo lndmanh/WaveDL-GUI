@@ -1,29 +1,22 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
+import { useI18n } from 'vue-i18n';
 import { Button } from '@/components/ui/button';
+import { projectGuideMessageKeys } from '../../i18n/dynamic-keys';
 
-const { translateKnownMessage } = useWorkstationI18n(projectMessages);
+const { t } = useI18n({ useScope: 'global' });
 defineProps<{ enabled: boolean; step: number; busy: boolean }>();
 defineEmits<{ toggle: []; previous: []; next: [] }>();
-const steps = [
-  'Dataset',
-  'Model',
-  'Preset',
-  'Training & runtime',
-  'Review & approval',
-  'Acknowledged',
-];
+const steps = projectGuideMessageKeys;
 </script>
 <template>
-  <nav :aria-label="translateKnownMessage('Guided training authoring')" class="flex flex-col gap-4">
+  <nav :aria-label="t('project.guidedTrainingAuthoring')" class="flex flex-col gap-4">
     <Button
       type="button"
       variant="outline"
       class="self-start"
       :disabled="busy"
       @click="$emit('toggle')"
-      >{{ translateKnownMessage(enabled ? 'Show full editor' : 'Use guided steps') }}</Button
+      >{{ t(enabled ? 'project.showFullEditor' : 'project.useGuidedSteps') }}</Button
     ><template v-if="enabled"
       ><ol class="flex flex-wrap gap-3">
         <li
@@ -32,15 +25,11 @@ const steps = [
           :aria-current="index === step ? 'step' : undefined"
           :class="index === step ? 'font-medium' : 'text-muted-foreground'"
         >
-          {{ index + 1 }}. {{ translateKnownMessage(label) }}
+          {{ index + 1 }}. {{ t(label) }}
         </li>
       </ol>
       <p>
-        {{
-          translateKnownMessage(
-            "Guided steps share the ordinary editor's draft and validation. Advancing never plans or starts a run.",
-          )
-        }}
+        {{ t('project.guideHelp') }}
       </p>
       <div class="flex gap-3">
         <Button
@@ -48,13 +37,13 @@ const steps = [
           variant="outline"
           :disabled="busy || step === 0"
           @click="$emit('previous')"
-          >{{ translateKnownMessage('Previous step') }}</Button
+          >{{ t('project.previousStep') }}</Button
         ><Button
           type="button"
           variant="outline"
           :disabled="busy || step >= 4"
           @click="$emit('next')"
-          >{{ translateKnownMessage('Next step') }}</Button
+          >{{ t('project.nextStep') }}</Button
         >
       </div></template
     >

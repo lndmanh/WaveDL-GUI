@@ -1,4 +1,5 @@
 import { toRaw } from 'vue';
+import type { ClientErrorKey, ClientErrorParams } from '../i18n/client-messages';
 import { adoptionRequestSchema, type AdoptionRequest } from '../../shared/schemas/adoption-request';
 import { CatalogApi, type DataSelection } from './catalog-api';
 import type { ConnectionSession } from './connection-session';
@@ -29,6 +30,8 @@ export class AdoptionError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly clientMessageKey?: ClientErrorKey,
+    readonly clientMessageParams?: ClientErrorParams,
   ) {
     super(message);
     this.name = 'AdoptionError';
@@ -54,7 +57,7 @@ function response(
     value.backend_status !== 'unknown' ||
     value.adopted !== true
   )
-    throw new DaemonApiError('response', 'Invalid adoption acknowledgement.');
+    throw DaemonApiError.fromKey('response', 'invalidAdoptionAcknowledgement');
   return Object.freeze({
     plan_id: value.plan_id,
     run_id: value.run_id,
@@ -104,10 +107,19 @@ export class AdoptionWorkflow {
   }
   prepare(directory: DataSelection, attempt: number): void {
     new CatalogApi(this.session).assertSelection(directory);
-    if (directory.kind !== 'directory') throw new AdoptionError('Choose a daemon run directory.');
+    if (directory.kind !== 'directory')
+      throw new AdoptionError(
+        'Choose a daemon run directory.',
+        undefined,
+        'chooseADaemonRunDirectory',
+      );
     const request = adoptionRequestSchema.parse({ path: directory.path, attempt });
     if (this.#status === 'pending')
-      throw new AdoptionError('Wait for the current adoption acknowledgement.');
+      throw new AdoptionError(
+        'Wait for the current adoption acknowledgement.',
+        undefined,
+        'adoptionAwaitingAck',
+      );
     const same =
       this.#daemonId === directory.daemonId &&
       this.#request?.path === request.path &&
@@ -115,6 +127,8 @@ export class AdoptionWorkflow {
     if (this.#status === 'acknowledgement_unknown' && !same)
       throw new AdoptionError(
         'Revalidate the same directory and attempt before retrying the retained request.',
+        undefined,
+        'adoptionRevalidationRequired',
       );
     if (!same) {
       this.#key = this.keyFactory();
@@ -128,10 +142,18 @@ export class AdoptionWorkflow {
   }
   async adopt(): Promise<AdoptionResult> {
     if (!this.#source || !this.#request)
-      throw new AdoptionError('Select a daemon directory and attempt first.');
+      throw new AdoptionError(
+        'Select a daemon directory and attempt first.',
+        undefined,
+        'adoptionSelectionRequired',
+      );
     new CatalogApi(this.session).assertSelection(this.#source);
     if (this.#status === 'pending')
-      throw new AdoptionError('An adoption request is already pending.');
+      throw new AdoptionError(
+        'An adoption request is already pending.',
+        undefined,
+        'adoptionAlreadyPending',
+      );
     if (this.#result && this.#confirmedRevision === this.session.snapshot().revision)
       return this.#result;
     const request = this.#request;
@@ -164,6 +186,7 @@ export class AdoptionWorkflow {
           ? 'The daemon rejected adoption. No ownership confirmation was received.'
           : 'Adoption acknowledgement is unknown. Reconnect and reselect the same directory and attempt, then retry the retained request.',
         httpStatus,
+        this.#status === 'rejected' ? 'adoptionRejected' : 'adoptionAckUnknown',
       );
     }
   }

@@ -1,8 +1,16 @@
 import { onBeforeUnmount, shallowRef } from 'vue';
+import { datasetExportMessageKeys } from '../i18n/dynamic-keys';
 
 /** Native download handoff with no claim that the browser saved the file. */
 export function usePreviewExport(filename: string) {
-  const exportMessage = shallowRef('');
+  const exportMessage = shallowRef<
+    | ''
+    | 'datasets.pngExportUnavailable'
+    | 'datasets.pngExportPreparing'
+    | 'datasets.pngExportPreparationFailed'
+    | 'datasets.pngExportRequested'
+    | 'datasets.pngExportRequestFailed'
+  >('');
   const exporting = shallowRef(false);
   let revision = 0;
   function resetExport() {
@@ -14,18 +22,18 @@ export function usePreviewExport(filename: string) {
   function exportPng(canvas: HTMLCanvasElement | null | undefined) {
     if (exporting.value) return;
     if (!canvas) {
-      exportMessage.value = 'PNG export is unavailable until the chart is ready.';
+      exportMessage.value = datasetExportMessageKeys.unavailable;
       return;
     }
     const current = revision;
     exporting.value = true;
-    exportMessage.value = 'Preparing PNG export…';
+    exportMessage.value = datasetExportMessageKeys.preparing;
     try {
       canvas.toBlob((blob) => {
         if (current !== revision) return;
         exporting.value = false;
         if (!blob) {
-          exportMessage.value = 'PNG export could not be prepared. Retry the export.';
+          exportMessage.value = datasetExportMessageKeys.preparationFailed;
           return;
         }
         let url: string | undefined;
@@ -35,11 +43,9 @@ export function usePreviewExport(filename: string) {
           link.href = url;
           link.download = filename;
           link.click();
-          exportMessage.value =
-            'PNG export requested. Your browser controls where it is saved; this is the bounded preview.';
+          exportMessage.value = datasetExportMessageKeys.requested;
         } catch {
-          exportMessage.value =
-            'PNG export could not be requested. Check browser download settings and retry.';
+          exportMessage.value = datasetExportMessageKeys.requestFailed;
         } finally {
           if (url) {
             const requestedUrl = url;
@@ -49,7 +55,7 @@ export function usePreviewExport(filename: string) {
       });
     } catch {
       exporting.value = false;
-      exportMessage.value = 'PNG export could not be prepared. Retry the export.';
+      exportMessage.value = datasetExportMessageKeys.preparationFailed;
     }
   }
   return { exportMessage, exporting, exportPng, resetExport };

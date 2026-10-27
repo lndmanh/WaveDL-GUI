@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { translateClientDiagnostic } from '../../app/i18n/client-messages';
 import { AutoPlotController, automaticPlotRequest } from '../../app/lib/autoplot-controller';
 import { ConnectionSession } from './session-fixture';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
@@ -691,7 +692,9 @@ describe('actual captured automatic plot coordinator', () => {
       owner.controller.capture(train, await owner.approve());
       await owner.controller.observeFresh(train);
       expect(owner.controller.state.value.status).toBe('unavailable');
-      expect(owner.controller.state.value.message).toContain('incomplete');
+      expect(translateClientDiagnostic('en', owner.controller.state.value.message)).toContain(
+        'incomplete',
+      );
       expect(owner.session.snapshot().status).toBe('connected');
       await owner.controller.retry();
       await owner.controller.observeFresh(train);

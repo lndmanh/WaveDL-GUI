@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
 import { webcrypto } from 'node:crypto';
-import { flushPromises, mount } from '@vue/test-utils';
-import { defineComponent, h, ref, shallowRef } from 'vue';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
+import { defineComponent, h, shallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { ArtifactClient } from '../../app/lib/artifact-client';
 import { ConnectionSession } from './session-fixture';
 import { CV_SUMMARY_BUDGET, loadCvSummary, parseCvSummary } from '../../app/lib/cv-summary';
 import CvSummaryPanel from '../../app/components/results/CvSummaryPanel.vue';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../app/i18n/core';
 
 function fixture() {
   return {
@@ -147,15 +146,14 @@ describe('published CV summary contract', () => {
   });
   it('requires explicit generation choice, retains verified data on locale change, clears on disconnect', async () => {
     const { session, artifacts, downloads } = await setup();
-    const locale = ref<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const listed = shallowRef(artifacts);
     const Host = defineComponent({
       setup() {
-        provideWorkstationLocale(locale);
         return () => h(CvSummaryPanel, { session, artifacts: listed.value });
       },
     });
-    const wrapper = mount(Host);
+    const wrapper = mount(Host, undefined, i18n);
     try {
       expect(downloads).toHaveLength(0);
       expect(wrapper.get('button').attributes('disabled')).toBeDefined();
@@ -164,7 +162,7 @@ describe('published CV summary contract', () => {
       await vi.waitFor(() => expect(wrapper.text()).toContain('Overall mean'));
       expect(wrapper.text()).toContain('Unavailable');
       expect(wrapper.text()).toContain('Parameter 0');
-      locale.value = 'vi';
+      i18n.global.locale.value = 'vi';
       await flushPromises();
       expect(wrapper.text()).toContain('Trung bình tổng thể');
       expect(wrapper.text()).toContain('Không có');

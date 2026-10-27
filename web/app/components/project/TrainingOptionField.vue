@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { useClientMessages } from '../../composables/useClientMessages';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { projectMessages } from '../../i18n/project';
-import { trainingFieldMessages, trainingFieldMessageKeys } from '../../i18n/training-fields';
+import { useI18n } from 'vue-i18n';
+import { trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
 import { Field as VeeField } from 'vee-validate';
 import { computed, useId } from 'vue';
 import { Input } from '@/components/ui/input';
@@ -13,16 +12,13 @@ import type { Json } from '../../lib/daemon-api';
 import { trainingFieldMetadata } from '../../../shared/schemas/training-request';
 
 const { clientMessage } = useClientMessages();
-const { translateKnownMessage } = useWorkstationI18n(projectMessages);
-const { t: fieldMessage } = useWorkstationI18n(trainingFieldMessages);
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ name: string; disabled: boolean }>();
 const option = trainingFieldMetadata.find((item) => item.name === props.name);
-const messageKeys = Object.entries(trainingFieldMessageKeys).find(
-  ([name]) => name === props.name,
-)?.[1];
+const messageKeys = trainingFieldMessageKeys[props.name];
 const idPrefix = useId();
 const controlId = computed(() => `${idPrefix}-training-${props.name}`);
-const label = computed(() => (messageKeys ? fieldMessage(messageKeys.label) : props.name));
+const label = computed(() => (messageKeys ? t(messageKeys.label) : props.name));
 function listText(value: Json): string {
   return Array.isArray(value) ? value.join('\n') : '';
 }
@@ -92,10 +88,8 @@ function stringValue(value: string | number): string | null {
         @blur="field.onBlur"
       />
       <FieldDescription
-        >{{ messageKeys ? fieldMessage(messageKeys.description) : name
-        }}{{
-          option.multiple ? translateKnownMessage(' Enter one value per line.') : ''
-        }}</FieldDescription
+        >{{ messageKeys ? t(messageKeys.description) : name
+        }}{{ option.multiple ? t('project.enterOneValuePerLine') : '' }}</FieldDescription
       >
       <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
     </Field>

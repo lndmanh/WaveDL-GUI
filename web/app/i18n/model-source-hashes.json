@@ -1,0 +1,286 @@
+{
+  "cnn": {
+    "description": "1f1c8b3347e072",
+    "bestFor": "123cc47f694391"
+  },
+  "resnet18": {
+    "description": "0ee6cf7e447f91",
+    "bestFor": "06cb96ac9a51d4"
+  },
+  "resnet34": {
+    "description": "0ddbbc49647e8d",
+    "bestFor": "12d2a526a4543f"
+  },
+  "resnet50": {
+    "description": "14a9478f85ecea",
+    "bestFor": "1ef92a57e71b43"
+  },
+  "resnet18_pretrained": {
+    "description": "1d8427376e6f17",
+    "bestFor": "09f6df6256b886"
+  },
+  "resnet50_pretrained": {
+    "description": "1297c94be3f544",
+    "bestFor": "0cc1a555e9bdbe"
+  },
+  "densenet121": {
+    "description": "1b3af00fe790c5",
+    "bestFor": "1641638f762ed7"
+  },
+  "densenet169": {
+    "description": "1170689a2baca7",
+    "bestFor": "0afbb926a67605"
+  },
+  "densenet121_pretrained": {
+    "description": "07d9467cfff7a2",
+    "bestFor": "0859f0f1d309dc"
+  },
+  "mobilenet_v3_small": {
+    "description": "1959fdcc7973d7",
+    "bestFor": "0bd7773160e98a"
+  },
+  "mobilenet_v3_large": {
+    "description": "150affec5d774f",
+    "bestFor": "03cb98757cd8be"
+  },
+  "efficientnet_b0": {
+    "description": "1174dd437ccfca",
+    "bestFor": "13cad1d1cb1320"
+  },
+  "efficientnet_b2": {
+    "description": "1c92ad258b88bd",
+    "bestFor": "1129fb090437cc"
+  },
+  "efficientnet_b4": {
+    "description": "11cadc72461d33",
+    "bestFor": "02c64311fb10f2"
+  },
+  "efficientnet_b7": {
+    "description": "001a1c78b568fb",
+    "bestFor": "086ad077ad1054"
+  },
+  "efficientnet_v2_s": {
+    "description": "11731dfce00e46",
+    "bestFor": "108c8deed59698"
+  },
+  "efficientnet_v2_m": {
+    "description": "04d26a18602844",
+    "bestFor": "1d863056366c24"
+  },
+  "efficientnet_v2_l": {
+    "description": "102899992c02bc",
+    "bestFor": "139788b597d8cc"
+  },
+  "regnet_y_400mf": {
+    "description": "021c7b077d8b7d",
+    "bestFor": "1d3c328ebfa8a0"
+  },
+  "regnet_y_800mf": {
+    "description": "133a68b74059b0",
+    "bestFor": "12d6863b2e2d0a"
+  },
+  "regnet_y_1_6gf": {
+    "description": "1513d82f5710b9",
+    "bestFor": "173b3793509792"
+  },
+  "regnet_y_3_2gf": {
+    "description": "1f994a21ace4b0",
+    "bestFor": "1b6bc825214d55"
+  },
+  "regnet_y_8gf": {
+    "description": "0aad1b4e1c637d",
+    "bestFor": "0fc942b6afb354"
+  },
+  "convnext_tiny": {
+    "description": "0d8acd40828a03",
+    "bestFor": "1daa9e22403b5a"
+  },
+  "convnext_small": {
+    "description": "0d15c65f348d6d",
+    "bestFor": "05b58663b35611"
+  },
+  "convnext_base": {
+    "description": "1c73ee9eaa5aee",
+    "bestFor": "1d6da709c6be07"
+  },
+  "convnext_tiny_pretrained": {
+    "description": "045969d766461c",
+    "bestFor": "0211d6e69b25d2"
+  },
+  "convnext_v2_tiny": {
+    "description": "1d5ed1d3c84916",
+    "bestFor": "0abb958e03838e"
+  },
+  "convnext_v2_small": {
+    "description": "182d7e9f3c31bf",
+    "bestFor": "12cecbc9921ee1"
+  },
+  "convnext_v2_base": {
+    "description": "144cf74c4257fb",
+    "bestFor": "06d6a96c8da7a9"
+  },
+  "convnext_v2_tiny_pretrained": {
+    "description": "19005a0fdc556d",
+    "bestFor": "0351fdba5753ce"
+  },
+  "unireplknet_tiny": {
+    "description": "1e8b28a099d31a",
+    "bestFor": "1671c89b3f0bd4"
+  },
+  "unireplknet_small": {
+    "description": "0bae0f47dc3d8a",
+    "bestFor": "1b6055ac707abe"
+  },
+  "unireplknet_base": {
+    "description": "08757bdbefaa02",
+    "bestFor": "0a50372fd35c02"
+  },
+  "vit_tiny": {
+    "description": "099db2c3c1181d",
+    "bestFor": "0292c3e5912940"
+  },
+  "vit_small": {
+    "description": "0fb9dca6117c8b",
+    "bestFor": "00f54b7bf5decf"
+  },
+  "vit_base": {
+    "description": "1bbc75520aae96",
+    "bestFor": "17c3bd929d0dd2"
+  },
+  "swin_t": {
+    "description": "0f17f7070fad6b",
+    "bestFor": "043dbb4573a9b9"
+  },
+  "swin_s": {
+    "description": "1d228bb6a38121",
+    "bestFor": "096bfdff3250ec"
+  },
+  "swin_b": {
+    "description": "0db692681d1d3f",
+    "bestFor": "00ff787c3518fb"
+  },
+  "maxvit_tiny": {
+    "description": "06e1f0dbbb2cd2",
+    "bestFor": "15d2dfd51cd127"
+  },
+  "maxvit_small": {
+    "description": "098b56ef14ae8b",
+    "bestFor": "0671904a10af84"
+  },
+  "maxvit_base": {
+    "description": "1008c063945b1c",
+    "bestFor": "1f48d8e8d0a45b"
+  },
+  "fastvit_t8": {
+    "description": "106148a697010f",
+    "bestFor": "0a7a9e72593595"
+  },
+  "fastvit_t12": {
+    "description": "199902e63a26b1",
+    "bestFor": "0083f1dfb58f18"
+  },
+  "fastvit_s12": {
+    "description": "16d756a05c487e",
+    "bestFor": "093f0b61a89018"
+  },
+  "fastvit_sa12": {
+    "description": "00dd300933f8ec",
+    "bestFor": "0ac150c2f8de8d"
+  },
+  "caformer_s18": {
+    "description": "1c1b82d49f623c",
+    "bestFor": "1a00ebe042997e"
+  },
+  "caformer_s36": {
+    "description": "16860d75ebbba5",
+    "bestFor": "0854422b90ba9f"
+  },
+  "caformer_m36": {
+    "description": "0558e7671809ae",
+    "bestFor": "19a914b6c2b8f0"
+  },
+  "poolformer_s12": {
+    "description": "0ad3a5c470a2ef",
+    "bestFor": "1ffa0fcd847871"
+  },
+  "efficientvit_m1": {
+    "description": "1288102e65c281",
+    "bestFor": "1461b682fd9804"
+  },
+  "efficientvit_b1": {
+    "description": "00a2fd7d296408",
+    "bestFor": "1da836f9ea1e45"
+  },
+  "efficientvit_b2": {
+    "description": "0b28847bbcaa1c",
+    "bestFor": "0fbc307655c8c9"
+  },
+  "efficientvit_l2": {
+    "description": "1edeae4d98aded",
+    "bestFor": "0ed28b75e0edd0"
+  },
+  "mamba_1d": {
+    "description": "0226a97ed0aaa7",
+    "bestFor": "0def5e83035b33"
+  },
+  "s4d_small": {
+    "description": "1f840009e25d4f",
+    "bestFor": "15075965392261"
+  },
+  "s4d": {
+    "description": "0516f8b8b53497",
+    "bestFor": "0a9f5af810a21d"
+  },
+  "s4d_large": {
+    "description": "07ec35287e97d8",
+    "bestFor": "128b5852c2ee64"
+  },
+  "vim_tiny": {
+    "description": "1a487f34d4b17d",
+    "bestFor": "0d71598907774a"
+  },
+  "vim_small": {
+    "description": "0f4b0fdc973fa9",
+    "bestFor": "1fcdf431d9a785"
+  },
+  "vim_base": {
+    "description": "1bb1b1e457bef1",
+    "bestFor": "112cccced65f99"
+  },
+  "tcn_small": {
+    "description": "1829788ab34dc2",
+    "bestFor": "13d3c11e208465"
+  },
+  "tcn": {
+    "description": "11c07ef06d189a",
+    "bestFor": "1d182bd42d269b"
+  },
+  "tcn_large": {
+    "description": "1c2fc3ac186f83",
+    "bestFor": "09fab4c27937af"
+  },
+  "wavenet_small": {
+    "description": "042ff59c9dc9de",
+    "bestFor": "03175f641ad5a8"
+  },
+  "wavenet": {
+    "description": "0d83571cec0680",
+    "bestFor": "0dedb8c00e8687"
+  },
+  "wavenet_large": {
+    "description": "1cbbc095ebe28d",
+    "bestFor": "12df374e58cb04"
+  },
+  "resnet3d_18": {
+    "description": "169548fdbc594e",
+    "bestFor": "16404114bca8c7"
+  },
+  "mc3_18": {
+    "description": "0a8f588399d023",
+    "bestFor": "0d0d7d22bd775f"
+  },
+  "unet_regression": {
+    "description": "06b4cba9df66be",
+    "bestFor": "17dae2360ff1b8"
+  }
+}

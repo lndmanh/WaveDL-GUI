@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, toRaw, useId, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';
@@ -8,9 +9,8 @@ import type { ConnectionSession } from '../../lib/connection-session';
 import type { DatasetInspection } from '../../lib/dataset-inspection';
 import { CatalogApi, type ModelDescription, type ModelSelection } from '../../lib/catalog-api';
 import ModelList from './ModelList.vue';
-import { catalogMessages } from '../../i18n/catalog';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-const { t, translateKnownMessage } = useWorkstationI18n(catalogMessages);
+import { modelCategoryMessageKeys } from '../../i18n/dynamic-keys';
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{
   session: ConnectionSession;
   inspection?: DatasetInspection | null;
@@ -21,11 +21,15 @@ const searchId = useId();
 const models = shallowRef<readonly ModelDescription[]>([]);
 const query = shallowRef('');
 const busy = shallowRef(false);
-const message = shallowRef('');
+const message = shallowRef<'' | 'catalog.modelsUnavailable' | 'catalog.connectionChanged'>('');
+function categoryLabel(category: string): string {
+  const key = modelCategoryMessageKeys[category as keyof typeof modelCategoryMessageKeys];
+  return key ? t(key) : category;
+}
 const page = shallowRef(0);
 const filtered = computed(() =>
   models.value.filter((model) =>
-    `${model.displayName} ${model.id} ${model.category} ${translateKnownMessage(model.category)}`
+    `${model.displayName} ${model.id} ${model.category} ${categoryLabel(model.category)}`
       .toLowerCase()
       .includes(query.value.toLowerCase()),
   ),
@@ -52,8 +56,7 @@ async function load() {
     const value = await new CatalogApi(toRaw(props.session)).models(request.signal);
     if (current === revision) models.value = value;
   } catch {
-    if (current === revision)
-      message.value = 'Model catalogue unavailable. Reconnect to the verified daemon and retry.';
+    if (current === revision) message.value = 'catalog.modelsUnavailable';
   } finally {
     if (current === revision) {
       busy.value = false;
@@ -66,7 +69,7 @@ function select(model: ModelDescription) {
     emit('select', new CatalogApi(toRaw(props.session)).selectModel(model, models.value));
   } catch {
     models.value = [];
-    message.value = 'Connection changed. Reload the catalogue before selecting.';
+    message.value = 'catalog.connectionChanged';
   }
 }
 watch(query, () => {
@@ -89,8 +92,7 @@ watch(
       if (state.status === 'connected') {
         message.value = '';
         void load();
-      } else if (state.status !== 'disconnected')
-        message.value = 'Model catalogue unavailable. Reconnect to the verified daemon and retry.';
+      } else if (state.status !== 'disconnected') message.value = 'catalog.modelsUnavailable';
     });
   },
   { immediate: true },
@@ -101,23 +103,23 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <section class="flex flex-col gap-4" :aria-label="t('modelCatalog')">
-    <h2>{{ t('chooseModel') }}</h2>
+  <section class="flex flex-col gap-4" :aria-label="t('catalog.modelCatalog')">
+    <h2>{{ t('catalog.chooseModel') }}</h2>
     <Alert
-      ><AlertTitle>{{ t('certification') }}</AlertTitle
-      ><AlertDescription>{{ t('modelSafety') }}</AlertDescription></Alert
+      ><AlertTitle>{{ t('catalog.certification') }}</AlertTitle
+      ><AlertDescription>{{ t('catalog.modelSafety') }}</AlertDescription></Alert
     >
     <Field
-      ><FieldLabel :for="searchId">{{ t('findModel') }}</FieldLabel
+      ><FieldLabel :for="searchId">{{ t('catalog.findModel') }}</FieldLabel
       ><Input :id="searchId" v-model="query" :disabled="busy" /><FieldDescription>{{
-        t('searchHelp')
+        t('catalog.searchHelp')
       }}</FieldDescription></Field
     >
     <Alert v-if="message" role="alert"
-      ><AlertTitle>{{ t('catalogStatus') }}</AlertTitle
-      ><AlertDescription>{{ translateKnownMessage(message) }}</AlertDescription></Alert
+      ><AlertTitle>{{ t('catalog.catalogStatus') }}</AlertTitle
+      ><AlertDescription>{{ t(message) }}</AlertDescription></Alert
     >
-    <p v-if="busy" role="status">{{ t('readingModels') }}</p>
+    <p v-if="busy" role="status">{{ t('catalog.readingModels') }}</p>
     <ModelList
       :models="visible"
       :busy="busy"
@@ -125,19 +127,21 @@ onBeforeUnmount(() => {
       :single-channel="singleChannel"
       @select="select"
     />
-    <p v-if="!busy && !visible.length && !message" role="status">{{ t('noModels') }}</p>
+    <p v-if="!busy && !visible.length && !message" role="status">{{ t('catalog.noModels') }}</p>
     <div class="flex flex-wrap gap-3">
       <Button variant="outline" :disabled="busy || page === 0" @click="page--">{{
-        t('previousModels')
+        t('catalog.previousModels')
       }}</Button>
       <Button
         variant="outline"
         :disabled="busy || (page + 1) * 20 >= filtered.length"
         @click="page++"
-        >{{ t('nextModels') }}</Button
+        >{{ t('catalog.nextModels') }}</Button
       >
-      <Button variant="outline" :disabled="busy" @click="load">{{ t('reloadCatalog') }}</Button>
-      <Button v-if="busy" variant="outline" @click="cancel">{{ t('stopLoading') }}</Button>
+      <Button variant="outline" :disabled="busy" @click="load">{{
+        t('catalog.reloadCatalog')
+      }}</Button>
+      <Button v-if="busy" variant="outline" @click="cancel">{{ t('catalog.stopLoading') }}</Button>
     </div>
   </section>
 </template>

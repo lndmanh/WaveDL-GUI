@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, h, onMounted, onScopeDispose, shallowRef } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHead, renderDOMHead } from '@unhead/vue/client';
 import WorkstationController from '../../app/components/WorkstationController.vue';
 import { useDaemonConnection } from '../../app/composables/useDaemonConnection';
-import { useWorkstationI18n } from '../../app/composables/useWorkstationI18n';
-import { defineMessages } from '../../app/i18n/core';
+import { useI18n } from 'vue-i18n';
 import { defaultAppearance, saveAppearance } from '../../app/lib/preferences';
 
 let capturedConnection: ReturnType<typeof useDaemonConnection> | undefined;
@@ -75,10 +75,7 @@ vi.mock('../../app/composables/useAutomaticPlots', async () => {
   };
 });
 
-const messages = defineMessages(
-  { label: 'Selected publication' },
-  { label: 'Bản công bố đã chọn' },
-);
+const messages = { en: { label: 'Selected publication' }, vi: { label: 'Bản công bố đã chọn' } };
 const sections = ['experiments', 'datasets', 'results', 'settings'] as const;
 const Shell = defineComponent({
   emits: ['navigate'],
@@ -183,7 +180,7 @@ describe('mounted workstation root locale navigation retention', () => {
         const zoom = shallowRef('0:100');
         const selectedRun = shallowRef<string | null>(props.initialRunId);
         const history = shallowRef('verified-history-steps-0-100');
-        const { t } = useWorkstationI18n(messages);
+        const { t } = useI18n({ useScope: 'local', messages });
         onMounted(() => {
           mounts.runs++;
         });
@@ -228,7 +225,7 @@ describe('mounted workstation root locale navigation retention', () => {
           const draft = shallowRef('');
           const selected = shallowRef('');
           const approved = shallowRef(false);
-          const { t } = useWorkstationI18n(messages);
+          const { t } = useI18n({ useScope: 'local', messages });
           const label = computed(() => t('label'));
           onMounted(() => {
             mounts[kind]++;

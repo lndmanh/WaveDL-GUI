@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { resultsMessages } from '../../i18n/results';
+import { useI18n } from 'vue-i18n';
 import { Button } from '@/components/ui/button';
 import type { Artifact } from '../../lib/artifact-client';
-const { t, locale } = useWorkstationI18n(resultsMessages);
+const { t, locale } = useI18n({ useScope: 'global' });
 defineProps<{ artifacts: readonly Artifact[]; busy: boolean }>();
 defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>();
 </script>
@@ -12,15 +11,15 @@ defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>()
     <table class="w-full text-left text-sm">
       <caption class="pb-4 text-left text-muted-foreground">
         {{
-          t('publications')
+          t('results.publications')
         }}
       </caption>
       <thead>
         <tr>
-          <th scope="col">{{ t('generationAttempt') }}</th>
-          <th scope="col">{{ t('artifact') }}</th>
-          <th scope="col">{{ t('bytes') }}</th>
-          <th scope="col">{{ t('actions') }}</th>
+          <th scope="col">{{ t('results.generationAttempt') }}</th>
+          <th scope="col">{{ t('results.artifact') }}</th>
+          <th scope="col">{{ t('results.bytes') }}</th>
+          <th scope="col">{{ t('results.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -35,20 +34,20 @@ defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>()
                 size="sm"
                 :disabled="busy"
                 @click="$emit('download', artifact)"
-                >{{ t('download') }}</Button
+                >{{ t('results.download') }}</Button
               ><Button
                 v-if="artifact.path.endsWith('.png')"
                 variant="outline"
                 size="sm"
                 :disabled="busy"
                 @click="$emit('preview', artifact)"
-                >{{ t('viewPng') }}</Button
+                >{{ t('results.viewPng') }}</Button
               >
             </div>
           </td>
         </tr>
       </tbody>
     </table>
-    <p v-if="!artifacts.length" class="text-muted-foreground">{{ t('noArtifacts') }}</p>
+    <p v-if="!artifacts.length" class="text-muted-foreground">{{ t('results.noArtifacts') }}</p>
   </div>
 </template>

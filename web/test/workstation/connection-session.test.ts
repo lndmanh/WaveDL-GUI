@@ -46,6 +46,19 @@ afterEach(() => {
 });
 
 describe('browser connection authority', () => {
+  it('builds session errors from catalog keys and preserves the safe status', () => {
+    const failure = ConnectionSessionError.fromKey('identity', 'daemonReplaced', {
+      status: 409,
+    });
+    expect(failure).toBeInstanceOf(ConnectionSessionError);
+    expect(failure).toMatchObject({
+      code: 'identity',
+      message: 'A different WaveDL daemon is now serving this address. Sign in again.',
+      status: 409,
+      clientMessageKey: 'daemonReplaced',
+    });
+  });
+
   it.each([400, 500])(
     'preserves only the safe HTTP %s status through session error sanitization',
     async (status) => {

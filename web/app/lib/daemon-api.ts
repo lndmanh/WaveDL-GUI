@@ -1,4 +1,6 @@
 /** Browser-only, same-origin daemon transport. Browser authority is session-scoped. */
+import { clientError, type ClientErrorKey, type ClientErrorParams } from '../i18n/client-messages';
+
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
 export interface Health {
@@ -55,6 +57,13 @@ export interface PlanView {
   preview: JsonObject;
 }
 export type ApiErrorCode = 'authentication' | 'identity' | 'protocol' | 'response' | 'http';
+export interface DaemonApiErrorOptions {
+  status?: number;
+  buildMismatch?: boolean;
+  daemonIdentityChanged?: boolean;
+  params?: ClientErrorParams;
+}
+
 export class DaemonApiError extends Error {
   constructor(
     public readonly code: ApiErrorCode,
@@ -62,9 +71,28 @@ export class DaemonApiError extends Error {
     public readonly status?: number,
     public readonly buildMismatch = false,
     public readonly daemonIdentityChanged = false,
+    public readonly clientMessageKey?: ClientErrorKey,
+    public readonly clientMessageParams?: ClientErrorParams,
   ) {
     super(message);
     this.name = 'DaemonApiError';
+  }
+
+  static fromKey(
+    code: ApiErrorCode,
+    key: ClientErrorKey,
+    options: DaemonApiErrorOptions = {},
+  ): DaemonApiError {
+    const { status, buildMismatch = false, daemonIdentityChanged = false, params } = options;
+    return new DaemonApiError(
+      code,
+      clientError(key, params).message,
+      status,
+      buildMismatch,
+      daemonIdentityChanged,
+      key,
+      params,
+    );
   }
 }
 
@@ -110,7 +138,7 @@ function runEvidence(value: JsonObject, runId: string, requestId: string): void 
   const valid = (name: string, check: (field: Json) => boolean): void => {
     const field = value[name];
     if (field !== undefined && !check(field))
-      throw new DaemonApiError('response', `Invalid run evidence ${name}`);
+      throw DaemonApiError.fromKey('response', 'invalidRunEvidence', { params: { field: name } });
   };
   valid('native_pending', (field) => typeof field === 'boolean');
   valid('native_identity', (field) => field === null || nativeIdentity(field, runId, requestId));
@@ -133,7 +161,7 @@ function runEvidence(value: JsonObject, runId: string, requestId: string): void 
     for (const [name, check] of Object.entries(checks)) {
       const field = record[name];
       if (field !== undefined && !check(field))
-        throw new DaemonApiError('response', `Invalid run evidence ${name}`);
+        throw DaemonApiError.fromKey('response', 'invalidRunEvidence', { params: { field: name } });
     }
   };
   const integer = (field: Json): boolean =>
@@ -186,10 +214,7 @@ function runEvidence(value: JsonObject, runId: string, requestId: string): void 
     value.current_runtime_attempt !== undefined &&
     value.current_runtime_attempt !== null
   ) {
-    throw new DaemonApiError(
-      'response',
-      'Pending native evidence cannot advertise a current runtime',
-    );
+    throw DaemonApiError.fromKey('response', 'pendingRuntimeConflict');
   }
 }
 function runView(value: Json, expectedRunId?: string): RunView {
@@ -212,7 +237,7 @@ function runView(value: Json, expectedRunId?: string): RunView {
     typeof value.cancellation_requested !== 'boolean' ||
     (value.evidence !== null && !jsonObject(value.evidence))
   ) {
-    throw new DaemonApiError('response', 'Invalid run response identity or state');
+    throw DaemonApiError.fromKey('response', 'invalidRunResponse');
   }
   if (value.evidence !== null) runEvidence(value.evidence, value.run_id, value.request_id);
   return {
@@ -237,7 +262,7 @@ export function validateJson(
   budget = { nodes: 0 },
 ): asserts value is Json {
   if (depth > 32 || ++budget.nodes > 65536)
-    throw new DaemonApiError('response', 'JSON exceeds complexity limits');
+    throw DaemonApiError.fromKey('response', 'jsonTooComplex');
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number' && Number.isFinite(value)) return;
   if (Array.isArray(value)) {
@@ -248,18 +273,18 @@ export function validateJson(
     for (const child of Object.values(value)) validateJson(child, depth + 1, budget);
     return;
   }
-  throw new DaemonApiError('response', 'Invalid JSON value');
+  throw DaemonApiError.fromKey('response', 'invalidJsonValue');
 }
 
 export function parseJson(text: string): Json {
   if (new TextEncoder().encode(text).byteLength > 2 * 1024 * 1024) {
-    throw new DaemonApiError('response', 'JSON exceeds byte limit');
+    throw DaemonApiError.fromKey('response', 'jsonTooLarge');
   }
   let value: unknown;
   try {
     value = JSON.parse(text);
   } catch {
-    throw new DaemonApiError('response', 'Malformed JSON response');
+    throw DaemonApiError.fromKey('response', 'malformedJsonResponse');
   }
   validateJson(value);
   // JSON.parse silently keeps the last duplicate member. Reject ambiguity before
@@ -277,7 +302,7 @@ export function parseJson(text: string): Json {
     else if (token === ':' && current) current.key = false;
     else if (token.startsWith('"') && current?.keys && current.key) {
       const key: string = JSON.parse(token);
-      if (current.keys.has(key)) throw new DaemonApiError('response', 'Duplicate JSON member');
+      if (current.keys.has(key)) throw DaemonApiError.fromKey('response', 'duplicateJsonMember');
       current.keys.add(key);
     }
   }
@@ -336,9 +361,9 @@ function sessionToken(value: string): boolean {
 
 async function boundedJson(response: Response, limit = 2 * 1024 * 1024): Promise<Json> {
   if (response.headers.get('content-type')?.split(';', 1)[0]?.trim() !== 'application/json') {
-    throw new DaemonApiError('response', 'Expected a JSON response');
+    throw DaemonApiError.fromKey('response', 'expectedAJsonResponse');
   }
-  if (!response.body) throw new DaemonApiError('response', 'Missing response body');
+  if (!response.body) throw DaemonApiError.fromKey('response', 'missingResponseBody');
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let length = 0;
@@ -346,7 +371,7 @@ async function boundedJson(response: Response, limit = 2 * 1024 * 1024): Promise
   let deadline: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
     deadline = setTimeout(
-      () => reject(new DaemonApiError('http', 'Daemon response timed out')),
+      () => reject(DaemonApiError.fromKey('http', 'daemonResponseTimedOut')),
       30000,
     );
   });
@@ -355,14 +380,14 @@ async function boundedJson(response: Response, limit = 2 * 1024 * 1024): Promise
       const { value, done } = await Promise.race([reader.read(), expired]);
       if (done) break;
       length += value.byteLength;
-      if (length > limit) throw new DaemonApiError('response', 'Response exceeds byte limit');
+      if (length > limit) throw DaemonApiError.fromKey('response', 'responseExceedsByteLimit');
       text += decoder.decode(value, { stream: true });
     }
     text += decoder.decode();
     return parseJson(text);
   } catch (error) {
     if (error instanceof DaemonApiError) throw error;
-    throw new DaemonApiError('response', 'Invalid UTF-8 response');
+    throw DaemonApiError.fromKey('response', 'invalidUtf8Response');
   } finally {
     clearTimeout(deadline);
     await reader.cancel().catch(() => undefined);
@@ -400,11 +425,11 @@ export class DaemonApi {
       url.search ||
       url.hash
     ) {
-      throw new DaemonApiError('identity', 'Expected an HTTP origin');
+      throw DaemonApiError.fromKey('identity', 'expectedAnHttpOrigin');
     }
     this.origin = url.origin;
     if (typeof globalThis.location !== 'undefined' && globalThis.location.origin !== this.origin) {
-      throw new DaemonApiError('identity', 'Daemon API must use the current browser origin');
+      throw DaemonApiError.fromKey('identity', 'apiOriginMismatch');
     }
     this.#daemonId = pins.daemonId;
     this.#buildId = pins.buildId;
@@ -416,7 +441,7 @@ export class DaemonApi {
         (pin) => pin !== undefined && !/^[\x21-\x7e]{1,256}$/.test(pin),
       )
     ) {
-      throw new DaemonApiError('identity', 'Invalid daemon identity pins');
+      throw DaemonApiError.fromKey('identity', 'invalidDaemonIdentityPins');
     }
   }
   get daemonId(): string | undefined {
@@ -430,7 +455,7 @@ export class DaemonApi {
   }
   setToken(token: string): void {
     if (!/^[A-Za-z0-9._~+/=-]{1,4096}$/.test(token))
-      throw new DaemonApiError('authentication', 'Invalid bearer credential');
+      throw DaemonApiError.fromKey('authentication', 'invalidBearerCredential');
     if (token !== this.#token) {
       this.#approvedPlans = new WeakMap();
       this.#credentialRevision++;
@@ -440,7 +465,7 @@ export class DaemonApi {
   }
   setRotatedToken(token: string): void {
     if (!sessionToken(token))
-      throw new DaemonApiError('authentication', 'Invalid bearer credential');
+      throw DaemonApiError.fromKey('authentication', 'invalidBearerCredential');
     this.#token = token;
   }
   clearToken(): void {
@@ -453,28 +478,28 @@ export class DaemonApi {
     const stripped = stripBootstrapUrl(input);
     replaceUrl(stripped.url); // Synchronous removal MUST precede the first request.
     if (new URL(stripped.url).origin !== this.origin)
-      throw new DaemonApiError('identity', 'Bootstrap origin differs');
+      throw DaemonApiError.fromKey('identity', 'bootstrapOriginDiffers');
     if (stripped.invalid)
-      throw new DaemonApiError('authentication', 'Ambiguous bootstrap credential');
+      throw DaemonApiError.fromKey('authentication', 'ambiguousBootstrapCredential');
     if (stripped.code === null) return null;
     return this.exchangeBootstrapCode(stripped.code);
   }
   async exchangeBootstrapCode(code: string, signal?: AbortSignal): Promise<SessionGrant> {
     if (!/^[A-Za-z0-9._~+/=-]{1,4096}$/.test(code))
-      throw new DaemonApiError('authentication', 'Invalid bootstrap credential');
+      throw DaemonApiError.fromKey('authentication', 'invalidBootstrapCredential');
     this.clearToken();
     const response = await this.#request('/api/bootstrap', 'POST', { code }, signal, true);
     const body = await this.#json(response, 8192);
     const grant = sessionGrant(body);
     if (!grant) {
-      throw new DaemonApiError('response', 'Invalid bootstrap response');
+      throw DaemonApiError.fromKey('response', 'invalidBootstrapResponse');
     }
     this.setToken(grant.access_token);
     return grant;
   }
   async rotateSession(signal?: AbortSignal): Promise<SessionGrant> {
     if (this.#rotation) await this.#rotation;
-    if (signal?.aborted) throw new DaemonApiError('http', 'Session rotation was interrupted');
+    if (signal?.aborted) throw DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted');
     const revision = this.#credentialRevision;
     const presented = this.#token;
     let release!: () => void;
@@ -489,15 +514,15 @@ export class DaemonApi {
         !presented ||
         presented !== this.#token
       )
-        throw new DaemonApiError('http', 'Session rotation was interrupted');
+        throw DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted');
       const grant = sessionGrant(
         await this.#json(
           await this.#request('/api/session', 'POST', undefined, signal, false, undefined, true),
         ),
       );
-      if (!grant) throw new DaemonApiError('response', 'Invalid session response');
+      if (!grant) throw DaemonApiError.fromKey('response', 'invalidSessionResponse');
       if (signal?.aborted || revision !== this.#credentialRevision)
-        throw new DaemonApiError('http', 'Session rotation was interrupted');
+        throw DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted');
       this.setRotatedToken(grant.access_token);
       return grant;
     } finally {
@@ -518,7 +543,7 @@ export class DaemonApi {
       };
       const abort = () => {
         this.#idleWaiters.delete(done);
-        reject(new DaemonApiError('http', 'Session rotation was interrupted'));
+        reject(DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted'));
       };
       this.#idleWaiters.add(done);
       signal?.addEventListener('abort', abort, { once: true });
@@ -536,7 +561,7 @@ export class DaemonApi {
       !Number.isSafeInteger(body.protocol_min) ||
       !Number.isSafeInteger(body.protocol_max)
     ) {
-      throw new DaemonApiError('response', 'Invalid daemon health response');
+      throw DaemonApiError.fromKey('response', 'invalidDaemonHealthResponse');
     }
     const minimum = body.protocol_min;
     const maximum = body.protocol_max;
@@ -548,18 +573,16 @@ export class DaemonApi {
       minimum > this.protocolVersion ||
       maximum < this.protocolVersion
     ) {
-      throw new DaemonApiError('protocol', 'Daemon protocol mismatch; update the daemon or client');
+      throw DaemonApiError.fromKey('protocol', 'daemonProtocolMismatch');
     }
     if (this.#daemonId && body.daemon_id !== this.#daemonId) {
-      throw new DaemonApiError('identity', 'Daemon identity changed', 409, false, true);
+      throw DaemonApiError.fromKey('identity', 'daemonIdentityChanged', {
+        status: 409,
+        daemonIdentityChanged: true,
+      });
     }
     if (this.#buildId && body.build_id !== this.#buildId)
-      throw new DaemonApiError(
-        'identity',
-        'Daemon identity or build changed; reconnect explicitly',
-        undefined,
-        true,
-      );
+      throw DaemonApiError.fromKey('identity', 'daemonPinsChanged', { buildMismatch: true });
     this.#daemonId = body.daemon_id;
     this.#buildId = body.build_id;
     return {
@@ -577,7 +600,7 @@ export class DaemonApi {
   /** Artifact bytes only; consumers must bound, hash and recheck before publishing. */
   async downloadResponse(path: string, signal?: AbortSignal): Promise<Response> {
     if (!/^\/api\/runs\/[0-9a-f-]{36}\/artifacts\/gen-\d{6,}\/.+/.test(path) || path.includes('?'))
-      throw new DaemonApiError('response', 'Invalid artifact download route');
+      throw DaemonApiError.fromKey('response', 'invalidArtifactDownloadRoute');
     this.#apiUrl(path);
     await this.health(signal);
     return this.#request(path, 'GET', undefined, signal);
@@ -585,7 +608,7 @@ export class DaemonApi {
   assertResponseCurrent(response: Response): void {
     if (this.#responseRevisions.get(response) !== this.#credentialRevision || !this.authenticated) {
       void response.body?.cancel().catch(() => undefined);
-      throw new DaemonApiError('authentication', 'Connection credential changed during download');
+      throw DaemonApiError.fromKey('authentication', 'downloadCredentialChanged');
     }
   }
   async listRuns(
@@ -600,29 +623,29 @@ export class DaemonApi {
       !Number.isSafeInteger(offset) ||
       offset < 0
     ) {
-      throw new DaemonApiError('response', 'Invalid run pagination');
+      throw DaemonApiError.fromKey('response', 'invalidRunPagination');
     }
     const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (options.state) query.set('state', options.state);
     const value = await this.read(`/api/runs?${query}`, options.signal);
     if (!jsonObject(value) || !Array.isArray(value.runs))
-      throw new DaemonApiError('response', 'Invalid run list');
+      throw DaemonApiError.fromKey('response', 'invalidRunList');
     return value.runs.map((item) => runView(item));
   }
   async getRun(runId: string, signal?: AbortSignal): Promise<RunView> {
-    if (!isUuid(runId)) throw new DaemonApiError('identity', 'Invalid run identity');
+    if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
     return runView(await this.read(`/api/runs/${runId}`, signal), runId);
   }
   async plan(request: JsonObject, idempotencyKey: string, signal?: AbortSignal): Promise<PlanView> {
     if (!idempotencyKey || idempotencyKey.length > 256 || /[\r\n]/.test(idempotencyKey))
-      throw new DaemonApiError('response', 'Invalid idempotency key');
+      throw DaemonApiError.fromKey('response', 'invalidIdempotencyKey');
     const revision = this.#scopeRevision;
     this.#requestBody(request, idempotencyKey);
     const snapshot = structuredClone(request);
     freezeJson(snapshot);
     const value = await this.mutate('/api/runs/plan', snapshot, { idempotencyKey, signal });
     if (revision !== this.#scopeRevision)
-      throw new DaemonApiError('authentication', 'Connection credential changed during request');
+      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
     if (
       !jsonObject(value) ||
       !isUuid(value.plan_id) ||
@@ -630,7 +653,7 @@ export class DaemonApi {
       !isUuid(value.request_id) ||
       !jsonObject(value.preview)
     ) {
-      throw new DaemonApiError('response', 'Invalid plan response');
+      throw DaemonApiError.fromKey('response', 'invalidPlanResponse');
     }
     // Approval is memory-only and belongs to this exact verified connection.
     // A persisted plan must be re-planned with its original idempotency key;
@@ -643,7 +666,7 @@ export class DaemonApi {
       preview: value.preview,
     });
     if (!this.#daemonId || !this.#buildId)
-      throw new DaemonApiError('identity', 'Plan lacks a verified daemon identity');
+      throw DaemonApiError.fromKey('identity', 'planLacksAVerifiedDaemonIdentity');
     this.#approvedPlans.set(approved, {
       daemonId: this.#daemonId,
       buildId: this.#buildId,
@@ -661,23 +684,23 @@ export class DaemonApi {
       approval.daemonId !== this.#daemonId ||
       approval.buildId !== this.#buildId
     )
-      throw new DaemonApiError('identity', 'Plan belongs to another connection; preview it again');
+      throw DaemonApiError.fromKey('identity', 'planConnectionMismatch');
     return structuredClone(approval.request);
   }
   async submit(plan: PlanView, signal?: AbortSignal): Promise<RunView> {
     this.approvedRequest(plan);
     if (!isUuid(plan.plan_id) || !isUuid(plan.run_id) || !isUuid(plan.request_id))
-      throw new DaemonApiError('identity', 'Invalid approved plan identity');
+      throw DaemonApiError.fromKey('identity', 'invalidApprovedPlanIdentity');
     const value = runView(
       await this.mutate('/api/runs', { plan_id: plan.plan_id }, { signal }),
       plan.run_id,
     );
     if (value.plan_id !== plan.plan_id || value.request_id !== plan.request_id)
-      throw new DaemonApiError('identity', 'Submission does not belong to approved plan');
+      throw DaemonApiError.fromKey('identity', 'submissionPlanMismatch');
     return value;
   }
   async cancelRun(runId: string, signal?: AbortSignal): Promise<RunView> {
-    if (!isUuid(runId)) throw new DaemonApiError('identity', 'Invalid run identity');
+    if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
     return runView(await this.mutate(`/api/runs/${runId}/cancel`, undefined, { signal }), runId);
   }
   async mutate(
@@ -692,7 +715,7 @@ export class DaemonApi {
     const revision = this.#credentialRevision;
     await this.health(options.signal);
     if (revision !== this.#credentialRevision)
-      throw new DaemonApiError('authentication', 'Connection credential changed during request');
+      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
     return this.#json(
       await this.#request(path, 'POST', snapshot, options.signal, false, options.idempotencyKey),
     );
@@ -711,10 +734,10 @@ export class DaemonApi {
       cursor.seq < -1 ||
       (cursor.attempt === 0 && cursor.seq !== -1)
     )
-      throw new DaemonApiError('response', 'Invalid event cursor');
+      throw DaemonApiError.fromKey('response', 'invalidEventCursor');
     await this.health(signal);
     if (expectedDaemonId !== undefined && expectedDaemonId !== this.#daemonId)
-      throw new DaemonApiError('identity', 'Event cursor belongs to another daemon');
+      throw DaemonApiError.fromKey('identity', 'cursorDaemonMismatch');
     const response = await this.#request(
       `/api/runs/${runId}/events?attempt=${cursor.attempt}&seq=${cursor.seq}`,
       'GET',
@@ -723,7 +746,7 @@ export class DaemonApi {
     );
     if (response.headers.get('content-type')?.split(';', 1)[0]?.trim() !== 'text/event-stream') {
       await response.body?.cancel();
-      throw new DaemonApiError('response', 'Expected an event stream');
+      throw DaemonApiError.fromKey('response', 'expectedAnEventStream');
     }
     return response;
   }
@@ -737,22 +760,22 @@ export class DaemonApi {
       url.hash ||
       !url.pathname.startsWith('/api/')
     ) {
-      throw new DaemonApiError('identity', 'API requests must remain same-origin');
+      throw DaemonApiError.fromKey('identity', 'apiCrossOrigin');
     }
     if ([...url.searchParams.keys()].some((key) => secretNames.has(key.toLowerCase()))) {
-      throw new DaemonApiError('identity', 'Credentials must not appear in API URLs');
+      throw DaemonApiError.fromKey('identity', 'apiUrlCredentials');
     }
     return url;
   }
   #requestBody(body?: JsonObject, idempotencyKey?: string): string | undefined {
     if (idempotencyKey !== undefined && !/^[\x21-\x7e]{1,256}$/.test(idempotencyKey)) {
-      throw new DaemonApiError('response', 'Invalid idempotency key');
+      throw DaemonApiError.fromKey('response', 'invalidIdempotencyKey');
     }
     if (body === undefined) return undefined;
     validateJson(body);
     const serialized = JSON.stringify(body);
     if (new TextEncoder().encode(serialized).byteLength > 1024 * 1024) {
-      throw new DaemonApiError('response', 'Request exceeds byte limit');
+      throw DaemonApiError.fromKey('response', 'requestExceedsByteLimit');
     }
     return serialized;
   }
@@ -760,11 +783,11 @@ export class DaemonApi {
     const revision = this.#responseRevisions.get(response);
     if (revision !== this.#credentialRevision) {
       await response.body?.cancel();
-      throw new DaemonApiError('authentication', 'Connection credential changed during request');
+      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
     }
     const body = await boundedJson(response, limit);
     if (revision !== this.#credentialRevision)
-      throw new DaemonApiError('authentication', 'Connection credential changed during request');
+      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
     return body;
   }
   async #request(
@@ -776,16 +799,16 @@ export class DaemonApi {
     idempotencyKey?: string,
     rotation = false,
   ): Promise<Response> {
-    if (signal?.aborted) throw new DaemonApiError('http', 'Session rotation was interrupted');
+    if (signal?.aborted) throw DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted');
     if (!rotation && this.#rotation) {
       const revision = this.#credentialRevision;
       await this.#rotation;
       if (signal?.aborted || revision !== this.#credentialRevision)
-        throw new DaemonApiError('http', 'Session rotation was interrupted');
+        throw DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted');
     }
     const url = this.#apiUrl(path);
     if (!bootstrap && !this.#token)
-      throw new DaemonApiError('authentication', 'Enter the daemon bearer credential');
+      throw DaemonApiError.fromKey('authentication', 'credentialMissing');
     const headers = new Headers({ Accept: 'application/json' });
     if (!bootstrap) headers.set('Authorization', `Bearer ${this.#token}`);
     if (this.#daemonId && !bootstrap) headers.set('X-WaveDL-Daemon-ID', this.#daemonId);
@@ -794,7 +817,7 @@ export class DaemonApi {
     if (idempotencyKey !== undefined) headers.set('Idempotency-Key', idempotencyKey);
     const deadline = new AbortController();
     const timer = setTimeout(
-      () => deadline.abort(new DaemonApiError('http', 'Daemon request timed out')),
+      () => deadline.abort(DaemonApiError.fromKey('http', 'daemonRequestTimedOut')),
       15000,
     );
     const revision = this.#credentialRevision;
@@ -822,7 +845,7 @@ export class DaemonApi {
     }
     if (revision !== this.#credentialRevision) {
       await response.body?.cancel();
-      throw new DaemonApiError('authentication', 'Connection credential changed during request');
+      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
     }
     this.#responseRevisions.set(response, revision);
     if (!response.ok) {
@@ -831,28 +854,22 @@ export class DaemonApi {
         if (presentedToken === this.#token) {
           this.clearToken();
         }
-        throw new DaemonApiError(
-          'authentication',
-          'Credential expired or rejected; enter it again',
-          401,
-          false,
-          false,
-        );
+        throw DaemonApiError.fromKey('authentication', 'credentialRejected', { status: 401 });
       }
       const daemonIdentityChanged =
         response.status === 409 &&
         (url.pathname === '/api/health' ||
           url.pathname === '/api/session' ||
           response.headers.get('X-WaveDL-Error-Code') === 'daemon_identity_changed');
-      throw new DaemonApiError(
-        daemonIdentityChanged ? 'identity' : 'http',
-        daemonIdentityChanged
-          ? 'Daemon identity changed'
-          : `Daemon request failed (${response.status})`,
-        response.status,
-        false,
-        daemonIdentityChanged,
-      );
+      if (daemonIdentityChanged)
+        throw DaemonApiError.fromKey('identity', 'daemonIdentityChanged', {
+          status: response.status,
+          daemonIdentityChanged: true,
+        });
+      throw DaemonApiError.fromKey('http', 'daemonRequestFailed', {
+        status: response.status,
+        params: { status: response.status },
+      });
     }
     return response;
   }

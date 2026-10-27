@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { resultsMessages } from '../../i18n/results';
+import { useI18n } from 'vue-i18n';
 import { computed, onBeforeUnmount, shallowRef, watch, toRaw } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -12,7 +11,7 @@ import CvSummaryPanel from './CvSummaryPanel.vue';
 import ResultOperationForm from './ResultOperationForm.vue';
 import EvaluationResultsPanel from './EvaluationResultsPanel.vue';
 import type { RunMonitorSnapshot } from '../../lib/run-monitor';
-const { t, translateKnownMessage } = useWorkstationI18n(resultsMessages);
+const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{
   session: ConnectionSession;
   runId: string | null;
@@ -73,8 +72,7 @@ async function refresh() {
     const items = await new ArtifactClient(session.value).list(props.runId, scope.signal);
     if (current === epoch) artifacts.value = items;
   } catch {
-    if (current === epoch)
-      message.value = 'Artifacts could not be loaded. Verify the connection and refresh.';
+    if (current === epoch) message.value = 'results.artifactsFailed';
   } finally {
     if (current === epoch) busy.value = false;
   }
@@ -100,16 +98,13 @@ async function consume(artifact: Artifact, preview = false) {
       link.href = url;
       link.download = name;
       link.click();
-      downloadStatus.value =
-        'Verified artifact download requested. Your browser controls where it is saved.';
+      downloadStatus.value = 'results.downloadRequested';
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
   } catch {
     if (current === epoch)
       message.value =
-        artifact.size > 64 * 1024 * 1024
-          ? 'This artifact exceeds the 64 MiB browser budget. Export with the CLI.'
-          : 'Artifact verification failed or download was interrupted. No file was published.';
+        artifact.size > 64 * 1024 * 1024 ? 'results.budget' : 'results.verificationFailed';
   } finally {
     if (current === epoch) busy.value = false;
   }
@@ -122,21 +117,23 @@ onBeforeUnmount(() => {
   <section class="flex min-w-0 flex-col gap-6" aria-labelledby="results-title">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h2 id="results-title" class="text-xl font-semibold">{{ t('publishedResults') }}</h2>
-        <p class="text-sm text-muted-foreground">{{ t('resultsHelp') }}</p>
+        <h2 id="results-title" class="text-xl font-semibold">
+          {{ t('results.publishedResults') }}
+        </h2>
+        <p class="text-sm text-muted-foreground">{{ t('results.resultsHelp') }}</p>
       </div>
       <Button variant="outline" :disabled="!runId || busy || !session.api" @click="refresh">{{
-        busy ? t('working') : t('refresh')
+        busy ? t('results.working') : t('results.refresh')
       }}</Button>
     </div>
     <Alert v-if="message"
-      ><AlertTitle>{{ t('artifactStatus') }}</AlertTitle
-      ><AlertDescription>{{ translateKnownMessage(message) }}</AlertDescription></Alert
+      ><AlertTitle>{{ t('results.artifactStatus') }}</AlertTitle
+      ><AlertDescription>{{ t(message) }}</AlertDescription></Alert
     >
     <p v-if="downloadStatus" role="status" class="text-sm text-muted-foreground">
-      {{ translateKnownMessage(downloadStatus) }}
+      {{ t(downloadStatus) }}
     </p>
-    <p v-if="!runId" class="text-muted-foreground">{{ t('selectExperiment') }}</p>
+    <p v-if="!runId" class="text-muted-foreground">{{ t('results.selectExperiment') }}</p>
     <EvaluationResultsPanel
       v-if="connected && monitor && monitor.run?.run_id === runId"
       :run="monitor.run"
@@ -163,10 +160,10 @@ onBeforeUnmount(() => {
       @run-selected="emit('runSelected', $event)"
     />
     <figure v-if="imageUrl" class="flex flex-col gap-3">
-      <img :src="imageUrl" :alt="t('verifiedPlot')" class="max-w-full" /><Button
+      <img :src="imageUrl" :alt="t('results.verifiedPlot')" class="max-w-full" /><Button
         variant="outline"
         @click="clearImage"
-        >{{ t('closePlot') }}</Button
+        >{{ t('results.closePlot') }}</Button
       >
     </figure>
   </section>

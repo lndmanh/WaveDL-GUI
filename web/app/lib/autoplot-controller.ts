@@ -1,3 +1,4 @@
+import { clientError, type ClientMessage } from '../i18n/client-messages';
 import { shallowRef, toRaw } from 'vue';
 import {
   trainingConfigSchema,
@@ -29,7 +30,8 @@ export function automaticPlotRequest(
   plan: PlanView,
   originalRequest?: JsonObject,
 ): TrainingRequest {
-  if (typeof plan.preview.manifest_json !== 'string') throw new Error('Missing approved manifest');
+  if (typeof plan.preview.manifest_json !== 'string')
+    throw clientError('missingApprovedManifest', {});
   const manifest = parseJson(plan.preview.manifest_json);
   if (
     !object(manifest) ||
@@ -42,11 +44,11 @@ export function automaticPlotRequest(
     !object(plan.preview.topology) ||
     plan.preview.target !== run.backend
   )
-    throw new Error('Unsupported approved training manifest');
+    throw clientError('unsupportedTrainingManifest', {});
   const mappings = storageMapSchema.parse(manifest.storage_map ?? []);
   const keys = new Set(Object.keys(trainingConfigSchema.shape));
   if (Object.keys(manifest.resolved_config).some((key) => key !== 'output_dir' && !keys.has(key)))
-    throw new Error('Unsupported normalized training configuration');
+    throw clientError('unsupportedTrainingConfig', {});
   const config = Object.fromEntries(
     Object.entries(manifest.resolved_config).filter(([key]) => keys.has(key)),
   );
@@ -64,7 +66,7 @@ export function automaticPlotRequest(
     topology: plan.preview.topology,
   });
   if (!originalRequest) {
-    if (mappings.length) throw new Error('Mapped plots require the original approved host request');
+    if (mappings.length) throw clientError('plotHostRequestRequired', {});
     return normalized;
   }
   const original = trainingRequestSchema.parse(originalRequest);
@@ -82,7 +84,7 @@ export function automaticPlotRequest(
     mappingIdentity(approvedMappings) !== mappingIdentity(mappings) ||
     original.backend !== normalized.backend
   )
-    throw new Error('Approved storage mapping differs from the submitted request');
+    throw clientError('storageApprovalMismatch', {});
   if (!mappings.length) return normalized;
   if (
     mappedStoragePath(original.config.data_path, mappings) !==
@@ -90,7 +92,7 @@ export function automaticPlotRequest(
     mappedStoragePath(original.runtime.python, mappings) !==
       normalizedStoragePath(normalized.runtime.python)
   )
-    throw new Error('Approved host paths do not match normalized execution paths');
+    throw clientError('hostPathMismatch', {});
   // File registrations are mapped by the daemon just like the dataset. Keep
   // their original host spelling after verifying one forward rewrite; sending
   // normalized execution paths would apply overlapping maps a second time.
@@ -104,7 +106,7 @@ export function automaticPlotRequest(
         : item !== approved;
     })
   )
-    throw new Error('Approved registrations do not match normalized execution paths');
+    throw clientError('registrationPathMismatch', {});
   return trainingRequestSchema.parse({
     ...normalized,
     config: {
@@ -119,7 +121,7 @@ export function automaticPlotRequest(
 export interface AutomaticPlotState {
   status: 'armed' | 'planning' | 'submitted' | 'error' | 'unavailable' | 'stopped';
   plotRunId: string | null;
-  message: string;
+  message: ClientMessage;
 }
 function canonical(value: Json): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -188,7 +190,7 @@ export class AutoPlotController {
     this.session = toRaw(session);
     for (const value of [options.pollMs ?? 2000, options.deadlineMs ?? 15000])
       if (!Number.isSafeInteger(value) || value < 1)
-        throw new Error('Invalid automatic plot deadline');
+        throw clientError('invalidAutomaticPlotDeadline', {});
     this.#unsubscribe = this.session.subscribe((state) => {
       if (
         this.#workflow &&
@@ -208,7 +210,7 @@ export class AutoPlotController {
       this.state.value = {
         status: 'unavailable',
         plotRunId: null,
-        message: 'Automatic plot workflow capacity reached. Use explicit result planning.',
+        message: clientError('autoPlotCapacity', {}),
       };
       return;
     }
@@ -216,7 +218,7 @@ export class AutoPlotController {
     try {
       const approved = toRaw(plan);
       const api = this.session.api;
-      if (!api) throw new Error('Automatic plots require a verified connection');
+      if (!api) throw clientError('autoPlotConnectionRequired', {});
       const request = automaticPlotRequest(run, approved, api.approvedRequest(approved));
       if (request.config.cv > 0) return;
       this.#revision = state.revision;
@@ -233,12 +235,11 @@ export class AutoPlotController {
       });
       this.#run = structuredClone(toRaw(run));
       this.#observedAttempt = run.attempt;
-      if (!this.#acceptScope(run)) throw new Error('Unsupported captured native scope');
+      if (!this.#acceptScope(run)) throw clientError('unsupportedCapturedNativeScope', {});
       this.state.value = {
         status: 'armed',
         plotRunId: null,
-        message:
-          'Diagnostic plots will use this approved training run’s published best checkpoint.',
+        message: clientError('autoPlotCheckpointNotice', {}),
       };
       this.#schedule();
     } catch {
@@ -246,8 +247,7 @@ export class AutoPlotController {
       this.state.value = {
         status: 'unavailable',
         plotRunId: null,
-        message:
-          'Automatic plots unavailable: approved manifest is unsupported. Use explicit result planning.',
+        message: clientError('autoPlotManifestUnsupported', {}),
       };
     }
   }
@@ -278,8 +278,7 @@ export class AutoPlotController {
       this.state.value = {
         ...this.state.value,
         status: 'error',
-        message:
-          'Automatic plot acknowledgment is unconfirmed. Retry explicitly on this connection; the same plan and key are retained.',
+        message: clientError('autoPlotAckUnknown', {}),
       };
   }
   #current(signal: AbortSignal): boolean {
@@ -292,7 +291,7 @@ export class AutoPlotController {
     if (!current) return false;
     try {
       if (!this.#sourcePlan || !this.#sourceApi || this.session.api !== this.#sourceApi)
-        throw new Error('Source approval scope changed');
+        throw clientError('sourceApprovalScopeChanged', {});
       this.#sourceApi.approvedRequest(this.#sourcePlan);
       return true;
     } catch {
@@ -376,7 +375,7 @@ export class AutoPlotController {
         this.state.value = {
           status: 'unavailable',
           plotRunId: null,
-          message: 'Automatic plots unavailable: the published checkpoint is incomplete.',
+          message: clientError('autoPlotCheckpointIncomplete', {}),
         };
         return;
       }
@@ -447,7 +446,7 @@ export class AutoPlotController {
       );
       if (!this.#current(signal)) return;
       if (observed.plan_id !== plan.plan_id || observed.request_id !== plan.request_id)
-        throw new Error('Automatic plot identity changed');
+        throw clientError('automaticPlotIdentityChanged', {});
       if (observed.submission_requested) {
         this.#complete(observed);
         return;
@@ -507,7 +506,7 @@ export class AutoPlotController {
         typeof sourcePlan.preview.manifest_json !== 'string' ||
         typeof plan.preview.manifest_json !== 'string'
       )
-        throw new Error('Missing approved manifests');
+        throw clientError('missingApprovedManifests', {});
       const source = parseJson(sourcePlan.preview.manifest_json);
       const plot = parseJson(plan.preview.manifest_json);
       if (
@@ -517,7 +516,7 @@ export class AutoPlotController {
         !object(plot.resolved_config) ||
         !object(plot.checkpoint_source)
       )
-        throw new Error('Invalid plot manifest');
+        throw clientError('invalidPlotManifest', {});
       const pin = plot.checkpoint_source;
       const digest = Array.from(
         new Uint8Array(
@@ -548,14 +547,14 @@ export class AutoPlotController {
         canonical(pin.files ?? null) !== canonical(files) ||
         canonical(pin.selection ?? null) !== canonical(selection)
       )
-        throw new Error('Plot normalization changed approved authority');
+        throw clientError('plotAuthorityChanged', {});
       for (const [key, expected] of Object.entries(intent.request.config)) {
         if (
           key !== 'data_path' &&
           key !== 'import_modules' &&
           canonical(plot.resolved_config[key] ?? null) !== canonical(expected)
         )
-          throw new Error('Plot configuration changed approved intent');
+          throw clientError('plotIntentChanged', {});
       }
       return true;
     } catch {
@@ -564,8 +563,7 @@ export class AutoPlotController {
       this.state.value = {
         status: 'unavailable',
         plotRunId: null,
-        message:
-          'Automatic plot preview differs from approved training authority. Use explicit result planning.',
+        message: clientError('autoPlotAuthorityMismatch', {}),
       };
       return false;
     }
@@ -621,12 +619,12 @@ export class AutoPlotController {
       run.backend !== this.#run?.backend ||
       !run.submission_requested
     )
-      throw new Error('Automatic plot acknowledgment does not match the persisted plan');
+      throw clientError('autoPlotAckMismatch', {});
     this.#workflow?.submitted();
     this.state.value = {
       status: 'submitted',
       plotRunId: run.run_id,
-      message: 'Daemon acknowledged the diagnostic plot run.',
+      message: clientError('autoPlotAcknowledged', {}),
     };
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = null;

@@ -1,3 +1,4 @@
+import { clientError } from '../../app/i18n/client-messages';
 import { z } from 'zod';
 
 /** Lexical only: browsers cannot resolve host symlinks or invent inverse maps. */
@@ -30,17 +31,16 @@ function pathParts(
 }
 export function normalizedStoragePath(value: string): string {
   const path = pathParts(value);
-  if (!path) throw new Error('Storage paths must be safe absolute paths without traversal.');
+  if (!path) throw clientError('unsafeStoragePath', {});
   const result = path.root + path.parts.join('/');
   return path.platform === 'windows' ? result.toLowerCase() : result;
 }
 const rootSchema = z
   .string()
   .max(8192)
-  .refine(
-    (value) => pathParts(value) !== null,
-    'Use a safe absolute storage root without parent traversal.',
-  );
+  .refine((value) => pathParts(value) !== null, {
+    params: { clientMessageKey: 'unsafeStorageRoot' },
+  });
 export const storageMappingSchema = z
   .strictObject({
     host_root: rootSchema,
@@ -49,7 +49,7 @@ export const storageMappingSchema = z
   .refine(
     (mapping) =>
       pathParts(mapping.host_root)?.platform === pathParts(mapping.execution_root)?.platform,
-    'Storage mapping path platforms must match.',
+    { params: { clientMessageKey: 'storagePlatformMismatch' } },
   );
 export const storageMapSchema = z
   .array(storageMappingSchema)
@@ -59,7 +59,7 @@ export const storageMapSchema = z
       mappings.every((mapping) => pathParts(mapping.host_root) !== null) &&
       new Set(mappings.map((mapping) => normalizedStoragePath(mapping.host_root))).size ===
         mappings.length,
-    'Storage host roots must be unique.',
+    { params: { clientMessageKey: 'storageHostRootsMustBeUnique' } },
   );
 export type StorageMapping = z.infer<typeof storageMappingSchema>;
 

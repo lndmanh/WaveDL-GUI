@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { runMessages } from '../../i18n/runs';
+import { useI18n } from 'vue-i18n';
 import type { RunView } from '../../lib/daemon-api';
 import { Button } from '@/components/ui/button';
 import StateBadge from './StateBadge.vue';
-const { t, translateKnownMessage } = useWorkstationI18n(runMessages);
+import { runOperationMessageKeys } from '../../i18n/dynamic-keys';
+const { t } = useI18n({ useScope: 'global' });
 defineProps<{
   runs: readonly RunView[];
   loading: boolean;
@@ -15,22 +15,22 @@ defineProps<{
 defineEmits<{ select: [runId: string]; refresh: []; page: [offset: number] }>();
 </script>
 <template>
-  <section class="run-list" :aria-label="t('runs')">
+  <section class="run-list" :aria-label="t('runs.runs')">
     <div class="toolbar">
-      <h2 class="heading">{{ t('runs') }}</h2>
+      <h2 class="heading">{{ t('runs.runs') }}</h2>
       <Button variant="outline" :disabled="loading" @click="$emit('refresh')">{{
-        t('refresh')
+        t('runs.refresh')
       }}</Button>
     </div>
-    <p v-if="!runs.length">{{ loading ? t('loadingRuns') : t('noRuns') }}</p>
+    <p v-if="!runs.length">{{ loading ? t('runs.loadingRuns') : t('runs.noRuns') }}</p>
     <p v-if="lastRefreshed" class="text-muted-foreground text-xs">
-      {{ t('listSnapshot', { time: lastRefreshed }) }}
+      {{ t('runs.listSnapshot', { time: lastRefreshed }) }}
     </p>
     <ul class="items">
       <li v-for="run in runs" :key="run.run_id">
         <Button variant="ghost" class="run-row" @click="$emit('select', run.run_id)">
           <span class="identity"
-            ><strong>{{ translateKnownMessage(run.operation) }}</strong
+            ><strong>{{ t(runOperationMessageKeys[run.operation]) }}</strong
             ><small>{{ run.run_id }}</small></span
           ><StateBadge :run="run" :stale="staleRunIds?.has(run.run_id)" />
         </Button>
@@ -42,14 +42,14 @@ defineEmits<{ select: [runId: string]; refresh: []; page: [offset: number] }>();
         :disabled="loading || page === 0"
         @click="$emit('page', Math.max(0, page - 50))"
       >
-        {{ t('previous') }}</Button
-      ><span>{{ t('page', { page: Math.floor(page / 50) + 1 }) }}</span
+        {{ t('runs.previous') }}</Button
+      ><span>{{ t('runs.page', { page: Math.floor(page / 50) + 1 }) }}</span
       ><Button
         variant="outline"
         :disabled="loading || runs.length < 50"
         @click="$emit('page', page + 50)"
       >
-        {{ t('next') }}
+        {{ t('runs.next') }}
       </Button>
     </div>
   </section>

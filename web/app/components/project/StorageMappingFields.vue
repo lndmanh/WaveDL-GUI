@@ -14,8 +14,7 @@ import {
   FieldDescription,
 } from '@/components/ui/field';
 import { storageMapSchema, type StorageMapping } from '../../../shared/schemas/storage-mapping';
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { storageMappingMessages } from '../../i18n/storage-mapping';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{
   mappings?: readonly StorageMapping[];
@@ -23,22 +22,22 @@ const props = defineProps<{
   disabled: boolean;
 }>();
 const emit = defineEmits<{ update: [mappings: StorageMapping[]] }>();
-const { t } = useWorkstationI18n(storageMappingMessages);
+const { t } = useI18n({ useScope: 'global' });
 const id = useId();
 const mappings = computed(() => props.mappings ?? []);
 const validation = computed(() => storageMapSchema.safeParse(mappings.value));
 const issues = computed(() => (validation.value.success ? [] : validation.value.error.issues));
 const mapErrors = computed(() =>
-  issues.value.some((issue) => issue.path.length === 0) ? [t('mapError')] : [],
+  issues.value.some((issue) => issue.path.length === 0) ? [t('storage.mapError')] : [],
 );
 function rootErrors(index: number, key: keyof StorageMapping): string[] {
   return issues.value.some((issue) => issue.path[0] === index && issue.path[1] === key)
-    ? [t('rootError')]
+    ? [t('storage.rootError')]
     : [];
 }
 function rowErrors(index: number): string[] {
   return issues.value.some((issue) => issue.path[0] === index && issue.path.length === 1)
-    ? [t('rowError')]
+    ? [t('storage.rowError')]
     : [];
 }
 function add() {
@@ -67,24 +66,24 @@ function remove(index: number) {
 
 <template>
   <details :open="mappings.length > 0">
-    <summary class="cursor-pointer font-medium">{{ t('title') }}</summary>
+    <summary class="cursor-pointer font-medium">{{ t('storage.title') }}</summary>
     <FieldGroup class="mt-4">
-      <FieldDescription :id="`${id}-storage-help`">{{ t('guidance') }}</FieldDescription>
-      <FieldDescription>{{ t('interpreter') }}</FieldDescription>
+      <FieldDescription :id="`${id}-storage-help`">{{ t('storage.guidance') }}</FieldDescription>
+      <FieldDescription>{{ t('storage.interpreter') }}</FieldDescription>
       <Alert v-if="backend === 'local' && mappings.length">
-        <AlertTitle>{{ t('title') }}</AlertTitle>
-        <AlertDescription>{{ t('local') }}</AlertDescription>
+        <AlertTitle>{{ t('storage.title') }}</AlertTitle>
+        <AlertDescription>{{ t('storage.local') }}</AlertDescription>
       </Alert>
-      <FieldDescription v-if="!mappings.length">{{ t('empty') }}</FieldDescription>
+      <FieldDescription v-if="!mappings.length">{{ t('storage.empty') }}</FieldDescription>
       <FieldSet v-for="(mapping, index) in mappings" :key="index">
-        <FieldLegend variant="label">{{ t('row', { number: index + 1 }) }}</FieldLegend>
+        <FieldLegend variant="label">{{ t('storage.row', { number: index + 1 }) }}</FieldLegend>
         <FieldGroup>
           <VeeField v-slot="{ field }" :name="`storage_map[${index}].host_root`" :keep-value="true">
             <Field
               :data-invalid="!!rootErrors(index, 'host_root').length"
               :data-disabled="disabled"
             >
-              <FieldLabel :for="`${id}-storage-${index}-host`">{{ t('host') }}</FieldLabel>
+              <FieldLabel :for="`${id}-storage-${index}-host`">{{ t('storage.host') }}</FieldLabel>
               <Input
                 :id="`${id}-storage-${index}-host`"
                 :name="`storage_map[${index}].host_root`"
@@ -117,7 +116,7 @@ function remove(index: number) {
               :data-disabled="disabled"
             >
               <FieldLabel :for="`${id}-storage-${index}-execution`">{{
-                t('execution')
+                t('storage.execution')
               }}</FieldLabel>
               <Input
                 :id="`${id}-storage-${index}-execution`"
@@ -143,18 +142,18 @@ function remove(index: number) {
           </VeeField>
           <FieldError :errors="rowErrors(index)" />
           <Button type="button" variant="outline" :disabled="disabled" @click="remove(index)">{{
-            t('remove', { number: index + 1 })
+            t('storage.remove', { number: index + 1 })
           }}</Button>
         </FieldGroup>
       </FieldSet>
       <FieldError :errors="mapErrors" />
-      <FieldDescription>{{ t('limit') }}</FieldDescription>
+      <FieldDescription>{{ t('storage.limit') }}</FieldDescription>
       <Button
         type="button"
         variant="outline"
         :disabled="disabled || mappings.length >= 32"
         @click="add"
-        >{{ t('add') }}</Button
+        >{{ t('storage.add') }}</Button
       >
     </FieldGroup>
   </details>

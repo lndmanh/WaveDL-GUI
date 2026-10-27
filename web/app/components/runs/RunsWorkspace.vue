@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
 import { useClientMessages } from '../../composables/useClientMessages';
-import { runMessages } from '../../i18n/runs';
 import { watch } from 'vue';
 import { DaemonApi, DaemonApiError } from '../../lib/daemon-api';
 import { useRuns } from '../../composables/useRuns';
 import RunList from './RunList.vue';
 import RunDetail from './RunDetail.vue';
-const { translateKnownMessage } = useWorkstationI18n(runMessages);
 const { clientMessage } = useClientMessages();
 const props = defineProps<{ api: DaemonApi; initialRunId?: string | null }>();
 const emit = defineEmits<{
@@ -44,7 +41,7 @@ watch(
 </script>
 <template>
   <div class="runs-workspace">
-    <p v-if="message" role="status">{{ translateKnownMessage(clientMessage(message)) }}</p>
+    <p v-if="message" role="status">{{ clientMessage(message) }}</p>
     <RunList
       :runs="runs"
       :loading="loading"

@@ -1,35 +1,36 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
 import { useClientMessages } from '../../composables/useClientMessages';
-import { datasetMessages } from '../../i18n/datasets';
+import { useI18n } from 'vue-i18n';
 import { computed, onBeforeUnmount, shallowRef, toRaw, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { DataSelection } from '../../lib/catalog-api';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { DatasetPreviewApi, sampleMatrix, type DatasetPreview } from '../../lib/dataset-preview';
+import { datasetPreviewMessageKeys, datasetPreviewTabMessageKeys } from '../../i18n/dynamic-keys';
 import PreviewPlot from './PreviewPlot.vue';
 import PreviewHeatmap from './PreviewHeatmap.vue';
 import PreviewStatistics from './PreviewStatistics.vue';
 
-const { t, translateKnownMessage } = useWorkstationI18n(datasetMessages);
+const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 
 const props = defineProps<{ session: ConnectionSession; selection: DataSelection | null }>();
 const tabs = [
-  ['input', 'inputDistribution'],
-  ['output', 'outputDistribution'],
-  ['sample', 'samples'],
-  ['correlation', 'correlation'],
-  ['statistics', 'statistics'],
-  ['scatter', 'scatter'],
+  ['input', datasetPreviewTabMessageKeys.input],
+  ['output', datasetPreviewTabMessageKeys.output],
+  ['sample', datasetPreviewTabMessageKeys.sample],
+  ['correlation', datasetPreviewTabMessageKeys.correlation],
+  ['statistics', datasetPreviewTabMessageKeys.statistics],
+  ['scatter', datasetPreviewTabMessageKeys.scatter],
 ] as const;
 type Tab = (typeof tabs)[number][0];
+type PreviewMessage = { kind: 'key'; key: string } | { kind: 'error'; value: Error };
 const activeTab = shallowRef<Tab>('input');
 const data = shallowRef<DatasetPreview | null>(null);
 const loading = shallowRef(false);
 const available = shallowRef(false);
-const message = shallowRef('');
+const message = shallowRef<PreviewMessage | null>(null);
 let request: AbortController | null = null;
 let sequence = 0;
 let unsubscribe: (() => void) | null = null;
@@ -43,15 +44,15 @@ function revoke() {
 function stop() {
   if (!loading.value) return;
   revoke();
-  message.value = 'Preview loading stopped. Refresh preview to retry.';
+  message.value = { kind: 'key', key: 'datasets.previewStopped' };
 }
 async function load() {
   revoke();
-  message.value = '';
+  message.value = null;
   const selection = props.selection ? toRaw(props.selection) : null;
   if (!selection) return;
   if (!available.value) {
-    message.value = 'Reconnect and select this dataset again to preview.';
+    message.value = { kind: 'key', key: 'datasets.previewReconnect' };
     return;
   }
   const controller = new AbortController();
@@ -67,7 +68,10 @@ async function load() {
     if (current === sequence && !controller.signal.aborted) data.value = result;
   } catch (error) {
     if (current === sequence && !controller.signal.aborted)
-      message.value = error instanceof Error ? error.message : 'Dataset preview unavailable.';
+      message.value =
+        error instanceof Error
+          ? { kind: 'error', value: error }
+          : { kind: 'key', key: 'datasets.previewUnavailable' };
   } finally {
     if (current === sequence) {
       loading.value = false;
@@ -87,7 +91,7 @@ watch(
       if (state.revision !== revision || state.status !== 'connected') {
         revision = state.revision;
         revoke();
-        message.value = 'Reconnect and select this dataset again to preview.';
+        message.value = { kind: 'key', key: 'datasets.previewReconnect' };
       }
     });
   },
@@ -146,21 +150,25 @@ const matrices = computed(
 </script>
 
 <template>
-  <section class="dataset-preview" :aria-label="t('previewTitle')">
+  <section class="dataset-preview" :aria-label="t('datasets.previewTitle')">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h3>{{ t('previewTitle') }}</h3>
+      <h3>{{ t('datasets.previewTitle') }}</h3>
       <Button
         variant="outline"
         size="sm"
         :disabled="loading || !selection || !available"
         @click="load"
-        >{{ t('refreshPreview') }}</Button
+        >{{ t('datasets.refreshPreview') }}</Button
       >
-      <Button v-if="loading" variant="ghost" size="sm" @click="stop">{{ t('stopPreview') }}</Button>
+      <Button v-if="loading" variant="ghost" size="sm" @click="stop">{{
+        t('datasets.stopPreview')
+      }}</Button>
     </div>
-    <p v-if="loading" role="status">{{ t('previewLoading') }}</p>
-    <p v-else-if="message" role="status">{{ clientMessage(translateKnownMessage(message)) }}</p>
-    <p v-else-if="!selection" role="status">{{ t('selectDataset') }}</p>
+    <p v-if="loading" role="status">{{ t('datasets.previewLoading') }}</p>
+    <p v-else-if="message" role="status">
+      {{ message.kind === 'key' ? t(message.key) : clientMessage(message.value) }}
+    </p>
+    <p v-else-if="!selection" role="status">{{ t('datasets.selectDataset') }}</p>
     <template v-if="data">
       <p class="text-muted-foreground text-sm">
         {{ data.format.toUpperCase() }} · {{ data.input_key }} {{ data.input_shape.join(' × ') }} →
@@ -168,11 +176,14 @@ const matrices = computed(
       </p>
       <p class="text-muted-foreground text-sm">
         {{
-          t('previewBounds', { count: data.sample_indices.length, total: data.input_shape[0] ?? 0 })
+          t('datasets.previewBounds', {
+            count: data.sample_indices.length,
+            total: data.input_shape[0] ?? 0,
+          })
         }}
       </p>
       <Tabs :model-value="activeTab" @update:model-value="selectTab">
-        <TabsList class="flex h-auto flex-wrap" :aria-label="t('previewView')">
+        <TabsList class="flex h-auto flex-wrap" :aria-label="t('datasets.previewView')">
           <TabsTrigger v-for="[key, label] in tabs" :key="key" :value="key">{{
             t(label)
           }}</TabsTrigger>
@@ -182,7 +193,7 @@ const matrices = computed(
             <PreviewPlot
               v-for="plot in plots"
               :key="plot.id"
-              :title="t('featureTitle', { feature: plot.feature })"
+              :title="t('datasets.featureTitle', { feature: plot.feature })"
               :x="plot.x"
               :y="plot.y"
               histogram
@@ -192,9 +203,9 @@ const matrices = computed(
             <div v-for="{ sample, matrix, x, y } in matrices" :key="sample.sample_index">
               <p class="text-muted-foreground text-xs">
                 {{
-                  t('sampleHelp', {
+                  t('datasets.sampleHelp', {
                     sample: sample.sample_index,
-                    original: sample.feature_shape.join(' × ') || t('scalar'),
+                    original: sample.feature_shape.join(' × ') || t('datasets.scalar'),
                     preview: sample.shape.join(' × '),
                   })
                 }}
@@ -203,12 +214,12 @@ const matrices = computed(
                 v-if="sample.shape.length === 1"
                 :x="x"
                 :y="y"
-                :title="t('sampleTitle', { sample: sample.sample_index })"
+                :title="t('datasets.sampleTitle', { sample: sample.sample_index })"
               />
               <PreviewHeatmap
                 v-else
                 :matrix="matrix"
-                :title="t('sampleTitle', { sample: sample.sample_index })"
+                :title="t('datasets.sampleTitle', { sample: sample.sample_index })"
               />
             </div>
           </div>
@@ -216,20 +227,24 @@ const matrices = computed(
             <PreviewHeatmap
               v-if="data.correlation.matrix"
               :matrix="data.correlation.matrix"
-              :title="t('correlationTitle')"
+              :title="t('datasets.correlationTitle')"
               correlation
             />
             <p v-else role="status">
               {{
                 t(
                   data.sample_indices.length < 2
-                    ? 'correlationInsufficientRows'
-                    : 'correlationMissing',
+                    ? datasetPreviewMessageKeys.correlationInsufficientRows
+                    : datasetPreviewMessageKeys.correlationMissing,
                 )
               }}
             </p>
             <p class="text-muted-foreground text-xs">
-              {{ t('featureOrder', { features: data.correlation.feature_indices.join(', ') }) }}
+              {{
+                t('datasets.featureOrder', {
+                  features: data.correlation.feature_indices.join(', '),
+                })
+              }}
             </p>
           </template>
           <PreviewStatistics
@@ -240,7 +255,7 @@ const matrices = computed(
             <PreviewPlot
               v-for="plot in scatterPlots"
               :key="plot.id"
-              :title="t('scatterTitle', { feature: plot.feature })"
+              :title="t('datasets.scatterTitle', { feature: plot.feature })"
               :x="plot.x"
               :y="plot.y"
               scatter

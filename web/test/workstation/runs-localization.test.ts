@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
-import { mount } from '@vue/test-utils';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../app/i18n/core';
 import MetricSummary from '../../app/components/runs/MetricSummary.vue';
 import StateBadge from '../../app/components/runs/StateBadge.vue';
 import LogPanel from '../../app/components/runs/LogPanel.vue';
@@ -47,23 +45,22 @@ describe('run presentation localization', () => {
       ['supervision_lost', true, 'supervision lost'],
       ['completed', false, 'completed'],
     ] as const;
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const wrapper = mount(
       defineComponent({
-        setup() {
-          provideWorkstationLocale(locale);
-          return () =>
-            h(
-              'div',
-              states.map(([state, uncertainty]) =>
-                h(StateBadge, {
-                  key: state,
-                  run: { ...run, run_id: `run-${state}`, state, uncertainty },
-                }),
-              ),
-            );
-        },
+        setup: () => () =>
+          h(
+            'div',
+            states.map(([state, uncertainty]) =>
+              h(StateBadge, {
+                key: state,
+                run: { ...run, run_id: `run-${state}`, state, uncertainty },
+              }),
+            ),
+          ),
       }),
+      undefined,
+      i18n,
     );
     const text = wrapper.text();
     for (const [, , label] of states) expect(text).toContain(label);
@@ -74,7 +71,7 @@ describe('run presentation localization', () => {
   });
 
   it('localizes known operation/backend labels without changing run identity or action payloads', async () => {
-    const locale = shallowRef<WorkstationLocale>('vi');
+    const i18n = createTestI18n('vi');
     const runs: RunView[] = [
       { ...run, run_id: 'train-run', operation: 'train' },
       { ...run, run_id: 'test-run', operation: 'test', backend: 'slurm' },
@@ -94,16 +91,14 @@ describe('run presentation localization', () => {
     });
     const wrapper = mount(
       defineComponent({
-        setup() {
-          provideWorkstationLocale(locale);
-          return () =>
-            h('div', [
-              h(RunList, { runs, loading: false, page: 0 }),
-              h(RunDetail, { snapshot: snapshot.value }),
-            ]);
-        },
+        setup: () => () =>
+          h('div', [
+            h(RunList, { runs, loading: false, page: 0 }),
+            h(RunDetail, { snapshot: snapshot.value }),
+          ]),
       }),
       { global: { stubs: { MetricsChart: true } } },
+      i18n,
     );
     expect(wrapper.text()).toContain('Huấn luyện');
     expect(wrapper.text()).toContain('Đánh giá');
@@ -123,64 +118,63 @@ describe('run presentation localization', () => {
     snapshot.value = { ...snapshot.value, run: { ...run, backend: 'custom-backend' } };
     await nextTick();
     expect(detail.text()).toContain('custom-backend');
-    locale.value = 'en';
+    i18n.global.locale.value = 'en';
     await nextTick();
     expect(wrapper.text()).toContain('train');
     wrapper.unmount();
   });
   it('translates chrome, status and health while retaining raw logs, ids and parameter names', async () => {
-    const locale = shallowRef<WorkstationLocale>('vi');
+    const i18n = createTestI18n('vi');
     const health = [
       { label: 'Overfitting', value: 'Gap: 100.0%', status: 'Severe', severity: 'error' as const },
     ];
     const wrapper = mount(
       defineComponent({
-        setup() {
-          provideWorkstationLocale(locale);
-          return () =>
-            h('div', [
-              h(RunList, { runs: [run], loading: false, page: 0 }),
-              h(StateBadge, { run, stale: true }),
-              h(LogPanel, { events: [event], truncated: true }),
-              h(MetricSummary, {
-                summary: {
-                  progress: { epoch: 1, totalEpochs: 2, fraction: 0.5 },
-                  best: 2,
-                  latest: null,
-                  current: {
-                    trainLoss: 1,
-                    validationLoss: 2,
-                    r2: null,
-                    bestR2: null,
-                    learningRate: null,
-                    pearson: null,
-                    gradientNorm: null,
-                    mae: null,
-                    epochSeconds: null,
-                    elapsedSeconds: null,
-                    patience: null,
-                    health,
-                    parameters: [{ name: 'Training loss', value: null }],
+        setup: () => () =>
+          h('div', [
+            h(RunList, { runs: [run], loading: false, page: 0 }),
+            h(StateBadge, { run, stale: true }),
+            h(LogPanel, { events: [event], truncated: true }),
+            h(MetricSummary, {
+              summary: {
+                progress: { epoch: 1, totalEpochs: 2, fraction: 0.5 },
+                best: 2,
+                latest: null,
+                current: {
+                  trainLoss: 1,
+                  validationLoss: 2,
+                  r2: null,
+                  bestR2: null,
+                  learningRate: null,
+                  pearson: null,
+                  gradientNorm: null,
+                  mae: null,
+                  epochSeconds: null,
+                  elapsedSeconds: null,
+                  patience: null,
+                  health,
+                  parameters: [{ name: 'Training loss', value: null }],
+                },
+              },
+            }),
+            h(EvaluationResultsPanel, {
+              run: { ...run, state: 'completed' },
+              freshness: 'fresh',
+              events: [
+                {
+                  ...event,
+                  type: 'metric',
+                  payload: {
+                    name: 'evaluation',
+                    metrics: { mae_avg: 0.125, custom_key: 'raw-value' },
                   },
                 },
-              }),
-              h(EvaluationResultsPanel, {
-                run: { ...run, state: 'completed' },
-                freshness: 'fresh',
-                events: [
-                  {
-                    ...event,
-                    type: 'metric',
-                    payload: {
-                      name: 'evaluation',
-                      metrics: { mae_avg: 0.125, custom_key: 'raw-value' },
-                    },
-                  },
-                ],
-              }),
-            ]);
-        },
+              ],
+            }),
+          ]),
       }),
+      undefined,
+      i18n,
     );
     expect(wrapper.text()).toContain('Lượt chạy');
     expect(wrapper.text()).toContain('đang chạy');
@@ -193,7 +187,7 @@ describe('run presentation localization', () => {
     expect(wrapper.get('[aria-label="MAE theo tham số"]').text()).toContain('Training loss');
     expect(run.state).toBe('running');
     expect(health[0]?.status).toBe('Severe');
-    locale.value = 'en';
+    i18n.global.locale.value = 'en';
     await nextTick();
     expect(wrapper.text()).toContain('Convergence health');
     expect(wrapper.text()).toContain('Gap: 100.0%');

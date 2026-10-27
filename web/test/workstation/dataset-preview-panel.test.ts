@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, shallowRef } from 'vue';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../app/i18n/core';
+import { defineComponent, h } from 'vue';
 import DatasetPreviewPanel from '../../app/components/datasets/DatasetPreviewPanel.vue';
 import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
@@ -192,16 +191,16 @@ describe('dataset preview scope and lazy views', () => {
     const preview = vi.spyOn(DatasetPreviewApi.prototype, 'preview').mockResolvedValue(payload);
     const connection = await session();
     const connectionBefore = connection.snapshot();
-    const locale = shallowRef<WorkstationLocale>('vi');
+    const i18n = createTestI18n('vi');
     const before = JSON.stringify(payload);
     const wrapper = mount(
       defineComponent({
         setup() {
-          provideWorkstationLocale(locale);
           return () => h(DatasetPreviewPanel, { session: connection, selection });
         },
       }),
       { global },
+      i18n,
     );
     await flushPromises();
     expect(wrapper.text()).toContain('Trực quan hóa tập dữ liệu');
@@ -212,7 +211,7 @@ describe('dataset preview scope and lazy views', () => {
     await flushPromises();
     expect(wrapper.get('preview-heatmap-stub').attributes('title')).toBe('Mẫu đầu vào 0');
     const signal = preview.mock.calls[0]?.[2];
-    locale.value = 'en';
+    i18n.global.locale.value = 'en';
     await flushPromises();
     expect(wrapper.get('[role="tab"][data-state="active"]').text()).toBe('Samples');
     expect(wrapper.get('preview-heatmap-stub').attributes('title')).toBe('Input sample 0');

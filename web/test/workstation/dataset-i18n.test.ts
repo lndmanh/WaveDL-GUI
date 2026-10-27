@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { flushPromises, mount } from '@vue/test-utils';
-import { computed, defineComponent, h, shallowRef } from 'vue';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { createTestI18n } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
+import { computed, defineComponent, h } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../app/i18n/core';
 import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue';
 import PreviewStatistics from '../../app/components/datasets/PreviewStatistics.vue';
 import PreviewPlot from '../../app/components/datasets/PreviewPlot.vue';
@@ -68,7 +68,7 @@ describe('dataset language presentation', () => {
       ),
     });
     await session.connect('token');
-    const locale = shallowRef<WorkstationLocale>('vi');
+    const i18n = createTestI18n('vi');
     const selection = {
       root: 'data',
       relativePath: 'wave.npz',
@@ -78,11 +78,10 @@ describe('dataset language presentation', () => {
     };
     const wrapper = mount(
       defineComponent({
-        setup() {
-          provideWorkstationLocale(locale);
-          return () => h(DatasetInfoPanel, { session, selection });
-        },
+        setup: () => () => h(DatasetInfoPanel, { session, selection }),
       }),
+      undefined,
+      i18n,
     );
     await flushPromises();
     expect(wrapper.text()).toContain('Tóm tắt thông tin tập dữ liệu');
@@ -98,53 +97,54 @@ describe('dataset language presentation', () => {
       'float64',
     ]);
     const signal = inspect.mock.calls[0]?.[1];
-    locale.value = 'en';
+    i18n.global.locale.value = 'en';
     await flushPromises();
     expect(wrapper.text()).toContain('Unknown');
     expect(inspect).toHaveBeenCalledOnce();
     expect(signal?.aborted).toBe(false);
     session.detach();
     await flushPromises();
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await flushPromises();
     expect(wrapper.text()).toContain('Kết nối lại');
     wrapper.unmount();
   });
   it('translates statistics while keeping indices and missing numeric values intact', async () => {
-    const locale = shallowRef<WorkstationLocale>('vi');
+    const i18n = createTestI18n('vi');
     const statistics = { feature_indices: [3], means: [2.5], stds: [null] };
     const wrapper = mount(
       defineComponent({
-        setup() {
-          provideWorkstationLocale(locale);
-          return () => h(PreviewStatistics, { statistics });
-        },
+        setup: () => () => h(PreviewStatistics, { statistics }),
       }),
       { global: { stubs: { PreviewPlot: true } } },
+      i18n,
     );
     expect(wrapper.text()).toContain('Độ lệch chuẩn');
     expect(wrapper.findAll('tbody tr').map((row) => row.text())).toEqual(['32.5Thiếu']);
-    locale.value = 'en';
+    i18n.global.locale.value = 'en';
     await flushPromises();
     expect(wrapper.text()).toContain('Standard deviation');
     expect(statistics).toEqual({ feature_indices: [3], means: [2.5], stds: [null] });
     wrapper.unmount();
   });
   it('rebuilds translated canvas legends without changing numerical data or zoom', async () => {
-    const locale = shallowRef<WorkstationLocale>('en');
+    const i18n = createTestI18n('en');
     const x = [0, 1],
       y = [1, 2];
     const wrapper = mount(
       defineComponent({
         setup() {
-          provideWorkstationLocale(locale);
-          const title = computed(() => (locale.value === 'en' ? 'Feature 0' : 'Đặc trưng 0'));
+          const title = computed(() =>
+            i18n.global.locale.value === 'en' ? 'Feature 0' : 'Đặc trưng 0',
+          );
           return () => h(PreviewPlot, { title: title.value, x, y });
         },
       }),
+      undefined,
+      i18n,
     );
     expect(chart.create).toHaveBeenCalledOnce();
-    locale.value = 'vi';
+    i18n.global.locale.value = 'vi';
     await flushPromises();
     expect(chart.create).toHaveBeenCalledTimes(2);
     expect(chart.create.mock.calls[1]?.[0].series[0].label).toBe('Giá trị');

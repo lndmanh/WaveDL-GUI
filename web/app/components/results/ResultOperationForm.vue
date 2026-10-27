@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { resultsMessages } from '../../i18n/results';
+import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
 import { onBeforeUnmount, shallowRef, watch, toRaw } from 'vue';
 import { useForm, Field as VeeField } from 'vee-validate';
@@ -23,8 +22,11 @@ import RuntimeFields from '../project/RuntimeFields.vue';
 import EnvironmentFields from '../project/EnvironmentFields.vue';
 import StorageMappingFields from '../project/StorageMappingFields.vue';
 import PlanApproval from '../project/PlanApproval.vue';
-const { t, translateKnownMessage } = useWorkstationI18n(resultsMessages);
+const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+function fieldMessage(message: string): string {
+  return message.startsWith('results.') ? t(message) : clientMessage(message);
+}
 const props = defineProps<{ session: ConnectionSession; artifacts: readonly Artifact[] }>();
 const session = toRaw(props.session);
 const emit = defineEmits<{ runSelected: [runId: string] }>();
@@ -59,7 +61,7 @@ watch(
     invalidate();
     source.value = null;
     sources.value = [];
-    sourceMessage.value = 'Verifying checkpoint classifications…';
+    sourceMessage.value = 'results.verifying';
     const controller = new AbortController();
     const revision = session.snapshot().revision;
     onCleanup(() => controller.abort());
@@ -67,14 +69,10 @@ watch(
       const options = await checkpointOptions(session, props.artifacts, controller.signal);
       if (!controller.signal.aborted && session.api && session.snapshot().revision === revision) {
         sources.value = options;
-        sourceMessage.value = options.length
-          ? ''
-          : 'No published checkpoint classification is available.';
+        sourceMessage.value = options.length ? '' : 'results.noClassification';
       }
     } catch {
-      if (!controller.signal.aborted)
-        sourceMessage.value =
-          'Checkpoint classifications could not be verified. Refresh artifacts.';
+      if (!controller.signal.aborted) sourceMessage.value = 'results.classificationFailed';
     }
   },
   { immediate: true },
@@ -101,16 +99,17 @@ function chooseSource(event: Event) {
 }
 function sourceLabel(item: CheckpointOption): string {
   const kind = item.classification.kind;
-  return t('sourceLabel', {
+  const kindKeys: Readonly<Record<CheckpointOption['classification']['kind'], string>> = {
+    best: 'results.best',
+    periodic: 'results.periodic',
+    interrupted: 'results.interrupted',
+    cross_validation_fold: 'results.cvFold',
+    cross_validation_summary: 'results.cvSummary',
+  };
+  return t('results.sourceLabel', {
     generation: item.artifact.generation,
     attempt: item.artifact.attempt,
-    kind: t(
-      kind === 'cross_validation_fold'
-        ? 'cvFold'
-        : kind === 'cross_validation_summary'
-          ? 'cvSummary'
-          : kind,
-    ),
+    kind: t(kindKeys[kind]),
     fold: item.classification.fold === undefined ? '' : ` ${item.classification.fold}`,
   });
 }
@@ -130,9 +129,8 @@ async function work(action: (signal: AbortSignal) => Promise<void>) {
     await action(scope.signal);
   } catch {
     if (current === epoch) {
-      message.value =
-        'The request was not acknowledged. Verify the connection, then check status or retry this unchanged plan.';
-      setFieldError('backend', 'Review the execution settings and source publication.');
+      message.value = 'results.unacknowledged';
+      setFieldError('backend', 'results.settingsError');
     }
   } finally {
     if (current === epoch) busy.value = false;
@@ -142,7 +140,7 @@ const preview = handleSubmit(async (draft) => {
   const selectedData = data.value;
   const selectedSource = source.value;
   if (!selectedData || !selectedSource) {
-    message.value = 'Select a dataset and an explicit checkpoint generation first.';
+    message.value = 'results.selectionRequired';
     return;
   }
   await work(async (signal) => {
@@ -169,15 +167,15 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <section class="flex flex-col gap-5 border-t pt-6" aria-labelledby="inference-title">
-    <h2 id="inference-title" class="text-xl font-semibold">{{ t('evaluatePlots') }}</h2>
-    <p class="text-sm text-muted-foreground">{{ t('sourceHelp') }}</p>
+    <h2 id="inference-title" class="text-xl font-semibold">{{ t('results.evaluatePlots') }}</h2>
+    <p class="text-sm text-muted-foreground">{{ t('results.sourceHelp') }}</p>
     <BrowseContainer :session="session" @select="chooseData" />
     <form class="flex flex-col gap-5" @submit.prevent="preview">
       <FieldGroup>
         <Field
-          ><FieldLabel for="source-generation">{{ t('sourceGeneration') }}</FieldLabel
+          ><FieldLabel for="source-generation">{{ t('results.sourceGeneration') }}</FieldLabel
           ><select id="source-generation" :disabled="busy" @change="chooseSource">
-            <option value="">{{ t('choosePublication') }}</option>
+            <option value="">{{ t('results.choosePublication') }}</option>
             <option
               v-for="item in sources"
               :key="item.artifact.generation"
@@ -190,22 +188,20 @@ onBeforeUnmount(() => {
         >
         <VeeField v-slot="{ field, errors }" name="operation"
           ><Field :data-invalid="!!errors.length"
-            ><FieldLabel for="result-operation">{{ t('operation') }}</FieldLabel
+            ><FieldLabel for="result-operation">{{ t('results.operation') }}</FieldLabel
             ><select
               id="result-operation"
               v-bind="field"
               :disabled="busy"
               :aria-invalid="!!errors.length"
             >
-              <option value="test">{{ t('evaluate') }}</option>
-              <option value="plot">{{ t('generatePlots') }}</option></select
-            ><FieldError
-              v-if="errors.length"
-              :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+              <option value="test">{{ t('results.evaluate') }}</option>
+              <option value="plot">{{ t('results.generatePlots') }}</option></select
+            ><FieldError v-if="errors.length" :errors="errors.map(fieldMessage)" /></Field
         ></VeeField>
         <VeeField v-slot="{ field, errors }" name="config.export"
           ><Field :data-invalid="!!errors.length"
-            ><FieldLabel for="result-export">{{ t('modelExport') }}</FieldLabel
+            ><FieldLabel for="result-export">{{ t('results.modelExport') }}</FieldLabel
             ><select
               id="result-export"
               :value="field.value ?? ''"
@@ -213,11 +209,9 @@ onBeforeUnmount(() => {
               :aria-invalid="!!errors.length"
               @change="field.onChange(exportValue($event))"
             >
-              <option value="">{{ t('none') }}</option>
+              <option value="">{{ t('results.none') }}</option>
               <option value="onnx">ONNX</option></select
-            ><FieldError
-              v-if="errors.length"
-              :errors="errors.map((error) => translateKnownMessage(clientMessage(error)))" /></Field
+            ><FieldError v-if="errors.length" :errors="errors.map(fieldMessage)" /></Field
         ></VeeField>
         <InferenceFields :disabled="busy" />
         <RuntimeFields :disabled="busy" />
@@ -233,10 +227,12 @@ onBeforeUnmount(() => {
           @update="setFieldValue('storage_map', $event)"
         />
       </FieldGroup>
-      <p v-if="sourceMessage" role="status">{{ translateKnownMessage(sourceMessage) }}</p>
-      <Button type="submit" :disabled="busy || !session.api">{{ t('previewPlan') }}</Button>
+      <p v-if="sourceMessage" role="status">{{ t(sourceMessage) }}</p>
+      <Button type="submit" :disabled="busy || !session.api">{{ t('results.previewPlan') }}</Button>
     </form>
-    <p v-if="message" role="alert">{{ translateKnownMessage(clientMessage(message)) }}</p>
+    <p v-if="message" role="alert">
+      {{ typeof message === 'string' ? fieldMessage(message) : clientMessage(message) }}
+    </p>
     <PlanApproval v-if="plan" :plan="plan" :busy="busy" @submit="submit" @status="status" />
   </section>
 </template>

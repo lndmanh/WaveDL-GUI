@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { mount, flushPromises } from '@vue/test-utils';
+import { mountWithI18n as mount } from './mountWithI18n';
+import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';

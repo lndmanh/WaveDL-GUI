@@ -1,3 +1,4 @@
+import { validationMessage } from '../../app/i18n/client-messages';
 import { z } from 'zod';
 import options from '../training-options.json';
 import { storageMapSchema } from './storage-mapping';
@@ -7,11 +8,11 @@ const integer = finite.int();
 const text = z
   .string()
   .max(8192)
-  .refine((value) => !value.includes('\0'), 'NUL is not allowed.');
+  .refine((value) => !value.includes('\0'), { params: { clientMessageKey: 'nulNotAllowed' } });
 const nullableText = text.nullable();
 const csvNumbers = text.refine(
   (value) => value.split(',').every((part) => part.trim() !== '' && Number.isFinite(Number(part))),
-  'Enter comma-separated finite numbers.',
+  { params: { clientMessageKey: 'enterCommaSeparatedFiniteNumbers' } },
 );
 /** Field types for editable drafts and preferences, before submission compatibility. */
 export const trainingConfigBaseSchema = z.strictObject({
@@ -35,7 +36,7 @@ export const trainingConfigBaseSchema = z.strictObject({
     (value) =>
       value.split(',').length === 2 &&
       value.split(',').every((part) => Number(part) >= 0 && Number(part) < 1),
-    'Enter two beta values in [0, 1).',
+    { params: { clientMessageKey: 'enterTwoBetaValuesIn01' } },
   ),
   scheduler: z.enum([
     'plateau',
@@ -53,10 +54,9 @@ export const trainingConfigBaseSchema = z.strictObject({
   warmup_epochs: integer.min(0),
   step_size: integer.min(1),
   milestones: text
-    .refine(
-      (value) => value.split(',').every((part) => /^\d+$/.test(part.trim())),
-      'Enter comma-separated epochs.',
-    )
+    .refine((value) => value.split(',').every((part) => /^\d+$/.test(part.trim())), {
+      params: { clientMessageKey: 'enterCommaSeparatedEpochs' },
+    })
     .nullable(),
   data_path: text.min(1),
   workers: integer.min(-1),
@@ -101,7 +101,7 @@ export const trainingConfigSchema = trainingConfigBaseSchema.superRefine((config
     context.addIssue({
       code: 'custom',
       path: ['cv'],
-      message: 'Cross-validation requires at least two folds.',
+      params: { clientMessageKey: 'cvFoldCount' },
     });
     return;
   }
@@ -110,13 +110,13 @@ export const trainingConfigSchema = trainingConfigBaseSchema.superRefine((config
       context.addIssue({
         code: 'custom',
         path: ['optimizer'],
-        message: 'Cross-validation Nesterov momentum requires --optimizer sgd.',
+        params: { clientMessageKey: 'trainingCvNesterovRequiresSgd' },
       });
     if (config.momentum <= 0)
       context.addIssue({
         code: 'custom',
         path: ['momentum'],
-        message: 'Cross-validation Nesterov momentum requires positive --momentum.',
+        params: { clientMessageKey: 'cvNesterovMomentum' },
       });
   }
   if (
@@ -126,14 +126,14 @@ export const trainingConfigSchema = trainingConfigBaseSchema.superRefine((config
     context.addIssue({
       code: 'custom',
       path: ['scheduler_factor'],
-      message: 'Cross-validation plateau scheduler requires --scheduler_factor in [0, 1).',
+      params: { clientMessageKey: 'cvPlateauFactor' },
     });
   for (const name of cvUnsupportedOptions) {
     if (config[name] !== configDefaults[name])
       context.addIssue({
         code: 'custom',
         path: [name],
-        message: `Cross-validation does not support nondefault --${name}.`,
+        params: { clientMessageKey: 'trainingUnsupportedCvOption', option: name },
       });
   }
   // cache_validate is retained but inapplicable: CV reads the source directly.
@@ -145,7 +145,7 @@ const absolutePath = text
   .min(1)
   .refine(
     (value) => value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\'),
-    'Choose an absolute daemon-host path.',
+    { params: { clientMessageKey: 'chooseAnAbsoluteDaemonHostPath' } },
   );
 export const trainingRequestSchema = z
   .strictObject({
@@ -161,10 +161,9 @@ export const trainingRequestSchema = z
         z
           .string()
           .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
-          .refine(
-            (name) => !reservedRuntimeVariable(name),
-            'Scheduler and launcher identity variables are daemon-owned.',
-          ),
+          .refine((name) => !reservedRuntimeVariable(name), {
+            params: { clientMessageKey: 'reservedIdentityVariable' },
+          }),
         text,
       ),
     }),
@@ -178,7 +177,7 @@ export const trainingRequestSchema = z
         (value) =>
           value.machine_rank < value.num_machines &&
           value.num_machines * value.processes_per_machine <= 1024,
-        'Rank must belong to the topology; at most 1024 processes.',
+        { params: { clientMessageKey: 'invalidTopologyRank' } },
       ),
   })
   .superRefine((request, context) => {
@@ -191,8 +190,9 @@ export const trainingRequestSchema = z
       context.addIssue({
         code: 'custom',
         path: ['runtime', 'environment'],
-        message:
-          'Slurm owns CUDA_VISIBLE_DEVICES; configure GPU resources through operator policy.',
+        params: {
+          clientMessageKey: 'slurmGpuPolicy',
+        },
       });
   });
 export type TrainingRequest = z.infer<typeof trainingRequestSchema>;
@@ -216,12 +216,9 @@ export function reservedRuntimeVariable(name: string): boolean {
   );
 }
 export const customModelSchema = z.strictObject({
-  modelId: z
-    .string()
-    .regex(
-      /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/,
-      'Enter a model registry identifier, not a path or expression.',
-    ),
+  modelId: z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/, {
+    error: () => validationMessage('invalidModelRegistryId'),
+  }),
 });
 export const trainingFieldMetadata = options.filter(
   (option) => option.name !== 'data_path' && option.name !== 'model',

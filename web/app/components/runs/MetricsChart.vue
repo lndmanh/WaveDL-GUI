@@ -1,20 +1,15 @@
 <script setup lang="ts">
-import { useWorkstationI18n } from '../../composables/useWorkstationI18n';
-import { runMessages } from '../../i18n/runs';
+import { useI18n } from 'vue-i18n';
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MetricRecord } from '../../lib/metric-history';
-import {
-  buildPlotSeries,
-  PLOT_LABELS,
-  type PlotChannel,
-  type PlotSeries,
-} from '../../lib/plot-series';
+import { buildPlotSeries, type PlotChannel, type PlotSeries } from '../../lib/plot-series';
+import { plotMetricMessageKeys } from '../../i18n/dynamic-keys';
 
-const { t, translateKnownMessage, locale } = useWorkstationI18n(runMessages);
+const { t, locale } = useI18n({ useScope: 'global' });
 const props = defineProps<{ records: readonly MetricRecord[]; unavailable?: boolean }>();
 const channel = shallowRef<PlotChannel>('loss');
 const host = useTemplateRef<HTMLDivElement>('host');
@@ -32,14 +27,14 @@ const projection = computed<{ series: PlotSeries | null; error: string }>(() => 
   } catch (error) {
     return {
       series: null,
-      error: error instanceof Error ? error.message : runMessages.en.chartDataError,
+      error: error instanceof Error ? error.message : t('runs.chartDataError'),
     };
   }
 });
 const message = computed(() => {
   const raw = projection.value.error || renderError.value;
   const capacity = /^Chart capacity exceeded \((\d+) metric records\)\.$/.exec(raw);
-  return capacity ? t('chartCapacity', { count: capacity[1]! }) : translateKnownMessage(raw);
+  return capacity ? t('runs.chartCapacity', { count: capacity[1]! }) : raw;
 });
 function selectChannel(value: string | number) {
   if (value === 'loss' || value === 'r2' || value === 'lr') channel.value = value;
@@ -76,13 +71,16 @@ function renderPlot() {
         height: 300,
         scales: { x: { time: false } },
         axes: [
-          { label: t('step'), stroke: muted, grid: { stroke: border } },
+          { label: t('runs.step'), stroke: muted, grid: { stroke: border } },
           { stroke: muted, grid: { stroke: border } },
         ],
         series: [
-          { label: t('step') },
+          { label: t('runs.step') },
           ...series.fields.map((field, index) => ({
-            label: translateKnownMessage(PLOT_LABELS[field] ?? field),
+            label:
+              plotMetricMessageKeys[field as keyof typeof plotMetricMessageKeys] === undefined
+                ? field
+                : t(plotMetricMessageKeys[field as keyof typeof plotMetricMessageKeys]),
             stroke: index === 0 ? primary : secondary,
             width: 2,
             spanGaps: false,
@@ -96,7 +94,7 @@ function renderPlot() {
     );
   } catch {
     destroyPlot();
-    renderError.value = runMessages.en.chartRenderError;
+    renderError.value = t('runs.chartRenderError');
   }
 }
 function scheduleRender() {
@@ -150,36 +148,36 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="metrics-chart" :aria-label="t('runtimeHistory')">
+  <section class="metrics-chart" :aria-label="t('runs.runtimeHistory')">
     <div class="chart-heading">
       <div>
-        <h3>{{ t('history') }}</h3>
-        <p>{{ t('lineage', { count: projection.series?.pointCount ?? 0 }) }}</p>
+        <h3>{{ t('runs.history') }}</h3>
+        <p>{{ t('runs.lineage', { count: projection.series?.pointCount ?? 0 }) }}</p>
       </div>
       <Button variant="ghost" size="sm" :disabled="!plot" @click="resetZoom">{{
-        t('resetZoom')
+        t('runs.resetZoom')
       }}</Button>
     </div>
     <Tabs :model-value="channel" @update:model-value="selectChannel">
-      <TabsList :aria-label="t('channel')">
-        <TabsTrigger value="loss">{{ t('loss') }}</TabsTrigger>
-        <TabsTrigger value="r2">{{ t('r2') }}</TabsTrigger>
-        <TabsTrigger value="lr">{{ t('lr') }}</TabsTrigger>
+      <TabsList :aria-label="t('runs.channel')">
+        <TabsTrigger value="loss">{{ t('runs.loss') }}</TabsTrigger>
+        <TabsTrigger value="r2">{{ t('runs.r2') }}</TabsTrigger>
+        <TabsTrigger value="lr">{{ t('runs.lr') }}</TabsTrigger>
       </TabsList>
       <TabsContent :value="channel" force-mount>
         <p v-if="message" role="status">{{ message }}</p>
         <p v-else-if="unavailable" role="status">
-          {{ t('notLive') }}
+          {{ t('runs.notLive') }}
         </p>
         <p v-else-if="!projection.series?.pointCount" role="status">
           {{
-            t('waitingChannel', {
+            t('runs.waitingChannel', {
               channel:
                 channel === 'lr'
-                  ? t('learningRateLower')
+                  ? t('runs.learningRateLower')
                   : channel === 'loss'
-                    ? t('lossLower')
-                    : t('r2Lower'),
+                    ? t('runs.lossLower')
+                    : t('runs.r2Lower'),
             })
           }}
         </p>
@@ -191,7 +189,7 @@ onBeforeUnmount(() => {
       </TabsContent>
     </Tabs>
     <p class="chart-note">
-      {{ t('chartNote') }}
+      {{ t('runs.chartNote') }}
     </p>
   </section>
 </template>

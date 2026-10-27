@@ -1,0 +1,16 @@
+{
+  "title": "Advanced: explicit storage mappings",
+  "guidance": "Host roots belong to the daemon host; execution roots belong to the selected Python execution environment. Mapping only rewrites paths lexically: it does not upload files, mount storage, resolve symlinks or verify access. Configure storage and site policy outside this form.",
+  "interpreter": "The interpreter path is an execution-realm path, not a host path to remap. Enter only mappings you explicitly configured; dataset and other draft paths are never changed by this editor.",
+  "local": "The local backend refuses nonempty storage mappings. Remove mappings or explicitly select your intended non-local backend; switching backends does not clear this draft.",
+  "empty": "No mapping configured. Existing host-path behavior is unchanged.",
+  "host": "Host root",
+  "execution": "Execution root",
+  "row": "Mapping {number}",
+  "add": "Add mapping",
+  "remove": "Remove mapping {number}",
+  "limit": "Up to 32 explicit mappings. Each root is limited to 8192 characters.",
+  "rootError": "Enter an absolute root without parent traversal, control characters or invalid path syntax (8192 characters maximum).",
+  "rowError": "Host and execution roots must use the same path platform.",
+  "mapError": "Use no more than 32 mappings with unique host roots."
+}
