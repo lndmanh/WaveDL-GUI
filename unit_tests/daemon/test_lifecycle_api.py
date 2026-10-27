@@ -367,6 +367,21 @@ def tick_until(controller, predicate):
     pytest.fail("Controller did not make bounded progress")
 
 
+def test_foreign_origin_cancel_does_not_mutate_then_authorized_cancel_succeeds(
+    environment,
+):
+    app, _, _, plans, _, _ = environment
+    preview = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="origin-cancel"
+    ).json()
+    path = f"/api/runs/{preview['run_id']}/cancel"
+    foreign = request(app, "POST", path, headers={"Origin": "http://localhost:8421"})
+    assert foreign.status_code == 403
+    assert not plans.get(preview["plan_id"]).cancellation_requested
+    authorized = request(app, "POST", path)
+    assert authorized.status_code == 202
+
+
 def test_preview_uuid_owned_pure_and_idempotent(environment, monkeypatch):
     app, service, _, plans, _, backend = environment
     monkeypatch.setenv("SECRET_RUNTIME_TOKEN", "do-not-inherit")

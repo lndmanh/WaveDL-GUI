@@ -428,6 +428,50 @@ def test_catalog_root_configuration_is_explicit(tmp_path):
     assert CatalogService({}).browse() == {"roots": []}
 
 
+@pytest.mark.skipif(
+    os.name == "nt" or os.geteuid() == 0, reason="Requires POSIX non-root permissions"
+)
+def test_browse_rejects_locked_directory_and_uses_bounded_default(tmp_path):
+    locked = tmp_path / "locked"
+    locked.mkdir(mode=0o700)
+    catalog = CatalogService({"data": tmp_path})
+    assert catalog.max_entries == 1000
+    locked.chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            catalog.browse("data", "locked")
+    finally:
+        locked.chmod(0o700)
+
+
+def test_preview_child_identity_changed_maps_to_documented_refusal(
+    tmp_path, monkeypatch
+):
+    from wavedl_daemon.runs.preview_service import (
+        DatasetPreviewService,
+        PreviewIdentityChanged,
+    )
+    from wavedl_daemon.supervision.base import ProcessResult
+
+    (tmp_path / "data.npz").write_bytes(b"selected file")
+    observed = []
+
+    def refused(spec, budget, *, token):
+        observed.append(spec)
+        return ProcessResult(1, b'{"code":"identity_changed"}', b"")
+
+    monkeypatch.setattr("wavedl_daemon.runs.preview_service.run_command", refused)
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = DatasetPreviewService(
+            sys.executable, Path.cwd(), pool, CatalogService({"data": tmp_path})
+        )
+        with pytest.raises(PreviewIdentityChanged, match="Dataset identity changed"):
+            asyncio.run(
+                service.preview({"root": "data", "path": "data.npz", "view": "all"})
+            )
+    assert len(observed) == 1
+
+
 def test_catalog_worker_cancellation_retains_owner_and_pool_admission(tmp_path):
     entered, gate = threading.Event(), threading.Event()
     service = CatalogService({"data": tmp_path})
