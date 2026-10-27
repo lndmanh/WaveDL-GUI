@@ -197,6 +197,11 @@ def test_hosted_journal_fault_never_fabricates_or_skips_completion(tmp_path, fau
                 return (await current())["state"] == "completed"
 
             await until(recovered)
+            bookmark = await services.host.call(
+                lambda session: session.ingestor._bookmarks[(layout.run_id, 1)]
+            )
+            assert bookmark.offset == layout.journal(1).stat().st_size
+            assert bookmark.last_seq == 1
             assert await services.event_log.read_after(layout.run_id) == [
                 hello,
                 completed,

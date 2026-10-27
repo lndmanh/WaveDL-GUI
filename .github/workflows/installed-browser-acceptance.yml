@@ -9,7 +9,7 @@ on:
       - "pyproject.toml"
       - "MANIFEST.in"
       - "tools/**"
-      - "unit_tests/test_installed_browser_workflow.py"
+      - "unit_tests/test_ci_required_gates.py"
       - ".github/workflows/installed-browser-acceptance.yml"
   pull_request:
     paths: *installed-paths
@@ -57,11 +57,9 @@ jobs:
           requirements = tomllib.loads(Path("pyproject.toml").read_text())["build-system"]["requires"]
           subprocess.run([sys.executable, "-m", "pip", "install", *requirements], check=True)
           PY
-      - name: Test installed-browser gate contracts
+      - name: Test required gates and installed-browser product evidence
         run: |
-          python -m pytest --noconftest unit_tests/test_installed_browser_workflow.py -q
-          ruff check unit_tests/test_installed_browser_workflow.py
-          ruff format --check unit_tests/test_installed_browser_workflow.py
+          python -m pytest --noconftest unit_tests/test_ci_required_gates.py -q
           node --test tools/verify_installed_browser_report.test.mjs
       - name: Install pinned native browser controller
         run: |

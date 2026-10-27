@@ -13,7 +13,7 @@ on:
       - "tools/vendor_web_assets.py"
       - "unit_tests/daemon/test_installed_cli.py"
       - "unit_tests/daemon/test_installed_cli_native_helpers.py"
-      - "unit_tests/test_windows_cpu_acceptance_workflow.py"
+      - "unit_tests/test_ci_required_gates.py"
       - "unit_tests/test_launcher_stdio.py"
       - ".github/workflows/windows-cpu-acceptance.yml"
   pull_request:
@@ -27,7 +27,7 @@ on:
       - "tools/vendor_web_assets.py"
       - "unit_tests/daemon/test_installed_cli.py"
       - "unit_tests/daemon/test_installed_cli_native_helpers.py"
-      - "unit_tests/test_windows_cpu_acceptance_workflow.py"
+      - "unit_tests/test_ci_required_gates.py"
       - "unit_tests/test_launcher_stdio.py"
       - ".github/workflows/windows-cpu-acceptance.yml"
   workflow_dispatch:
@@ -85,9 +85,9 @@ jobs:
           subprocess.run([sys.executable, "-m", "pip", "install", *requirements], check=True)
           PY
           python -m pip check
-      - name: Test Windows CPU workflow contracts
+      - name: Test native installed CLI helpers and launcher
         if: ${{ success() && !cancelled() }}
-        run: python -m pytest --noconftest unit_tests/test_windows_cpu_acceptance_workflow.py unit_tests/daemon/test_installed_cli_native_helpers.py unit_tests/test_launcher_stdio.py -q
+        run: python -m pytest --noconftest unit_tests/daemon/test_installed_cli_native_helpers.py unit_tests/test_launcher_stdio.py -q
       - name: Generate locked browser assets
         if: ${{ success() && !cancelled() }}
         working-directory: web

@@ -53,6 +53,31 @@ def test_health_is_authenticated_minimal_identity_without_state_creation(app):
     assert not app.state.settings.run_root.exists()
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "headers"),
+    [
+        ("GET", "/api/runs", {"Origin": "http://localhost:8421"}),
+        (
+            "POST",
+            "/api/runs/12345678-1234-4234-8234-123456789abc/cancel",
+            {"Origin": "http://localhost:8421", "Cookie": f"token={TOKEN}"},
+        ),
+        (
+            "OPTIONS",
+            "/api/runs/12345678-1234-4234-8234-123456789abc/cancel",
+            {
+                "Origin": "http://localhost:8421",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        ),
+    ],
+)
+def test_foreign_origin_is_rejected_before_auth_and_cors(method, path, headers, app):
+    response = request(app, method, path, headers=headers)
+    assert response.status_code == 403
+    assert "access-control-allow-origin" not in response.headers
+
+
 def test_expected_backend_identity_matches_and_header_remains_optional(app):
     response = request(app, headers=AUTH | {"X-WaveDL-Daemon-ID": "daemon-test"})
     assert response.status_code == 200

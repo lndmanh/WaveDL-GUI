@@ -286,6 +286,30 @@ def test_worker_stdout_is_finite_json_only(tmp_path):
     assert not completed.stderr
 
 
+def test_worker_reports_identity_changed_for_mutated_input(tmp_path):
+    path = tmp_path / "identity-change.npz"
+    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
+    expected = identity(path)
+    with path.open("ab") as stream:
+        stream.write(b"mutation")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "wavedl.core.dataset_preview",
+            "--path",
+            str(path),
+            "--expected-identity",
+            json.dumps(expected),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert json.loads(completed.stdout)["code"] == "identity_changed"
+
+
 def test_content_mutation_during_numeric_read_is_refused(tmp_path, monkeypatch):
     path = tmp_path / "mutation.npz"
     np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
