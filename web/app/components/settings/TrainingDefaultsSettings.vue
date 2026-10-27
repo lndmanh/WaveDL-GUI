@@ -5,6 +5,9 @@ import { useForm } from 'vee-validate';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { FieldGroup } from '@/components/ui/field';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import ShellInfo from '../shell/ShellInfo.vue';
+import { ChevronDown } from '@lucide/vue';
 import TrainingOptionField from '../project/TrainingOptionField.vue';
 import {
   loadTrainingPreferences,
@@ -54,29 +57,41 @@ const { t } = useI18n({ useScope: 'global' });
     <h2 id="defaults-heading" class="font-medium">
       {{ t('shell.newRunDefaults') }}
     </h2>
-    <p class="text-sm text-muted-foreground">
-      {{ t('shell.trainingDefaultsHelp') }}
-    </p>
+    <div class="flex items-center justify-between gap-2">
+      <p class="text-sm text-muted-foreground">
+        {{ t('shell.trainingDefaultsSummary') }}
+      </p>
+      <ShellInfo :label="t('shell.newRunDefaults')" :text="t('shell.trainingDefaultsHelp')" />
+    </div>
     <p v-if="!daemonId">
       {{ t('shell.trainingDefaultsDisconnected') }}
     </p>
     <form v-else class="flex flex-col gap-4" @submit.prevent="submit">
-      <details>
-        <summary class="cursor-pointer">
-          {{ t('shell.trainingAndOptionalWBDefaults') }}
-        </summary>
-        <FieldGroup class="mt-4">
-          <TrainingOptionField
-            v-for="name in trainingPreferenceFields"
-            :key="name"
-            :name="name"
-            :disabled="false"
-          />
-        </FieldGroup>
-      </details>
-      <p class="text-sm text-muted-foreground">
-        {{ t('shell.loggingHelp') }}
-      </p>
+      <Collapsible v-slot="{ open }" class="flex flex-col gap-4" :unmount-on-hide="false">
+        <CollapsibleTrigger as-child>
+          <Button type="button" variant="outline" class="w-full justify-between">
+            {{ t('shell.trainingAndOptionalWBDefaults') }}
+            <ChevronDown data-icon="inline-end" aria-hidden="true" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent :force-mount="true">
+          <FieldGroup class="mt-4" :hidden="!open" :inert="!open" :aria-hidden="!open">
+            <TrainingOptionField
+              v-for="name in trainingPreferenceFields"
+              :key="name"
+              :name="name"
+              :disabled="false"
+            />
+          </FieldGroup>
+        </CollapsibleContent>
+      </Collapsible>
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-sm text-muted-foreground">{{ t('shell.loggingSummary') }}</p>
+        <ShellInfo
+          :label="t('shell.trainingAndOptionalWBDefaults')"
+          :text="t('shell.loggingHelp')"
+        />
+      </div>
       <div class="flex flex-wrap gap-2">
         <Button type="submit">{{ t('shell.saveTrainingDefaults') }}</Button
         ><Button type="button" variant="outline" @click="resetDefaults">{{
