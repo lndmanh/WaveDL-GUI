@@ -2,9 +2,25 @@
 
 ## Project Overview
 
-WaveDL is a deep learning framework for wave-based inverse problems with two packages:
+WaveDL is a deep learning framework and new daemon/browser application for
+wave-based inverse problems:
 - `src/wavedl/` — Core ML framework (PyTorch training, models, utilities)
-- `src/wavedl_gui/` — GUI application built with PySide6 + PyQt-Fluent-Widgets (`qfluentwidgets`)
+- `src/wavedl_daemon/` — Headless per-user execution/API service
+- `web/` — Nuxt/Vue + TypeScript browser workstation; generated static assets are
+  vendored into the daemon package
+
+The browser is the primary UI; `wavedl-train` also works without a daemon.
+Legacy Qt compatibility, old-user-data migration, a deprecation period and an
+intermediate Qt-retaining release are non-goals. `src/wavedl_gui/` may remain
+temporarily as unshipped historical source in this dirty checkout; do not treat
+it as active product code or claim it has been physically deleted. Preserve
+unrelated dirty changes and existing user files.
+
+The 24 workstation capabilities remain functional product requirements.
+API/protocol, durable-state, crash/replay recovery, security and ownership
+safeguards remain required. Validate a real site's filesystem/Slurm before
+declaring HPC support. Final release validation remains required; tagging or
+publishing requires explicit approval.
 
 Python **3.11+** required. Licensed under MIT.
 
@@ -12,12 +28,30 @@ Python **3.11+** required. Licensed under MIT.
 
 ```bash
 pip install -e ".[dev]"        # Core + dev tools (ruff, pytest)
-pip install -e ".[dev,gui]"    # Core + dev + GUI (PySide6, qfluentwidgets)
+pip install -e ".[dev,daemon]" # Core + dev + daemon/browser runtime
 ```
+
+For browser development, use the existing `web/package.json` and lockfile:
+
+```bash
+cd web
+npm ci
+npm run typecheck
+npm test
+npm run lint:workstation
+npm run format:check
+npm run generate
+cd ..
+python tools/vendor_web_assets.py
+```
+
+Do not run formatting/autofix unless requested. Use clean staging for package
+builds to avoid stale `build/lib` modules; never clean user preferences/databases.
 
 ## Lint & Format
 
-Ruff is the sole linter and formatter (replaces Black, Flake8, isort).
+Ruff is the Python linter and formatter (replaces Black, Flake8, isort).
+Browser code uses the existing Oxlint/Oxfmt scripts above.
 
 ```bash
 ruff check .                       # Lint
@@ -70,60 +104,50 @@ Ruff handles import sorting (isort rules). Order: stdlib, third-party, local.
 - Multi-imports use `combine-as-imports = true`
 - `__init__.py` files may have unused imports (`F401` suppressed)
 
-Typical import pattern in GUI code:
-```python
-# coding: utf-8
-import os
-import sys
-from enum import Enum
-
-from PySide6.QtCore import QObject, Signal
-from qfluentwidgets import (FluentIconBase, getIconColor, Theme)
-
-from ..common.config import cfg
-from ..common.signal_bus import signalBus
-```
+Browser code follows the established `web/workstation/` imports and conventions;
+do not apply legacy Qt import rules to it.
 
 ### Naming Conventions
 - **Classes**: `PascalCase` — `TrainingProgress`, `ProcessState`, `SignalBus`
-- **Functions/methods**: `camelCase` for GUI layer (`connectSignalToSlot`, `initNavigation`), `snake_case` for ML layer (`load_config`, `get_loss`, `build_model`)
+- **Functions/methods**: `snake_case` for Python core/daemon; existing camelCase conventions for browser TypeScript
 - **Private methods**: Single underscore prefix `_check_environment()`
-- **Config items**: `camelCase` matching qfluentwidgets convention (`batchSize`, `learningRate`)
-- **Constants/module singletons**: `UPPER_SNAKE` for true constants (`FEEDBACK_URL`), `camelCase` for singleton instances (`signalBus`, `cfg`, `trainingService`)
+- **Config items**: Follow daemon contracts and existing browser types, not qfluentwidgets conventions
+- **Constants**: `UPPER_SNAKE` for true constants; preserve established local conventions
 - **Enums**: `PascalCase` class name, `UPPER_SNAKE` members (`ProcessState.IDLE`)
 - **Test classes**: `Test*` prefix; test methods: `test_*` with snake_case
-- **Signals**: `camelCase` ending with `Sig` suffix (`trainingProgressSig`, `appErrorSig`)
+- Legacy Qt camelCase/signal conventions apply only when explicitly working on retained historical Qt source
 
 ### Type Annotations
 - Used in the ML layer: `def load_config(config_path: str) -> dict[str, Any]:`
 - Use modern syntax (`dict[str, Any]`, `list[float]`) not `typing.Dict`/`typing.List`
 - `from __future__ import annotations` used in newer files
-- GUI layer is less strictly typed (follows qfluentwidgets conventions)
+- Browser code uses TypeScript and Vue Composition API with `<script setup>`;
+  follow existing web types rather than the historical loosely typed Qt layer
 - Dataclasses used for structured data (`@dataclass class TrainingProgress`)
 
 ### Error Handling
 - Factory functions raise `ValueError` for unknown keys: `raise ValueError(f"Unknown loss function")`
-- GUI uses decorator-based exception handling: `@exceptionHandler("log_name", default_value)`
+- Daemon/API failures preserve truthful unknown/uncertain states and sanitized diagnostics
 - `FileNotFoundError` for missing config/data files
-- GUI errors are forwarded via `signalBus.appErrorSig.emit(message)` and shown as `InfoBar`
+- Browser errors use the existing workstation error presentation; never expose credentials or private error bodies
 
 ### Docstrings
 - ML layer uses detailed module-level docstrings with sections (Features, Usage, Author)
 - Function docstrings use Google-style or NumPy-style (`Parameters`, `Returns`, `Raises`)
-- GUI classes use short one-line docstrings
+- Python service classes use concise docstrings
 - Test docstrings describe expected behavior: `"""MSE loss should work correctly."""`
 
 ## Architecture Patterns
 
-### GUI Layer (`wavedl_gui`)
-- **Window**: `MSFluentWindow` base class (Microsoft Fluent design)
-- **Signal bus**: Centralized `SignalBus(QObject)` singleton for cross-component communication
-- **Config**: `QConfig` subclass with typed `ConfigItem` fields, auto-persisted to JSON
-- **StyleSheets**: `StyleSheetBase` + `Enum` pattern with theme-aware `path()` method
-- **Icons**: `FluentIconBase` + `Enum` with `path()` returning resource paths
-- **Services**: Stateless service singletons (`trainingService`, `VersionService`)
-- **Concurrency**: `TaskExecutor` for async work, `QThread` for subprocess management
-- **Navigation**: `NavigationItemPosition.TOP/BOTTOM`, `addSubInterface()` pattern
+### Daemon/browser application
+- **Daemon**: Per-user same-origin API and static client; authenticated mutations
+- **State**: Journal/SQLite projection, attempt-aware replay and durable intents;
+  preserve ownership and crash-recovery contracts
+- **Browser**: Nuxt static SPA, Vue Composition API + TypeScript; follow existing
+  `web/workstation/` components, composables and design conventions
+- **Offline**: Shell/assets only; service worker never intercepts `/api/**`
+- **Execution**: Daemon owns runtime supervision; closing a browser detaches,
+  cancellation is an explicit durable request
 
 ### ML Layer (`wavedl`)
 - **Registry pattern**: `register_model`, `get_model`, `list_models`, `get_loss`, `list_losses`
@@ -134,13 +158,11 @@ from ..common.signal_bus import signalBus
 
 | Path | Purpose |
 |---|---|
-| `src/wavedl_gui/main.py` | GUI entry point |
-| `src/wavedl_gui/view/main_window.py` | Main window (MSFluentWindow) |
-| `src/wavedl_gui/common/config.py` | QConfig with all ConfigItems |
-| `src/wavedl_gui/common/signal_bus.py` | Application-wide signal bus |
-| `src/wavedl_gui/common/style_sheet.py` | Theme-aware stylesheets |
-| `src/wavedl_gui/common/icon.py` | Custom icon enums |
-| `src/wavedl_gui/service/training_service.py` | Subprocess training manager |
+| `src/wavedl_daemon/` | Daemon CLI, HTTP API, storage and execution backends |
+| `src/wavedl/core/` | Shared protocol and lifecycle contracts |
+| `web/workstation/` | Browser application source |
+| `web/package.json` | Frontend build, tests and validation commands |
+| `tools/vendor_web_assets.py` | Vendor generated static browser output |
 | `src/wavedl/train.py` | CLI training entry point |
 | `src/wavedl/models/` | 18+ model architectures |
 | `src/wavedl/utils/` | Losses, metrics, optimizers, schedulers, data loading |

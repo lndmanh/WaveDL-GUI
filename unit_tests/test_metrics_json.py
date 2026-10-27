@@ -2,7 +2,7 @@
 Unit Tests for Strict-JSON Metric Emission
 ===========================================
 
-Tests that the structured metrics line emitted for GUI/daemon consumption is
+Tests that the structured metrics line emitted for daemon/browser consumption is
 valid JSON under RFC 8259, which forbids the bare ``Infinity``/``NaN`` tokens
 that Python's ``json`` module emits by default.
 
@@ -182,85 +182,6 @@ class TestStrictJsonSerialisation:
         assert decoded["train_loss"] is None
         assert decoded["r2"] is None
         assert decoded["mae_per_param"] == [None, 0.2]
-
-
-# ==============================================================================
-# CONSUMER ROUND-TRIP TESTS
-# ==============================================================================
-
-
-class TestGuiIngestionRoundTrip:
-    """The GUI parser must survive the null values the sanitiser now emits.
-
-    ``dict.get(key, default)`` returns None when the key is present with a null
-    value, so a null on the wire would otherwise reach format strings such as
-    ``f"{best_val_loss:.6f}"`` and comparisons such as ``best_val_loss < inf``.
-    """
-
-    def _emit(self, metrics):
-        """Serialise metrics exactly as train.py does, returning the wire line."""
-        from wavedl.train import _finite_or_none
-
-        return f"##METRICS##{json.dumps(_finite_or_none(metrics), allow_nan=False)}"
-
-    def test_null_best_val_loss_stays_formattable(self):
-        """Epoch 1 of a fresh run must not put None into the progress object."""
-        pytest.importorskip("PySide6")
-        from wavedl_gui.service.training_service import OutputParser
-
-        parser = OutputParser()
-        line = self._emit({"epoch": 1, "best_val_loss": float("inf"), "val_loss": 0.5})
-        progress, _ = parser.parse_line(line)
-
-        assert progress.best_val_loss is not None
-        assert f"{progress.best_val_loss:.6f}"  # would raise TypeError on None
-        assert progress.best_val_loss == float("inf")
-
-    def test_null_best_val_loss_survives_comparison(self):
-        """convergence_card compares against inf; None would raise TypeError."""
-        pytest.importorskip("PySide6")
-        from wavedl_gui.service.training_service import OutputParser
-
-        parser = OutputParser()
-        line = self._emit({"epoch": 1, "best_val_loss": float("inf")})
-        progress, _ = parser.parse_line(line)
-
-        assert (progress.best_val_loss < float("inf")) is False
-
-    def test_diverged_metrics_stay_numeric(self):
-        """NaN metrics from a diverged run must not become None in the GUI."""
-        pytest.importorskip("PySide6")
-        from wavedl_gui.service.training_service import OutputParser
-
-        parser = OutputParser()
-        line = self._emit(
-            {
-                "epoch": 4,
-                "train_loss": float("nan"),
-                "val_loss": float("nan"),
-                "r2": float("nan"),
-                "mae_per_param": [float("nan"), 0.2],
-            }
-        )
-        progress, _ = parser.parse_line(line)
-
-        assert progress.train_loss is not None
-        assert progress.val_loss is not None
-        assert progress.r2_score is not None
-        assert None not in progress.mae_per_param
-
-    def test_finite_metrics_pass_through_unchanged(self):
-        """The ordinary path is unaffected by the null handling."""
-        pytest.importorskip("PySide6")
-        from wavedl_gui.service.training_service import OutputParser
-
-        parser = OutputParser()
-        line = self._emit({"epoch": 12, "val_loss": 0.25, "best_val_loss": 0.2})
-        progress, _ = parser.parse_line(line)
-
-        assert progress.epoch == 12
-        assert progress.val_loss == pytest.approx(0.25)
-        assert progress.best_val_loss == pytest.approx(0.2)
 
 
 def _reject_constant(name):
