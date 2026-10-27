@@ -115,6 +115,19 @@ const vietnamese: Record<string, string> = {
     'Yêu cầu bị gián đoạn hoặc hết thời gian; kiểm tra kết quả trước khi thử lại.',
   'Credential expired or rejected; enter it again.':
     'Thông tin xác thực đã hết hạn hoặc bị từ chối; nhập lại.',
+  'Your session ended. Sign in again.': 'Phiên của bạn đã kết thúc. Hãy đăng nhập lại.',
+  'A different WaveDL daemon is now serving this address. Sign in again.':
+    'Một daemon WaveDL khác đang phục vụ địa chỉ này. Hãy đăng nhập lại.',
+  'Daemon identity changed. Sign in again to verify this daemon.':
+    'Danh tính daemon đã thay đổi. Hãy đăng nhập lại để xác minh daemon này.',
+  'Daemon identity changed': 'Danh tính daemon đã thay đổi',
+  'The daemon returned its master credential.': 'Daemon đã trả về thông tin xác thực chính.',
+  'The daemon did not rotate the session token.': 'Daemon không xoay vòng mã phiên.',
+  'Session rotation was interrupted': 'Việc xoay vòng phiên đã bị gián đoạn',
+  'Connection health is unavailable.': 'Không có tình trạng kết nối.',
+  'Invalid bootstrap credential': 'Thông tin xác thực khởi tạo không hợp lệ',
+  'Invalid session response': 'Phản hồi phiên không hợp lệ',
+  'Session credential exceeds storage bound.': 'Thông tin xác thực phiên vượt giới hạn bộ nhớ.',
   'Daemon identity, build or protocol changed. Update the client or explicitly disconnect before changing daemon scope.':
     'Định danh, bản dựng hoặc giao thức daemon đã thay đổi. Cập nhật ứng dụng hoặc chủ động ngắt kết nối trước khi đổi phạm vi daemon.',
   'The daemon returned an invalid response. Reconnect to verify its identity.':

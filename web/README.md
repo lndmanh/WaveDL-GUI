@@ -26,9 +26,20 @@ Lint/format checks target active custom code.
 There is no Cloudflare, NuxtHub, Sentry, account/auth backend, telemetry or remote
 font module. No Nitro server ships: `ssr: false` and static generation produce
 only `.output/public`. The daemon remains the sole API/compute authority. Never
-place bearer tokens in build environment variables, source, public assets or
-browser local storage. The connection session holds its bearer only in memory;
-reload or detach requires fresh authentication.
+place the master bearer in build environment variables, source, public assets,
+URLs or browser storage. Bootstrap exchanges it for a bounded, revocable
+session envelope stored under `wavedl.session.v1` in `sessionStorage` by default;
+`localStorage` is used only after the explicit **Keep me signed in on this browser** choice. Reloads
+resume the same session without rotating its token. Session tokens expire after
+12 hours idle or 7 days absolute. With the same state root and registry, daemon
+identity is stable across restarts, `--credential-file` also preserves the master
+token, and browser sessions are in memory, so after a daemon restart sign in again.
+The envelope's `expiresAt` is informational; the client never rotates or rejects it
+locally, and the daemon remains authoritative.
+401 reports “Your session ended. Sign in again.”; a daemon-identity 409 reports
+“A different WaveDL daemon is now serving this address. Sign in again.” Only
+stored envelopes matching the rejected token are cleared. The non-credential
+sign-in preference is remembered and can be changed while connected.
 
 Cross-validation summaries are displayed from an explicitly selected, completed
 SHA-verified publication. Summary generations are not model checkpoints. ONNX
@@ -42,18 +53,25 @@ from the repository root and start it; Node is not required to run this bundle:
 
 ```sh
 python -m pip install -e ".[daemon]"
-wavedl-daemon serve --browse-root datasets=/absolute/path/to/datasets
+wavedl-daemon serve --credential-file /absolute/path/to/daemon-token --browse-root datasets=/absolute/path/to/datasets
 ```
+
+Use an owner-only token file for the recommended restart-stable master
+credential; see the root [README](../README.md) for the creation command. The
+ephemeral default is still supported, but a daemon restart requires a new
+bootstrap link.
 
 If you change browser source, regenerate and vendor its assets using the
 development commands below before testing those changes through the daemon.
 
-Open the single-use bootstrap URL printed by the daemon. The token is stripped
-from the URL before requests begin. Select data and a model, enter the absolute
-Python interpreter on the daemon host, review the persisted plan, and approve
-it. The selected Python must contain the WaveDL ML dependencies; daemon health
-alone does not certify that environment. Keep the daemon bound to loopback; use
-SSH forwarding for remote hosts, not unauthenticated LAN exposure.
+Open the single-use bootstrap URL printed by the daemon. The bootstrap code is
+stripped from the URL synchronously before requests begin and is exchanged for
+a session token; the master credential never enters the URL or browser storage.
+Select data and a model, enter the absolute Python interpreter on the daemon
+host, review the persisted plan, and approve it. The selected Python must
+contain the WaveDL ML dependencies; daemon health alone does not certify that
+environment. Keep the daemon bound to loopback; use SSH forwarding for remote
+hosts, not unauthenticated LAN exposure.
 
 Closing/detaching stops browser follow-up work without cancelling running jobs.
 Use the explicit cancellation action for that. Browser downloads use your
@@ -149,12 +167,14 @@ and their open state is checked without changing authored values or creating pla
 This does not establish keyboard-only summary/form acceptance; that gate remains
 separate. They exercise guided dataset/model selection,
 then explicitly switch to the full editor for stable labelled-field authoring;
-postconditions use read-only daemon SQLite queries.
+postconditions use read-only daemon SQLite queries. The reload case asserts
+that the session envelope survives a document reload, the URL is credential
+free and the master bearer is absent from storage.
 
 The baseline checks explicit approval, daemon-confirmed real CPU completion and
 downloaded bytes against the immutable publication's size and SHA-256.
-Failure cases check detach/close without cancellation, reload requiring fresh
-authentication, explicit cancellation with daemon-confirmed terminal state, and
+Failure cases check detach/close without cancellation, reload session recovery,
+explicit cancellation with daemon-confirmed terminal state, and
 recovery after the fixture suppresses one
 successful submit acknowledgment and returns an empty proxy-style 503
 *after actual backend acceptance*. The lost-ack case tests HTTP gateway failure

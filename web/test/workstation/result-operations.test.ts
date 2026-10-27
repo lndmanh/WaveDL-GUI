@@ -3,7 +3,7 @@ import { inferenceDefaults, resultRequestSchema } from '../../shared/schemas/res
 import { ResultOperations, checkpointOptions } from '../../app/lib/result-operations';
 import { ArtifactClient } from '../../app/lib/artifact-client';
 import { CatalogApi } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { createResultOperationDefaults } from '../../app/lib/result-operation-defaults';
 const sourceRun = '11111111-1111-4111-8111-111111111111';
 const ids = {

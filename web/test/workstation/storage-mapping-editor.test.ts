@@ -16,7 +16,7 @@ import {
   type TrainingRequest,
 } from '../../shared/schemas/training-request';
 import { inferenceDefaults, resultRequestSchema } from '../../shared/schemas/result-request';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ArtifactClient } from '../../app/lib/artifact-client';
 import { ProjectPlan } from '../../app/lib/project-plan';

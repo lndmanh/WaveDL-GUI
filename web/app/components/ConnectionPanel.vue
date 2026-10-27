@@ -11,13 +11,17 @@ import { Cable } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { ConnectionState } from '../lib/connection-session';
 
-const props = defineProps<{ state: ConnectionState }>();
+const props = withDefaults(defineProps<{ state: ConnectionState; keepSignedIn?: boolean }>(), {
+  keepSignedIn: false,
+});
 const emit = defineEmits<{
-  connect: [token: string];
-  reconnect: [token: string];
+  connect: [token: string, keepSignedIn: boolean];
+  reconnect: [token: string, keepSignedIn: boolean];
+  'update:keepSignedIn': [keepSignedIn: boolean];
   detach: [];
   refresh: [];
 }>();
@@ -25,6 +29,7 @@ const { handleSubmit, resetForm, setFieldError } = useForm<DaemonCredentialValue
   initialValues: { token: '' },
   validationSchema: daemonCredentialSchema,
 });
+const keepSignedIn = computed(() => props.keepSignedIn);
 const busy = computed(
   () => props.state.status === 'connecting' || props.state.status === 'offline',
 );
@@ -32,8 +37,8 @@ const connected = computed(() => props.state.status === 'connected');
 const submit = handleSubmit((values) => {
   const token = values.token;
   resetForm({ values: { token: '' } });
-  if (props.state.revision > 0) emit('reconnect', token);
-  else emit('connect', token);
+  if (props.state.revision > 0) emit('reconnect', token, keepSignedIn.value);
+  else emit('connect', token, keepSignedIn.value);
 });
 watch(
   () => props.state.revision,
@@ -58,7 +63,7 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
     <p class="introduction">
       {{
         translateKnownMessage(
-          'Your daemon runs the experiments. This browser connects only to its current origin; credentials stay in memory.',
+          'Your daemon runs the experiments. This browser connects only to its current origin. An expiring session token stays in this tab unless you choose to keep it on this browser; your master credential is never saved.',
         )
       }}
     </p>
@@ -93,7 +98,7 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
         <VeeField v-slot="{ field, errors }" name="token">
           <Field :data-invalid="!!errors.length" :data-disabled="busy">
             <FieldLabel for="daemon-bearer">{{
-              translateKnownMessage('Daemon bearer credential')
+              translateKnownMessage('Daemon master credential')
             }}</FieldLabel>
             <Input
               id="daemon-bearer"
@@ -106,7 +111,7 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
             />
             <FieldDescription id="daemon-bearer-help">{{
               translateKnownMessage(
-                'Paste the credential provided by WaveDL. It is not saved to browser storage.',
+                'Paste the credential provided by WaveDL. It is exchanged for an expiring session token and never saved.',
               )
             }}</FieldDescription>
             <FieldError v-if="errors.length" :errors="errors.map(translateKnownMessage)" />
@@ -131,6 +136,25 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
         >
       </div>
     </form>
+    <Field orientation="horizontal" class="items-start mt-5">
+      <Checkbox
+        id="keep-signed-in"
+        :model-value="keepSignedIn"
+        :disabled="busy"
+        aria-describedby="keep-signed-in-help"
+        @update:model-value="emit('update:keepSignedIn', $event === true)"
+      />
+      <div class="grid gap-1">
+        <FieldLabel for="keep-signed-in">{{
+          translateKnownMessage('Keep me signed in on this browser')
+        }}</FieldLabel>
+        <FieldDescription id="keep-signed-in-help">{{
+          translateKnownMessage(
+            'Saves only the expiring session token in this browser. Your master credential is never saved.',
+          )
+        }}</FieldDescription>
+      </div>
+    </Field>
     <p class="offline-note">
       {{
         translateKnownMessage(

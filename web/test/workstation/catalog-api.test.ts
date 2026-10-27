@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi, relativePath } from '../../app/lib/catalog-api';
 
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
@@ -76,7 +76,7 @@ describe('scoped daemon catalogues', () => {
   it('verifies daemon identity before custom model authoring', async () => {
     const { api, session, skew } = await setup({});
     skew();
-    await expect(api.selectCustomModel('wave')).rejects.toMatchObject({ code: 'skew' });
+    await expect(api.selectCustomModel('wave')).rejects.toMatchObject({ code: 'identity' });
     expect(session.snapshot().status).toBe('skew');
   });
   it.each([
@@ -173,7 +173,7 @@ describe('scoped daemon catalogues', () => {
   it('fails closed on forwarded-port daemon replacement before reading a catalogue', async () => {
     const { api, session, skew, fetcher } = await setup({ roots: [] });
     skew();
-    await expect(api.roots()).rejects.toMatchObject({ code: 'skew' });
+    await expect(api.roots()).rejects.toMatchObject({ code: 'identity' });
     expect(session.snapshot().status).toBe('skew');
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/api/browse'))).toBe(false);
   });

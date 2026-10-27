@@ -22,17 +22,21 @@ from wavedl_daemon.http.bootstrap import (
 TOKEN = "daemon-secret+/=private"
 
 
-def test_code_is_random_and_only_digest_is_stored():
+def test_code_is_random_and_only_digests_are_stored():
     credentials = BootstrapCredentials(TOKEN)
     first, second = credentials.mint(), credentials.mint()
     assert first != second
     assert len(first) == 43
     assert hashlib.sha256(first.encode()).digest() in credentials._pending
+    assert TOKEN not in repr(credentials.__dict__)
     assert first not in repr(credentials.__dict__)
-    assert credentials.exchange(first) == TOKEN
+    exchanged = credentials.exchange(first)
+    assert exchanged.token not in repr(credentials.__dict__)
+    assert credentials.authenticate(exchanged.token)
+    assert not credentials.is_master(exchanged.token)
     with pytest.raises(BootstrapExchangeError, match="Invalid or expired"):
         credentials.exchange(first)
-    assert credentials.exchange(second) == TOKEN
+    assert credentials.authenticate(credentials.exchange(second).token)
 
 
 def test_sixteen_concurrent_exchanges_have_exactly_one_winner():
@@ -43,13 +47,13 @@ def test_sixteen_concurrent_exchanges_have_exactly_one_winner():
     def exchange(_):
         barrier.wait(timeout=10)
         try:
-            return credentials.exchange(code)
+            return credentials.exchange(code).token
         except BootstrapExchangeError:
             return None
 
     with ThreadPoolExecutor(max_workers=16) as pool:
         results = list(pool.map(exchange, range(16)))
-    assert results.count(TOKEN) == 1
+    assert sum(result is not None for result in results) == 1
     assert results.count(None) == 15
     assert not credentials._pending
 
@@ -64,12 +68,14 @@ def test_deadline_is_exclusive_and_capacity_cleanup_is_bounded():
         credentials.mint()
     assert len(credentials._pending) == 2
     now[0] = 11.999
-    assert credentials.exchange(first) == TOKEN
+    first_grant = credentials.exchange(first)
+    assert credentials.authenticate(first_grant.token)
     third = credentials.mint()
     now[0] = 12.0
     with pytest.raises(BootstrapExchangeError):
         credentials.exchange(second)
-    assert credentials.exchange(third) == TOKEN
+    third_grant = credentials.exchange(third)
+    assert credentials.authenticate(third_grant.token)
     now[0] = 20
     code = credentials.mint()
     now[0] = 22
@@ -91,7 +97,7 @@ def test_invalid_codes_have_identical_secret_free_error(code):
         credentials.exchange(code)
     assert str(failure.value) == "Invalid or expired bootstrap code"
     assert TOKEN not in str(failure.value)
-    assert credentials.exchange(valid) == TOKEN
+    assert credentials.authenticate(credentials.exchange(valid).token)
 
 
 @pytest.mark.parametrize(
@@ -102,10 +108,15 @@ def test_invalid_codes_have_identical_secret_free_error(code):
         {"ttl_seconds": float("nan")},
         {"ttl_seconds": float("inf")},
         {"ttl_seconds": True},
+        {"session_idle_seconds": 0},
+        {"session_absolute_seconds": float("inf")},
         {"max_pending": 0},
         {"max_pending": True},
+        {"max_sessions": 0},
+        {"max_sessions": True},
         {"max_pending": 1.5},
         {"clock": None},
+        {"wall_clock": None},
     ],
 )
 def test_invalid_pool_configuration_fails_without_secret(kwargs):
@@ -124,13 +135,87 @@ def test_nonfinite_clock_fails_closed_without_consuming_code():
     with pytest.raises(BootstrapExchangeError):
         credentials.exchange(code)
     now[0] = 2.0
-    assert credentials.exchange(code) == TOKEN
+    assert credentials.authenticate(credentials.exchange(code).token)
 
 
 def test_matches_token_validates_injected_app_identity():
     credentials = BootstrapCredentials(TOKEN)
     assert credentials.matches_token(TOKEN)
     assert not credentials.matches_token("other")
+
+
+def test_session_idle_expiry_slides_but_is_exclusive():
+    now = [100.0]
+    credentials = BootstrapCredentials(
+        TOKEN,
+        session_idle_seconds=10,
+        session_absolute_seconds=100,
+        clock=lambda: now[0],
+        wall_clock=lambda: 1000.0 + now[0],
+    )
+    token = credentials.exchange(credentials.mint()).token
+    assert credentials.authenticate(token)
+    now[0] = 109.999
+    assert credentials.authenticate(token)
+    now[0] = 119.998
+    assert credentials.authenticate(token)
+    now[0] = 129.998
+    assert not credentials.authenticate(token)
+
+
+def test_absolute_expiry_bounds_sliding_sessions_and_rotation():
+    now = [100.0]
+    credentials = BootstrapCredentials(
+        TOKEN,
+        session_idle_seconds=10,
+        session_absolute_seconds=25,
+        clock=lambda: now[0],
+        wall_clock=lambda: 2000.0 + now[0],
+    )
+    original = credentials.exchange(credentials.mint())
+    now[0] = 109.0
+    rotated = credentials.rotate(original.token)
+    assert not credentials.authenticate(original.token)
+    assert credentials.authenticate(rotated.token)
+    now[0] = 118.999
+    assert credentials.authenticate(rotated.token)
+    now[0] = 124.999
+    assert credentials.authenticate(rotated.token)
+    now[0] = 125.0
+    assert not credentials.authenticate(rotated.token)
+
+
+def test_session_lru_evicts_oldest_authority_and_rotation_works_at_capacity():
+    credentials = BootstrapCredentials(TOKEN, max_sessions=2)
+    first = credentials.mint_session()
+    second = credentials.mint_session()
+    assert len(credentials._sessions) == 2
+    assert credentials.authenticate(first.token)
+    third = credentials.mint_session()
+    assert len(credentials._sessions) == 2
+    assert credentials.authenticate(first.token)
+    assert not credentials.authenticate(second.token)
+    assert credentials.authenticate(third.token)
+    rotated = credentials.rotate(first.token)
+    assert len(credentials._sessions) == 2
+    assert not credentials.authenticate(first.token)
+    assert credentials.authenticate(third.token)
+    assert credentials.authenticate(rotated.token)
+    assert credentials.is_master(TOKEN)
+    assert credentials.revoke(third.token)
+    assert not credentials.authenticate(third.token)
+    assert not credentials.revoke(TOKEN)
+
+
+def test_bootstrap_exchange_evicts_lru_when_session_pool_is_full():
+    credentials = BootstrapCredentials(TOKEN, max_sessions=1)
+    first = credentials.mint_session()
+    code = credentials.mint()
+    exchanged = credentials.exchange(code)
+    assert len(credentials._pending) == 0
+    assert len(credentials._sessions) == 1
+    assert not credentials.authenticate(first.token)
+    assert credentials.authenticate(exchanged.token)
 
 
 def log_record(message, args=()):
@@ -152,7 +237,7 @@ def test_uvicorn_access_format_redacts_and_preserves_pagination():
             200,
         ),
     )
-    redactor = AccessLogRedactionFilter(credentials)
+    redactor = AccessLogRedactionFilter(credentials, master_token=TOKEN)
     assert redactor.filter(record)
     message = record.getMessage()
     assert code not in message
@@ -207,7 +292,8 @@ def test_raw_messages_redact_token_headers_and_consumed_bootstrap():
     code = credentials.mint()
     credentials.exchange(code)
     encoded_code = "".join(f"%{ord(char):02X}" for char in code)
-    redactor = AccessLogRedactionFilter(credentials)
+    redactor = AccessLogRedactionFilter(credentials, master_token=TOKEN)
+    session = credentials.exchange(credentials.mint()).token
     for text in [
         TOKEN,
         quote(TOKEN, safe=""),
@@ -215,6 +301,7 @@ def test_raw_messages_redact_token_headers_and_consumed_bootstrap():
         f"Authorization: Bearer {TOKEN}",
         code,
         encoded_code,
+        session,
         "prefix" + code + "suffix",
     ]:
         record = log_record("fallback %s", (text,))

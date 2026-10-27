@@ -856,21 +856,10 @@ Use a dedicated Python environment for WaveDL. The daemon requires Starlette
 cannot share that dependency environment. The selected training interpreter
 must have WaveDL and its ML dependencies installed.
 
-For a fresh local session, no token file or legacy migration is needed. Replace
-the dataset path below with your own absolute directory, then open the one-time
-bootstrap URL printed in the terminal:
-
-```bash
-wavedl-daemon serve --browse-root "datasets=/absolute/path/to/datasets"
-```
-
-The daemon generates an in-memory credential for that process. Restarting it
-requires opening the new bootstrap URL; an old browser session cannot retain
-authority over a replacement daemon.
-
-For a stable credential shared with the command-line client, optionally create
-a private token **once** on macOS/Linux, outside the repository.
-This command refuses to replace an existing token and prints only its location:
+For a fresh local session, the recommended primary mode is a private
+`--credential-file`. Create a private token **once** on macOS/Linux, outside the
+repository. The command refuses to replace an existing token and prints only
+its location:
 
 ```bash
 python -c 'import os, secrets; from pathlib import Path; directory = Path.home() / ".wavedl"; directory.mkdir(mode=0o700, exist_ok=True); path = directory / "daemon-token"; descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600); stream = os.fdopen(descriptor, "w"); stream.write(secrets.token_urlsafe(32) + "\n"); stream.close(); print(path)'
@@ -880,23 +869,20 @@ Windows credentials require a user-private file ACL; Unix mode bits alone do not
 provide that guarantee. Native Windows foundations and isolated installed CPU
 acceptance pass on Python 3.11/3.13; this does not certify Windows GPU execution.
 
-In the first terminal, start the daemon with that exact absolute path:
+In the first terminal, start the daemon with that exact absolute path. Replace
+the dataset path below with your own absolute directory:
 
 ```bash
-wavedl-daemon serve --credential-file <absolute-token-path>
+wavedl-daemon serve --credential-file <absolute-token-path> --browse-root "datasets=/absolute/path/to/datasets"
 ```
 
 Do not share or commit the token. Remote execution uses SSH forwarding and
 explicit daemon-side paths, not a bare LAN HTTP address. The one-time bootstrap
-URL is not the credential file. Daemon-free `wavedl-train` remains available below.
-
-To expose a dataset directory, start the daemon with an explicit browse root
-(replace both paths with your own absolute paths):
-
-```bash
-python -m pip install -e ".[dev,daemon]"
-wavedl-daemon serve --credential-file "<absolute-token-path>" --browse-root "datasets=<absolute-dataset-directory>"
-```
+URL is not the credential file. With the same state root and registry, daemon
+identity is stable across restarts, `--credential-file` also preserves the master
+token, and browser sessions are in memory, so after a daemon restart sign in again.
+Without `--credential-file`, the master credential is ephemeral. Daemon-free
+`wavedl-train` remains available below.
 
 Open the one-time **bootstrap URL printed by the daemon** in your local browser.
 In **New training run**, select the configured dataset, model and the absolute
@@ -905,12 +891,25 @@ configuration, then explicitly approve it. **Datasets** provides bounded numeric
 previews; a preview refusal does not necessarily mean a dataset cannot train.
 
 This is a local CPU development workflow, not a completed Windows/GPU/Slurm or
-production-release certification. Keep the credential private and the daemon
-loopback-only. Closing the browser detaches monitoring; it does not stop training.
-Reloading requires authentication again because the browser does not persist the
-credential. If you change web source, regenerate and vendor its assets before
-using the daemon's browser client (`npm run generate` in `web/`, followed by
-`python tools/vendor_web_assets.py` from the repository root).
+production-release certification. Keep the master credential private and the
+daemon loopback-only. The bootstrap exchange gives the browser a separate,
+revocable session token; only that derived session envelope is stored, in
+`sessionStorage` by default. **Keep me signed in on this browser** opts into
+`localStorage`; it is off by default. The envelope key is `wavedl.session.v1`.
+Session tokens use a 12-hour idle sliding lifetime and a 7-day absolute lifetime.
+The master bearer is never persisted, and
+credentials are not placed in the URL after bootstrap. Reloading the page
+resumes the same browser session without rotating its token. A rejected session
+reports **Your session ended. Sign in again.** A changed daemon identity reports
+**A different WaveDL daemon is now serving this address. Sign in again.**
+Only stored envelopes matching the rejected token are cleared. The sign-in
+preference is remembered separately, and its switch is also available while
+connected. Turning it off removes the localStorage credential copy. Explicitly
+disconnect to revoke the session. Closing the browser
+detaches monitoring and does not stop training. If you change web source,
+regenerate and vendor its assets before using the daemon's browser client
+(`npm run generate` in `web/`, followed by `python tools/vendor_web_assets.py`
+from the repository root).
 
 The browser workstation is online-only. Offline/PWA support, service-worker
 precaching and retained browser builds were retired by the project owner on
@@ -919,8 +918,8 @@ precaching and retained browser builds were retired by the project owner on
 The daemon's `/api/health` response identifies its web build. When the browser
 detects a build mismatch, it shows **A newer WaveDL build is available — Reload**.
 Reload only happens when you choose the button; save or export unsaved work first.
-The browser does not silently reload, and credentials still require fresh
-authentication after a reload.
+The browser does not silently reload. A same-daemon reload resumes the scoped
+session; a daemon restart still requires opening the new bootstrap URL.
 
 For clients that still have a worker registered from an older release, the
 daemon serves `/sw.js` as a no-store, self-unregistering cleanup worker. It does

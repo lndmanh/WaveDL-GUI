@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CatalogApi } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import {
   DatasetPreviewApi,
   parseDatasetPreview,

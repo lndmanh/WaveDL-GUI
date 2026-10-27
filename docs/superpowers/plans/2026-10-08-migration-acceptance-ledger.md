@@ -4697,3 +4697,47 @@ The tar SHA-256 is
 219 Python files and 39 web assets match the rebuilt wheel and current source.
 No repository files were edited during recertification, and no tag, release or
 publication was performed. This supersedes prior package reports.
+
+### Phase 3 session credential migration — 2026-10-28
+
+The browser session contract now exchanges each single-use bootstrap code for a
+bounded, revocable session token. The default browser envelope is stored in
+`sessionStorage` under `wavedl.session.v1`; the explicit “Keep me signed in on
+this browser” choice may move that envelope to `localStorage`. The master
+bearer is never persisted, copied into a URL, or accepted as browser session
+evidence. Session tokens use a 12-hour idle sliding lifetime and a 7-day
+absolute lifetime. The acceptance inventory therefore permits one strict envelope key in
+the selected storage area, alongside the existing numeric run-cursor watermark,
+and rejects unknown keys, cookies, expired/mismatched envelopes and master-token
+equality. A single 401 retires and wipes the envelope; a daemon identity change
+is a separate restart message. The reload case now asserts bounded same-daemon
+session recovery and a credential-free URL; a fresh packaged-browser run against
+generated current assets remains deferred to Phase 7. The ephemeral daemon default still
+requires a new bootstrap link after restart; `--credential-file` is the
+documented primary mode and persists the master credential and daemon identity,
+while session tokens remain intentionally in memory and are re-established
+after restart.
+
+### Session QA correction — 2026-10-28
+
+The plan's claim that `daemon_id` was regenerated per process was wrong: the
+CLI's `uuid4` fallback was always replaced at startup by the service's
+registry-derived identity (state root, registry device/inode and principal).
+The added identity file and override have been removed. With the same state
+root and registry, daemon identity is stable across restarts,
+`--credential-file` also preserves the master token, and browser sessions are
+in memory, so after a daemon restart sign in again.
+
+This correction supersedes the session-lifecycle claims in the note above:
+resume performs the full health handshake with the stored token and never
+rotates it, and there is no rotation timer. A 401 reports “Your session ended.
+Sign in again.” A daemon-identity 409 reports “A different WaveDL daemon is now
+serving this address. Sign in again.” Cleanup compares the rejected token to
+each stored envelope instead of clearing another tab's credential. Transient
+resume failures retain the envelope; a failed persistence write removes stale
+copies of that token while allowing in-memory use. The non-credential sign-in
+choice is remembered in preferences and is available in the connected primary
+bootstrap flow. Session capacity now evicts the least-recently-used session.
+Already-open SSE streams are intentionally unchanged and keep streaming until
+closed after revocation. Fresh packaged-browser acceptance remains deferred to
+the final asset regeneration.

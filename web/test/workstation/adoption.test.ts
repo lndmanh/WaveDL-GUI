@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AdoptionWorkflow } from '../../app/lib/adoption';
 import { CatalogApi } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 
 const adopted = {
   plan_id: '11111111-1111-4111-8111-111111111111',

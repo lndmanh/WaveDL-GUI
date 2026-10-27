@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
 import ProjectGuide from '../../app/components/project/ProjectGuide.vue';

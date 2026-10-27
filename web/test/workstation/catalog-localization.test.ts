@@ -11,7 +11,7 @@ import { provideWorkstationLocale } from '../../app/composables/useWorkstationI1
 import { bundledModelMessages, modelPresentation } from '../../app/i18n/model-descriptions';
 import type { WorkstationLocale } from '../../app/i18n/core';
 import { CatalogApi, type ModelDescription } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

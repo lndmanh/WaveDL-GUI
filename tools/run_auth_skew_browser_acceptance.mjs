@@ -26,8 +26,8 @@ const python = process.env.WAVEDL_PYTHON ?? "python";
 const browser = process.env.AGENT_BROWSER_BIN ?? "agent-browser";
 const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 
-function command(binary, args, { timeout = 35000, env = process.env, redact } = {}) {
-  return boundedCommand(binary, args, { cwd: repo, timeout, env, redact });
+function command(binary, args, { timeout = 35000, env = process.env, redact, input } = {}) {
+  return boundedCommand(binary, args, { cwd: repo, timeout, env, redact, input });
 }
 
 async function main() {
@@ -123,8 +123,17 @@ async function main() {
         },
       },
     );
+  const browserEnvironment = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith("AGENT_BROWSER_")),
+    ),
+    AGENT_BROWSER_SESSION: session,
+  };
   const dom = async (expression) =>
-    JSON.parse(JSON.parse(await cli("eval", "-b", Buffer.from(expression).toString("base64"))));
+    JSON.parse(JSON.parse(await command(browser, ["--session", session, "eval", "--stdin"], {
+      input: expression,
+      env: browserEnvironment,
+    })));
   const observe = async (expression) => dom(`JSON.stringify(${expression})`);
   const actions = createBrowserActions({ cli, dom, snapshot: () => cli("snapshot", "-i") });
   const button = (name) =>
@@ -176,15 +185,19 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     );
     const before = await observe(`({
       connected: document.body.innerText.includes('Connected'),
-      storage: (${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, '', ''),
+      storage: (${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, '', '', { forbiddenToken: ${JSON.stringify(token)}, origin: ${JSON.stringify(origin)} }),
       oldHistory: !!document.querySelector('[aria-label="Runtime metric history"] canvas'),
       oldPlan: !!document.querySelector('[aria-label="Approved normalized manifest"]'),
     })`);
-    assert.equal(before.storage.local, 0, "Bearer must not be persisted in localStorage");
-    assert.equal(before.storage.session, 0, "Bearer must not be persisted in sessionStorage");
-    assert.equal(before.storage.cookies, "", "Bearer must not be persisted as a cookie");
+    assert.equal(before.storage.local, 0, "Session credential must not be persisted in localStorage by default");
+    assert.equal(before.storage.session, 1, "Session credential must be persisted in sessionStorage by default");
+    assert.equal(before.storage.credential.key, "wavedl.session.v1");
+    assert.equal(before.storage.credential.present, true, "Session envelope must be present after bootstrap exchange");
+    assert.equal(before.storage.credential.valid, true, "Session envelope must be bounded and valid");
+    assert.equal(before.storage.credential.masterTokenPresent, false, "Master bearer must not be persisted in browser storage");
+    assert.equal(before.storage.cookies, "", "Session credential must remain cookie-free");
     report.assertions.push(
-      "bootstrap exchanged through the real daemon and browser memory remained storage-free",
+      "bootstrap exchanged through the real daemon; only the bounded session envelope entered sessionStorage and the master bearer remained absent",
     );
     report.browserRuntime = await observe("({userAgent:navigator.userAgent})");
     report.browserRuntime.executable =
@@ -310,7 +323,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     report.connectionNavigation = await observe(`({
       panelPresent: !!document.querySelector('section[aria-labelledby="connection-title"]'),
       navCurrent: Array.from(document.querySelectorAll('nav[aria-label="Sections"] button')).find(e => e.getAttribute('aria-current') === 'page')?.textContent.trim(),
-      authenticationNotice: document.body.innerText.includes('Credential expired or rejected; enter it again.'),
+      authenticationNotice: document.body.innerText.includes('Your session ended. Sign in again.'),
       identityNotice: document.body.innerText.includes('Connection identity changed'),
     })`);
     await waitFor(
@@ -329,15 +342,15 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
       click: () => cli("click", verifyLocator),
       proveRetirement: async () => {
         await waitFor(
-          "document.body.innerText.includes('Credential expired or rejected; enter it again.')",
+          "document.body.innerText.includes('Your session ended. Sign in again.')",
           "explicit authentication failure state",
         );
         const faults = (await readFile(join(root, ".auth-skew-evidence.jsonl"), "utf8"))
           .trim().split("\n").map((line) => JSON.parse(line));
-        const storageExpression = `(${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, ${JSON.stringify(faults[0]?.daemonId)}, ${JSON.stringify(manifest.run_id)})`;
+        const storageExpression = `(${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, ${JSON.stringify(faults[0]?.daemonId)}, ${JSON.stringify(manifest.run_id)}, { forbiddenToken: ${JSON.stringify(token)}, origin: ${JSON.stringify(origin)} })`;
         const revoked = await observe(`({
-          authMessage: document.body.innerText.includes('Credential expired or rejected; enter it again.'),
-          reconnectPrompt: document.body.innerText.includes('Daemon bearer credential'),
+          authMessage: document.body.innerText.includes('Your session ended. Sign in again.'),
+          reconnectPrompt: document.body.innerText.includes('Daemon master credential'),
           stalePlan: !!document.querySelector('[aria-label="Approved normalized manifest"]'),
           staleHistory: !!document.querySelector('[aria-label="Runtime metric history"] canvas'),
           staleSelectedRun: !!document.querySelector('[aria-label="Selected run"]'),
@@ -356,11 +369,11 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
       "real authenticated request returned 401 and displayed explicit reauthentication with no stale mutation controls",
     );
     report.tokenObservation =
-      "behavioral authority retirement only; private token bytes are not inspected";
+      "Storage is checked in-page for equality with the private master bearer; neither raw token is returned or recorded";
     report.historyPlanPrecondition =
       "normal UI persisted approval and submitted CPU runtime with nonempty rendered metric history";
 
-    await actions.fill("Daemon bearer credential", token);
+    await actions.fill("Daemon master credential", token);
     await button("Connect securely");
     await waitFor(
       "document.body.innerText.includes('Connected')",
@@ -368,7 +381,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     );
     const reauthed = await observe(`({
       connected: document.body.innerText.includes('Connected'),
-      authMessage: document.body.innerText.includes('Credential expired or rejected; enter it again.'),
+      authMessage: document.body.innerText.includes('Your session ended. Sign in again.'),
       mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Cancel run|Preview persisted plan/.test(e.textContent)).length,
       storage: ${storageExpression},
     })`);
@@ -378,10 +391,14 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
       "Fresh credential must restore the same daemon scope",
     );
     assert.equal(reauthed.mutationControls, 0, "Reauthentication must not revive a stale plan");
-    assert.equal(reauthed.storage.session, 0, "Reauthentication remains memory-only");
+    assert.equal(reauthed.storage.session, 1, "Reauthentication persists one bounded session envelope");
+    assert.equal(reauthed.storage.credential.key, "wavedl.session.v1");
+    assert.equal(reauthed.storage.credential.present, true);
+    assert.equal(reauthed.storage.credential.valid, true);
+    assert.equal(reauthed.storage.credential.masterTokenPresent, false, "Reauthentication must not persist the master bearer");
     assert.equal(reauthed.storage.cookies, "", "Reauthentication remains cookie-free");
     assert(reauthed.storage.valid, "Reauthentication may persist only scoped numeric cursors");
-    report.assertions.push("browser storage contains only bounded daemon/run cursor watermarks; credentials, bootstrap, paths and raw events are not persisted or copied into storage evidence");
+    report.assertions.push("browser storage contains only the bounded session envelope and numeric daemon/run cursor watermarks; the master bearer, bootstrap, paths and raw events are not persisted or copied into storage evidence");
     report.assertions.push(
       "same daemon explicitly reauthenticated without reviving stale plan authority",
     );
@@ -404,7 +421,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
         recovery: false,
       });
       await button("Disconnect and clear scope");
-      await actions.fill("Daemon bearer credential", token);
+      await actions.fill("Daemon master credential", token);
       await button("Connect securely");
       await waitFor(
         "document.body.innerText.includes('Connected to ')",

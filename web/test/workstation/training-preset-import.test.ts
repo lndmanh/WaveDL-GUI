@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
 import { applyTrainingPreset, trainingPresetSchema } from '../../app/lib/training-presets';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import type { z } from 'zod';

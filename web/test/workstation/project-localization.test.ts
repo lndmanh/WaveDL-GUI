@@ -21,7 +21,7 @@ import TrainingDefaultsSettings from '../../app/components/settings/TrainingDefa
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import { trainingFieldMessageKeys, trainingFieldMessages } from '../../app/i18n/training-fields';
 import { translateMessage, type WorkstationLocale } from '../../app/i18n/core';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import { trainingCommand, trainingYaml } from '../../app/lib/training-export';

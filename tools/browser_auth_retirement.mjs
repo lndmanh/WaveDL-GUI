@@ -33,6 +33,7 @@ export async function clickAuthenticationControlOnce({ click, proveRetirement })
     "401 must retire old plan, history and selected-run authority");
   assert.equal(revoked.mutationControls, 0);
   assert.equal(revoked.storage.session, 0);
+  assert.equal(revoked.storage.credential.present, false, "401 must wipe the persisted session envelope");
   assert.equal(revoked.storage.cookies, "");
   assert(revoked.storage.valid, "Only scoped numeric cursor watermarks may remain");
   return { ...proof, acknowledgementLost };

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AutoPlotController, automaticPlotRequest } from '../../app/lib/autoplot-controller';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
 import { mappedStoragePath, type StorageMapping } from '../../shared/schemas/storage-mapping';
 import type { PlanView, RunView } from '../../app/lib/daemon-api';

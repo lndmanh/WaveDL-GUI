@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { access, lstat, mkdir, open, readFile, readdir, realpath, rm, statfs, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createConnection } from "node:net";
@@ -13,6 +13,7 @@ import { browserLaunchArgs, browserTemporaryEnvironment } from "./browser_launch
 import { createBrowserActions, xpathLiteral } from "./browser_actions.mjs";
 import { openTrainingEditor } from "./browser_training_editor.mjs";
 import { resultOperations } from "./browser_result_operations.mjs";
+import { observeCursorStorage, SESSION_CREDENTIAL_KEY } from "./browser_cursor_storage.mjs";
 import { verifyInstalledBrowserRecord } from "./verify_installed_browser_report.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
@@ -58,6 +59,9 @@ const venv = join(owned, "venv");
 const root = join(owned, "runtime");
 const profile = join(owned, "browser-profile");
 const downloads = join(owned, "downloads");
+const tokenFile = join(owned, "private-bearer");
+const masterBearer = randomBytes(32).toString("base64url");
+await writeFile(tokenFile, masterBearer, { mode: 0o600, flag: "wx" });
 for (const path of [root, profile, downloads]) await mkdir(path, { mode: 0o700 });
 const hostPython = process.env.WAVEDL_PYTHON ?? "python3.11";
 const python = join(venv, "bin/python");
@@ -174,7 +178,7 @@ rng=np.random.default_rng(42);x=rng.normal(size=(96,32)).astype(np.float32);y=x[
 np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   record.browser = (await command(browser, ["--version"], 10000)).trim();
   record.stage = "installed-cli-start";
-  daemon = spawn(executable, ["serve", "--port", "0", "--state-root", join(root, "state"), "--run-root", join(root, "runs"), "--browse-root", `datasets=${root}`],
+  daemon = spawn(executable, ["serve", "--port", "0", "--credential-file", tokenFile, "--state-root", join(root, "state"), "--run-root", join(root, "runs"), "--browse-root", `datasets=${root}`],
     { cwd: root, env: environment, stdio: ["ignore", "pipe", "pipe"] });
   daemon.on("error", () => { daemonSpawnFailed = true; });
   daemon.stdout.on("data", bytes => { stdout = (stdout + bytes).slice(-65536); });
@@ -193,7 +197,7 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   await cli("open", "--headed", "false", "--engine", "chrome", "--profile", profile, "--allowed-domains", "127.0.0.1,localhost", url);
   await cli("set", "viewport", "1280", "900");
   await cli("wait", "--text", "Connected");
-  record.bootstrap = await dom(`JSON.stringify({removed:!location.href.includes('bootstrap'),local:Object.keys(localStorage),session:Object.keys(sessionStorage),cookies:document.cookie})`);
+  record.bootstrap = await dom(`JSON.stringify({removed:!location.href.includes('bootstrap'),credentialKey:${JSON.stringify(SESSION_CREDENTIAL_KEY)},storage:(${observeCursorStorage.toString()})(localStorage,sessionStorage,document.cookie,'','',{forbiddenToken:${JSON.stringify(masterBearer)},origin:location.origin})})`);
   record.stage = "native-ui-training-authoring";
   await button("New training run");
   const rootControl = await actions.readyControl("field", "Configured root", false, { locator: 'xpath=//*[@role="combobox" and @aria-label="Configured root"]' });
@@ -311,6 +315,8 @@ print(json.dumps({'released':True}))`, [root]));
       await rm(owned, { recursive: true, force: false });
       await assert.rejects(access(owned), { code: "ENOENT" });
       record.cleanup.ownedRootsRemoved = true;
+      await assert.rejects(access(tokenFile), { code: "ENOENT" });
+      record.cleanup.credentialFileRemoved = true;
     } catch { errors.push("owned-root-cleanup"); }
   }
   if (errors.length) record.status = "failed";

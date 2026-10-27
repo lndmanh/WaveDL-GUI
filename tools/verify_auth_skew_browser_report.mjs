@@ -44,11 +44,21 @@ export function verifyAuthSkewReport(report) {
   assert.equal(report.revoked.mutationControls, 0);
   assert(report.reauthed.connected && !report.reauthed.authMessage);
   assert.equal(report.reauthed.mutationControls, 0);
+  assert.equal(report.revoked.storage.session, 0);
+  assert.equal(report.revoked.storage.credential.present, false);
+  assert.equal(report.revoked.storage.credential.key, "wavedl.session.v1");
+  assert.equal(report.reauthed.storage.session, 1);
+  assert.equal(report.reauthed.storage.credential.present, true);
+  assert.equal(report.reauthed.storage.credential.key, "wavedl.session.v1");
+  assert.equal(report.reauthed.storage.credential.masterTokenPresent, false);
   for (const state of [report.revoked, report.reauthed]) {
-    assert.equal(state.storage.session, 0);
     assert.equal(state.storage.cookies, "");
-    assert.deepEqual(Object.keys(state.storage).sort(), ["cookies", "entries", "local", "session", "valid"]);
+    assert.deepEqual(Object.keys(state.storage).sort(), [
+      "bootstrapInUrl", "cookies", "credential", "credentialInUrl", "credentialStorage", "entries", "local", "session", "valid",
+    ]);
     assert.equal(state.storage.valid, true);
+    assert.equal(state.storage.credentialInUrl, false);
+    assert.equal(state.storage.bootstrapInUrl, false);
     assert(Array.isArray(state.storage.entries));
     assert.equal(state.storage.local, state.storage.entries.length);
     assert(state.storage.local <= 1);
@@ -61,7 +71,13 @@ export function verifyAuthSkewReport(report) {
       assert(Number.isSafeInteger(value.seq) && value.seq >= -1);
       assert(value.attempt !== 0 || value.seq === -1);
     }
+    assert.deepEqual(Object.keys(state.storage.credential).sort(), [
+      "daemonIdMatches", "expiresAtValid", "key", "masterTokenPresent", "originMatches", "present", "tokenInUrl", "valid",
+    ]);
+    assert.equal(state.storage.credential.tokenInUrl, false);
   }
+  assert.equal(report.revoked.storage.credentialStorage, null);
+  assert.equal(report.reauthed.storage.credentialStorage, "session");
   assert.deepEqual(
     report.skewObservations.map((e) => [e.mode, e.refused, e.recovery]),
     [

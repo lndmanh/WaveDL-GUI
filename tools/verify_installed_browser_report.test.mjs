@@ -39,7 +39,11 @@ function fixture() {
     installation: { prefix, python, console: prefix + "/bin/wavedl-daemon", modules: Object.fromEntries(["wavedl", "wavedl.core.protocol", "wavedl_daemon", "wavedl_daemon.cli"].map(name => [name, prefix + "/lib/" + name])),
       noCheckoutPath: true, observedSystemSitePackages: false, qtAbsent: true, cwdOutsideCheckout: true, pipCheck: true, assetCount: 33, assets, assetManifestSha256: sha256 },
     installBudget: { minimumFreeBytes: 2 * 1024 ** 3, samples: 20, offlineOnly: true, terminalExit: 0 },
-    pythonInterpreter: python, bootstrap: { removed: true, local: [], session: [], cookies: "" },
+    pythonInterpreter: python, bootstrap: { removed: true, credentialKey: "wavedl.session.v1", storage: {
+      local: 0, entries: [], session: 1, credentialStorage: "session", credentialInUrl: false, bootstrapInUrl: false,
+      credential: { present: true, key: "wavedl.session.v1", valid: true, daemonIdMatches: true,
+        originMatches: true, expiresAtValid: true, masterTokenPresent: false, tokenInUrl: false }, valid: true, cookies: "",
+    } },
     trainingManifest: training,
     previewRegistry: { plans: 1, submissions: [], executions: [], control: [{ submission_requested: 0, cancellation_requested: 0 }] },
     trainingSettled: { plans: 2, runs: [{ state: "completed" }, { state: "completed" }] },
@@ -48,7 +52,7 @@ function fixture() {
     predictions: { generation: "gen-000001", runId: approved.run_id, expected: file, actual: file }, finalRegistry: state,
     cleanupRegistry: structuredClone(state), daemonExit: { code: 130, signal: null },
     staticClient: { path: "/settings/storage", shell: true, apiStatus: 401, apiType: "application/json" }, runtimePids: [1, 2, 3],
-    cleanup: { errors: [], browserAbsent: true, daemonReaped: true, applicationShutdownComplete: true, listenerAbsent: true, daemonPidAbsent: true, runtimePidsAndGroupsAbsent: true, storageClosed: true, ownedRootsRemoved: true },
+    cleanup: { errors: [], browserAbsent: true, daemonReaped: true, applicationShutdownComplete: true, listenerAbsent: true, daemonPidAbsent: true, runtimePidsAndGroupsAbsent: true, storageClosed: true, ownedRootsRemoved: true, credentialFileRemoved: true },
   };
 }
 test("accepts exact installed-runtime and native-browser evidence boundary", () => verifyInstalledBrowserRecord(fixture(), expectedWheelSha256));

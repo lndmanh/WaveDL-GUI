@@ -5,7 +5,7 @@ import { defineComponent, h, shallowRef } from 'vue';
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import type { WorkstationLocale } from '../../app/i18n/core';
 import DatasetPreviewPanel from '../../app/components/datasets/DatasetPreviewPanel.vue';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { DatasetPreviewApi, type DatasetPreview } from '../../app/lib/dataset-preview';
 

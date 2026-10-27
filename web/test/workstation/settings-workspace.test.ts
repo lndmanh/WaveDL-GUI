@@ -5,7 +5,7 @@ import SettingsWorkspace from '../../app/components/settings/SettingsWorkspace.v
 import AppearanceSettings from '../../app/components/settings/AppearanceSettings.vue';
 import TrainingDefaultsSettings from '../../app/components/settings/TrainingDefaultsSettings.vue';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import {
   defaultAppearance,
   appearanceSchema,

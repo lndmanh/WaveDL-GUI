@@ -5,10 +5,39 @@ import { DaemonApi, DaemonApiError, parseJson, stripBootstrapUrl } from '../../a
 const token = 'a'.repeat(64);
 const origin = 'http://127.0.0.1:8765';
 const health = { daemon_id: 'daemon-a', build_id: 'build-a', protocol_min: 1, protocol_max: 1 };
+const grant = (daemonId = health.daemon_id, suffix = 'g') => ({
+  access_token: `session-${suffix.repeat(35)}`,
+  token_type: 'Bearer',
+  expires_at: Date.now() + 86_400_000,
+  daemon_id: daemonId,
+});
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 describe('daemon transport', () => {
+  it('does not expose a rejected credential on any own or inherited error property', async () => {
+    const api = new DaemonApi(origin, {}, async () => json({}, 401));
+    api.setToken(token);
+    let failure: unknown;
+    try {
+      await api.health();
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(DaemonApiError);
+    if (!(failure instanceof DaemonApiError)) throw new Error('Missing authentication failure');
+    expect(failure.status).toBe(401);
+    expect('credentialToken' in failure).toBe(false);
+    let prototype: object | null = failure;
+    while (prototype !== null) {
+      for (const key of Reflect.ownKeys(prototype)) {
+        expect(Reflect.get(failure, key)).not.toBe(token);
+      }
+      prototype = Object.getPrototypeOf(prototype);
+    }
+    expect(JSON.stringify(failure)).not.toContain(token);
+  });
+
   it.each([
     { native_pending: 'true' },
     { native_pending: true, current_runtime_attempt: 1 },
@@ -123,6 +152,38 @@ describe('daemon transport', () => {
     await pending;
     expect(api.authenticated).toBe(true);
   });
+  it('drains in-flight requests before rotating and accepts their finished responses', async () => {
+    let readStarted = false;
+    let finishRead: ((response: Response) => void) | undefined;
+    let rotationStarted = false;
+    const replacement = grant(health.daemon_id, 'r');
+    const api = new DaemonApi(origin, {}, async (url) => {
+      const path = new URL(String(url)).pathname;
+      if (path === '/api/health') return json(health);
+      if (path === '/api/models') {
+        readStarted = true;
+        return new Promise<Response>((resolve) => {
+          finishRead = resolve;
+        });
+      }
+      if (path === '/api/session') {
+        rotationStarted = true;
+        return json(replacement);
+      }
+      throw new Error('Unexpected API route');
+    });
+    api.setToken(token);
+    const reading = api.read('/api/models');
+    await vi.waitFor(() => expect(readStarted).toBe(true));
+    const rotating = api.rotateSession();
+    await Promise.resolve();
+    expect(rotationStarted).toBe(false);
+    finishRead?.(json({ models: [] }));
+    await expect(reading).resolves.toEqual({ models: [] });
+    await expect(rotating).resolves.toEqual(replacement);
+    expect(rotationStarted).toBe(true);
+    expect(api.authenticated).toBe(true);
+  });
   it('does not restore credentials from a revoked bootstrap body', async () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     const body = new ReadableStream<Uint8Array>({
@@ -229,8 +290,9 @@ describe('daemon transport', () => {
       if (String(url).endsWith('/bootstrap')) {
         expect(new Headers(init?.headers).has('Authorization')).toBe(false);
         expect(init?.body).toBe('{"code":"once"}');
-        return json({ access_token: token, token_type: 'Bearer' });
+        return json(grant());
       }
+      if (String(url).endsWith('/session')) return json(grant());
       expect(new Headers(init?.headers).get('Authorization')).toBe(`Bearer ${token}`);
       return json(health);
     });
@@ -239,7 +301,7 @@ describe('daemon transport', () => {
       order.push('strip');
       expect(url).toBe(`${origin}/?tab=runs`);
     });
-    expect(order).toEqual(['strip', 'fetch', 'fetch']);
+    expect(order).toEqual(['strip', 'fetch']);
     expect(api.authenticated).toBe(true);
     expect(JSON.stringify(api)).not.toContain(token);
     expect(new DaemonApi(origin).authenticated).toBe(false);
@@ -267,9 +329,11 @@ describe('daemon transport', () => {
     expect(api.authenticated).toBe(false);
   });
   it('keeps a verified session after a domain conflict without retrying mutation', async () => {
-    const fetcher = vi.fn<typeof fetch>(async (url) =>
-      String(url).endsWith('/api/health') ? json(health) : json({ error: 'Conflict' }, 409),
-    );
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith('/api/health')) return json(health);
+      if (String(url).endsWith('/api/session')) return json(grant());
+      return json({ error: 'Conflict' }, 409);
+    });
     const session = new ConnectionSession({ origin, buildId: 'build-a', fetcher });
     expect(await session.connect(token)).toBe(true);
     const revision = session.snapshot().revision;
@@ -287,11 +351,36 @@ describe('daemon transport', () => {
     ).toHaveLength(1);
     session.detach();
   });
+  it('retires authority when a domain route labels a daemon identity fence', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith('/api/health')) return json(health);
+      if (String(url).endsWith('/api/session')) return json(grant());
+      return new Response(JSON.stringify({ detail: 'ignored' }), {
+        status: 409,
+        headers: {
+          'content-type': 'application/json',
+          'X-WaveDL-Error-Code': 'daemon_identity_changed',
+        },
+      });
+    });
+    const owner = new ConnectionSession({ origin, buildId: 'build-a', fetcher });
+    expect(await owner.connect(token)).toBe(true);
+    await expect(
+      owner.perform((api, signal) => api.read('/api/models', signal)),
+    ).rejects.toMatchObject({ code: 'identity' });
+    expect(owner.snapshot()).toMatchObject({
+      status: 'skew',
+      message: 'A different WaveDL daemon is now serving this address. Sign in again.',
+    });
+    expect(owner.api).toBeNull();
+    owner.dispose();
+  });
   it('revokes the session when health conflicts with pinned daemon identity', async () => {
     let replaced = false;
-    const fetcher = vi.fn<typeof fetch>(async () =>
-      replaced ? json({ error: 'Conflict' }, 409) : json(health),
-    );
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith('/api/session')) return json(grant());
+      return replaced ? json({ error: 'Conflict' }, 409) : json(health);
+    });
     const session = new ConnectionSession({ origin, buildId: 'build-a', fetcher });
     expect(await session.connect(token)).toBe(true);
     const api = session.api;
@@ -299,7 +388,7 @@ describe('daemon transport', () => {
     await expect(
       session.perform((current, signal) => current.health(signal)),
     ).rejects.toMatchObject({
-      code: 'skew',
+      code: 'identity',
     });
     expect(session.snapshot().status).toBe('skew');
     expect(session.api).toBeNull();

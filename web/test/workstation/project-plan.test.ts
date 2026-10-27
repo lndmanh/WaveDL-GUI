@@ -6,7 +6,7 @@ import {
   trainingRequestSchema,
 } from '../../shared/schemas/training-request';
 import options from '../../shared/training-options.json';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 

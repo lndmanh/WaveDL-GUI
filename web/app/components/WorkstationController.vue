@@ -22,7 +22,7 @@ const connection = useDaemonConnection({
   origin: typeof window === 'undefined' ? 'http://127.0.0.1' : window.location.origin,
   buildId: CLIENT_BUILD_ID,
 });
-const { state, api } = connection;
+const { state, api, keepSignedIn } = connection;
 const automaticPlots = useAutomaticPlots(connection.session);
 const automaticPlotState = automaticPlots.state;
 const section = shallowRef<
@@ -90,8 +90,10 @@ const reportFailure = computed(() => {
     <ConnectionPanel
       v-if="section === 'connection' || (!api && section !== 'settings')"
       :state="state"
+      :keep-signed-in="keepSignedIn"
       @connect="connection.connect"
       @reconnect="connection.reconnect"
+      @update:keep-signed-in="connection.setKeepSignedIn"
       @detach="connection.detach"
       @refresh="connection.refresh"
     />
