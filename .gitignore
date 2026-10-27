@@ -172,6 +172,7 @@ tools/*
 !tools/run_auth_skew_browser_acceptance.mjs
 !tools/run_auth_skew_browser_acceptance.test.mjs
 !tools/browser_cursor_storage.mjs
+!tools/browser_cursor_storage.test.mjs
 !tools/verify_auth_skew_browser_report.mjs
 !tools/verify_auth_skew_browser_report.test.mjs
 !tools/browser_actions.mjs
