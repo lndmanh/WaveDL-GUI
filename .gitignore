@@ -28,6 +28,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Keep the shared browser class utility trackable under the Python lib ignore.
 !web/app/lib/
 web/app/lib/*
 !web/app/lib/utils.ts
