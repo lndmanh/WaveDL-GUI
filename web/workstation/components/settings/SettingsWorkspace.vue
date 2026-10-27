@@ -50,7 +50,7 @@ const { t, translateKnownMessage } = useWorkstationI18n(shellSettingsMessages);
       <p class="text-sm text-muted-foreground">
         {{
           translateKnownMessage(
-            'Do not include access tokens, private paths or training data in public feedback. Application updates require explicit confirmation in the update prompt.',
+            'Do not include access tokens, private paths or training data in public feedback. Reloads are always user initiated.',
           )
         }}
       </p>

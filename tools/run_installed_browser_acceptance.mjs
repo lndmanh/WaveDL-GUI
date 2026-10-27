@@ -8,7 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createConnection } from "node:net";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { browserLaunchArgs, browserTemporaryEnvironment } from "./browser_launch_policy.mjs";
 import { createBrowserActions, xpathLiteral } from "./browser_actions.mjs";
 import { openTrainingEditor } from "./browser_training_editor.mjs";
@@ -156,7 +156,7 @@ console=prefix/'bin'/'wavedl-daemon';assert console.read_text().splitlines()[0]=
 assets=Path(wavedl_daemon.__file__).parent/'web_assets';files={str(p.relative_to(assets)):p.read_bytes() for p in assets.rglob('*') if p.is_file()}
 with zipfile.ZipFile(wheel) as z:
  original={n.removeprefix('wavedl_daemon/web_assets/'):z.read(n) for n in z.namelist() if n.startswith('wavedl_daemon/web_assets/') and not n.endswith('/')}
- assert files==original and len(files)==38
+ assert files==original and len(files)==33
  assert not any(n.startswith('wavedl_gui') for n in z.namelist())
  metadata=email.parser.Parser().parsestr(z.read(next(n for n in z.namelist() if n.endswith('.dist-info/METADATA'))).decode('utf-8'))
  assert 'gui' not in metadata.get_all('Provides-Extra',[])
@@ -194,8 +194,6 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   await cli("set", "viewport", "1280", "900");
   await cli("wait", "--text", "Connected");
   record.bootstrap = await dom(`JSON.stringify({removed:!location.href.includes('bootstrap'),local:Object.keys(localStorage),session:Object.keys(sessionStorage),cookies:document.cookie})`);
-  await cli("wait", "--fn", "navigator.serviceWorker.controller?.scriptURL===location.origin+'/sw.js'");
-  record.workerControlled = true;
   record.stage = "native-ui-training-authoring";
   await button("New training run");
   const rootControl = await actions.readyControl("field", "Configured root", false, { locator: 'xpath=//*[@role="combobox" and @aria-label="Configured root"]' });
@@ -238,13 +236,9 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   record.predictions = { generation, runId: evaluationId, expected: publication.complete.files["predictions.csv"],
     actual: { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } };
   assert.deepEqual(record.predictions.actual, record.predictions.expected);
-  record.stage = "installed-worker-deep-link-api-separation";
+  record.stage = "installed-static-deep-link-api-separation";
   await cli("open", `${origin}/settings/storage`);
-  await cli("wait", "--fn", "navigator.serviceWorker.controller?.scriptURL===location.origin+'/sw.js'");
-  await cli("set", "offline", "on");
-  record.beforeOfflineRegistry = await registry();
-  record.worker = await dom(`(async()=>{const refused=async(path,options)=>{try{await fetch(path,{cache:'no-store',...options});return false}catch{return true}};return JSON.stringify({controller:navigator.serviceWorker.controller?.scriptURL===location.origin+'/sw.js',path:location.pathname,shell:document.body.innerText.includes('WaveDL'),offline:!navigator.onLine,apiReadRefused:await refused('/api/health',{method:'GET'}),apiMutationRefused:await refused('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})})})()`);
-  await cli("set", "offline", "off");
+  record.staticClient = await dom(`(async()=>{const response=await fetch('/api/unknown',{cache:'no-store',headers:{accept:'text/html'}});return JSON.stringify({path:location.pathname,shell:document.body.innerText.includes('WaveDL'),apiStatus:response.status,apiType:response.headers.get('content-type')})})()`);
   record.finalRegistry = await registry();
   record.runtimePids = JSON.parse(await py(`import json,sqlite3,sys
 from pathlib import Path

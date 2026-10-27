@@ -7,12 +7,12 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, lstat, rm, realpath } fro
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
 import { browserLaunchArgs, browserTemporaryEnvironment } from "./browser_launch_policy.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 import { verifyHeaderDeadlineRecord } from "./verify_header_deadline_browser_report.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
 const python = process.env.WAVEDL_PYTHON ?? "python", browser = process.env.AGENT_BROWSER_BIN ?? "agent-browser";

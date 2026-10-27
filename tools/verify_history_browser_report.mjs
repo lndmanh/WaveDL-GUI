@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { boundedFile } from './verify_retained_browser_report.mjs';
+import { boundedFile } from './browser_files.mjs';
 import { currentAssetDigest } from './verify_adoption_negative_browser_report.mjs';
 import { DRIVER_READINESS_MODE } from './browser_actions.mjs';
 import { pathToFileURL } from 'node:url';

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { packagedAssetHashes } from "./browser_training_fields_full.mjs";
 const inventory = JSON.parse(
   readFileSync(new URL("../web/shared/training-options.json", import.meta.url), "utf8"),
@@ -78,7 +78,7 @@ export function verifyTrainingFieldsRecord(record) {
   const hash = (text) => createHash("sha256").update(text).digest("hex");
   assert.equal(full.inventorySha256, hash(JSON.stringify(full.inventory)));
   assert.equal(full.controlInventorySha256, hash(JSON.stringify(editable)));
-  assert.equal(Object.keys(full.beforeAssets).length, 37);
+  assert.equal(Object.keys(full.beforeAssets).length, 32);
   assert.deepEqual(full.afterAssets, full.beforeAssets);
   assert(Object.values(full.beforeAssets).every((value) => /^[a-f0-9]{64}$/.test(value)));
   assert.equal(hash(full.yamlText), full.yamlSha256);

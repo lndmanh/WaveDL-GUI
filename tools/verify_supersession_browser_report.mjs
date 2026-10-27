@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { pathToFileURL } from "node:url";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 

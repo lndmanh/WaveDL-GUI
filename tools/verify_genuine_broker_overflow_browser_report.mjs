@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { currentMappedAssets } from "./verify_mapped_autoplot_browser_report.mjs";
 import { parseHostileOriginJSON } from "./verify_hostile_origin_browser_report.mjs";
 

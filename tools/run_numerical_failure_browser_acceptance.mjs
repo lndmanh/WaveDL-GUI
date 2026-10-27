@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { createConnection } from 'node:net';
 import { createBrowserActions } from './browser_actions.mjs';
 import { browserLaunchArgs } from './browser_launch_policy.mjs';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { numericalSourceFingerprint, verifyNumericalFailureFile } from './verify_numerical_failure_browser_report.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');

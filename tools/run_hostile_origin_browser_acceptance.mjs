@@ -10,12 +10,12 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
 import { currentMappedAssets } from "./verify_mapped_autoplot_browser_report.mjs";
 import { verifyHostileOriginReport } from "./verify_hostile_origin_browser_report.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
 const delay = (ms) => new Promise((done) => setTimeout(done, ms));

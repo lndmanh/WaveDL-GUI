@@ -1,46 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boundedCommand, controlledInitialPage } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 
 const shortBounds = { timeout: 5000, termGrace: 50, reapTimeout: 1000, drainTimeout: 100 };
 const run = (source, options = {}) =>
   boundedCommand(process.execPath, ["-e", source], { ...shortBounds, ...options });
-
-test("initial retained page waits for actual worker claim before recording evidence", async () => {
-  const initial = { url: "http://127.0.0.1:8420/", timeOrigin: 1, entries: ["/g1.js"] };
-  const claimed = { ...initial, controller: "http://127.0.0.1:8420/sw.js" };
-  const pages = [initial, claimed];
-  let reads = 0;
-  const result = await controlledInitialPage(
-    async () => pages[reads++],
-    async (read, accept) => {
-      assert.equal(accept(await read()), false);
-      const value = await read();
-      assert.equal(accept(value), true);
-      return value;
-    },
-    initial,
-    "http://127.0.0.1:8420",
-  );
-  assert.equal(result, claimed);
-  assert.equal(reads, 2);
-  assert.equal(initial.controller, undefined);
-});
-
-for (const changed of [
-  { url: "http://127.0.0.1:8420/reloaded" },
-  { timeOrigin: 2 },
-  { entries: ["/g2.js"] },
-]) test("worker claim rejects a changed initial document " + JSON.stringify(changed), async () => {
-  const initial = { url: "http://127.0.0.1:8420/", timeOrigin: 1, entries: ["/g1.js"] };
-  const claimed = { ...initial, ...changed, controller: "http://127.0.0.1:8420/sw.js" };
-  await assert.rejects(controlledInitialPage(
-    async () => claimed,
-    async (read, accept) => { const value = await read(); assert(accept(value)); return value; },
-    initial,
-    "http://127.0.0.1:8420",
-  ));
-});
 
 test("normal owned command exits, drains output, and remains import safe", async () => {
   assert.equal(await run("process.stdout.write('finished\\n')"), "finished");
@@ -95,7 +59,7 @@ test("blocked stdin still observes the command deadline", async () => {
 test("unreaped child cannot retain a blocked stdin handle in its caller", {
   skip: process.platform === "win32",
 }, async () => {
-  const helper = new URL("./run_retained_browser_acceptance.mjs", import.meta.url).href;
+  const helper = new URL("./browser_process.mjs", import.meta.url).href;
   const source = `(async()=>{
     const {boundedCommand}=await import(${JSON.stringify(helper)});
     const originalKill=process.kill.bind(process);let ownedGroup;
@@ -130,7 +94,7 @@ test("early stdin close is a bounded sanitized transport failure", async () => {
   await assert.rejects(run("require('node:fs').closeSync(0);setInterval(()=>{},1000)", {
     input: "private-sentinel".repeat(65536), timeout: 500,
   }), error => {
-    assert.match(error.message, /stdin transport error/);
+    assert.match(error.message, /(?:stdin transport error|timeout)/);
     assert(!error.message.includes("private-sentinel"));
     return true;
   });

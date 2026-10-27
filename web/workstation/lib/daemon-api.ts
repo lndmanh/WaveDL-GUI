@@ -54,6 +54,7 @@ export class DaemonApiError extends Error {
     public readonly code: ApiErrorCode,
     message: string,
     public readonly status?: number,
+    public readonly buildMismatch = false,
   ) {
     super(message);
     this.name = 'DaemonApiError';
@@ -461,15 +462,19 @@ export class DaemonApi {
     ) {
       throw new DaemonApiError('protocol', 'Daemon protocol mismatch; update the daemon or client');
     }
-    if (
-      (this.#daemonId && body.daemon_id !== this.#daemonId) ||
-      (this.#buildId && body.build_id !== this.#buildId)
-    ) {
+    if (this.#daemonId && body.daemon_id !== this.#daemonId) {
       throw new DaemonApiError(
         'identity',
         'Daemon identity or build changed; reconnect explicitly',
       );
     }
+    if (this.#buildId && body.build_id !== this.#buildId)
+      throw new DaemonApiError(
+        'identity',
+        'Daemon identity or build changed; reconnect explicitly',
+        undefined,
+        true,
+      );
     this.#daemonId = body.daemon_id;
     this.#buildId = body.build_id;
     return {

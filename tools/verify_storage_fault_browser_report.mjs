@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { packagedAssetHashes } from "./browser_training_fields_full.mjs";
 
 export const limitation = "Controlled terminal numerical supervisor; genuine local submission, journal, owner ingestion, SQLite query_only/SQLITE_FULL, HTTP, SSE and native browser. Not native ENOSPC, filesystem permissions, ML training or site certification.";

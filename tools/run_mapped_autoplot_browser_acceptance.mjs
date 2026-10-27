@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { createBrowserActions } from './browser_actions.mjs';
 import { openTrainingEditor } from './browser_training_editor.mjs';
 import { browserLaunchArgs } from './browser_launch_policy.mjs';

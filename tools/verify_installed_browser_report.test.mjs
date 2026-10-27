@@ -12,7 +12,7 @@ function fixture() {
   const prefix = "/private/owned/venv";
   const python = prefix + "/bin/python";
   const sha256 = "a".repeat(64);
-  const assets = Object.fromEntries(Array.from({ length: 37 }, (_, index) => [`asset-${index}`, sha256]));
+  const assets = Object.fromEntries(Array.from({ length: 32 }, (_, index) => [`asset-${index}`, sha256]));
   assets[".wavedl-assets.json"] = sha256;
   const file = { size: 100, sha256 };
   const id = index => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
@@ -37,17 +37,17 @@ function fixture() {
     scope: "fresh isolated native CPython venv from offline wheelhouse; local CPU only",
     environment: { pythonPathRemoved: true, pythonHomeRemoved: true, userSiteDisabled: true, systemSitePackages: false, offlineResolution: true },
     installation: { prefix, python, console: prefix + "/bin/wavedl-daemon", modules: Object.fromEntries(["wavedl", "wavedl.core.protocol", "wavedl_daemon", "wavedl_daemon.cli"].map(name => [name, prefix + "/lib/" + name])),
-      noCheckoutPath: true, observedSystemSitePackages: false, qtAbsent: true, cwdOutsideCheckout: true, pipCheck: true, assetCount: 38, assets, assetManifestSha256: sha256 },
+      noCheckoutPath: true, observedSystemSitePackages: false, qtAbsent: true, cwdOutsideCheckout: true, pipCheck: true, assetCount: 33, assets, assetManifestSha256: sha256 },
     installBudget: { minimumFreeBytes: 2 * 1024 ** 3, samples: 20, offlineOnly: true, terminalExit: 0 },
-    pythonInterpreter: python, bootstrap: { removed: true, local: [], session: [], cookies: "" }, workerControlled: true,
+    pythonInterpreter: python, bootstrap: { removed: true, local: [], session: [], cookies: "" },
     trainingManifest: training,
     previewRegistry: { plans: 1, submissions: [], executions: [], control: [{ submission_requested: 0, cancellation_requested: 0 }] },
     trainingSettled: { plans: 2, runs: [{ state: "completed" }, { state: "completed" }] },
     resultOperations: { sourceRunId: training.run_id, approved, selected: { value: "gen-000001" },
       refusal: { before: {}, after: {}, invalid: "true" }, durable: { plans, runs: [{ runId: training.run_id, state: "completed", publications: [{ generation: "gen-000001" }] }, evaluation] } },
     predictions: { generation: "gen-000001", runId: approved.run_id, expected: file, actual: file }, finalRegistry: state,
-    beforeOfflineRegistry: structuredClone(state), cleanupRegistry: structuredClone(state), daemonExit: { code: 130, signal: null },
-    worker: { controller: true, path: "/settings/storage", shell: true, offline: true, apiReadRefused: true, apiMutationRefused: true }, runtimePids: [1, 2, 3],
+    cleanupRegistry: structuredClone(state), daemonExit: { code: 130, signal: null },
+    staticClient: { path: "/settings/storage", shell: true, apiStatus: 401, apiType: "application/json" }, runtimePids: [1, 2, 3],
     cleanup: { errors: [], browserAbsent: true, daemonReaped: true, applicationShutdownComplete: true, listenerAbsent: true, daemonPidAbsent: true, runtimePidsAndGroupsAbsent: true, storageClosed: true, ownedRootsRemoved: true },
   };
 }
@@ -74,7 +74,6 @@ for (const [name, mutate] of [
     for (const rows of [record.finalRegistry.submissions, record.finalRegistry.executions]) {
       rows.forEach((row, index) => { row.run_id = ids[(index + 1) % ids.length]; });
     }
-    record.beforeOfflineRegistry = structuredClone(record.finalRegistry);
     record.cleanupRegistry = structuredClone(record.finalRegistry);
   }],
   ["foreign final training run", record => record.finalRegistry.runs[0].run_id = "00000000-0000-4000-8000-000000000099"],
@@ -86,21 +85,19 @@ for (const [name, mutate] of [
   ["foreign runtime pid", record => record.runtimePids[0] = 99999],
   ["contradictory exit", record => record.daemonExit.signal = "SIGINT"],
   ["missing date", record => delete record.started],
-  ["offline queued mutation", record => record.beforeOfflineRegistry.plans = 3],
   ["late mutation after shutdown", record => record.cleanupRegistry.plans = 5],
   ["abnormal daemon exit", record => record.daemonExit.code = 1],
   ["no shutdown witness", record => record.cleanup.applicationShutdownComplete = false],
   ["held dispatch lock", record => record.cleanup.storageClosed = false],
   ["disk margin exceeded", record => record.installBudget.minimumFreeBytes = 100],
-  ["missing assets", record => record.installation.assetCount = 37],
+  ["missing assets", record => record.installation.assetCount = 32],
   ["wrong interpreter", record => record.trainingManifest.runtime.python = "/host/python"],
   ["early submission", record => record.previewRegistry.control[0].submission_requested = 1],
   ["training failed", record => record.trainingSettled.runs[0].state = "failed"],
   ["foreign checkpoint", record => record.resultOperations.approved.checkpoint_source.run_id = "foreign"],
   ["no evaluation metric", record => record.resultOperations.durable.runs[1].events.pop()],
   ["download mismatch", record => record.predictions.actual = { size: 99, sha256: "b".repeat(64) }],
-  ["API read cached", record => record.worker.apiReadRefused = false],
-  ["API mutation intercepted", record => record.worker.apiMutationRefused = false],
+  ["API route returned shell", record => record.staticClient.apiType = "text/html"],
   ["orphan process", record => record.cleanup.runtimePidsAndGroupsAbsent = false],
   ["cleanup failure", record => record.cleanup.errors.push("failure")],
 ]) test(`rejects ${name}`, () => {
@@ -108,7 +105,7 @@ for (const [name, mutate] of [
   mutate(record);
   assert.throws(() => verifyInstalledBrowserRecord(record, expectedWheelSha256));
 });
-test("runner starts the real console outside checkout and installs offline without startup-path workarounds", async () => {
+test("runner starts the real console outside checkout and verifies static API separation", async () => {
   const source = await readFile(new URL("./run_installed_browser_acceptance.mjs", import.meta.url), "utf8");
   assert(source.includes('spawn(executable, ["serve"'));
   assert(source.includes('"--run-root"') && source.includes('"--state-root"') && source.includes('"--browse-root"'));
@@ -117,7 +114,7 @@ test("runner starts the real console outside checkout and installs offline witho
   assert(!source.includes("--system-site-packages") && !source.includes("sys.path.remove") && !source.includes("sys.path.insert"));
   assert(!source.includes("browser_daemon_fixture.py") && !source.includes("dispatchEvent"));
   assert(source.includes("include-system-site-packages = false"));
-  assert(source.includes("await refused('/api/runs',{method:'POST'"));
+  assert(source.includes("fetch('/api/unknown',{cache:'no-store',headers:{accept:'text/html'}})"));
   assert(source.includes("Unresolved native ownership requires retained roots"));
   assert(source.includes('mode: 0o400, flag: "wx"'));
   assert(source.includes("Provides-Extra") && source.includes("Requires-Dist") && source.includes("importlib.util.find_spec(name) is None"));

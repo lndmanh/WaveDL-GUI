@@ -160,7 +160,7 @@ jobs:
               path.relative_to(source).as_posix(): path.read_bytes()
               for path in source.rglob("*") if path.is_file()
           }
-          assert {"index.html", ".wavedl-assets.json", ".wavedl-immutable.json"} <= expected.keys()
+          assert {"index.html", ".wavedl-assets.json"} <= expected.keys()
           with zipfile.ZipFile(wheel) as archive:
               metadata, = (name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
               assert Version(BytesParser().parsebytes(archive.read(metadata))["Version"]) == Version(tag)

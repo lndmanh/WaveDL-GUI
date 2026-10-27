@@ -8,11 +8,11 @@ import { join, resolve } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { connect } from "node:net";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { verifyNegativeAdoptionFile, currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
 const python = process.env.WAVEDL_PYTHON ?? "python";

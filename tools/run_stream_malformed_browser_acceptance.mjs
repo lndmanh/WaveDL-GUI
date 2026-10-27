@@ -6,7 +6,7 @@ import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { createBrowserActions } from "./browser_actions.mjs";
 import { verifyStreamMalformedBrowserReport } from "./verify_stream_malformed_browser_report.mjs";

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const digest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);

@@ -4,9 +4,9 @@ import { mkdir, mkdtemp, writeFile, lstat, readdir, rm, realpath } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, relative, sep, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { verifyCvParityFile } from "./verify_cv_parity_browser_report.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 assert(process.argv[2], "Usage: run_cv_parity_browser_acceptance.mjs REPORT_DIR");

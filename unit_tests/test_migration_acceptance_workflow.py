@@ -33,11 +33,8 @@ def test_expensive_acceptance_preserves_failure_diagnostics_but_stops_on_cancel(
         or "pytest unit_tests/daemon/test_registry_metric_http_recovery.py"
         in step.get("run", "")
     ]
-    implicit = {
-        "Verify native retained generations and refused fourth update",
-        "Run all twelve mandatory browser acceptance cases",
-    }
-    assert len(producers) == 53
+    implicit = {"Run all eleven mandatory browser acceptance cases"}
+    assert len(producers) == 47
     assert {step["name"] for step in producers if not step.get("if")} == implicit
     for step in producers:
         if step["name"] not in implicit:
@@ -51,7 +48,7 @@ def test_expensive_acceptance_preserves_failure_diagnostics_but_stops_on_cancel(
         if step.get("name", "").startswith(("Require ", "Verify "))
         and step not in producers
     ]
-    assert len(guards) == 60
+    assert len(guards) == 54
     implicit_guards = {
         "Verify installed dependency and CPU data contracts",
         "Require exhaustive field and effective Python export round trips",
@@ -208,12 +205,6 @@ def test_new_app_ci_excludes_legacy_transition_but_preserves_update_safety(workf
     commands = "\n".join(step.get("run", "") for step in steps)
     assert "run_legacy_browser_acceptance" not in commands
     assert "verify_legacy_transition_report" not in commands
-    for runner in (
-        "run_retained_browser_acceptance.mjs",
-        "run_retained_rollback_browser_acceptance.mjs",
-        "run_retained_concurrency_acceptance.mjs",
-    ):
-        assert f"node tools/{runner}" in commands
 
 
 @pytest.mark.parametrize("event", ["push", "pull_request"])
@@ -652,12 +643,9 @@ def test_genuine_broker_overflow_contracts_and_browser_file_guard_are_mandatory(
 
 
 @pytest.mark.parametrize("event", ["push", "pull_request"])
-def test_cold_offline_and_pending_cancel_changes_trigger_browser_lane(workflow, event):
+def test_pending_cancel_changes_trigger_browser_lane(workflow, event):
     triggers = workflow.get("on", workflow.get(True))
     assert {
-        "tools/run_cold_offline_browser_acceptance.mjs",
-        "tools/verify_cold_offline_browser_report.mjs",
-        "tools/verify_cold_offline_browser_report.test.mjs",
         "tools/browser_pending_cancel_fixture.py",
         "tools/run_pending_cancel_browser_acceptance.mjs",
         "tools/verify_pending_cancel_browser_report.mjs",
@@ -666,28 +654,14 @@ def test_cold_offline_and_pending_cancel_changes_trigger_browser_lane(workflow, 
     }.issubset(triggers[event]["paths"])
 
 
-def test_cold_offline_and_pending_cancel_live_gates_are_mandatory(workflow):
+def test_pending_cancel_live_gates_are_mandatory(workflow):
     steps = workflow["jobs"]["chromium-cpu"]["steps"]
     commands = "\n".join(step.get("run", "") for step in steps)
     for command in (
-        "node tools/run_cold_offline_browser_acceptance.mjs",
-        "node tools/verify_cold_offline_browser_report.mjs",
         "node tools/run_pending_cancel_browser_acceptance.mjs",
         "node tools/verify_pending_cancel_browser_report.mjs",
     ):
         assert command in commands
-    cold_runner = next(
-        step
-        for step in steps
-        if "node tools/run_cold_offline_browser_acceptance.mjs" in step.get("run", "")
-    )
-    cold_guard = next(
-        step
-        for step in steps
-        if step.get("run", "").startswith(
-            "node tools/verify_cold_offline_browser_report.mjs"
-        )
-    )
     pending_runner = next(
         step
         for step in steps
@@ -702,7 +676,7 @@ def test_cold_offline_and_pending_cancel_live_gates_are_mandatory(workflow):
             "node tools/verify_pending_cancel_browser_report.mjs"
         )
     )
-    for step in (cold_runner, cold_guard, pending_runner, pending_guard):
+    for step in (pending_runner, pending_guard):
         assert step["if"] == (
             "${{ !cancelled() }}"
             if step["name"].startswith(("Run ", "Exercise "))
@@ -710,14 +684,7 @@ def test_cold_offline_and_pending_cancel_live_gates_are_mandatory(workflow):
         )
         assert not step.get("continue-on-error", False)
         assert "||" not in step["run"]
-    assert steps.index(cold_runner) < steps.index(cold_guard)
-    assert 'WAVEDL_PYTHON="$(python -c' in cold_runner["run"]
-    assert "print(sys.executable)" in cold_runner["run"]
     assert steps.index(pending_runner) < steps.index(pending_guard)
-    assert any(
-        "cold-offline-browser.json" in line
-        for line in steps[-1]["with"]["path"].splitlines()
-    )
     assert any(
         "pending-cancel-browser.json" in line
         for line in steps[-1]["with"]["path"].splitlines()

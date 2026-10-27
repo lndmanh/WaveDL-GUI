@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { boundedFile } from './verify_retained_browser_report.mjs';
+import { boundedFile } from './browser_files.mjs';
 import { currentAssetDigest } from './verify_adoption_negative_browser_report.mjs';
 
 export const reconnectLimitation = 'Genuine same-daemon local CPU detach, reauthentication and fresh-monitor replay from zero. No private cursor storage, transport-resume cursor, attempt rollover, remote, Windows, GPU or site certification.';

@@ -1,13 +1,13 @@
-"""Static packaging refuses unowned output and retains recoverable builds."""
+"""Static packaging verifies client assets and retains recoverable builds."""
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import shutil
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -24,9 +24,7 @@ def test_generated_assets_survive_autocrlf_checkout_byte_for_byte(tmp_path):
     prefix = "src/wavedl_daemon/web_assets/"
     names = (
         ".wavedl-assets.json",
-        ".wavedl-immutable.json",
         "index.html",
-        "sw.js",
         "_nuxt/entry.js",
         "_nuxt/style.css",
         "image.png",
@@ -61,8 +59,7 @@ def test_generated_assets_survive_autocrlf_checkout_byte_for_byte(tmp_path):
 def vendor(tmp_path, monkeypatch):
     source = tmp_path / "public"
     source.mkdir()
-    for name in ("index.html", "sw.js", "manifest.webmanifest"):
-        (source / name).write_text(name)
+    (source / "index.html").write_text("index.html")
     spec = importlib.util.spec_from_file_location(
         "vendor_web_assets", Path(__file__).parents[2] / "tools/vendor_web_assets.py"
     )
@@ -74,64 +71,103 @@ def vendor(tmp_path, monkeypatch):
     (source / "_nuxt").mkdir()
     (source / "_nuxt/oaoxtviz.js").write_text("generated chunk")
     (source / "_nuxt/ordinary.js").write_text("public file")
-    (source / "sw.js").write_text(
-        "const precache = "
-        + json.dumps(
-            [
-                {"revision": "shell", "url": "/"},
-                {"revision": "manifest", "url": "manifest.webmanifest"},
-                {"revision": None, "url": "_nuxt/oaoxtviz.js"},
-                {"revision": "ordinary", "url": "_nuxt/ordinary.js"},
-            ],
-            separators=(",", ":"),
-        )
-        + ";"
-    )
-    manifest = tmp_path / "client.manifest.mjs"
-    manifest.write_text('export default {"entry": {"file": "oaoxtviz.js"}};')
-    monkeypatch.setattr(module, "CLIENT_MANIFEST", manifest)
     return module
 
 
-def test_packages_exact_manifest(tmp_path, monkeypatch):
+def test_packages_exact_manifest(tmp_path, monkeypatch, capsys):
     module = vendor(tmp_path, monkeypatch)
     module.main()
     assert json.loads(
         (module.TARGET / module.MANIFEST).read_text()
     ) == module.inventory(module.TARGET, managed=True)
-    marker = json.loads((module.TARGET / module.IMMUTABLE).read_text())
-    assert marker == {"version": 1, "paths": ["_nuxt/oaoxtviz.js"]}
+    assert set(module.inventory(module.TARGET, managed=True)) == {
+        "index.html",
+        "_nuxt/oaoxtviz.js",
+        "_nuxt/ordinary.js",
+    }
+    assert not (module.TARGET / "offline-build.json").exists()
+    assert not (module.TARGET / ".wavedl-immutable.json").exists()
+    total_bytes = sum(
+        (module.SOURCE / name).stat().st_size
+        for name in ("index.html", "_nuxt/oaoxtviz.js", "_nuxt/ordinary.js")
+    )
+    assert (
+        f"Packaged 3 verified static assets ({total_bytes} bytes)"
+        in capsys.readouterr().out
+    )
 
 
 def test_replacement_retains_previous_build(tmp_path, monkeypatch):
     module = vendor(tmp_path, monkeypatch)
     module.main()
-    previous_worker = (module.SOURCE / "sw.js").read_text()
-    new_worker = previous_worker + "\n// new worker"
-    (module.SOURCE / "sw.js").write_text(new_worker)
+    previous_index = (module.SOURCE / "index.html").read_text()
+    new_index = previous_index + "\n<!-- new build -->"
+    (module.SOURCE / "index.html").write_text(new_index)
     module.main()
     backups = list(module.WORK_AREA.glob("backup-*"))
     assert len(backups) == 1
-    assert (backups[0] / "sw.js").read_text() == previous_worker
-    assert (module.TARGET / "sw.js").read_text() == new_worker
+    assert (backups[0] / "index.html").read_text() == previous_index
+    assert (module.TARGET / "index.html").read_text() == new_index
 
 
 def test_refuses_modified_previous_build(tmp_path, monkeypatch):
     module = vendor(tmp_path, monkeypatch)
     module.main()
-    (module.TARGET / "sw.js").write_text("manual edit")
+    (module.TARGET / "index.html").write_text("manual edit")
     with pytest.raises(ValueError, match="differ"):
         module.main()
-    assert (module.TARGET / "sw.js").read_text() == "manual edit"
+    assert (module.TARGET / "index.html").read_text() == "manual edit"
+
+
+def test_refuses_duplicate_previous_manifest_keys(tmp_path, monkeypatch):
+    module = vendor(tmp_path, monkeypatch)
+    module.main()
+    (module.TARGET / module.MANIFEST).write_text(
+        '{"index.html":"first","index.html":"second"}'
+    )
+    with pytest.raises(ValueError, match="Duplicate generated asset manifest key"):
+        module.main()
 
 
 def test_refuses_unmanaged_previous_build(tmp_path, monkeypatch):
     module = vendor(tmp_path, monkeypatch)
     module.TARGET.mkdir()
-    for name in ("index.html", "sw.js", "manifest.webmanifest"):
-        (module.TARGET / name).write_text(name)
+    (module.TARGET / "index.html").write_text("index.html")
     with pytest.raises(ValueError, match="unmanaged"):
         module.main()
+
+
+def test_replaces_hash_verified_legacy_offline_package(tmp_path, monkeypatch):
+    module = vendor(tmp_path, monkeypatch)
+    module.TARGET.mkdir()
+    legacy = {
+        ".wavedl-immutable.json": b'{"version":1,"paths":[]}',
+        "index.html": b"previous shell",
+        "manifest.webmanifest": b'{"name":"WaveDL"}',
+        "offline-build.json": b'{"schema_version":1}',
+        "sw.js": b"previous worker",
+    }
+    for name, content in legacy.items():
+        (module.TARGET / name).write_bytes(content)
+    (module.TARGET / module.MANIFEST).write_text(
+        json.dumps(
+            {
+                name: hashlib.sha256(content).hexdigest()
+                for name, content in legacy.items()
+            }
+        )
+    )
+
+    module.main()
+
+    backup = next(module.WORK_AREA.glob("backup-*"))
+    assert {path.name for path in backup.iterdir()} == {*legacy, module.MANIFEST}
+    assert module.inventory(module.TARGET, managed=True) == module.inventory(
+        module.SOURCE
+    )
+    assert not (module.TARGET / module.LEGACY_IMMUTABLE).exists()
+    assert not (module.TARGET / "offline-build.json").exists()
+    assert not (module.TARGET / "sw.js").exists()
 
 
 @pytest.mark.parametrize("name", ["linked.js", "linked-dir"])
@@ -155,8 +191,8 @@ def test_refuses_backend_output(tmp_path, monkeypatch):
 
 def test_refuses_incomplete_build(tmp_path, monkeypatch):
     module = vendor(tmp_path, monkeypatch)
-    (module.SOURCE / "sw.js").unlink()
-    with pytest.raises(ValueError, match="Expected generated"):
+    (module.SOURCE / "index.html").unlink()
+    with pytest.raises(ValueError, match=r"index\.html"):
         module.main()
 
 
@@ -167,8 +203,8 @@ def test_refuses_build_secrets(tmp_path, monkeypatch):
         module.main()
 
 
-@pytest.mark.parametrize("name", [".wavedl-assets.json", ".wavedl-immutable.json"])
-def test_refuses_source_packaging_metadata(tmp_path, monkeypatch, name):
+@pytest.mark.parametrize("name", [".wavedl-assets.json", ".hidden.js"])
+def test_refuses_hidden_source_files(tmp_path, monkeypatch, name):
     module = vendor(tmp_path, monkeypatch)
     (module.SOURCE / name).write_text("{}")
     with pytest.raises(ValueError, match="Unexpected static"):
@@ -176,27 +212,16 @@ def test_refuses_source_packaging_metadata(tmp_path, monkeypatch, name):
     assert not module.TARGET.exists()
 
 
-def test_refuses_modified_previous_metadata(tmp_path, monkeypatch):
+def test_packages_assets_without_nuxt_producer_manifest(tmp_path, monkeypatch):
     module = vendor(tmp_path, monkeypatch)
     module.main()
-    (module.TARGET / module.IMMUTABLE).write_text("manual edit")
-    with pytest.raises(ValueError, match="differ"):
-        module.main()
-
-
-def test_missing_manifest_asset_preserves_previous_build(tmp_path, monkeypatch):
-    module = vendor(tmp_path, monkeypatch)
-    module.main()
-    (module.SOURCE / "_nuxt/oaoxtviz.js").unlink()
-    with pytest.raises(ValueError, match="Generated client asset is missing"):
-        module.main()
     assert (module.TARGET / "_nuxt/oaoxtviz.js").read_text() == "generated chunk"
 
 
 def test_failed_replacement_restores_previous_build(tmp_path, monkeypatch):
     module = vendor(tmp_path, monkeypatch)
     module.main()
-    original_worker = (module.SOURCE / "sw.js").read_text()
+    original_index = (module.SOURCE / "index.html").read_text()
     original = module.os.replace
 
     def fail_stage(source, destination):
@@ -205,24 +230,29 @@ def test_failed_replacement_restores_previous_build(tmp_path, monkeypatch):
         original(source, destination)
 
     monkeypatch.setattr(module.os, "replace", fail_stage)
-    (module.SOURCE / "sw.js").write_text(original_worker + "\n// new worker")
+    (module.SOURCE / "index.html").write_text(original_index + "\n<!-- new -->")
     with pytest.raises(OSError, match="replacement failed"):
         module.main()
-    assert (module.TARGET / "sw.js").read_text() == original_worker
+    assert (module.TARGET / "index.html").read_text() == original_index
     assert json.loads(
         (module.TARGET / module.MANIFEST).read_text()
     ) == module.inventory(module.TARGET, managed=True)
 
 
-def test_refuses_duplicate_producer_manifest_keys(tmp_path, monkeypatch):
+def test_staged_copy_race_preserves_previous_build(tmp_path, monkeypatch):
     module = vendor(tmp_path, monkeypatch)
-    monkeypatch.setattr(
-        module.subprocess,
-        "run",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            stdout='{"entry":{"file":"oaoxtviz.js","file":"ordinary.js"}}'
-        ),
-    )
-    with pytest.raises(ValueError, match="Duplicate"):
+    module.main()
+    previous_index = (module.TARGET / "index.html").read_bytes()
+    original_copy = module.shutil.copyfile
+
+    def corrupt_copy(source, destination):
+        original_copy(source, destination)
+        if Path(source).name == "ordinary.js":
+            Path(destination).write_text("changed during staging")
+
+    monkeypatch.setattr(module.shutil, "copyfile", corrupt_copy)
+    (module.SOURCE / "index.html").write_text("new build")
+    with pytest.raises(ValueError, match="changed while being staged"):
         module.main()
-    assert not module.TARGET.exists()
+    assert (module.TARGET / "index.html").read_bytes() == previous_index
+    assert not list(module.WORK_AREA.glob("stage-*"))

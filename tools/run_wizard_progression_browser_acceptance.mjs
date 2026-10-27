@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, writeFile, readdir, realpath, lstat, rm } from 'node:fs
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { REPORT_NAME, readWizardEvidence, verifyWizardProgressionFile, verifyWizardProgressionReport } from './verify_wizard_progression_browser_report.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { packagedAssetHashes } from "./browser_training_fields_full.mjs";
@@ -188,7 +188,7 @@ export function verifyTrainingValidationRecord(record) {
   assert((record.cleanup.fixtureExit.code === 0 && record.cleanup.fixtureExit.signal === null) ||
     (record.cleanup.fixtureExit.code === null && record.cleanup.fixtureExit.signal === "SIGINT"));
   for (const name of ["failure","error","skipped","shutdownError"]) assert.equal(record[name], undefined);
-  assert.equal(Object.keys(v.beforeAssets).length, 37);
+  assert.equal(Object.keys(v.beforeAssets).length, 32);
   assert(Object.values(v.beforeAssets).every((x) => /^[a-f0-9]{64}$/.test(x)));
   assert.deepEqual(v.beforeAssets, v.afterAssets);
   assert.equal(v.postAssetManifestSha256, record.assetManifestSha256);

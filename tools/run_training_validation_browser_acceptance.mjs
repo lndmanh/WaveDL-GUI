@@ -4,10 +4,10 @@ import { mkdir, mkdtemp, writeFile, lstat, readdir, rm, realpath } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, relative, sep, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { verifyTrainingValidationFile } from "./verify_training_validation_browser_report.mjs";
 import { reportDestination, ownedEvidencePath } from "./run_training_fields_browser_acceptance.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export async function main(path) {
   assert(path, "Usage: run_training_validation_browser_acceptance.mjs REPORT_DIR");

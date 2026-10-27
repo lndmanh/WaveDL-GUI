@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { createBrowserActions } from "./browser_actions.mjs";
 import { verifyNativeSseSplitReport, verifyNativeSseSplitAssets } from "./verify_native_sse_split_report.mjs";

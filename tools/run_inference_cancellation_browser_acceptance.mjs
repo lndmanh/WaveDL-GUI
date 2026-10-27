@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TextDecoder } from "node:util";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { verifyInferenceCancellationFile } from "./verify_inference_cancellation_browser_report.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 assert(process.argv[2], "Usage: run_inference_cancellation_browser_acceptance.mjs REPORT_DIR");
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");

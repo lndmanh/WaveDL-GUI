@@ -6,8 +6,8 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
-import { boundedFile } from './verify_retained_browser_report.mjs';
+import { boundedCommand } from './browser_process.mjs';
+import { boundedFile } from './browser_files.mjs';
 import { reportDestination, ownedEvidencePath } from './run_training_fields_browser_acceptance.mjs';
 import { verifyPresetImportFile } from './verify_preset_import_browser_report.mjs';
 

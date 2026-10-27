@@ -37,12 +37,11 @@ export function verifyInstalledBrowserRecord(record, expectedWheelSha256) {
   assert.equal(install.observedSystemSitePackages, false);
   assert(record.installBudget.minimumFreeBytes >= 1024 ** 3 && record.installBudget.samples > 0 && record.installBudget.offlineOnly === true && record.installBudget.terminalExit === 0);
   assert.equal(record.pythonInterpreter, install.python);
-  assert.equal(install.assetCount, 38);
-  assert.equal(Object.keys(install.assets).length, 38);
+  assert.equal(install.assetCount, 33);
+  assert.equal(Object.keys(install.assets).length, 33);
   assert(Object.values(install.assets).every(digest) && digest(install.assetManifestSha256));
   assert.equal(install.assets[".wavedl-assets.json"], install.assetManifestSha256);
   assert.deepEqual(record.bootstrap, { removed: true, local: [], session: [], cookies: "" });
-  assert.equal(record.workerControlled, true);
   const train = record.trainingManifest;
   assert(uuid(train.run_id));
   assert.equal(train.operation, "train");
@@ -120,9 +119,8 @@ export function verifyInstalledBrowserRecord(record, expectedWheelSha256) {
     assert(execution && ["run_id", "request_id", "pid", "supervisor_id"].every(key => execution[key] === source[key]));
     assert(record.finalRegistry.runs.some(run => run.run_id === source.run_id));
   }
-  assert.deepEqual(record.beforeOfflineRegistry, record.finalRegistry);
   assert.deepEqual(record.cleanupRegistry, record.finalRegistry);
-  assert.deepEqual(record.worker, { controller: true, path: "/settings/storage", shell: true, offline: true, apiReadRefused: true, apiMutationRefused: true });
+  assert.deepEqual(record.staticClient, { path: "/settings/storage", shell: true, apiStatus: 401, apiType: "application/json" });
   assert(Array.isArray(record.runtimePids) && record.runtimePids.length === 3 && new Set(record.runtimePids).size === 3 && record.runtimePids.every(pid => Number.isSafeInteger(pid) && pid > 0));
   sameSet(record.runtimePids, record.finalRegistry.submissions.map(row => row.pid));
   assert.deepEqual(record.cleanup, { errors: [], browserAbsent: true, daemonReaped: true, listenerAbsent: true,

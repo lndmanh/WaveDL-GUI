@@ -11,6 +11,7 @@ const initial: ConnectionState = {
   health: null,
   message: null,
   revision: 0,
+  buildMismatch: false,
 };
 afterEach(() => {
   vi.restoreAllMocks();

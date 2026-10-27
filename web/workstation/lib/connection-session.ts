@@ -13,6 +13,7 @@ export interface ConnectionState {
   health: Health | null;
   message: string | null;
   revision: number;
+  buildMismatch: boolean;
 }
 export interface ConnectionOptions {
   origin: string;
@@ -49,6 +50,7 @@ export class ConnectionSession {
     health: null,
     message: null,
     revision: 0,
+    buildMismatch: false,
   });
   #listeners = new Set<(state: ConnectionState) => void>();
   #api: DaemonApi | null = null;
@@ -85,8 +87,15 @@ export class ConnectionSession {
     status: ConnectionStatus,
     message: string | null = null,
     health: Health | null = null,
+    buildMismatch = false,
   ): void {
-    this.#state = Object.freeze({ status, message, health, revision: this.#state.revision });
+    this.#state = Object.freeze({
+      status,
+      message,
+      health,
+      revision: this.#state.revision,
+      buildMismatch,
+    });
     for (const listener of this.#listeners) listener(this.#state);
   }
   #revoke(): void {
@@ -319,6 +328,8 @@ export class ConnectionSession {
     this.#publish(
       safe.code === 'authentication' ? 'authentication' : safe.code === 'skew' ? 'skew' : 'error',
       safe.message,
+      null,
+      error instanceof DaemonApiError && error.buildMismatch,
     );
   }
 }

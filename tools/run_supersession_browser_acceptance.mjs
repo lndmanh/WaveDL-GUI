@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { TextDecoder } from "node:util";
 import { StringDecoder } from "node:string_decoder";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 import { verifySupersessionReport } from "./verify_supersession_browser_report.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";

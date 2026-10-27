@@ -8,7 +8,7 @@ const fixture = await readFile(new URL('./browser_daemon_fixture.py', import.met
 test('partial best cases are explicit and do not expand required baseline cases', () => {
   const defaults = runner.match(/const cases = (\[[^\]]+\])/)[1];
   assert.deepEqual(JSON.parse(defaults.replaceAll("'", '"')), [
-    'baseline', 'offline', 'detach', 'reload', 'cancel', 'lost-ack',
+    'baseline', 'detach', 'reload', 'cancel', 'lost-ack',
     'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity',
     'download-names', 'dataset-parity',
   ]);

@@ -22,9 +22,7 @@ ASSETS = {
     name: name.encode()
     for name in (
         "index.html",
-        "sw.js",
         ".wavedl-assets.json",
-        ".wavedl-immutable.json",
         "_nuxt/lazy.js",
     )
 }

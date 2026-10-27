@@ -6,7 +6,7 @@ const configuration = await readFile(new URL('../../nuxt.config.ts', import.meta
 const packaged = new URL('../../../src/wavedl_daemon/web_assets/', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('.wavedl-assets.json', packaged), 'utf8'));
 
-test('workstation explicitly disables framework reload paths outside per-tab consent', () => {
+test('workstation explicitly disables framework reload paths outside build-skew prompt', () => {
   assert.match(configuration, /emitRouteChunkError:\s*false/);
   assert.match(configuration, /checkOutdatedBuildInterval:\s*false/);
 });

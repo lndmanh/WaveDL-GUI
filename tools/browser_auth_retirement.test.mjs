@@ -5,7 +5,7 @@ import {
   redactAuthenticationClickError,
   RETIRED_CONTROL_ERROR,
 } from "./browser_auth_retirement.mjs";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 
 test("native missing-element stderr crosses the real bounded command redactor", async () => {
   const click = () => boundedCommand(process.execPath, ["-e",

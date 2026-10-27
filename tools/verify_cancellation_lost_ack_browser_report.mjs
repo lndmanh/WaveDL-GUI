@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
-import { boundedFile, verifySourceSnapshot } from './verify_retained_browser_report.mjs';
+import { boundedFile } from './browser_files.mjs';
+import { verifySourceSnapshot } from './browser_source_snapshot.mjs';
 import { currentAssetDigest } from './verify_adoption_negative_browser_report.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
