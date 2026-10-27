@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 const MAX_FRAMES = 4096;
 const MAX_SPLIT_BYTES = 16 * 1024 * 1024;

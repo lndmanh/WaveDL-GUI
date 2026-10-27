@@ -58,7 +58,7 @@ function fixture() {
     resolved_config: yaml,
   };
   const assets = Object.fromEntries(
-    Array.from({ length: 37 }, (_, index) => [`file-${index}`, "a".repeat(64)]),
+    Array.from({ length: 32 }, (_, index) => [`file-${index}`, "a".repeat(64)]),
   );
   return {
     name: "training-fields-full",

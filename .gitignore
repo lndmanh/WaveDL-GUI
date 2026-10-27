@@ -130,6 +130,12 @@ docs/**
 .VSCodeCounter
 
 tools/*
+!tools/browser_asset_proof.mjs
+!tools/browser_files.mjs
+!tools/browser_process.mjs
+!tools/browser_process.test.mjs
+!tools/browser_source_snapshot.mjs
+!tools/browser_source_snapshot.test.mjs
 !tools/vendor_web_assets.py
 !tools/browser_daemon_fixture.py
 !tools/browser_adoption_fixture.py

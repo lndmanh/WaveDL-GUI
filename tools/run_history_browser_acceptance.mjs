@@ -6,7 +6,7 @@ import { access, mkdtemp, mkdir, writeFile, rm, readdir } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { browserLaunchArgs } from './browser_launch_policy.mjs';
 import { createBrowserActions, DRIVER_READINESS_MODE } from './browser_actions.mjs';
 import { verifyHistoryBrowserReport, isRefusedConnectionError } from './verify_history_browser_report.mjs';

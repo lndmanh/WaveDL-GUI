@@ -1,6 +1,6 @@
 import { defineMessages } from './core';
 
-/** Shell, connection, update and browser-settings presentation only. */
+/** Shell, connection, build-skew and browser-settings presentation only. */
 export const shellSettingsMessages = defineMessages(
   {
     'Skip to workspace': 'Skip to workspace',
@@ -30,6 +30,8 @@ export const shellSettingsMessages = defineMessages(
       'Your daemon runs the experiments. This browser connects only to its current origin; credentials stay in memory.',
     'Connection identity changed': 'Connection identity changed',
     'Connection status': 'Connection status',
+    'A newer WaveDL build is available': 'A newer WaveDL build is available',
+    Reload: 'Reload',
     'Connected to {daemonId} · build {buildId}': 'Connected to {daemonId} · build {buildId}',
     'Verify connection': 'Verify connection',
     Disconnect: 'Disconnect',
@@ -41,18 +43,6 @@ export const shellSettingsMessages = defineMessages(
     'Disconnect and clear scope': 'Disconnect and clear scope',
     'Disconnecting never cancels running jobs. An offline page cannot confirm live status or perform actions. A changed daemon identity requires an explicit disconnect before starting a new scope.':
       'Disconnecting never cancels running jobs. An offline page cannot confirm live status or perform actions. A changed daemon identity requires an explicit disconnect before starting a new scope.',
-    'A workstation update is available': 'A workstation update is available',
-    'Workstation update blocked': 'Workstation update blocked',
-    'Reload this tab only when you are ready. Another tab may activate the shared worker, but cannot reload this tab.':
-      'Reload this tab only when you are ready. Another tab may activate the shared worker, but cannot reload this tab.',
-    'Updating…': 'Updating…',
-    'Update and reload': 'Update and reload',
-    Later: 'Later',
-    'The update failed. Try again when connected.': 'The update failed. Try again when connected.',
-    'Update blocked by retained offline builds. Existing tabs remain loaded. Close all Workstation tabs, then use browser storage tools to unregister only the WaveDL service-worker registration for this origin and remove only its retained-build caches and database. Reopen Workstation while connected.':
-      'Update blocked by retained offline builds. Existing tabs remain loaded. Close all Workstation tabs, then use browser storage tools to unregister only the WaveDL service-worker registration for this origin and remove only its retained-build caches and database. Reopen Workstation while connected.',
-    'Update verification failed. This tab has not reloaded. Restore the connection and reload explicitly to check again.':
-      'Update verification failed. This tab has not reloaded. Restore the connection and reload explicitly to check again.',
     'Appearance and guidance': 'Appearance and guidance',
     Appearance: 'Appearance',
     System: 'System',
@@ -85,8 +75,8 @@ export const shellSettingsMessages = defineMessages(
     'Wave-based deep-learning experiments, planned and executed by your daemon.':
       'Wave-based deep-learning experiments, planned and executed by your daemon.',
     'Project and feedback': 'Project and feedback',
-    'Do not include access tokens, private paths or training data in public feedback. Application updates require explicit confirmation in the update prompt.':
-      'Do not include access tokens, private paths or training data in public feedback. Application updates require explicit confirmation in the update prompt.',
+    'Do not include access tokens, private paths or training data in public feedback. Reloads are always user initiated.':
+      'Do not include access tokens, private paths or training data in public feedback. Reloads are always user initiated.',
     'New-run defaults': 'New-run defaults',
     'Saved separately for each verified daemon identity, in this browser only. Dataset, model, runtime, credentials and executable-code selections are never saved here. Existing drafts, approved plans and submitted runs are unchanged.':
       'Saved separately for each verified daemon identity, in this browser only. Dataset, model, runtime, credentials and executable-code selections are never saved here. Existing drafts, approved plans and submitted runs are unchanged.',
@@ -148,6 +138,8 @@ export const shellSettingsMessages = defineMessages(
       'Daemon của bạn chạy các thí nghiệm. Trình duyệt này chỉ kết nối với nguồn hiện tại; thông tin xác thực chỉ lưu trong bộ nhớ.',
     'Connection identity changed': 'Danh tính kết nối đã thay đổi',
     'Connection status': 'Trạng thái kết nối',
+    'A newer WaveDL build is available': 'Đã có bản dựng WaveDL mới hơn',
+    Reload: 'Tải lại',
     'Connected to {daemonId} · build {buildId}': 'Đã kết nối với {daemonId} · bản dựng {buildId}',
     'Verify connection': 'Xác minh kết nối',
     Disconnect: 'Ngắt kết nối',
@@ -159,19 +151,6 @@ export const shellSettingsMessages = defineMessages(
     'Disconnect and clear scope': 'Ngắt kết nối và xóa phạm vi',
     'Disconnecting never cancels running jobs. An offline page cannot confirm live status or perform actions. A changed daemon identity requires an explicit disconnect before starting a new scope.':
       'Ngắt kết nối không hủy các tác vụ đang chạy. Trang ngoại tuyến không thể xác nhận trạng thái trực tiếp hoặc thực hiện thao tác. Khi danh tính daemon thay đổi, bạn phải chủ động ngắt kết nối trước khi bắt đầu phạm vi mới.',
-    'A workstation update is available': 'Có bản cập nhật trạm làm việc',
-    'Workstation update blocked': 'Bản cập nhật Workstation bị chặn',
-    'Reload this tab only when you are ready. Another tab may activate the shared worker, but cannot reload this tab.':
-      'Chỉ tải lại thẻ này khi bạn sẵn sàng. Thẻ khác có thể kích hoạt service worker dùng chung, nhưng không thể tải lại thẻ này.',
-    'Updating…': 'Đang cập nhật…',
-    'Update and reload': 'Cập nhật và tải lại',
-    Later: 'Để sau',
-    'The update failed. Try again when connected.':
-      'Cập nhật thất bại. Hãy thử lại khi có kết nối.',
-    'Update blocked by retained offline builds. Existing tabs remain loaded. Close all Workstation tabs, then use browser storage tools to unregister only the WaveDL service-worker registration for this origin and remove only its retained-build caches and database. Reopen Workstation while connected.':
-      'Cập nhật bị chặn do các bản dựng ngoại tuyến được giữ lại. Các thẻ hiện tại vẫn đang mở. Đóng tất cả các thẻ Workstation, rồi dùng công cụ lưu trữ của trình duyệt để chỉ hủy đăng ký service worker của WaveDL cho nguồn gốc này và chỉ xóa bộ nhớ đệm bản dựng được giữ lại cùng cơ sở dữ liệu của nó. Mở lại Workstation khi có kết nối.',
-    'Update verification failed. This tab has not reloaded. Restore the connection and reload explicitly to check again.':
-      'Xác minh bản cập nhật thất bại. Thẻ này chưa được tải lại. Khôi phục kết nối rồi chủ động tải lại để kiểm tra lần nữa.',
     'Appearance and guidance': 'Giao diện và hướng dẫn',
     Appearance: 'Giao diện',
     System: 'Hệ thống',
@@ -204,8 +183,8 @@ export const shellSettingsMessages = defineMessages(
     'Wave-based deep-learning experiments, planned and executed by your daemon.':
       'Thí nghiệm học sâu dựa trên sóng, được daemon của bạn lập kế hoạch và thực thi.',
     'Project and feedback': 'Dự án và phản hồi',
-    'Do not include access tokens, private paths or training data in public feedback. Application updates require explicit confirmation in the update prompt.':
-      'Không đưa mã truy cập, đường dẫn riêng tư hoặc dữ liệu huấn luyện vào phản hồi công khai. Cập nhật ứng dụng cần được xác nhận rõ ràng trong thông báo cập nhật.',
+    'Do not include access tokens, private paths or training data in public feedback. Reloads are always user initiated.':
+      'Không đưa mã truy cập, đường dẫn riêng tư hoặc dữ liệu huấn luyện vào phản hồi công khai. Việc tải lại luôn do bạn chủ động thực hiện.',
     'New-run defaults': 'Mặc định cho lượt chạy mới',
     'Saved separately for each verified daemon identity, in this browser only. Dataset, model, runtime, credentials and executable-code selections are never saved here. Existing drafts, approved plans and submitted runs are unchanged.':
       'Lưu riêng cho từng danh tính daemon đã xác minh, chỉ trong trình duyệt này. Các lựa chọn tập dữ liệu, mô hình, môi trường chạy, thông tin xác thực và mã thực thi không được lưu ở đây. Bản nháp hiện có, kế hoạch đã duyệt và lượt chạy đã gửi không thay đổi.',

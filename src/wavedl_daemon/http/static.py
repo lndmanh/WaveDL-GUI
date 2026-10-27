@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import mimetypes
 import re
 from contextlib import ExitStack
@@ -20,15 +19,16 @@ from wavedl.core.safe_files import open_directory
 
 MAX_ASSET_BYTES = 32 * 1024 * 1024
 _INLINE_SCRIPT = re.compile(rb"<script\b([^>]*)>(.*?)</script\s*>", re.I | re.S)
-
-
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate metadata key")
-        result[key] = value
-    return result
+_UNREGISTER_SERVICE_WORKER = b"""self.addEventListener("install", event => {
+  event.waitUntil(self.skipWaiting());
+});
+self.addEventListener("activate", event => {
+  event.waitUntil((async () => {
+    await self.clients.claim();
+    await self.registration.unregister();
+  })());
+});
+"""
 
 
 def _headers(raw: bytes, *, html: bool, immutable: bool) -> dict[str, str]:
@@ -84,72 +84,6 @@ class StaticClient:
                 parts[-1], limit=MAX_ASSET_BYTES if limit is None else limit
             )
 
-    def _nuxt_immutable(self, parts: tuple[str, ...], digest: str) -> bool:
-        """Generated Nuxt hash names also need their vendored byte inventory."""
-        if len(parts) < 2 or parts[0] != "_nuxt":
-            return False
-        try:
-            raw = self._read((".wavedl-assets.json",), limit=1024 * 1024)
-        except FileNotFoundError:
-            return False
-        except (OSError, ValueError):
-            raise HTTPException(404, "Not found") from None
-        try:
-            inventory = json.loads(raw, object_pairs_hook=_unique_object)
-            if not isinstance(inventory, dict):
-                raise ValueError("Invalid asset inventory")
-            marker_digest = inventory.get(".wavedl-immutable.json")
-            if marker_digest is not None:
-                marker_raw = self._read((".wavedl-immutable.json",), limit=1024 * 1024)
-                if hashlib.sha256(marker_raw).hexdigest() != marker_digest:
-                    raise ValueError("Immutable inventory does not match its build")
-                marker = json.loads(marker_raw, object_pairs_hook=_unique_object)
-                if (
-                    not isinstance(marker, dict)
-                    or set(marker) != {"version", "paths"}
-                    or type(marker.get("version")) is not int
-                    or marker.get("version") != 1
-                    or not isinstance(marker.get("paths"), list)
-                    or not 0 < len(marker["paths"]) <= min(len(inventory), 10000)
-                ):
-                    raise ValueError("Invalid immutable inventory")
-                paths = set()
-                for path in marker["paths"]:
-                    if (
-                        not isinstance(path, str)
-                        or len(path) > 1024
-                        or len(path.split("/")) > 32
-                        or re.fullmatch(
-                            r"_nuxt/(?:[A-Za-z0-9_.@+-]+/)*[A-Za-z0-9_.@+-]+", path
-                        )
-                        is None
-                        or any(part in {".", ".."} for part in path.split("/"))
-                        or path in paths
-                        or not isinstance(inventory.get(path), str)
-                        or re.fullmatch(r"[a-f0-9]{64}", inventory[path]) is None
-                    ):
-                        raise ValueError("Invalid immutable inventory path")
-                    paths.add(path)
-                if "/".join(parts) not in paths:
-                    return False
-            else:
-                # Compatibility for previously vendored builds. Lowercase-only
-                # names require explicit producer provenance in the new marker.
-                match = re.search(
-                    r"(?:^|\.)([A-Za-z0-9_-]{8,})\.(?:js|css)$", parts[-1]
-                )
-                if (
-                    len(parts) != 2
-                    or match is None
-                    or not any(c.isupper() or c.isdigit() for c in match[1])
-                ):
-                    return False
-            if inventory.get("/".join(parts)) != digest:
-                raise ValueError("Asset does not match its vendored build")
-        except (ValueError, OSError):
-            raise HTTPException(404, "Not found") from None
-        return True
-
     def _load(self, parts: tuple[str, ...], navigation: bool):
         try:
             raw = self._read(parts)
@@ -172,15 +106,11 @@ class StaticClient:
             raise HTTPException(404, "Not found") from None
         media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
         html = media_type == "text/html"
-        # Only content-verified digest names are immutable; arbitrary filenames,
-        # the manifest and worker must remain revalidated across upgrades.
+        # Only content-verified digest names are immutable; all other assets
+        # remain revalidated across upgrades.
         digest = hashlib.sha256(raw).hexdigest()
         hashes = re.findall(r"(?:^|[.-])([a-f0-9]{12,64})(?=\.)", name)
-        immutable = not html and (
-            self._nuxt_immutable(parts, digest)
-            if parts[0] == "_nuxt"
-            else any(digest.startswith(value) for value in hashes)
-        )
+        immutable = not html and any(digest.startswith(value) for value in hashes)
         return raw, media_type, _headers(raw, html=html, immutable=immutable)
 
     async def serve(self, request):
@@ -196,6 +126,20 @@ class StaticClient:
             for part in parts
         ):
             raise HTTPException(404, "Not found")
+        if parts == ("sw.js",):
+            response = Response(
+                _UNREGISTER_SERVICE_WORKER,
+                media_type="application/javascript",
+                headers={
+                    "Cache-Control": "no-store",
+                    "Content-Security-Policy": "default-src 'none'; base-uri 'none'",
+                    "Referrer-Policy": "no-referrer",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+            if request.method == "HEAD":
+                response.body = b""
+            return response
         # Missing asset URLs are never the shell. Navigation must explicitly
         # accept HTML, while / is always a shell request.
         navigation = not path or (

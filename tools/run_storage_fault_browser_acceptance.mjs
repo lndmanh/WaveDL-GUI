@@ -9,11 +9,11 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE, xpathLiteral } from "./browser_actions.mjs";
 import { packagedAssetHashes } from "./browser_training_fields_full.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { limitation, verifyStorageFaultBrowserReport } from "./verify_storage_fault_browser_report.mjs";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));

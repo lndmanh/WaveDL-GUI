@@ -101,7 +101,13 @@ describe('results session replacement ownership', () => {
     expect(a.calls).toHaveLength(priorACalls);
 
     if (!retiredListener) throw new Error('Missing retired subscription');
-    retiredListener({ status: 'disconnected', revision: 999, health: null, message: null });
+    retiredListener({
+      status: 'disconnected',
+      revision: 999,
+      health: null,
+      message: null,
+      buildMismatch: false,
+    });
     await flushPromises();
     expect(wrapper.text()).toContain('cv_summary.json');
     expect(wrapper.get('button').attributes('disabled')).toBeUndefined();

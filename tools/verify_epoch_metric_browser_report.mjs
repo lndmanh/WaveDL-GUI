@@ -4,9 +4,9 @@ import { inflateSync } from "node:zlib";
 import { lstat, readdir, readlink } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
-import { isGeneratedDistAlias } from "./build_retained_browser_fixtures.mjs";
+import { isGeneratedDistAlias } from "./browser_source_snapshot.mjs";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sha = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -31,12 +31,12 @@ const harnessSources = [
   "tools/browser_numerical_failure_fixture.py",
   "tools/browser_actions.mjs",
   "tools/browser_launch_policy.mjs",
-  "tools/browser_retained_active_draft.mjs",
+  "tools/browser_asset_proof.mjs",
   "tools/browser_training_editor.mjs",
-  "tools/run_retained_browser_acceptance.mjs",
-  "tools/verify_retained_browser_report.mjs",
+  "tools/browser_process.mjs",
+  "tools/browser_files.mjs",
   "tools/verify_adoption_negative_browser_report.mjs",
-  "tools/build_retained_browser_fixtures.mjs",
+  "tools/browser_source_snapshot.mjs",
   "tools/vendor_web_assets.py",
   "unit_tests/test_runtime_training.py",
 ];

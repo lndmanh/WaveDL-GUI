@@ -6,11 +6,11 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, access, realpath, readdir } fr
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { browserLaunchArgs } from './browser_launch_policy.mjs';
 import { createBrowserActions } from './browser_actions.mjs';
 import { verifyPendingCancelBrowserReport } from './verify_pending_cancel_browser_report.mjs';
-import { boundedFile } from './verify_retained_browser_report.mjs';
+import { boundedFile } from './browser_files.mjs';
 
 const repo = resolve(new URL('..', import.meta.url).pathname);
 const reportPath = process.argv.find(arg => arg.startsWith('--report='))?.slice(9);

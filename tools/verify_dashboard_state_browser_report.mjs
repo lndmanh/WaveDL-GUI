@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { DRIVER_READINESS_MODE } from "./browser_actions.mjs";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 
 export const stages = [
   { name: "queued", badge: "queued", attempt: 1, pending: true, emptyMetrics: true },

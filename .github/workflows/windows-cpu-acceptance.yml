@@ -122,7 +122,7 @@ jobs:
           assets = checkout / "src/wavedl_daemon/web_assets"
           expected = {path.relative_to(assets).as_posix(): path.read_bytes() for path in assets.rglob("*") if path.is_file()}
           assert inventory(assets, managed=True) == json.loads(expected[".wavedl-assets.json"])
-          assert {"index.html", "sw.js", ".wavedl-assets.json", ".wavedl-immutable.json"} <= expected.keys()
+          assert {"index.html", ".wavedl-assets.json"} <= expected.keys()
           target = stage / "src/wavedl_daemon/web_assets"
           if target.exists():
               shutil.rmtree(target)

@@ -8,7 +8,7 @@ const defaults = Object.fromEntries(JSON.parse(readFileSync(
 const empty = {plans:0,runs:[],control:[],submissions:[],executions:[]};
 function fixture() {
   const python = "/fixture/python";
-  const assets = Object.fromEntries(Array.from({length:37},(_,i)=>["asset"+i,"a".repeat(64)]));
+  const assets = Object.fromEntries(Array.from({length:32},(_,i)=>["asset"+i,"a".repeat(64)]));
   const baseline = {plans:1,runs:[],submissions:[],executions:[],control:[
     {plan_id:"11111111-1111-4111-8111-111111111111",submission_requested:0,cancellation_requested:0}]};
   const state = {...structuredClone(baseline),plans:2};

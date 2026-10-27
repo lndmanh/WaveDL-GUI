@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { createConnection } from 'node:net';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { browserLaunchArgs, browserTemporaryEnvironment } from './browser_launch_policy.mjs';
 import { verifyKeyboardRecord, keyboardFailureCategory } from './verify_keyboard_browser_report.mjs';
 import { fileURLToPath } from 'node:url';

@@ -13,7 +13,7 @@ from .test_installed_cli import checked, installed
 def installed_web(tmp_path_factory):
     root = Path(__file__).resolve().parents[2]
     assets = root / "src/wavedl_daemon/web_assets"
-    if not (assets / "index.html").is_file() or not (assets / "sw.js").is_file():
+    if not (assets / "index.html").is_file():
         pytest.skip(
             "Generate and vendor the real web build before installed acceptance"
         )
@@ -33,7 +33,6 @@ def installed_web(tmp_path_factory):
 _EXERCISE = r"""
 import asyncio, base64, hashlib, json, re, sys
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
 import httpx
 import wavedl_daemon
 from wavedl_daemon.http.app import create_app
@@ -48,12 +47,6 @@ for name, expected in inventory.items():
     raw = (assets / name).read_bytes()
     assert len(raw) == expected['size'], name
     assert hashlib.sha256(raw).hexdigest() == expected['sha256'], name
-canonical = json.loads((assets / '.wavedl-assets.json').read_text())
-marker_raw = (assets / '.wavedl-immutable.json').read_bytes()
-assert canonical['.wavedl-immutable.json'] == hashlib.sha256(marker_raw).hexdigest()
-marker = json.loads(marker_raw)
-assert marker['version'] == 1 and marker['paths']
-assert all(name in canonical and name.startswith('_nuxt/') for name in marker['paths'])
 
 async def exercise():
     app = create_app(None, token='installed-static', daemon_id='installed-daemon',
@@ -88,7 +81,16 @@ async def exercise():
         assert missing.headers['content-type'] == 'application/json'
         assert (await client.post('/runs/installed-run')).status_code == 405
         assert (await client.get('/_nuxt/missing.js', headers={'Accept':'text/html'})).status_code == 404
+        worker = await client.get('/sw.js')
+        assert worker.status_code == 200
+        assert worker.headers['cache-control'] == 'no-store'
+        assert b'registration.unregister' in worker.content
+        assert b'addEventListener("fetch"' not in worker.content
+        assert b'navigate(' not in worker.content
+        assert b'caches' not in worker.content
         for name in inventory:
+            if name == 'sw.js':
+                continue
             response = await client.get('/' + name)
             assert response.status_code == 200, (name, response.status_code)
             assert hashlib.sha256(response.content).hexdigest() == inventory[name]['sha256'], name
@@ -97,36 +99,8 @@ async def exercise():
                 assert 'javascript' in response.headers['content-type'], name
             elif name.endswith('.css'):
                 assert response.headers['content-type'].startswith('text/css'), name
-            if name.startswith('_nuxt/') and name.count('/') == 1 and name.endswith(('.js','.css')):
-                assert name in marker['paths'], ('Generated chunk absent from producer inventory', name)
-                assert 'immutable' in response.headers['cache-control'], name
-            if name in ('sw.js', 'manifest.webmanifest'):
-                assert response.headers['cache-control'] == 'no-cache', name
-        worker = await client.get('/sw.js')
-        assert b'installed-static' not in worker.content
-        # Exercise the actual bundled Workbox install URLs, not a reconstructed
-        # filesystem listing. Workbox may transform index.html/404.html into
-        # navigation aliases, which a worker's default Accept cannot resolve.
-        manifests = re.findall(r'\[\{"revision":.*?\}\]', worker.text, re.S)
-        assert len(manifests) == 1, 'Pinned worker precache literal not found'
-        entries = json.loads(manifests[0])
-        assert entries and all(set(entry) == {'revision','url'} for entry in entries)
-        assert any(entry['url'] == '/' for entry in entries)
-        seen = set()
-        for entry in entries:
-            url = urljoin('http://localhost/', entry['url'])
-            parsed = urlsplit(url)
-            assert parsed.scheme == 'http' and parsed.netloc == 'localhost', url
-            assert not parsed.query and not parsed.fragment, url
-            assert parsed.path not in seen, 'Duplicate precache URL: ' + url
-            seen.add(parsed.path)
-            assert parsed.path != '/api' and not parsed.path.startswith('/api/'), url
-            response = await client.get(url, headers={'Accept':'*/*'})
-            assert response.status_code == 200, ('Worker precache URL unavailable', url, response.status_code)
-            canonical = 'index.html' if parsed.path == '/' else parsed.path.lstrip('/')
-            assert canonical in inventory, ('Precache URL has no packaged file', url)
-            assert hashlib.sha256(response.content).hexdigest() == inventory[canonical]['sha256'], url
-    print(json.dumps({'packaged_files':len(inventory), 'precache_urls':len(entries),
+    print(json.dumps({'packaged_files':len(inventory),
+                      'service_worker_retirement':'verified',
                       'static_and_api':'verified'}))
 asyncio.run(exercise())
 """
@@ -144,4 +118,4 @@ def test_installed_real_web_inventory_shell_csp_and_api_separation(installed_web
     evidence = json.loads(output)
     assert evidence["packaged_files"] == len(inventory)
     assert evidence["static_and_api"] == "verified"
-    assert evidence["precache_urls"] > 10
+    assert evidence["service_worker_retirement"] == "verified"

@@ -9,7 +9,7 @@ export async function packagedAssetHashes(repo) {
   const base = join(repo, "src/wavedl_daemon/web_assets");
   const files = JSON.parse(await readFile(join(base, ".wavedl-assets.json"), "utf8"));
   const hashes = {};
-  assert.equal(Object.keys(files).length, 37);
+  assert.equal(Object.keys(files).length, 32);
   for (const [name, expected] of Object.entries(files)) {
     assert(
       name &&

@@ -9,7 +9,7 @@ import { provideWorkstationLocale } from '../composables/useWorkstationI18n';
 import WorkstationShell from './WorkstationShell.vue';
 import ConnectionPanel from './ConnectionPanel.vue';
 import RunsWorkspace from './runs/RunsWorkspace.vue';
-import UpdatePrompt from './UpdatePrompt.vue';
+import BuildSkewPrompt from './BuildSkewPrompt.vue';
 import AutomaticPlotStatus from './results/AutomaticPlotStatus.vue';
 import { applyAppearance, loadAppearance, type AppearancePreferences } from '../lib/preferences';
 const ProjectContainer = defineAsyncComponent(() => import('./project/ProjectContainer.vue'));
@@ -138,6 +138,6 @@ const reportFailure = computed(() => {
       :appearance="appearance"
       @appearance-changed="appearanceChanged"
     />
-    <UpdatePrompt />
+    <BuildSkewPrompt :visible="state.buildMismatch === true" />
   </WorkstationShell>
 </template>

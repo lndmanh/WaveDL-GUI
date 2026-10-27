@@ -127,8 +127,8 @@ external-platform certification.
 | 19 Published artifacts | artifact store/SafeDirectory; `DT/test_safe_artifacts.py` replacement-after-listing/before-open/after-open tests; artifact-publication and tamper reports | Component + assembled containment/incomplete/integrity/budget/no-inline; local symlink race is tested, not an absent implementation. Site filesystem semantics remain external. |
 | 20 Appearance/defaults/W&B | preferences/settings; `WT/preferences.test.ts`, settings/localization tests; preferences and wizard reports | Component + assembled corruption fallback, language/theme/zoom/accent/defaults/guide. External W&B access is not required to prove optional default persistence. No cache deletion is authorized. |
 | 21 Connection/identity | connection-session/auth/bootstrap; `WT/connection-session.test.ts`, HTTP auth/bootstrap tests; auth-skew, port-reuse and hostile-origin reports | Component + assembled 401/skew/isolation/URL stripping; real forwarding/site deployment identity remains external. |
-| 22 About/feedback/update | SettingsWorkspace/UpdatePrompt/build identity; shell tests, retained-consent/rollback/concurrency reports | Component + assembled explicit update consent and retained active draft/run; feedback uses no-referrer/noopener and warns against secret disclosure, not an automatic outbound export. |
-| 23 Offline/PWA | compiled worker/static serving; `web/test/generated/service-worker.test.mjs`, installed-web tests; cold-offline/retained reports and current controlled-build replacement report | Component + assembled API exclusion/cold deep links/no offline submit; exact same-controller object and genuine new-daemon build refusal pass. Matching-new-client update and cache-hit provenance are not claimed by that refusal slice. |
+| 22 About/feedback/update | SettingsWorkspace/build identity; shell and build-skew prompt tests | Component + assembled explicit build-skew notice and user-triggered reload; feedback uses no-referrer/noopener and warns against secret disclosure, not an automatic outbound export. |
+| 23 Offline/PWA | Former compiled worker/static-serving implementation and acceptance evidence below (historical record only) | Retired as a product capability by owner decision on 2026-10-27; no offline/PWA support is required or claimed for the current workstation. |
 | 24 Run list/detail/adoption | RunsWorkspace/adoption service; `DT/test_adoption.py`, `test_adoption_service.py`; standalone main/negative/rollover reports | Component + assembled real standalone provenance/ownership/lost-ACK/negative history. No PID supervision adoption; real-site ownership/storage remains external. |
 
 ## Architecture §16: all 15 failure categories
@@ -178,3 +178,12 @@ native Windows runtime/process control; actual GPU/accelerate trees across
 supported OSes; a real Slurm site's filesystem/version/config/retention/requeue;
 and explicit tagging/publishing approval. Local acceptance cannot manufacture
 these authorities, and the current support claims must continue to state them.
+
+## 2026-10-27 owner decision — capability #23 retired
+
+The owner retired Offline/PWA capability #23. The retained-build service worker,
+offline shell/cache behavior and update-consent subsystem are not part of the
+current workstation contract. Current build-skew handling is limited to an
+accessible user-triggered reload notice; no offline support or silent reload is
+claimed. The historical implementation and reports above remain dated evidence,
+not current requirements or acceptance gates.

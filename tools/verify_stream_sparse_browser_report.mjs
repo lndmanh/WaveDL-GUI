@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 
 export const limitation =
   "attempt rollover and post-rejection local cursor are unclaimed; Unicode annotation, event omission and controls are bounded fixture faults; ASGI byte splits do not assert browser network chunk boundaries";

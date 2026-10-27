@@ -13,7 +13,7 @@ import {
   requireEpochOutputsAbsent,
 } from "./verify_epoch_metric_browser_report.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { fileURLToPath } from "node:url";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");

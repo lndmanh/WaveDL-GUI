@@ -148,6 +148,17 @@ describe('browser connection authority', () => {
     expect(owner.snapshot().status).toBe(status);
     expect(owner.api).toBeNull();
   });
+  it('marks only an actual build-id mismatch as eligible for the reload prompt', async () => {
+    const buildMismatch = session(async () => json({ ...health, build_id: '2.0.0' }));
+    expect(await buildMismatch.connect('credential')).toBe(false);
+    expect(buildMismatch.snapshot()).toMatchObject({ status: 'skew', buildMismatch: true });
+
+    const protocolMismatch = session(async () =>
+      json({ ...health, protocol_min: 2, protocol_max: 2 }),
+    );
+    expect(await protocolMismatch.connect('credential')).toBe(false);
+    expect(protocolMismatch.snapshot()).toMatchObject({ status: 'skew', buildMismatch: false });
+  });
   it('retains identity pins across reauthentication and refuses port reuse until detach', async () => {
     let current = health;
     const owner = session(async () => json(current));

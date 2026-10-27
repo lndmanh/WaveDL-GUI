@@ -13,7 +13,7 @@ disconnecting still clears connection-scoped authority.
 ## Active source and provenance
 
 Nuxt uses `workstation/` as `srcDir`, Vue Composition API and TypeScript. `app.vue`
-only composes the workstation controller and explicit update handling.
+only composes the workstation controller and build-skew notice.
 The active app imports selected existing shadcn primitives from `app/components/ui`.
 `app/assets/css/tailwind.css` provides the active semantic theme, using local system
 fonts only. `workstation/lib` contains the typed daemon client and stream foundation.
@@ -78,17 +78,7 @@ npm test
 npm run generate
 cd ..
 python tools/vendor_web_assets.py
-cd web
-npm run test:generated
 ```
-
-Run generated-worker checks after vendoring: they compare the generated worker
-with the packaged shell and metadata, so mixing two builds correctly fails.
-The generated-worker route check needs the Python daemon test dependencies
-(`starlette`, `anyio`, `httpx`). If npm resolves a different Python interpreter,
-set `WAVEDL_PYTHON` to the absolute interpreter used for the daemon installation:
-`WAVEDL_PYTHON=/absolute/path/to/python npm run test:generated`. CI installs those
-dependencies into its selected Python 3.11 environment before the check.
 
 The vendor script validates the exact static output, rejects links/backend files,
 and checks existing packaged assets against their manifest before replacement.
@@ -97,13 +87,15 @@ outside the Python package source tree.
 The Python wheel includes only the vendored assets, not Node or a Nuxt server.
 Do not manually copy build output into the package: stale chunks must not survive.
 
-The generated service-worker tests execute the actual bundled worker and check
-every generated precache URL against the Python static route with non-navigation
-headers (requires Python `starlette`, `anyio` and `httpx`). API reads,
-mutations and navigations (including `/api?probe=1`) are never intercepted. Only
-static shell/assets are precached; there is no offline mutation queue or runtime
-data cache. Updates use `prompt` and require the user's explicit reload action.
-Browser install/offline/update acceptance is a separate runtime gate.
+The browser workstation is online-only; Offline/PWA and retained-build support
+were retired by the project owner on 2026-10-27. It does not register a service
+worker or cache application/API data for offline use. `/api/health` reports the
+daemon build identity; when it differs from the browser build, an accessible
+notice offers **A newer WaveDL build is available — Reload**. Reload is user-
+initiated with `location.reload()` and is never automatic.
+For a client left under an older registration, the daemon serves `/sw.js` as a
+no-store, self-unregistering cleanup worker. It does not clear site data or force
+a reload; reopen or reload the tab once after cleanup to use the current client.
 
 ## Known dependency caveats
 
@@ -124,7 +116,6 @@ run used `agent-browser 0.26.0`):
 ```sh
 node tools/run_web_acceptance.mjs
 node tools/run_web_acceptance.mjs --case=baseline
-node tools/run_web_acceptance.mjs --case=offline
 node tools/run_web_acceptance.mjs --case=detach
 node tools/run_web_acceptance.mjs --case=reload
 node tools/run_web_acceptance.mjs --case=cancel
@@ -165,9 +156,9 @@ postconditions use read-only daemon SQLite queries.
 
 The baseline checks explicit approval, daemon-confirmed real CPU completion and
 downloaded bytes against the immutable publication's size and SHA-256.
-Failure cases check Chromium offline emulation without mutation, detach/close without
-cancellation, reload requiring fresh authentication, explicit cancellation with
-daemon-confirmed terminal state, and recovery after the fixture suppresses one
+Failure cases check detach/close without cancellation, reload requiring fresh
+authentication, explicit cancellation with daemon-confirmed terminal state, and
+recovery after the fixture suppresses one
 successful submit acknowledgment and returns an empty proxy-style 503
 *after actual backend acceptance*. The lost-ack case tests HTTP gateway failure
 after acceptance, not a TCP connection-loss test; the CLI's
@@ -242,5 +233,5 @@ Forced or uncertain shutdown marks the case failed and retains its private roots
 for inspection rather than deleting data while descendants may remain.
 JSON evidence remains for inspection. Nonzero exit means at least one
 case failed; failure records are not acceptance claims. This slice does not
-establish all T38 gates, every artifact format/size boundary, PWA installation/update,
-GPU/Slurm execution, or network-level lost-ACK recovery.
+establish all T38 gates, every artifact format/size boundary, build-skew reload
+handling, GPU/Slurm execution, or network-level lost-ACK recovery.

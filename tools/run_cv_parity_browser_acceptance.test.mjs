@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("CV parity is additive and keeps the default twelve real-browser scenarios", async () => {
+test("CV parity is additive and keeps the default eleven real-browser scenarios", async () => {
   const shared = await readFile(new URL("./run_web_acceptance.mjs", import.meta.url), "utf8");
   const cases = shared.match(/const cases = \[([^\]]+)\]/)[1].match(/'[^']+'/g);
-  assert.equal(cases.length, 12);
+  assert.equal(cases.length, 11);
   assert(!cases.includes("'cv-parity'"));
   assert(shared.includes("if (name === 'cv-parity')"));
   const helper = await readFile(new URL("./browser_cv_parity.mjs", import.meta.url), "utf8");

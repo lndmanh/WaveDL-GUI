@@ -15,10 +15,6 @@ vi.mock('#app', async () => {
   const { useHead } = await import('@unhead/vue');
   return { useHead };
 });
-vi.mock('../../workstation/components/UpdatePrompt.vue', () => ({
-  default: { template: '<span />' },
-}));
-
 vi.mock('../../workstation/composables/useDaemonConnection', async () => {
   const { ConnectionSession } = await import('../../workstation/lib/connection-session');
   const vue = await import('vue');
@@ -26,13 +22,13 @@ vi.mock('../../workstation/composables/useDaemonConnection', async () => {
     useDaemonConnection: () => {
       const session = new ConnectionSession({
         origin: window.location.origin,
-        buildId: 'retention-test',
+        buildId: 'controller-test',
         fetcher: async (input) => {
           authorityCalls.fetch(String(input));
           return new Response(
             JSON.stringify({
               daemon_id: 'daemon-one',
-              build_id: 'retention-test',
+              build_id: 'controller-test',
               protocol_min: 1,
               protocol_max: 1,
             }),
@@ -148,7 +144,7 @@ describe('mounted workstation root locale navigation retention', () => {
             WorkstationShell: Shell,
             SettingsWorkspace: Settings,
             ConnectionPanel: true,
-            UpdatePrompt: true,
+            BuildSkewPrompt: true,
             AutomaticPlotStatus: true,
           },
         },
@@ -287,7 +283,7 @@ describe('mounted workstation root locale navigation retention', () => {
           ResultsContainer: workspace('results'),
           RunsWorkspace: Runs,
           ConnectionPanel: true,
-          UpdatePrompt: true,
+          BuildSkewPrompt: true,
           AutomaticPlotStatus: true,
         },
       },

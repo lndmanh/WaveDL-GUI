@@ -439,11 +439,7 @@ def sdist_inventory(path):
                 assets[member.name.removeprefix(prefix)] = archive.extractfile(
                     member
                 ).read()
-        assert (
-            version
-            and {"index.html", "sw.js", ".wavedl-assets.json", ".wavedl-immutable.json"}
-            <= assets.keys()
-        )
+        assert version and {"index.html", ".wavedl-assets.json"} <= assets.keys()
         return version, assets
 
 
@@ -715,12 +711,21 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed, record_pr
             assert match, line
             base, code = match.groups()
             async with httpx.AsyncClient(base_url=base) as client:
-                assert "index.html" in assets and "sw.js" in assets
+                assert "index.html" in assets
                 assert any(name.startswith("_nuxt/") for name in assets)
                 for name, expected in assets.items():
+                    if name == "sw.js":
+                        continue
                     response = await client.get("/" + name)
                     assert response.status_code == 200, (name, response.text)
                     assert response.content == expected, name
+                worker = await client.get("/sw.js")
+                assert worker.status_code == 200
+                assert worker.headers["cache-control"] == "no-store"
+                assert b"registration.unregister" in worker.content
+                assert b'addEventListener("fetch"' not in worker.content
+                assert b"navigate(" not in worker.content
+                assert b"caches" not in worker.content
                 root = await client.get("/")
                 assert root.content == assets["index.html"]
                 assert root.headers["cache-control"] == "no-store"

@@ -16,18 +16,16 @@ import { downloadNameProvenance } from './browser_download_names.mjs';
 import { datasetParity } from './browser_dataset_parity.mjs';
 import { openTrainingEditor, editorFieldObservationExpression } from './browser_training_editor.mjs';
 import { createBrowserActions, controlExpression, actionableExpression, xpathLiteral, DRIVER_READINESS_MODE } from './browser_actions.mjs';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { retainFailurePrefixes } from './browser_failure_evidence.mjs';
 import { browserLaunchArgs, browserTemporaryEnvironment } from './browser_launch_policy.mjs';
-import { verifyCachedBuildReplacementRecord } from './verify_cached_build_replacement_report.mjs';
-import { controllerIdentityScript } from './browser_controller_identity.mjs';
 import { acceptanceDiagnostic } from './browser_acceptance_diagnostic.mjs';
 import { lostAckBindingReady, verifyLostAckEvidence } from './browser_lost_ack_evidence.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const cases = ['baseline', 'offline', 'detach', 'reload', 'cancel', 'lost-ack', 'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity'];
+const cases = ['baseline', 'detach', 'reload', 'cancel', 'lost-ack', 'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity'];
 const selected = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? 'all';
-if (selected !== 'all' && ![...cases, 'cached-build-replacement', 'autoplot-metadata-integrity', 'partial-best-fallback', 'partial-best-refusal', 'preset-import', 'wizard-progression', 'submitted-plan-authoring-protection', 'result-operations', 'onnx-export', 'inference-cancellation', 'cv-parity', 'training-fields-full', 'training-validation'].includes(selected)) throw new Error(`Choose: ${cases.join(', ')}, cached-build-replacement, autoplot-metadata-integrity, partial-best-fallback, partial-best-refusal, preset-import, wizard-progression, submitted-plan-authoring-protection, result-operations, onnx-export, inference-cancellation, cv-parity, training-fields-full, training-validation, all`);
+if (selected !== 'all' && ![...cases, 'autoplot-metadata-integrity', 'partial-best-fallback', 'partial-best-refusal', 'preset-import', 'wizard-progression', 'submitted-plan-authoring-protection', 'result-operations', 'onnx-export', 'inference-cancellation', 'cv-parity', 'training-fields-full', 'training-validation'].includes(selected)) throw new Error(`Choose: ${cases.join(', ')}, autoplot-metadata-integrity, partial-best-fallback, partial-best-refusal, preset-import, wizard-progression, submitted-plan-authoring-protection, result-operations, onnx-export, inference-cancellation, cv-parity, training-fields-full, training-validation, all`);
 const python = process.env.WAVEDL_PYTHON ?? 'python';
 const browser = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
 const browserExecutable = process.env.WAVEDL_BROWSER_EXECUTABLE;
@@ -186,8 +184,7 @@ print(json.dumps({"cursor":{"runId":run_id,"attempt":metric['attempt'],"seq":met
 async function scenario(name) {
   const record = { name, browser: version, driverReadinessMode: DRIVER_READINESS_MODE, pythonInterpreter: interpreter, started: new Date().toISOString(), status: 'running', assertions: [] };
   const integrity = name === 'autoplot-metadata-integrity';
-  const buildReplacement = name === 'cached-build-replacement';
-  const liveReplacement = name === 'live-port-reuse' || buildReplacement;
+  const liveReplacement = name === 'live-port-reuse';
   const partialBest = name === 'partial-best-fallback' || integrity ? 'fallback' : name === 'partial-best-refusal' ? 'refusal' : null;
   evidence.cases.push(record);
   const root = join(workspace, name === 'authoring-parity' ? "authoring parity 'quoted' $;" : name);
@@ -268,7 +265,7 @@ async function scenario(name) {
     assert(record.replacementAccessMetadata.every((request) => !['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) && !(request.path.startsWith(`/api/runs/${originalRunId}`) && request.status >= 200 && request.status < 300)), 'Replacement accepted foreign old-run read/replay or received mutating request');
   };
   const fixture = spawn(python, ['tools/browser_daemon_fixture.py', '--root', root, '--unseeded', ...(fixtureWebAssets ? ['--web-assets', fixtureWebAssets] : []), ...(partialBest ? ['--partial-best', partialBest, '--request-metadata'] : []), ...(integrity ? ['--autoplot-metadata-integrity'] : []), ...(name === 'dataset-parity' ? ['--output-grid', '--request-metadata'] : []), ...(['training-validation', 'preset-import'].includes(name) ? ['--request-metadata'] : []), ...(name === 'lost-ack' ? ['--drop-submit-ack'] : []), ...(name === 'artifact-tamper' ? ['--tamper-artifact'] : []), ...(tokenFile ? ['--token-file', tokenFile] : []), ...(liveReplacement ? ['--record-process-results'] : [])], {
-    cwd: repo, env: { ...process.env, PYTHONPATH: join(repo, 'src'), OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', ...(buildReplacement ? { TMPDIR: root } : {}) },
+    cwd: repo, env: { ...process.env, PYTHONPATH: join(repo, 'src'), OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   active.add(fixture);
@@ -483,14 +480,6 @@ async function scenario(name) {
       const port = new URL(url).port;
       const firstHealth = await authenticatedHealth(origin, sharedToken);
       record.originalDaemon = firstHealth;
-      if (buildReplacement) {
-        await cli('wait', '--fn', 'navigator.serviceWorker.controller?.scriptURL === location.origin + "/sw.js"');
-        await cli('eval', '-b', Buffer.from(controllerIdentityScript).toString('base64'));
-        record.buildReplacementControllerBefore = await dom('JSON.stringify(window.__wavedlControllerIdentity())');
-        record.buildReplacementOldPage = await dom(`JSON.stringify({timeOrigin:performance.timeOrigin,controller:navigator.serviceWorker.controller?.scriptURL??null,entries:Array.from(document.scripts).filter(script=>script.src).map(script=>new URL(script.src).pathname).sort()})`);
-        assert(record.buildReplacementOldPage.entries.length > 0);
-        record.buildReplacementEntryHashes = Object.fromEntries(await Promise.all(record.buildReplacementOldPage.entries.map(async path => [path, createHash('sha256').update(await readFile(join(repo, 'src/wavedl_daemon/web_assets', path))).digest('hex')])));
-      }
       const originalRunId = approvedManifest.run_id;
       if (liveReplacement) {
         await button('Approve and start this plan');
@@ -540,8 +529,8 @@ async function scenario(name) {
         }
       }
       await mkdir(replacementRoot, { mode: 0o700 });
-      replacement = spawn(python, [buildReplacement ? 'tools/browser_build_replacement_fixture.py' : 'tools/browser_daemon_fixture.py', '--root', replacementRoot, '--unseeded', '--port', port, '--token-file', tokenFile, ...(liveReplacement ? ['--request-metadata'] : [])], {
-        cwd: repo, env: { ...process.env, PYTHONPATH: join(repo, 'src'), OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', ...(buildReplacement ? { TMPDIR: replacementRoot } : {}) },
+      replacement = spawn(python, ['tools/browser_daemon_fixture.py', '--root', replacementRoot, '--unseeded', '--port', port, '--token-file', tokenFile, ...(liveReplacement ? ['--request-metadata'] : [])], {
+        cwd: repo, env: { ...process.env, PYTHONPATH: join(repo, 'src'), OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       active.add(replacement);
@@ -560,7 +549,7 @@ async function scenario(name) {
       replacementStdout = ''; // Never open/store replacement bootstrap: old browser scope stays live.
       const secondHealth = await authenticatedHealth(origin, sharedToken);
       record.replacementDaemon = secondHealth;
-      check(firstHealth.daemonId !== secondHealth.daemonId && (buildReplacement ? secondHealth.buildId === firstHealth.buildId + '-qa-controlled-replacement' : firstHealth.buildId === secondHealth.buildId), 'Same origin and authenticated bearer expose the intended genuine replacement daemon identity/build');
+      check(firstHealth.daemonId !== secondHealth.daemonId && firstHealth.buildId === secondHealth.buildId, 'Same origin and authenticated bearer expose the intended replacement daemon identity/build');
       record.replacementBeforeStaleSubmit = await registry(replacementRoot);
       check(record.replacementBeforeStaleSubmit.plans === 0, 'Replacement daemon starts with no plans');
       if (liveReplacement) {
@@ -594,35 +583,12 @@ async function scenario(name) {
         record.liveIdentityFence = await dom(`JSON.stringify({identityMessage:document.body.innerText.includes('Connection identity changed'),selectedRunAbsent:!document.querySelector('[aria-label="Selected run"]'),metricHistoryAbsent:!document.querySelector('[aria-label="Runtime metric history"]'),diagnosticsAbsent:!document.querySelector('[aria-label="Runtime diagnostics"]'),noEnabledCancel:!Array.from(document.querySelectorAll('button')).some(e=>e.getClientRects().length&&!e.disabled&&e.textContent.trim()==='Request cancellation'),previewAbsent:!document.querySelector('[aria-label="Approved normalized manifest"]')})`);
         check(Object.values(record.liveIdentityFence).every((value) => value === true), 'Identity fence revokes actual nonempty monitor history, diagnostics, selected run, preview and cancellation authority');
         await captureReplacementMetadata();
-        if (buildReplacement) {
-          await button('Disconnect and clear scope');
-          await fill('Daemon bearer credential', sharedToken);
-          await button('Connect securely');
-          await cli('wait', '--text', 'Daemon identity, build or protocol changed.');
-          record.buildReplacementFreshConnect = await dom(`JSON.stringify({identityMessage:document.body.innerText.includes('Connection identity changed'),credentialEmpty:document.querySelector('#daemon-bearer')?.value === '',selectedRunAbsent:!document.querySelector('[aria-label="Selected run"]'),historyAbsent:!document.querySelector('[aria-label="Runtime metric history"]'),approvalAbsent:!document.querySelector('[aria-label="Approved normalized manifest"]'),noEnabledMutations:!Array.from(document.querySelectorAll('button')).some(button=>button.getClientRects().length&&!button.disabled&&['Approve and start this plan','Preview persisted plan','Request cancellation'].includes(button.textContent.trim()))})`);
-          assert(Object.values(record.buildReplacementFreshConnect).every(value => value === true));
-          record.buildReplacementAfterExplicitConnect = await registry(replacementRoot);
-          record.buildReplacementAfterPage = await dom(`JSON.stringify({timeOrigin:performance.timeOrigin,controller:navigator.serviceWorker.controller?.scriptURL??null,entries:Array.from(document.scripts).filter(script=>script.src).map(script=>new URL(script.src).pathname).sort()})`);
-          assert.deepEqual(record.buildReplacementAfterPage, record.buildReplacementOldPage);
-          record.buildReplacementControllerAfter = await dom('JSON.stringify(window.__wavedlControllerIdentity())');
-          assert.deepEqual(record.buildReplacementControllerAfter, { originalControllerPresent: true, sameControllerObject: true, controllerChanges: 0 });
-          record.buildReplacementIdentityObserver = 'Read-only QA closure retains original ServiceWorker object and counts controllerchange; no app, network or reload interception.';
-          record.buildReplacementLimitation = 'Same production source with controlled genuine factory build identity; old controlled page, actual controller object and unchanged loaded entry URLs/packaged byte hashes only. No cache-hit or loaded-response-byte proof, matching-new-client update, remote forwarding, released-binary or complete F15 claim.';
-        }
         check(true, 'Replacement rejected old-scope identity and accepted no foreign old-run read/cursor replay or mutating browser request');
         record.fault = 'Real replacement after actual running metric stream; same private bearer and origin, different identity; owned fixture shutdown cancels A, not browser closure';
       } else {
         check((await registry(root)).control.every((control) => control.submission_requested === 0), 'Original persisted preview remained unsubmitted');
         record.fault = 'Real daemon replacement on identical loopback port with identical private bearer; changed identity fences stale approval (not authentication failure)';
       }
-    } else if (name === 'offline') {
-      await cli('set', 'offline', 'on');
-      await cli('wait', '--text', 'Offline');
-      check(await dom(`JSON.stringify(!navigator.onLine)`), 'Chromium confirms actual offline emulation');
-      check(await dom(`JSON.stringify(!Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && !e.disabled && ['Approve and start this plan', 'Preview persisted plan', 'Request cancellation'].includes(e.textContent.trim())))`), 'Offline UI exposes no enabled plan/submit/cancel mutation');
-      const after = await registry(root);
-      check(after.plans === 1 && after.control.every((r) => !r.submission_requested && !r.cancellation_requested), 'Offline browser delivered no submit/cancel mutation');
-      record.fault = 'Chromium offline emulation after real persisted preview (NOT lost submit ACK)';
     } else if (name === 'lost-ack') {
       const approval = await dom(`JSON.stringify(document.querySelector('#approved-plan-title')?.parentElement.textContent)`);
       const planId = planned.control[0].plan_id;
@@ -1098,12 +1064,6 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
     if (liveReplacement && replacement && record.cleanup.browserSessionAbsent && record.cleanup.replacementServicesClosed) {
       try {
         await captureReplacementMetadata();
-        if (buildReplacement) {
-          const controlled = await readFile(join(replacementRoot, '.controlled-build-health.jsonl'), 'utf8');
-          assert(Buffer.byteLength(controlled) <= 1048576);
-          record.buildReplacementHealthReceipts = controlled.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-          record.buildReplacementFrozenAfterCleanup = true;
-        }
         record.replacementMetadataFrozenAfterCleanup = true;
         record.replacementMetadataComplete = true;
         record.replacementAfterStaleSubmit = await registry(replacementRoot);
@@ -1117,15 +1077,6 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
       } catch (error) { record.status = 'failed'; record.cleanup.errors.push(`Private credential cleanup: ${error.message}`); }
     }
     record.finished = new Date().toISOString();
-    if (buildReplacement && record.status === 'passed' && !record.shutdownError && !record.cleanup.errors.length) {
-      try {
-        const manifest = await readFile(join(repo, 'src/wavedl_daemon/web_assets/.wavedl-assets.json'));
-        verifyCachedBuildReplacementRecord({ ...record, cleanup: { ...record.cleanup, removedOwnedRoots: true, browserProfileRemoved: true, bothDaemonRootsAbsent: true } }, { assetHash: createHash('sha256').update(manifest).digest('hex'), assets: JSON.parse(manifest), directory: workspace, browser: version });
-      } catch (error) {
-        record.status = 'failed';
-        record.cleanup.errors.push(`Cached build pre-cleanup proof: ${error.message}`);
-      }
-    }
     // Only this mkdtemp-owned scenario root; never configured user storage.
     if (record.shutdownError || record.cleanup.errors.length) {
       record.cleanup.retainedPrivateRoots = [root, downloads, browserProfile, ...(replacementRoot ? [replacementRoot] : [])];

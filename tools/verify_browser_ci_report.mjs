@@ -10,7 +10,7 @@ import { verifyLostAckEvidence } from './browser_lost_ack_evidence.mjs';
 import { checkArtifactTamperEvidence } from './browser_artifact_tamper_evidence.mjs';
 
 export const requiredCases = Object.freeze([
-  'baseline', 'offline', 'detach', 'reload', 'cancel', 'lost-ack',
+  'baseline', 'detach', 'reload', 'cancel', 'lost-ack',
   'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity',
 ]);
 const maxBytes = 1024 * 1024;

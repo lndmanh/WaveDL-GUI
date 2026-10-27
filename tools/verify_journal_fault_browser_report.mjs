@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { packagedAssetHashes } from "./browser_training_fields_full.mjs";
 
 export const faults = Object.freeze(["torn-tail", "abandoned-tail", "oversized-line", "oversized-tail"]);

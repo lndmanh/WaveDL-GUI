@@ -39,8 +39,10 @@ retaining Qt are not product requirements. Qt source may remain temporarily in
 this dirty checkout as unshipped historical material; it is not the active
 application, and this statement does not claim its physical deletion.
 
-The 24 workstation capabilities remain functional product requirements, not a
-Qt backward-compatibility matrix. API/protocol, durable-state, crash-recovery,
+The 23 remaining workstation capabilities remain functional product requirements,
+not a Qt backward-compatibility matrix. Offline/PWA capability #23 was retired
+by owner decision on 2026-10-27; dated offline/worker reports below are historical
+evidence only. API/protocol, durable-state, crash-recovery,
 security and browser acceptance safeguards remain required. Real HPC-site
 filesystem/Slurm validation is required before declaring that deployment
 supported. Final daemon/browser package and release validation remains open;
@@ -179,7 +181,11 @@ real-503 checks against the service's 1000-entry limit, without production wire
 mutation. Unreadable configured roots, remote filesystems, disk ENOSPC and full
 T38/T30c/platform/site/release remain unproven. The older six-case report is historical.
 
-Current focused coverage also includes the generated-worker cold offline deep-link regression: deep links serve the shell while `/api/**` is never intercepted or cached. The local spawn-failure attempt-fence test confirms the durable attempt reservation remains uncertain/nonretryable (`SupervisionLost`), preventing duplicate admission rather than erasing the attempt state.
+Dated 8d1 focused coverage (2026-10-16) also included the generated-worker cold
+offline deep-link regression. That result is historical evidence, not current
+offline support. The local spawn-failure attempt-fence test confirms the durable
+attempt reservation remains uncertain/nonretryable (`SupervisionLost`), preventing
+duplicate admission rather than erasing the attempt state.
 
 Dated prior-07e auth-watermark report `/private/tmp/wavedl-auth-watermark-final-20261016.json` (SHA-256 `c20a9fac9b51616859f38d9ab10eba73520b0015ee46ddcba3680679fc8e4388`) passed its then-current verifier and 42 focused tests for persisted cursor watermarks and the later-open race. It is historical, not current-8d1 recertification; use the strict current auth report above. Model-shape guidance remains implemented and test-covered; full T38/T30c remain open.
 
@@ -190,7 +196,7 @@ checks (positive and mutation cases, including fatal UTF-8 tempfile handling);
 workflow checks pass 29. Earlier `pending-cancel-live-20261016-9.json` is historical:
 the current verifier rejects its source hash, so it is not current acceptance.
 
-Current-source retained-consent report
+Historical current-source retained-consent report (2026-10-16)
 `/private/tmp/wavedl-retained-current-consent-20261016-active-draft-3.json`
 (SHA-256 `cdc8680886336b71f8a480987fee0667ae1728a3923b2111802ad0e3f8c932ae`)
 and fixture summary
@@ -199,8 +205,8 @@ and fixture summary
 strict-pass all 11 existing stages plus cleanup. Four genuine namespaced QA builds
 use the current 641-source snapshot, not package-exact builds; the 37-asset 8d1
 package is unchanged. Waiting/defer/approval preserves the active CPU PID,
-plan/run and draft value 77, and only the approving tab reloads. This closes the
-scoped local current-source consent gate, not full T38/platform/site/release.
+plan/run and draft value 77, and only the approving tab reloads. This records the
+former consent flow as dated evidence; it is not a current product gate or claim.
 
 Current 8d1 P3/authoring reports below strict-pass within scoped local CPU evidence:
 
@@ -906,77 +912,28 @@ credential. If you change web source, regenerate and vendor its assets before
 using the daemon's browser client (`npm run generate` in `web/`, followed by
 `python tools/vendor_web_assets.py` from the repository root).
 
-Workstation updates require this tab's explicit **Update and reload** action.
-Another tab may activate the shared service worker, but does not grant permission
-to reload this tab. Save/export an unsaved draft before approving a reload;
-credentials and drafts are not persisted as part of the update.
+The browser workstation is online-only. Offline/PWA support, service-worker
+precaching and retained browser builds were retired by the project owner on
+2026-10-27; the browser does not cache application or API data for offline use.
 
-The worker now retains verified, complete web builds for deferred tabs instead
-of purging their old lazy assets on activation. Retention is bounded: at most
-**three admitted generations**, including pending installs and reservations left
-by incomplete cleanup, and **64 MiB of aggregate declared asset reservations**.
-Each build is limited to 16 MiB and 128 assets, each asset to 8 MiB, inventory
-metadata to 128 KiB, and preserved security headers to 8 KiB per response. These
-are admission bounds, not a promise about the browser's physical storage usage.
-There is no automatic garbage collection or eviction of admitted builds. A new
-generation is normally refused when capacity is exhausted; indefinitely many
-updates without manual maintenance are not supported.
+The daemon's `/api/health` response identifies its web build. When the browser
+detects a build mismatch, it shows **A newer WaveDL build is available — Reload**.
+Reload only happens when you choose the button; save or export unsaved work first.
+The browser does not silently reload, and credentials still require fresh
+authentication after a reload.
 
-CacheStorage and IndexedDB are not backups: browsers can evict them, and they can
-become corrupt. Missing, inconsistent or unverifiable retained data fails closed;
-it cannot guarantee old lazy navigation after such loss. API responses, bearer
-credentials and mutation state are never retained as offline build assets.
-
-For the **initial transition from a legacy worker**, save/export drafts and close
-all existing Workstation tabs/windows before reopening the current client. The
-retention mechanism cannot resurrect assets already purged by the legacy worker.
-A clean browser profile verifies a fresh install, not that legacy transition.
-
-If an update reports capacity or storage failure, first save/export drafts and
-record the affected origin. Close every Workstation tab/window for that origin.
-Only if you choose to discard its retained offline builds, use browser storage
-tools to inspect and remove the origin's `wavedl-retained-v1-*` CacheStorage
-buckets and `wavedl-retained-builds-v1` IndexedDB database together; do not clear
-unrelated origin storage, daemon run directories, credentials or user databases.
-Inspect the registration's origin and scope, then manually unregister only that
-WaveDL worker as part of this reset: an active worker whose retained database was
-removed cannot serve its verified shell. Reopen while connected
-and authenticate using a fresh trusted daemon bootstrap URL. This is deliberate
-manual recovery, loses retained offline builds, and does not restore old tabs;
-WaveDL does not automatically reset this storage.
-
-Earlier build-specific retained-browser evidence verifies three retained generations,
-approver-only reloads, deferred old-tab route rendering and refusal of a fourth
-generation without removing the three admitted builds. Read-only public fetch
-probes independently verify old assets through the real worker by hash and size;
-the same URLs return 404 from the current daemon. Lazy modules may have been
-HTTP-prefetched, so this does not prove their module-loader requests traversed
-the worker. Later restart, storage-loss and legacy-transition evidence is recorded
-in the acceptance ledger; this pilot alone does not certify those gates or T38.
+For clients that still have a worker registered from an older release, the
+daemon serves `/sw.js` as a no-store, self-unregistering cleanup worker. It does
+not clear site data or force a reload; after it activates, reopen or reload the
+tab once to use the current online client.
 
 A separate clean installed wheel with the `daemon` extra completed CPU training,
 test, plot and ONNX export and passed `pip check`. That wheel's browser assets
-predate the latest worker fix; it is not current-final-browser-asset acceptance.
+predate the latest browser changes; it is not current-final-browser-asset acceptance.
 The exact editable `.[dev,daemon]` install was resolver dry-run checked, not the
 installed runtime used for that test. The dedicated-environment recommendation
 above still applies.
 
-For contributor retained-build QA, with frontend dependencies, daemon/ML
-dependencies and `agent-browser 0.26.0` installed, run the checked-in producer,
-native pilot and fail-closed report guard separately from the training quickstart:
-
-```bash
-node tools/build_retained_browser_fixtures.mjs --output "<new-absolute-fixture-directory>"
-node tools/run_retained_browser_acceptance.mjs --fixtures="<absolute-fixture-directory>/summary.json" --report="<new-absolute-report-path>.json"
-node tools/verify_retained_browser_report.mjs "<absolute-report-path>.json" "<absolute-fixture-directory>/summary.json"
-```
-
-Use new, task-owned destinations; the producer creates four genuine private Nuxt
-builds without replacing installed client assets. The guarded native nine-stage
-pilot has passed locally. Its CI wiring is not evidence that hosted CI ran, nor
-does it certify the separate full workstation acceptance suite.
-On macOS, `WAVEDL_BROWSER_HEADED=true` optionally runs the native pilot visibly;
-headless remains the default and this is not a production requirement.
 The latest completed current-client twelve-case run passed **12/12** cases with
 verified cleanup and the fail-closed CI-report CLI passing locally. Hosted CI
 itself was not run. An isolated native dataset run also passed all five fixtures,

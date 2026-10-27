@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { boundedCommand } from "./run_retained_browser_acceptance.mjs";
+import { boundedCommand } from "./browser_process.mjs";
 import { createBrowserActions, DRIVER_READINESS_MODE } from "./browser_actions.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { observeCursorStorage } from "./browser_cursor_storage.mjs";

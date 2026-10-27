@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { boundedFile } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
 
 export function verifyHeaderDeadlineRecord(r) {

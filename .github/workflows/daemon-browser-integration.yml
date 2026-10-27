@@ -715,10 +715,6 @@ jobs:
         run: |
           node --test tools/run_autoplot_metadata_integrity_browser_acceptance.test.mjs tools/verify_autoplot_metadata_integrity_report.test.mjs
           python -m pytest unit_tests/test_browser_autoplot_metadata_integrity_fixture.py unit_tests/test_autoplot_metadata_integrity_workflow.py -q
-      - name: Test controlled build replacement evidence and workflow contracts
-        run: |
-          node --test tools/run_cached_build_replacement_browser_acceptance.test.mjs tools/verify_cached_build_replacement_report.test.mjs tools/browser_controller_identity.test.mjs
-          python -m pytest --noconftest unit_tests/test_browser_build_replacement_fixture.py unit_tests/test_cached_build_replacement_workflow.py -q
       - name: Test supervised HEADER deadline fixture and evidence contracts
         run: |
           node --test tools/verify_header_deadline_browser_report.test.mjs tools/run_header_deadline_browser_acceptance.test.mjs
@@ -811,9 +807,9 @@ jobs:
         run: |
           node --test tools/verify_preview_fault_browser_report.test.mjs
           python -m pytest unit_tests/daemon/test_browser_preview_fault_fixture.py -q
-      - name: Test cold-offline and pending-cancellation evidence contracts
+      - name: Test pending-cancellation evidence contracts
         run: |
-          node --test tools/verify_cold_offline_browser_report.test.mjs tools/verify_pending_cancel_browser_report.test.mjs tools/verify_catalogue_fault_browser_report.test.mjs tools/run_catalogue_fault_browser_acceptance.test.mjs
+          node --test tools/verify_pending_cancel_browser_report.test.mjs tools/verify_catalogue_fault_browser_report.test.mjs tools/run_catalogue_fault_browser_acceptance.test.mjs
           python -m pytest unit_tests/test_browser_catalogue_fault_fixture.py unit_tests/test_browser_pending_cancel_fixture.py unit_tests/test_browser_fixture_metadata.py unit_tests/test_browser_artifact_tamper_fixture.py -q
       - name: Test 100k-history evidence and numerical journal fixture
         run: |
@@ -867,8 +863,6 @@ jobs:
         run: python -m pytest unit_tests/test_hostile_origin_browser_fixture.py -q
       - name: Test F13 hostile-origin runner and strict evidence contracts
         run: node --test tools/run_hostile_origin_browser_acceptance.test.mjs tools/verify_hostile_origin_browser_report.test.mjs
-      - name: Test retained active-run and draft evidence contracts
-        run: node --test tools/browser_retained_active_draft.test.mjs tools/verify_retained_active_draft_report.test.mjs
       - name: Test same-daemon reconnect evidence and committed-prefix fixture
         run: |
           node --test tools/verify_reconnect_browser_report.test.mjs
@@ -948,51 +942,20 @@ jobs:
         run: |
           python -c 'import os, xml.etree.ElementTree as ET; from pathlib import Path; root = ET.parse(Path(os.environ["TMPDIR"]) / "numerical-runtime.xml").getroot(); cases = list(root.iter("testcase")); assert cases and not any(list(root.iter(kind)) for kind in ("failure", "error", "skipped")); expected = {"test_public_http_evaluation_failure_preserves_training_publication[nan]", "test_public_http_evaluation_failure_preserves_training_publication[inf]", "test_public_http_evaluation_failure_preserves_training_publication[empty]"}; actual = [case.attrib["name"] for case in cases if case.attrib.get("classname", "").endswith("test_hosted_operation_result_quality")]; assert len(actual) == len(expected) and set(actual) == expected'
       - name: Test authenticated stream and auth fixture boundaries
-        run: python -m pytest unit_tests/daemon/test_event_stream_live_boundaries.py unit_tests/daemon/test_stream_asgi_boundary.py unit_tests/daemon/test_browser_stream_fixture.py unit_tests/test_browser_auth_skew_fixture.py unit_tests/test_retained_concurrency_fixture.py -q
+        run: python -m pytest unit_tests/daemon/test_event_stream_live_boundaries.py unit_tests/daemon/test_stream_asgi_boundary.py unit_tests/daemon/test_browser_stream_fixture.py unit_tests/test_browser_auth_skew_fixture.py -q
       - name: Training editor readiness contracts
         run: node --test tools/browser_training_editor.test.mjs
-      - name: Retained-generation producer and evidence contracts
-        run: node --test tools/build_retained_browser_fixtures.test.mjs tools/verify_retained_browser_report.test.mjs tools/run_retained_browser_acceptance.test.mjs
-      - name: Test native retained-concurrency evidence contracts
-        run: node --test tools/verify_retained_concurrency_report.test.mjs
-      - name: Test native rollback and sparse-stream evidence contracts
-        run: node --test tools/verify_retained_rollback_browser_report.test.mjs tools/verify_stream_sparse_browser_report.test.mjs
+      - name: Test sparse-stream evidence contracts
+        run: node --test tools/verify_stream_sparse_browser_report.test.mjs
       - name: Test sparse-stream real fixture boundaries
         run: python -m pytest unit_tests/daemon/test_stream_sparse_browser_fixture.py -q
       - name: Test malformed-control refusal evidence contracts
         run: node --test tools/verify_stream_malformed_browser_report.test.mjs
       - name: Test malformed-control real fixture boundaries
         run: python -m pytest unit_tests/daemon/test_stream_malformed_browser_fixture.py -q
-      # These model/evidence tests are not native browser admission or rollback
-      # proof. The actual Chromium concurrency gate remains mandatory below.
-      - name: Test synthetic concurrency and rollback contracts (not native proof)
-        run: node --test tools/verify_retained_concurrency_stage.test.mjs tools/verify_retained_rollback_report.test.mjs
-      # This unreleased app has no legacy-worker migration gate. Normal
-      # retained-build updates, rollback and multi-tab safety remain required.
-      - name: Generate four genuine isolated workstation builds
-        run: node tools/build_retained_browser_fixtures.mjs --output "$TMPDIR/retained-builds"
-      - name: Verify native retained generations and refused fourth update
-        run: node tools/run_retained_browser_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-browser.json"
-      - name: Require complete retained-generation evidence and cleanup
-        if: always()
-        run: node tools/verify_retained_browser_report.mjs "$TMPDIR/retained-browser.json" "$TMPDIR/retained-builds/summary.json"
-      - name: Run retained native browser rollback acceptance
-        if: ${{ !cancelled() }}
-        run: node tools/run_retained_rollback_browser_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-rollback-browser.json"
-      - name: Require native rollback evidence and cleanup
-        if: always()
-        run: node tools/verify_retained_rollback_browser_report.mjs "$TMPDIR/retained-rollback-browser.json" "$TMPDIR/retained-builds/summary.json"
-      # This additive two-tab case reuses the four isolated builds without
-      # changing the original eleven retained-generation stages.
-      - name: Run retained active-run and draft browser acceptance
-        if: ${{ !cancelled() }}
-        run: node tools/run_retained_browser_acceptance.mjs --active-draft --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-active-draft.json"
-      - name: Require retained active-run, draft and cleanup evidence
-        if: always()
-        run: node tools/verify_retained_active_draft_report.mjs "$TMPDIR/retained-active-draft.json" "$TMPDIR/retained-builds/summary.json"
       # This is the checked-in runner, not an HTTP mock or a static-client test.
-      # No --case selection: all twelve real Chromium/CPU scenarios are mandatory.
-      - name: Run all twelve mandatory browser acceptance cases
+      # No --case selection: all eleven real Chromium/CPU scenarios are mandatory.
+      - name: Run all eleven mandatory browser acceptance cases
         run: node tools/run_web_acceptance.mjs
       # These are additive real-browser gates. Their disposable bearer tokens,
       # profiles, fixture roots and logs remain under TMPDIR and are never
@@ -1013,12 +976,6 @@ jobs:
       - name: Require preview-fault refusal and cleanup evidence
         if: always()
         run: node tools/verify_preview_fault_browser_report.mjs "$TMPDIR/preview-fault-browser/preview-fault.json"
-      - name: Run cold-process offline shell and authority acceptance
-        if: ${{ !cancelled() }}
-        run: WAVEDL_PYTHON="$(python -c 'import sys; print(sys.executable)')" node tools/run_cold_offline_browser_acceptance.mjs "$TMPDIR/cold-offline-browser.json"
-      - name: Require cold offline shell and authority evidence
-        if: always()
-        run: node tools/verify_cold_offline_browser_report.mjs "$TMPDIR/cold-offline-browser.json"
       - name: Run pending cancellation browser acceptance
         if: ${{ !cancelled() }}
         run: node tools/run_pending_cancel_browser_acceptance.mjs --report="$TMPDIR/pending-cancel-browser.json"
@@ -1298,12 +1255,6 @@ jobs:
       - name: Require current-package genuine broker-overflow evidence and owned cleanup
         if: always()
         run: node tools/verify_genuine_broker_overflow_browser_report.mjs "$TMPDIR/genuine-broker-overflow-browser.json"
-      - name: Run retained native concurrency acceptance
-        if: ${{ !cancelled() }}
-        run: node tools/run_retained_concurrency_acceptance.mjs --fixtures="$TMPDIR/retained-builds/summary.json" --report="$TMPDIR/retained-concurrency.json"
-      - name: Verify retained native concurrency evidence
-        if: always()
-        run: node tools/verify_retained_concurrency_report.mjs "$TMPDIR/retained-concurrency.json" "$TMPDIR/retained-builds/summary.json"
       - name: Run real partial-best fallback browser acceptance
         if: ${{ !cancelled() }}
         run: |
@@ -1367,28 +1318,6 @@ jobs:
           const record = await verifyAutoplotMetadataIntegrityReport(join(workspace, 'summary.json'));
           assert.equal(record.name, 'autoplot-metadata-integrity');
           JS
-      # A genuine factory build identity changes; no new binary or cache-hit claim.
-      - name: Run cached controller and controlled build replacement acceptance
-        if: ${{ !cancelled() }}
-        run: |
-          mkdir -m 700 "$TMPDIR/cached-build-replacement-browser"
-          TMPDIR="$TMPDIR/cached-build-replacement-browser" node tools/run_web_acceptance.mjs --case=cached-build-replacement
-      - name: Require exact cached build replacement report and owned cleanup
-        if: always()
-        run: |
-          node --input-type=module - "$TMPDIR/cached-build-replacement-browser" <<'JS'
-          import assert from 'node:assert/strict';
-          import { readdir, lstat } from 'node:fs/promises';
-          import { join } from 'node:path';
-          import { verifyCachedBuildReplacementReport } from './tools/verify_cached_build_replacement_report.mjs';
-          const root = process.argv[2], entries = await readdir(root);
-          assert.equal(entries.length, 1, 'Exactly one owned cached-build workspace required');
-          assert(/^wavedl-browser-acceptance-[A-Za-z0-9]+$/.test(entries[0]));
-          const workspace = join(root, entries[0]), info = await lstat(workspace);
-          assert(info.isDirectory() && !info.isSymbolicLink());
-          const record = await verifyCachedBuildReplacementReport(join(workspace, 'summary.json'));
-          assert.equal(record.name, 'cached-build-replacement');
-          JS
       - name: Run instrumented native Fetch SSE split acceptance
         if: ${{ !cancelled() }}
         run: |
@@ -1419,13 +1348,8 @@ jobs:
           # Never upload fixture roots, credential files, downloads, HAR, or logs.
           path: |
             ${{ runner.temp }}/wavedl-browser-ci/browser-build-manifest.json
-            ${{ runner.temp }}/wavedl-browser-ci/retained-browser.json
-            ${{ runner.temp }}/wavedl-browser-ci/retained-active-draft.json
-            ${{ runner.temp }}/wavedl-browser-ci/retained-rollback-browser.json
-            ${{ runner.temp }}/wavedl-browser-ci/retained-builds/summary.json
             ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/summary.json
             ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/baseline.json
-            ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/offline.json
             ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/detach.json
             ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/reload.json
             ${{ runner.temp }}/wavedl-browser-ci/wavedl-browser-acceptance-*/cancel.json
@@ -1444,14 +1368,11 @@ jobs:
             ${{ runner.temp }}/wavedl-browser-ci/autoplot-metadata-integrity/wavedl-browser-acceptance-*/autoplot-metadata-integrity.json
             ${{ runner.temp }}/wavedl-browser-ci/adoption-browser/standalone-adoption.json
             ${{ runner.temp }}/wavedl-browser-ci/preview-fault-browser/preview-fault.json
-            ${{ runner.temp }}/wavedl-browser-ci/cold-offline-browser.json
             ${{ runner.temp }}/wavedl-browser-ci/pending-cancel-browser.json
             ${{ runner.temp }}/wavedl-browser-ci/catalogue-fault-browser/catalogue-fault.json
             ${{ runner.temp }}/wavedl-browser-ci/header-deadline-browser/wavedl-header-deadline-*/header-deadline.json
             ${{ runner.temp }}/wavedl-browser-ci/preview-budget-browser/wavedl-preview-budget-*/preview-budget.json
             ${{ runner.temp }}/wavedl-browser-ci/native-sse-browser/native-sse.json
-            ${{ runner.temp }}/wavedl-browser-ci/cached-build-replacement-browser/wavedl-browser-acceptance-*/summary.json
-            ${{ runner.temp }}/wavedl-browser-ci/cached-build-replacement-browser/wavedl-browser-acceptance-*/cached-build-replacement.json
             ${{ runner.temp }}/wavedl-browser-ci/history-browser.json
             ${{ runner.temp }}/wavedl-browser-ci/reconnect-browser/reconnect.json
             ${{ runner.temp }}/wavedl-browser-ci/daemon-restart-browser/daemon-restart.json
@@ -1504,5 +1425,4 @@ jobs:
             ${{ runner.temp }}/wavedl-browser-ci/storage-fault-page-quota.json
             ${{ runner.temp }}/wavedl-browser-ci/hostile-origin-browser.json
             ${{ runner.temp }}/wavedl-browser-ci/genuine-broker-overflow-browser.json
-            ${{ runner.temp }}/wavedl-browser-ci/retained-concurrency.json
           if-no-files-found: warn

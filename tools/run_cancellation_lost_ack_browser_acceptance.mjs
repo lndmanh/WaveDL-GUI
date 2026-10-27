@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
-import { boundedCommand } from './run_retained_browser_acceptance.mjs';
+import { boundedCommand } from './browser_process.mjs';
 import { browserLaunchArgs } from './browser_launch_policy.mjs';
 import { createBrowserActions } from './browser_actions.mjs';
 import { verifyCancellationLostAckReport } from './verify_cancellation_lost_ack_browser_report.mjs';

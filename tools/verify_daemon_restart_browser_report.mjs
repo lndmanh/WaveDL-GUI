@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { currentAssetDigest } from "./verify_adoption_negative_browser_report.mjs";
-import { boundedFile, verifySourceSnapshot } from "./verify_retained_browser_report.mjs";
+import { boundedFile } from "./browser_files.mjs";
+import { verifySourceSnapshot } from "./browser_source_snapshot.mjs";
 const repository = fileURLToPath(new URL("../", import.meta.url));
 export const limitation =
   "Real POSIX local CPU abrupt owned-daemon restart, same durable database identity and explicit browser reauthentication. No host reboot, escaping-session containment, PID-reuse simulation, GPU, Windows, remote or site certification; supplementary T30c/T38 evidence only.";

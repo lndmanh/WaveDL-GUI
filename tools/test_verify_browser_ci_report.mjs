@@ -225,10 +225,10 @@ async function fixture(t) {
   return { root, workspace, manifest, summary, summaryPath, save, hash };
 }
 
-test('accepts exactly twelve passed cases tied to the generated build and cleanup', async (t) => {
+test('accepts exactly eleven passed cases tied to the generated build and cleanup', async (t) => {
   const f = await fixture(t);
   assert.deepEqual(await verifyWorkspace(f.root, f.manifest), {
-    cases: 12, assetManifestSha256: f.hash,
+    cases: 11, assetManifestSha256: f.hash,
   });
 });
 
@@ -260,7 +260,7 @@ for (const [name, mutate] of [
 test('accepts the owned report workspace directly through the CLI path helper', async (t) => {
   const f = await fixture(t);
   assert.deepEqual(await verifyCliPath(f.workspace, f.manifest), {
-    cases: 12, assetManifestSha256: f.hash,
+    cases: 11, assetManifestSha256: f.hash,
   });
 });
 
@@ -270,7 +270,7 @@ test('accepts actual browser collision suffixes independently of descriptive dat
   proof.formats[0].views[0].download.nativeFilename = 'dataset-preview (1).png';
   proof.formats[0].views[3].download.nativeFilename = 'dataset-heatmap (29).png';
   await f.save();
-  assert.equal((await verifyWorkspace(f.root, f.manifest)).cases, 12);
+  assert.equal((await verifyWorkspace(f.root, f.manifest)).cases, 11);
 });
 
 test('accepts genuinely unknown producer outcome independently of native cancellation', async (t) => {
@@ -283,7 +283,7 @@ test('accepts genuinely unknown producer outcome independently of native cancell
   r.explicitReauthAttempted = true;
   r.transportRetirementBeforeReplacement = {historyAbsent: true, credentialFieldEmpty: true, noEnabledCancel: true};
   await f.save();
-  assert.equal((await verifyWorkspace(f.root, f.manifest)).cases, 12);
+  assert.equal((await verifyWorkspace(f.root, f.manifest)).cases, 11);
 });
 for (const [status, code] of [['completed', 0], ['failed', 1]]) {
   test(`accepts genuine ${status} producer outcome independently of cancelled native result`, async (t) => {
@@ -292,14 +292,14 @@ for (const [status, code] of [['completed', 0], ['failed', 1]]) {
     termination.runtimeJournalExit.payload = {status, code};
     termination.runtimeOutcome = status;
     await f.save();
-    assert.equal((await verifyWorkspace(f.root, f.manifest)).cases, 12);
+    assert.equal((await verifyWorkspace(f.root, f.manifest)).cases, 11);
   });
 }
 
 for (const [name, mutate] of [
-  ['historical eleven-case report', (s) => { s.cases = s.cases.filter((r) => r.name !== 'dataset-parity'); }],
-  ['historical ten-case report', (s) => { s.cases = s.cases.filter((r) => r.name !== 'download-names'); }],
-  ['historical nine-case report', (s) => { s.cases = s.cases.filter((r) => r.name !== 'authoring-parity'); }],
+  ['historical ten-case report', (s) => { s.cases = s.cases.filter((r) => r.name !== 'dataset-parity'); }],
+  ['historical nine-case report', (s) => { s.cases = s.cases.filter((r) => r.name !== 'download-names'); }],
+  ['historical eight-case report', (s) => { s.cases = s.cases.filter((r) => r.name !== 'authoring-parity'); }],
   ['missing case', (s) => s.cases.pop()],
   ['empty summary', (s) => { s.cases = []; }],
   ['duplicate case', (s) => { s.cases[1] = structuredClone(s.cases[0]); }],
