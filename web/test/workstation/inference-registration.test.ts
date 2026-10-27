@@ -5,7 +5,7 @@ import { useForm } from 'vee-validate';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { inferenceConfigSchema, inferenceDefaults } from '../../shared/schemas/result-request';
-import InferenceFields from '../../workstation/components/results/InferenceFields.vue';
+import InferenceFields from '../../app/components/results/InferenceFields.vue';
 
 describe('explicit inference registration authority', () => {
   it('defaults legacy drafts to no imports and preserves explicitly authored lists', () => {

@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import ResultsContainer from '../../workstation/components/results/ResultsContainer.vue';
-import ArtifactList from '../../workstation/components/results/ArtifactList.vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import type { RunView } from '../../workstation/lib/daemon-api';
-import type { RunEvent } from '../../workstation/lib/event-stream';
-import type { RunMonitorSnapshot } from '../../workstation/lib/run-monitor';
+import ResultsContainer from '../../app/components/results/ResultsContainer.vue';
+import ArtifactList from '../../app/components/results/ArtifactList.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import type { RunView } from '../../app/lib/daemon-api';
+import type { RunEvent } from '../../app/lib/event-stream';
+import type { RunMonitorSnapshot } from '../../app/lib/run-monitor';
 
 const run: RunView = {
   run_id: '22222222-2222-4222-8222-222222222222',

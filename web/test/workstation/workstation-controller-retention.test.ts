@@ -3,11 +3,11 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { computed, defineComponent, h, onMounted, onScopeDispose, shallowRef } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHead, renderDOMHead } from '@unhead/vue/client';
-import WorkstationController from '../../workstation/components/WorkstationController.vue';
-import { useDaemonConnection } from '../../workstation/composables/useDaemonConnection';
-import { useWorkstationI18n } from '../../workstation/composables/useWorkstationI18n';
-import { defineMessages } from '../../workstation/i18n/core';
-import { defaultAppearance, saveAppearance } from '../../workstation/lib/preferences';
+import WorkstationController from '../../app/components/WorkstationController.vue';
+import { useDaemonConnection } from '../../app/composables/useDaemonConnection';
+import { useWorkstationI18n } from '../../app/composables/useWorkstationI18n';
+import { defineMessages } from '../../app/i18n/core';
+import { defaultAppearance, saveAppearance } from '../../app/lib/preferences';
 
 let capturedConnection: ReturnType<typeof useDaemonConnection> | undefined;
 const authorityCalls = vi.hoisted(() => ({ fetch: vi.fn(), dispose: vi.fn() }));
@@ -15,8 +15,8 @@ vi.mock('#app', async () => {
   const { useHead } = await import('@unhead/vue');
   return { useHead };
 });
-vi.mock('../../workstation/composables/useDaemonConnection', async () => {
-  const { ConnectionSession } = await import('../../workstation/lib/connection-session');
+vi.mock('../../app/composables/useDaemonConnection', async () => {
+  const { ConnectionSession } = await import('../../app/lib/connection-session');
   const vue = await import('vue');
   return {
     useDaemonConnection: () => {
@@ -61,7 +61,7 @@ vi.mock('../../workstation/composables/useDaemonConnection', async () => {
     },
   };
 });
-vi.mock('../../workstation/composables/useAutomaticPlots', async () => {
+vi.mock('../../app/composables/useAutomaticPlots', async () => {
   const vue = await import('vue');
   return {
     useAutomaticPlots: () => ({

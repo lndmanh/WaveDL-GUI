@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import EvaluationResultsPanel from '../../workstation/components/results/EvaluationResultsPanel.vue';
-import type { RunView } from '../../workstation/lib/daemon-api';
-import type { RunEvent } from '../../workstation/lib/event-stream';
-import RunDetail from '../../workstation/components/runs/RunDetail.vue';
-import type { RunMonitorSnapshot } from '../../workstation/lib/run-monitor';
+import EvaluationResultsPanel from '../../app/components/results/EvaluationResultsPanel.vue';
+import type { RunView } from '../../app/lib/daemon-api';
+import type { RunEvent } from '../../app/lib/event-stream';
+import RunDetail from '../../app/components/runs/RunDetail.vue';
+import type { RunMonitorSnapshot } from '../../app/lib/run-monitor';
 
 const run: RunView = {
   run_id: '22222222-2222-4222-8222-222222222222',

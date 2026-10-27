@@ -6,9 +6,9 @@ import {
   trainingRequestSchema,
 } from '../../shared/schemas/training-request';
 import options from '../../shared/training-options.json';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ProjectPlan } from '../../workstation/lib/project-plan';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ProjectPlan } from '../../app/lib/project-plan';
 
 const ids = {
   plan_id: '11111111-1111-4111-8111-111111111111',

@@ -2,11 +2,11 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { Select } from '@/components/ui/select';
-import BrowseContainer from '../../workstation/components/catalog/BrowseContainer.vue';
-import ModelSelector from '../../workstation/components/catalog/ModelSelector.vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { object } from '../../workstation/lib/daemon-api';
+import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { object } from '../../app/lib/daemon-api';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

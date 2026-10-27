@@ -40,7 +40,7 @@ def test_release_static_client_gate_requires_complete_quality_checks():
     commands = [step["run"] for step in static["steps"] if "run" in step]
     required = [
         "npm ci",
-        "npm run lint:workstation",
+        "npm run lint",
         "npm run format:check",
         "npm run typecheck",
         "npm test",

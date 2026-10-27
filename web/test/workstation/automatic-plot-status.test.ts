@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import AutomaticPlotStatus from '../../workstation/components/results/AutomaticPlotStatus.vue';
+import AutomaticPlotStatus from '../../app/components/results/AutomaticPlotStatus.vue';
 
 describe('automatic plot status actions', () => {
   it('offers explicit retry only for a recoverable error and routes acknowledged runs', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { MetricHistory } from '../../workstation/lib/metric-history';
-import type { RunEvent } from '../../workstation/lib/event-stream';
-import type { JsonObject, RunView } from '../../workstation/lib/daemon-api';
+import { MetricHistory } from '../../app/lib/metric-history';
+import type { RunEvent } from '../../app/lib/event-stream';
+import type { JsonObject, RunView } from '../../app/lib/daemon-api';
 
 const runId = '00000000-0000-4000-8000-000000000001';
 function event(seq: number, attempt = 1, type = 'metric', payload: JsonObject = {}): RunEvent {

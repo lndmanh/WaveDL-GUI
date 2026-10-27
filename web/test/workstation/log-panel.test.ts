@@ -2,11 +2,11 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
-import LogPanel from '../../workstation/components/runs/LogPanel.vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
-import type { RunEvent } from '../../workstation/lib/event-stream';
-import { eventDiagnostic, eventText } from '../../workstation/lib/run-monitor';
+import LogPanel from '../../app/components/runs/LogPanel.vue';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
+import type { RunEvent } from '../../app/lib/event-stream';
+import { eventDiagnostic, eventText } from '../../app/lib/run-monitor';
 
 function event(payload: Record<string, unknown>): RunEvent {
   return {

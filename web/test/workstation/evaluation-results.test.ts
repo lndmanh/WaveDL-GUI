@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { evaluationResults } from '../../workstation/lib/evaluation-results';
-import type { RunEvent } from '../../workstation/lib/event-stream';
-import type { RunView } from '../../workstation/lib/daemon-api';
+import { evaluationResults } from '../../app/lib/evaluation-results';
+import type { RunEvent } from '../../app/lib/event-stream';
+import type { RunView } from '../../app/lib/daemon-api';
 const view: RunView = {
   run_id: '22222222-2222-4222-8222-222222222222',
   plan_id: '11111111-1111-4111-8111-111111111111',

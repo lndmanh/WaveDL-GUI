@@ -1,13 +1,10 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import DatasetInfoPanel from '../../workstation/components/datasets/DatasetInfoPanel.vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import {
-  DatasetInspectionApi,
-  type DatasetInspection,
-} from '../../workstation/lib/dataset-inspection';
+import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { DatasetInspectionApi, type DatasetInspection } from '../../app/lib/dataset-inspection';
 const selection = {
   root: 'data',
   relativePath: 'wave.npz',

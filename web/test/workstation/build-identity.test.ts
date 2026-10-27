@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CLIENT_BUILD_ID } from '../../workstation/lib/build-identity';
+import { CLIENT_BUILD_ID } from '../../app/lib/build-identity';
 
 describe('bundled daemon compatibility identity', () => {
   it('matches the Python package version rather than the frontend package version', () => {

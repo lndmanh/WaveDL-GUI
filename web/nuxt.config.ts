@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync } from 'node:fs';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -7,22 +6,17 @@ import tailwindcss from '@tailwindcss/vite';
 const versionSource = readFileSync(new URL('../src/wavedl/__init__.py', import.meta.url), 'utf8');
 const version = versionSource.match(/^__version__ = "([A-Za-z0-9.+_-]+)"$/m)?.[1];
 if (!version) throw new Error('Cannot determine the WaveDL package build identity');
-const identityPath = new URL('./workstation/lib/build-identity.ts', import.meta.url);
+const identityPath = new URL('./app/lib/build-identity.ts', import.meta.url);
 const identitySource = `/** Generated from the Python package version by nuxt.config.ts. */\nexport const CLIENT_BUILD_ID = '${version}';\n`;
 if (readFileSync(identityPath, 'utf8') !== identitySource)
   writeFileSync(identityPath, identitySource);
 
-// app/ holds shared UI primitives and theme CSS. Only workstation/ is
-// application code; there is no Nitro API or backend.
+// The Nuxt 4 default app/ source root contains the browser application. There is
+// no Nitro API or backend.
 export default defineNuxtConfig({
   ssr: false,
-  srcDir: 'workstation',
-  dir: { public: 'workstation/public' },
   components: false,
   imports: { scan: false },
-  alias: {
-    '@': fileURLToPath(new URL('./app', import.meta.url)),
-  },
   css: ['@/assets/css/tailwind.css'],
   devtools: { enabled: false },
   telemetry: false,

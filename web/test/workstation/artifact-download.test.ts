@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Artifact } from '../../workstation/lib/artifact-client';
-import { artifactDownloadName } from '../../workstation/lib/artifact-download';
+import type { Artifact } from '../../app/lib/artifact-client';
+import { artifactDownloadName } from '../../app/lib/artifact-download';
 
 const artifact: Artifact = {
   runId: '22222222-2222-4222-8222-222222222222',

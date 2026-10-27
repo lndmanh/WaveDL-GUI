@@ -2,13 +2,13 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
-import MetricsChart from '../../workstation/components/runs/MetricsChart.vue';
-import MetricSummary from '../../workstation/components/runs/MetricSummary.vue';
-import RunDetail from '../../workstation/components/runs/RunDetail.vue';
-import type { MetricRecord } from '../../workstation/lib/metric-history';
-import type { RunMonitorSnapshot } from '../../workstation/lib/run-monitor';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
+import MetricsChart from '../../app/components/runs/MetricsChart.vue';
+import MetricSummary from '../../app/components/runs/MetricSummary.vue';
+import RunDetail from '../../app/components/runs/RunDetail.vue';
+import type { MetricRecord } from '../../app/lib/metric-history';
+import type { RunMonitorSnapshot } from '../../app/lib/run-monitor';
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),

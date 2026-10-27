@@ -2,10 +2,10 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
-import MetricSummary from '../../workstation/components/runs/MetricSummary.vue';
-import { MetricHistory } from '../../workstation/lib/metric-history';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
+import MetricSummary from '../../app/components/runs/MetricSummary.vue';
+import { MetricHistory } from '../../app/lib/metric-history';
 
 describe('current dashboard summary', () => {
   it('renders simultaneous metrics, real elapsed, per-parameter nulls and evidenced health', async () => {

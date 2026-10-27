@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import {
-  DaemonApi,
-  DaemonApiError,
-  parseJson,
-  stripBootstrapUrl,
-} from '../../workstation/lib/daemon-api';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { DaemonApi, DaemonApiError, parseJson, stripBootstrapUrl } from '../../app/lib/daemon-api';
 
 const token = 'a'.repeat(64);
 const origin = 'http://127.0.0.1:8765';

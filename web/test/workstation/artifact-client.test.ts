@@ -5,8 +5,8 @@ import {
   parseInventory,
   parseSelectionMetadata,
   pngPreviewBlob,
-} from '../../workstation/lib/artifact-client';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+} from '../../app/lib/artifact-client';
+import { ConnectionSession } from '../../app/lib/connection-session';
 const run = '22222222-2222-4222-8222-222222222222';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
 function json(body: object) {

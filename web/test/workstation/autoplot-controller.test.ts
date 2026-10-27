@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  AutoPlotController,
-  automaticPlotRequest,
-} from '../../workstation/lib/autoplot-controller';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import { AutoPlotController, automaticPlotRequest } from '../../app/lib/autoplot-controller';
+import { ConnectionSession } from '../../app/lib/connection-session';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
 import { mappedStoragePath, type StorageMapping } from '../../shared/schemas/storage-mapping';
-import type { PlanView, RunView } from '../../workstation/lib/daemon-api';
+import type { PlanView, RunView } from '../../app/lib/daemon-api';
 
 const train: RunView = {
   run_id: '22222222-2222-4222-8222-222222222222',

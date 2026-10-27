@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import { z } from 'zod';
-import TrainingFields from '../../workstation/components/project/TrainingFields.vue';
+import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import {
   trainingConfigSchema,
   trainingDefaults,
@@ -14,11 +14,11 @@ import {
   trainingRequestSchema,
   type TrainingConfig,
 } from '../../shared/schemas/training-request';
-import { trainingCommand, trainingYaml } from '../../workstation/lib/training-export';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ProjectPlan } from '../../workstation/lib/project-plan';
-import type { Json } from '../../workstation/lib/daemon-api';
+import { trainingCommand, trainingYaml } from '../../app/lib/training-export';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ProjectPlan } from '../../app/lib/project-plan';
+import type { Json } from '../../app/lib/daemon-api';
 
 // An explicit inventory, not values generated from metadata: newly added fields
 // must acquire a deliberate authoring case before this acceptance test passes.

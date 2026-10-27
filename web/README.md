@@ -12,17 +12,16 @@ disconnecting still clears connection-scoped authority.
 
 ## Active source and provenance
 
-Nuxt uses `workstation/` as `srcDir`, Vue Composition API and TypeScript. `app.vue`
+Nuxt uses its default `app/` source root, Vue Composition API and TypeScript. `app.vue`
 only composes the workstation controller and build-skew notice.
 The active app imports selected existing shadcn primitives from `app/components/ui`.
 `app/assets/css/tailwind.css` provides the active semantic theme, using local system
-fonts only. `workstation/lib` contains the typed daemon client and stream foundation.
+fonts only. `app/lib` contains the typed daemon client and stream foundation.
 
-No upstream product scaffold is retained. `app/` holds the shared shadcn UI
-primitives and theme CSS, plus an inactive `app.vue` retained for verification
-until the workstation source merge. The active typecheck checks all workstation
-TS/Vue and transitively imported UI components. Lint/format checks target active
-custom code.
+The former workstation source has been merged into `app/`, which now contains the
+browser application alongside the retained shadcn UI primitives and theme CSS.
+The active typecheck checks all app TS/Vue and transitively imported UI components.
+Lint/format checks target active custom code.
 
 There is no Cloudflare, NuxtHub, Sentry, account/auth backend, telemetry or remote
 font module. No Nitro server ships: `ssr: false` and static generation produce
@@ -69,7 +68,7 @@ cd web
 npm ci
 npm run dev
 # Run Nuxt prepare/typecheck and generate sequentially, not concurrently.
-npm run lint:workstation
+npm run lint
 npm run format:check
 npm run typecheck
 npm test

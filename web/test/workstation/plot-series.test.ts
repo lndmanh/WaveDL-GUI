@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildPlotSeries, MAX_PLOT_RECORDS } from '../../workstation/lib/plot-series';
-import { MetricHistory, type MetricRecord } from '../../workstation/lib/metric-history';
-import type { RunEvent } from '../../workstation/lib/event-stream';
+import { buildPlotSeries, MAX_PLOT_RECORDS } from '../../app/lib/plot-series';
+import { MetricHistory, type MetricRecord } from '../../app/lib/metric-history';
+import type { RunEvent } from '../../app/lib/event-stream';
 
 function record(step: number, changes: Partial<MetricRecord> = {}): MetricRecord {
   return {

@@ -2,8 +2,8 @@
 import { mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DaemonApi, type RunView } from '../../workstation/lib/daemon-api';
-import { useRuns } from '../../workstation/composables/useRuns';
+import { DaemonApi, type RunView } from '../../app/lib/daemon-api';
+import { useRuns } from '../../app/composables/useRuns';
 const id = '11111111-1111-1111-1111-111111111111';
 function run(state: RunView['state'] = 'running'): RunView {
   return {

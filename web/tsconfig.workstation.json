@@ -1,5 +1,0 @@
-{
-  "extends": "./.nuxt/tsconfig.app.json",
-  "include": ["workstation/**/*.ts", "workstation/**/*.vue", ".nuxt/**/*.d.ts"],
-  "exclude": ["node_modules"]
-}

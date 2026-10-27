@@ -2,17 +2,17 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { computed, defineComponent, h, shallowRef } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import WorkstationShell from '../../workstation/components/WorkstationShell.vue';
-import ConnectionPanel from '../../workstation/components/ConnectionPanel.vue';
-import SettingsWorkspace from '../../workstation/components/settings/SettingsWorkspace.vue';
-import TrainingDefaultsSettings from '../../workstation/components/settings/TrainingDefaultsSettings.vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
+import WorkstationShell from '../../app/components/WorkstationShell.vue';
+import ConnectionPanel from '../../app/components/ConnectionPanel.vue';
+import SettingsWorkspace from '../../app/components/settings/SettingsWorkspace.vue';
+import TrainingDefaultsSettings from '../../app/components/settings/TrainingDefaultsSettings.vue';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import {
   defaultAppearance,
   loadAppearance,
   type AppearancePreferences,
-} from '../../workstation/lib/preferences';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
+} from '../../app/lib/preferences';
+import type { WorkstationLocale } from '../../app/i18n/core';
 
 beforeEach(() => {
   const items = new Map<string, string>();

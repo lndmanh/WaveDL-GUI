@@ -2,13 +2,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import ProjectContainer from '../../workstation/components/project/ProjectContainer.vue';
-import ProjectGuide from '../../workstation/components/project/ProjectGuide.vue';
-import TrainingExport from '../../workstation/components/project/TrainingExport.vue';
-import BrowseContainer from '../../workstation/components/catalog/BrowseContainer.vue';
-import CustomModelSelector from '../../workstation/components/project/CustomModelSelector.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
+import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
+import TrainingExport from '../../app/components/project/TrainingExport.vue';
+import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {

@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
-import RuntimeFields from '../../workstation/components/project/RuntimeFields.vue';
+import RuntimeFields from '../../app/components/project/RuntimeFields.vue';
 
 const expectedLabels = [
   'Python interpreter',

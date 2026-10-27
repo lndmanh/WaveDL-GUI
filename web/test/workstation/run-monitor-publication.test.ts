@@ -1,10 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import {
-  RunMonitor,
-  type RunMonitorSnapshot,
-  type RunTransport,
-} from '../../workstation/lib/run-monitor';
-import type { JsonObject, RunView } from '../../workstation/lib/daemon-api';
+import { RunMonitor, type RunMonitorSnapshot, type RunTransport } from '../../app/lib/run-monitor';
+import type { JsonObject, RunView } from '../../app/lib/daemon-api';
 
 const id = '11111111-1111-1111-1111-111111111111';
 function view(patch: Partial<RunView> = {}): RunView {
