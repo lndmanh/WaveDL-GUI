@@ -53,11 +53,11 @@ class ModelCard(SimpleCardWidget):
 
     clicked = Signal(str)  # model_key
 
-    def __init__(self, model_key: str, parent=None):
+    def __init__(self, model_key: str, parent=None, *, info=None):
         super().__init__(parent)
         self._key = model_key
         self._selected = False
-        self._info = MODEL_INFO.get(model_key, {})
+        self._info = info if info is not None else MODEL_INFO.get(model_key, {})
 
         self.setFixedHeight(72)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -71,12 +71,13 @@ class ModelCard(SimpleCardWidget):
         topRow.setSpacing(8)
 
         self.nameLabel = StrongBodyLabel(self._info.get("display_name", model_key))
+        self.nameLabel.setTextFormat(Qt.TextFormat.PlainText)
         setFont(self.nameLabel, 13, QFont.Weight.DemiBold)
         topRow.addWidget(self.nameLabel)
 
         if self._info.get("is_pretrained"):
             badge = InfoBadge.custom(
-                "Pretrained",
+                "Metadata: pretrained",
                 QColor(52, 199, 89),
                 QColor(48, 209, 88),
                 self,
@@ -108,6 +109,7 @@ class ModelCard(SimpleCardWidget):
             self._info.get("short_description", "No description available")
         )
         self.descLabel.setWordWrap(False)
+        self.descLabel.setTextFormat(Qt.TextFormat.PlainText)
         self.descLabel.setTextColor(QColor(142, 142, 147), QColor(142, 142, 147))
         layout.addWidget(self.descLabel)
 
@@ -287,12 +289,16 @@ class ModelDetailPanel(QFrame):
         layout.addStretch()
 
         self._applyStyle()
+        for label in self.findChildren(QLabel):
+            label.setTextFormat(Qt.TextFormat.PlainText)
 
-    def setModel(self, model_key: str):
+    def setModel(self, model_key: str, info=None):
         """Update detail panel with model information."""
-        info = MODEL_INFO.get(model_key, {})
+        info = info if info is not None else MODEL_INFO.get(model_key, {})
         if not info:
             return
+        for label in self.findChildren(QLabel):
+            label.setTextFormat(Qt.TextFormat.PlainText)
 
         # ── Title ──
         self.titleLabel.setText(info.get("display_name", model_key))
@@ -338,7 +344,7 @@ class ModelDetailPanel(QFrame):
             self._addSpec("Compute Tier", compute)
         self._addSpec(
             "Pretrained",
-            "ImageNet weights available"
+            "Metadata lists pretrained weights"
             if info.get("is_pretrained")
             else "Train from scratch",
         )
@@ -390,6 +396,7 @@ class ModelDetailPanel(QFrame):
         row.addWidget(keyLabel)
 
         valLabel = BodyLabel(value)
+        valLabel.setTextFormat(Qt.TextFormat.PlainText)
         valLabel.setWordWrap(True)
         setFont(valLabel, 13)
         row.addWidget(valLabel)
@@ -430,6 +437,7 @@ class ModelDetailPanel(QFrame):
         widget.show()
         for text in items:
             lbl = CaptionLabel(f"{prefix}{text}")
+            lbl.setTextFormat(Qt.TextFormat.PlainText)
             lbl.setWordWrap(True)
             lbl.setTextColor(QColor(142, 142, 147), QColor(142, 142, 147))
             setFont(lbl, 12)
@@ -450,6 +458,7 @@ class ModelDetailPanel(QFrame):
         style = self._TAG_DARK if isDarkTheme() else self._TAG_LIGHT
         for tag in tags:
             pill = QLabel(tag)
+            pill.setTextFormat(Qt.TextFormat.PlainText)
             pill.setStyleSheet(f"QLabel {{ {style} }}")
             pill.setFixedHeight(20)
             self.tagsLayout.addWidget(pill)
@@ -581,6 +590,10 @@ class ModelBrowserPanel(QWidget):
         self._selected: str = ""
         self._dim_filter: int | None = None  # active filter value (None = all)
         self._suggested_dim: int | None = None  # suggested from data_info
+        self._model_info = MODEL_INFO
+        self._categories = MODEL_CATEGORIES
+        self._catalogue_worker = None
+        self._catalogue_epoch = 0
         self._init_ui()
         self._populate()
 
@@ -596,6 +609,12 @@ class ModelBrowserPanel(QWidget):
         left_lay = QVBoxLayout(left)
         left_lay.setContentsMargins(0, 0, 12, 0)
         left_lay.setSpacing(8)
+        self._catalogue_status = CaptionLabel(
+            "Offline descriptions · runtime support not verified", left
+        )
+        self._catalogue_status.setWordWrap(True)
+        self._catalogue_status.setTextFormat(Qt.TextFormat.PlainText)
+        left_lay.addWidget(self._catalogue_status)
 
         # Search row: dim-filter pill + search bar
         search_row = QHBoxLayout()
@@ -670,6 +689,81 @@ class ModelBrowserPanel(QWidget):
         self._sync_dim_menu()
         self._rebuild_cards()
 
+    def refresh_catalogue(self, connection=None):
+        """Explicit lazy network refresh; constructors retain offline descriptions."""
+        from ..common.config import daemonConnection
+        from ..service.daemon_models_worker import DaemonModelsWorker
+
+        self._catalogue_epoch += 1
+        if self._catalogue_worker is not None and self._catalogue_worker.isRunning():
+            self._catalogue_worker.stop()
+        self._catalogue_worker = None
+        try:
+            selected = connection or daemonConnection()
+        except ValueError:
+            self._catalogue_failure(
+                "Daemon connection not configured · offline descriptions; runtime support not verified"
+            )
+            return
+        worker = DaemonModelsWorker(selected, self)
+        self._catalogue_worker = worker
+        self._catalogue_status.setText(
+            "Loading daemon descriptions · runtime support not verified"
+        )
+        worker.resultSig.connect(self._catalogueReady)
+        worker.errorSig.connect(self._catalogueError)
+        worker.finished.connect(self._catalogue_finished)
+        worker.start()
+
+    def _catalogue_finished(self):
+        worker = self.sender()
+        if worker is None:
+            return
+        if worker is self._catalogue_worker:
+            self._catalogue_worker = None
+        worker.deleteLater()
+
+    def _catalogueReady(self, result):
+        if self.sender() is self._catalogue_worker:
+            self._accept_catalogue(result)
+
+    def _catalogueError(self, message):
+        if self.sender() is self._catalogue_worker:
+            self._catalogue_failure(message)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._catalogue_epoch == 0:
+            self.refresh_catalogue()
+
+    def _accept_catalogue(self, result):
+        if not result["catalogue"]["models"]:
+            self._catalogue_failure(
+                "Daemon descriptions are empty · offline descriptions remain selectable; runtime support not verified"
+            )
+            return
+        self._model_info = {item["id"]: item for item in result["catalogue"]["models"]}
+        self._categories = result["catalogue"]["categories"]
+        self._replace_categories()
+        self._catalogue_status.setText(
+            "Daemon-provided descriptions · runtime support not verified"
+        )
+        self._rebuild_cards()
+
+    def _replace_categories(self):
+        parent = self._category_bar.parentWidget()
+        category_bar = CategoryFilterBar(list(self._categories), parent)
+        category_bar.categoryChanged.connect(self._on_category_changed)
+        parent.layout().replaceWidget(self._category_bar, category_bar)
+        self._category_bar.deleteLater()
+        self._category_bar = category_bar
+
+    def _catalogue_failure(self, message):
+        self._model_info, self._categories = MODEL_INFO, MODEL_CATEGORIES
+        self._replace_categories()
+        self._catalogue_status.setText(message)
+        self._rebuild_cards()
+
     def select_model(self, model_key: str):
         """Programmatically select a model card."""
         self._select(model_key)
@@ -714,11 +808,11 @@ class ModelBrowserPanel(QWidget):
         total = 0
         shown = 0
 
-        for cat_name, cat_data in MODEL_CATEGORIES.items():
+        for cat_name, cat_data in self._categories.items():
             compatible: list[str] = []
             for model_id in cat_data["models"]:
                 total += 1
-                info = MODEL_INFO.get(model_id, {})
+                info = self._model_info.get(model_id, {})
                 supported = info.get("supported_dims", [])
                 if active_dim is None or active_dim in supported:
                     compatible.append(model_id)
@@ -732,7 +826,9 @@ class ModelBrowserPanel(QWidget):
             self._card_layout.addWidget(header)
 
             for model_id in compatible:
-                card = ModelCard(model_id, self._card_container)
+                card = ModelCard(
+                    model_id, self._card_container, info=self._model_info.get(model_id)
+                )
                 card.clicked.connect(self._select)
                 self._card_layout.addWidget(card)
                 self._cards[model_id] = card
@@ -745,8 +841,15 @@ class ModelBrowserPanel(QWidget):
         # Auto-select first or keep previous
         if self._selected and self._selected in self._cards:
             self._select(self._selected)
+        elif self._selected and self._selected not in self._model_info:
+            self._selected = ""
+            self._detail.titleLabel.setText("Select a model")
+            self.modelSelected.emit("")
         elif self._cards:
             self._select(next(iter(self._cards)))
+        else:
+            self._selected = ""
+            self.modelSelected.emit("")
 
         # Re-apply search
         if self._search.text().strip():
@@ -761,12 +864,14 @@ class ModelBrowserPanel(QWidget):
         lay.setSpacing(2)
 
         name_lbl = StrongBodyLabel(cat_name, widget)
+        name_lbl.setTextFormat(Qt.TextFormat.PlainText)
         setFont(name_lbl, 12, QFont.Weight.DemiBold)
         lay.addWidget(name_lbl)
 
         desc = cat_data.get("short_description", "")
         if desc:
             desc_lbl = CaptionLabel(desc, widget)
+            desc_lbl.setTextFormat(Qt.TextFormat.PlainText)
             desc_lbl.setTextColor(QColor(142, 142, 147), QColor(142, 142, 147))
             lay.addWidget(desc_lbl)
 
@@ -775,12 +880,19 @@ class ModelBrowserPanel(QWidget):
     # ── Selection ────────────────────────────────────────────────────────
 
     def _select(self, model_key: str):
+        if model_key not in self._cards:
+            if self._selected in self._cards:
+                self._cards[self._selected].setSelected(False)
+            self._selected = ""
+            self._detail.titleLabel.setText("Select a model")
+            self.modelSelected.emit("")
+            return
         if self._selected in self._cards:
             self._cards[self._selected].setSelected(False)
         self._selected = model_key
         if model_key in self._cards:
             self._cards[model_key].setSelected(True)
-        self._detail.setModel(model_key)
+        self._detail.setModel(model_key, self._model_info.get(model_key))
         self.modelSelected.emit(model_key)
 
     # ── Filtering ────────────────────────────────────────────────────────
@@ -802,13 +914,13 @@ class ModelBrowserPanel(QWidget):
 
     def _on_search(self, text: str):
         query = text.strip().lower()
-        for cat_name, cat_data in MODEL_CATEGORIES.items():
+        for cat_name, cat_data in self._categories.items():
             cat_visible = False
             for model_id in cat_data["models"]:
                 if model_id not in self._cards:
                     continue
                 card = self._cards[model_id]
-                info = MODEL_INFO.get(model_id, {})
+                info = self._model_info.get(model_id, {})
                 name = info.get("display_name", model_id).lower()
                 desc = info.get("short_description", "").lower()
                 tags_str = " ".join(info.get("tags", [])).lower()
@@ -826,7 +938,7 @@ class ModelBrowserPanel(QWidget):
                 header.setVisible(cat_visible)
 
     def _on_category_changed(self, category: str):
-        for cat_name, cat_data in MODEL_CATEGORIES.items():
+        for cat_name, cat_data in self._categories.items():
             visible = not category or cat_name == category
             for model_id in cat_data["models"]:
                 if model_id in self._cards:

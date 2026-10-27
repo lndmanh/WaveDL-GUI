@@ -28,4 +28,3 @@ if sys.platform == "win32" and not DEBUG:
 
 
 CONFIG_FILE = CONFIG_FOLDER / "config.json"
-DB_PATH = CONFIG_FOLDER / "database.db"

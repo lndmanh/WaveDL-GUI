@@ -16,7 +16,7 @@ import seaborn as sns
 from matplotlib.backends.backend_qt import NavigationToolbar2QT
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -33,7 +33,9 @@ from qfluentwidgets import (
 )
 
 from ..common.theme_colors import muted_text_color as _muted_text_color
+from ..service.daemon_contracts import PathSelectionRef
 from ..service.data_plots_worker import DataBundle, DataPlotsWorker
+from ..service.data_preview_worker import DaemonDataPreviewWorker
 
 
 # ── Theme helpers ────────────────────────────────────────────────────────────
@@ -322,6 +324,112 @@ def _plot_input_vs_output(b: DataBundle, dark: bool) -> Figure:
 
 # ── Plot builder dispatch ────────────────────────────────────────────────────
 
+
+def _plot_remote_preview(name: str, bundle: DataBundle, dark: bool) -> Figure:
+    """Render bounded server summaries without reconstructing the dataset."""
+    value = bundle.remote_preview
+    palette = _PALETTE_DARK if dark else _PALETTE_LIGHT
+    fig = Figure(figsize=(10, 5), dpi=100)
+    if name in {"Input Distribution", "Output Distribution"}:
+        key = (
+            "input_histograms" if name == "Input Distribution" else "output_histograms"
+        )
+        histograms = value[key]
+        cols = min(4, len(histograms))
+        rows = (len(histograms) + cols - 1) // cols
+        for index, histogram in enumerate(histograms):
+            ax = fig.add_subplot(rows, cols, index + 1)
+            edges = np.asarray(histogram["edges"])
+            ax.bar(
+                edges[:-1],
+                histogram["counts"],
+                width=np.diff(edges),
+                align="edge",
+                color=palette[index % len(palette)],
+            )
+            ax.set_title(f"Feature {histogram['feature_index']}")
+            ax.set_ylabel("Count")
+    elif name == "Sample Preview":
+        samples = value["samples"]
+        for index, sample in enumerate(samples):
+            ax = fig.add_subplot(1, len(samples), index + 1)
+            data = np.asarray(sample["values"], dtype=float)
+            if data.ndim == 1:
+                ax.plot(data, color=palette[index])
+            else:
+                # Higher-dimensional bounded slices remain inspectable without
+                # assuming channel order or interpreting arbitrary arrays as RGB.
+                ax.imshow(
+                    data.reshape(data.shape[0], -1), aspect="auto", cmap="viridis"
+                )
+            truncated = sample["shape"] != sample["feature_shape"]
+            ax.set_title(
+                f"Sample {sample['sample_index']}" + (" (slice)" if truncated else "")
+            )
+    elif name == "Correlation Heatmap":
+        ax = fig.add_subplot(111)
+        corr = value["correlation"]
+        if corr["matrix"] is None:
+            ax.text(
+                0.5,
+                0.5,
+                "Insufficient samples or outputs for correlation",
+                ha="center",
+                va="center",
+            )
+            ax.axis("off")
+        else:
+            sns.heatmap(
+                np.asarray(corr["matrix"], dtype=float),
+                vmin=-1,
+                vmax=1,
+                cmap="coolwarm",
+                square=True,
+                ax=ax,
+                xticklabels=corr["feature_indices"],
+                yticklabels=corr["feature_indices"],
+            )
+    elif name == "Input Statistics":
+        ax = fig.add_subplot(111)
+        stats = value["input_statistics"]
+        positions = np.arange(len(stats["feature_indices"]))
+        means = np.asarray(stats["means"], dtype=float)
+        stds = np.asarray(stats["stds"], dtype=float)
+        valid = np.isfinite(means) & np.isfinite(stds)
+        if valid.any():
+            ax.bar(positions[valid], means[valid], yerr=stds[valid], color=palette[0])
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "No finite statistics in this bounded sample",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+        ax.set_xticks(positions, stats["feature_indices"], rotation=45)
+    elif name == "Input vs Output":
+        scatter = value["scatter"]
+        data = np.asarray(scatter["x"], dtype=float)
+        features = scatter["feature_indices"]
+        cols = min(3, len(features))
+        rows = (len(features) + cols - 1) // cols
+        for index, feature in enumerate(features):
+            ax = fig.add_subplot(rows, cols, index + 1)
+            ax.scatter(
+                data[:, index],
+                np.asarray(scatter["y"], dtype=float),
+                s=6,
+                alpha=0.45,
+                color=palette[index],
+            )
+            ax.set_xlabel(f"Input[{feature}]")
+            ax.set_ylabel("Output[0]")
+    fig.suptitle(f"{name} — bounded daemon sample", fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    return fig
+
+
 _BUILDERS: dict[str, callable] = {
     "Input Distribution": _plot_input_distribution,
     "Output Distribution": _plot_output_distribution,
@@ -359,9 +467,10 @@ class DataPlotsCard(SimpleCardWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._worker: DataPlotsWorker | None = None
+        self._worker: DataPlotsWorker | DaemonDataPreviewWorker | None = None
         self._bundle: DataBundle | None = None
         self._current_plot_name: str | None = None
+        self._error_widget = None
         self._init_ui()
         self.hide()
 
@@ -426,9 +535,10 @@ class DataPlotsCard(SimpleCardWidget):
     # ── Layout helpers ────────────────────────────────────────────
 
     def _showCard(self):
+        self.setMaximumHeight(16777215)
         self.setMinimumHeight(520)
         self.show()
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     def _updateParentLayout(self):
         parent = self.parentWidget()
@@ -438,11 +548,9 @@ class DataPlotsCard(SimpleCardWidget):
 
     # ── Public API ────────────────────────────────────────────────
 
-    def set_data_path(self, path: str):
+    def set_data_path(self, path: str, *, path_selection=None, connection=None):
         """Trigger data loading for the given file."""
-        if self._worker is not None and self._worker.isRunning():
-            self._worker.terminate()
-            self._worker.wait()
+        self._cancel_load()
 
         self._dispose_current_plot()
         self._bundle = None
@@ -451,27 +559,61 @@ class DataPlotsCard(SimpleCardWidget):
         self._pivot.hide()
         self._showCard()
 
-        self._worker = DataPlotsWorker(path, parent=self)
+        from ..common.config import cfg
+
+        remote = (
+            connection.path_realm == "remote"
+            if connection is not None
+            else cfg.get(cfg.daemonPathRealm) == "remote"
+        )
+        if (
+            remote
+            or (
+                path_selection is not None
+                and not isinstance(path_selection, PathSelectionRef)
+            )
+            or (
+                path_selection is not None
+                and getattr(path_selection, "realm", None) == "daemon"
+            )
+        ):
+            self._worker = DaemonDataPreviewWorker(
+                path, parent=self, path_selection=path_selection, connection=connection
+            )
+        else:
+            self._worker = DataPlotsWorker(path, parent=self)
         self._worker.dataReady.connect(self._on_data_ready)
         self._worker.errorOccurred.connect(self._on_error)
+        self._worker.finished.connect(self._on_worker_finished)
         self._worker.start()
 
+    def _cancel_load(self):
+        worker, self._worker = self._worker, None
+        if worker is not None:
+            worker.stop()
+
     def clear(self):
-        if self._worker is not None and self._worker.isRunning():
-            self._worker.terminate()
-            self._worker.wait()
+        self._cancel_load()
         self._dispose_current_plot()
         self._bundle = None
         self._current_plot_name = None
         self.setMinimumHeight(0)
         self.setFixedHeight(0)
         self.hide()
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     # ── Slots ─────────────────────────────────────────────────────
 
+    @Slot()
+    def _on_worker_finished(self):
+        if self.sender() is self._worker:
+            self._worker = None
+
+    @Slot(object)
     def _on_data_ready(self, bundle: DataBundle):
         """Data arrived — set up tabs and render the first plot."""
+        if self.sender() is not self._worker:
+            return
         self._bundle = bundle
         self._spinner_widget.hide()
 
@@ -493,7 +635,10 @@ class DataPlotsCard(SimpleCardWidget):
         self._pivot.setCurrentItem(first)
         self._show_plot(first)
 
+    @Slot(str)
     def _on_error(self, error: str):
+        if self.sender() is not self._worker:
+            return
         self._dispose_current_plot()
         self._spinner_widget.hide()
 
@@ -504,6 +649,7 @@ class DataPlotsCard(SimpleCardWidget):
         err_label.setAlignment(Qt.AlignCenter)
         setFont(err_label, 11)
         self._plot_container.addWidget(err_label)
+        self._error_widget = err_label
 
     # ── Lazy plot rendering ───────────────────────────────────────
 
@@ -524,7 +670,11 @@ class DataPlotsCard(SimpleCardWidget):
         if builder is None:
             return
 
-        fig = builder(self._bundle, dark)
+        fig = (
+            _plot_remote_preview(name, self._bundle, dark)
+            if self._bundle.remote_preview is not None
+            else builder(self._bundle, dark)
+        )
 
         # Create canvas + toolbar
         canvas = FigureCanvasQTAgg(fig)
@@ -540,6 +690,10 @@ class DataPlotsCard(SimpleCardWidget):
 
     def _dispose_current_plot(self):
         """Close the current matplotlib figure and remove canvas/toolbar."""
+        if self._error_widget is not None:
+            self._plot_container.removeWidget(self._error_widget)
+            self._error_widget.deleteLater()
+            self._error_widget = None
         if self._current_canvas is not None:
             # Close the matplotlib figure to free memory
             fig = self._current_canvas.figure

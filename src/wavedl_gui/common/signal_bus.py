@@ -7,6 +7,7 @@ class SignalBus(QObject):
     # Application signals
     appMessageSig = Signal(str)
     appErrorSig = Signal(str)
+    requestExitSig = Signal()
 
     # Window signals
     checkUpdateSig = Signal()
@@ -22,6 +23,11 @@ class SignalBus(QObject):
     # Testing signals
     testCompletedSig = Signal(bool, str, dict)  # (success, message, results)
 
+    # Plot generation signals
+    plotGeneratedSig = Signal(bool, str, list)  # (success, message, image_paths)
+    plotStartedSig = Signal()  # A plot worker was actually started
+    plotStateChangedSig = Signal(object, bool)  # (state, retry_available)
+
     # Navigation signals
     switchToProjectSig = Signal()
     switchToTrainingSig = Signal()
@@ -30,6 +36,7 @@ class SignalBus(QObject):
 
     # Action signals
     requestStartTrainingSig = Signal()  # Request MainWindow to start training
+    requestResumePlotsSig = Signal()  # Retry the retained plot monitor only
 
     # Wizard signals
     wizardCompletedSig = Signal(object)  # WizardState dataclass

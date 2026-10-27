@@ -5,9 +5,8 @@ Uses FluentWindow from qfluentwidgets for a modern fluent design with left sideb
 
 import sys
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QIcon
-from PySide6.QtSql import QSqlDatabase
 from PySide6.QtWidgets import QApplication, QFileDialog
 from qfluentwidgets import (
     FluentIcon as FIF,
@@ -21,12 +20,13 @@ from qfluentwidgets import (
 
 from ..common.concurrent import TaskExecutor
 from ..common.config import cfg
-from ..common.database import DatabaseThread, DBInitializer, SqlResponse, sqlSignalBus
 from ..common.setting import FEEDBACK_URL, KOFI_URL, RELEASE_URL
 from ..common.signal_bus import signalBus
-from ..common.utils import check_pytorch_installation, get_gpu_summary, openUrl
+from ..common.utils import openUrl
 from ..components.menu_bar import MenuBar
 from ..components.system_tray_icon import SystemTrayIcon
+from ..service.async_request_worker import activeRequestWorkers
+from ..service.data_plots_worker import activeDataPlotWorkers
 from ..service.training_service import trainingService
 from ..service.version_service import VersionService
 from .dashboard_interface import DashboardInterface
@@ -46,7 +46,6 @@ class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
 
-        self.initDatabase()
         self.initWindow()
 
         self.versionManager = VersionService()
@@ -87,6 +86,9 @@ class MainWindow(FluentWindow):
 
         # Dashboard "Start Training" button triggers validation + start
         signalBus.requestStartTrainingSig.connect(self.onStartTraining)
+        signalBus.requestResumePlotsSig.connect(self.onResumePlots)
+        signalBus.requestExitSig.connect(self.requestExit)
+        QApplication.instance().setProperty("frontendShutdownManaged", True)
 
         self.systemTrayIcon.messageClicked.connect(self.onSystemTrayMessageClicked)
 
@@ -142,16 +144,6 @@ class MainWindow(FluentWindow):
         self.show()
         QApplication.processEvents()
 
-    def initDatabase(self):
-        """Initialize database."""
-        DBInitializer.init()
-
-        self.databaseThread = DatabaseThread(
-            QSqlDatabase.database(DBInitializer.CONNECTION_NAME), self
-        )
-
-        sqlSignalBus.dataFetched.connect(self.onDataFetched)
-
     def initMenuBar(self):
         """Initialize macOS menu bar."""
         if sys.platform != "darwin":
@@ -160,16 +152,16 @@ class MainWindow(FluentWindow):
         self.menuBar = MenuBar(self)
         self.menuBar.openFileAct.triggered.connect(self.openFile)
         self.menuBar.closeWindowAct.triggered.connect(self.close)
+        self.menuBar.quitAct.triggered.connect(self.requestExit)
         self.menuBar.donateAct.triggered.connect(self.support)
         self.menuBar.settingsAct.triggered.connect(
             lambda: self.switchTo(self.settingInterface)
         )
         self.menuBar.feedbackAct.triggered.connect(lambda: openUrl(FEEDBACK_URL))
 
-    def onDataFetched(self, response: SqlResponse):
-        """Handle database response."""
-        if response.slot:
-            response.slot(response.data)
+    def onResumePlots(self):
+        """Retry the existing diagnostic plot operation, never start training."""
+        trainingService.resume_plot_if_needed()
 
     def onAppError(self, message: str):
         """Handle application error."""
@@ -238,6 +230,13 @@ class MainWindow(FluentWindow):
 
     def onStartTraining(self):
         """Start training with current configuration."""
+        # A disconnected submitted run is resumed by identity.  Do this before
+        # reading the editable draft: reconnect must not create a fresh plan or
+        # depend on data/settings that may have been reset after submission.
+        if trainingService.resume_training_if_needed():
+            self.switchTo(self.dashboardInterface)
+            return
+
         # Validate data path
         data_path = self.projectInterface.data_path
         output_dir = self.projectInterface.output_dir
@@ -255,6 +254,7 @@ class MainWindow(FluentWindow):
 
         # Get training config
         config = self.trainingInterface.get_training_config(data_path, output_dir)
+        config.data_selection = self.projectInterface.data_selection
 
         # Switch to dashboard and start training
         self.switchTo(self.dashboardInterface)
@@ -336,12 +336,15 @@ class MainWindow(FluentWindow):
 
         # Basic mode: populate config and start training
         if state.data_path:
-            self.projectInterface.set_data_path(state.data_path)
+            self.projectInterface.set_data_path(
+                state.data_path, getattr(state, "data_selection", None)
+            )
         if state.output_dir:
             self.projectInterface.set_output_dir(state.output_dir)
 
         # Apply wizard config to cfg items
         training_config = state.to_training_config()
+        training_config.data_selection = getattr(state, "data_selection", None)
         cfg.set(cfg.model, training_config.model)
         cfg.set(cfg.pretrained, training_config.pretrained)
         cfg.set(cfg.batchSize, training_config.batch_size)
@@ -358,25 +361,16 @@ class MainWindow(FluentWindow):
         trainingService.start_training(training_config)
 
     def _check_environment(self):
-        """Check PyTorch and GPU availability."""
-        installed, version, _cuda = check_pytorch_installation()
-
-        if not installed:
-            InfoBar.warning(
-                title=self.tr("PyTorch Not Found"),
-                content=self.tr("PyTorch is not installed. Training will not work."),
+        """Client hardware cannot certify the selected daemon runtime."""
+        if not cfg.get(cfg.daemonCredentialFile):
+            InfoBar.info(
+                title=self.tr("Connect to a daemon"),
+                content=self.tr(
+                    "Configure the execution host in Settings before starting a run."
+                ),
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=5000,
-            )
-        else:
-            gpu_summary = get_gpu_summary()
-            InfoBar.info(
-                title=f"PyTorch {version}",
-                content=gpu_summary,
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=4000,
             )
 
     def support(self):
@@ -395,14 +389,37 @@ class MainWindow(FluentWindow):
             self.projectInterface.set_data_path(path)
             self.switchTo(self.projectInterface)
 
-    def onExit(self):
-        """Exit main window."""
+    def requestExit(self):
+        """Detach locally and keep the Qt event loop alive until threads finish."""
+        if getattr(self, "_exit_requested", False):
+            return
+        self._exit_requested = True
+        self.setEnabled(False)
         self.systemTrayIcon.hide()
+        self._detachFrontend()
+        self._waitForFrontend()
 
-        # Stop any running training
-        trainingService.stop_training()
-        trainingService.stop_test()
+    def _detachFrontend(self):
+        trainingService.detachMonitoring()
+        for worker in (*activeRequestWorkers(), *activeDataPlotWorkers()):
+            worker.stop()
 
-        # close database
-        QSqlDatabase.database(DBInitializer.CONNECTION_NAME).close()
-        QSqlDatabase.removeDatabase(DBInitializer.CONNECTION_NAME)
+    def _waitForFrontend(self):
+        if (
+            trainingService.activeMonitoringWorkers()
+            or activeRequestWorkers()
+            or activeDataPlotWorkers()
+        ):
+            # Socket cancellation is cooperative; no force-termination or
+            # synchronous wait on the UI thread. Slow filesystem calls may
+            # finish later, and their QThreads remain retained until then.
+            QTimer.singleShot(50, self, self._waitForFrontend)
+            return
+        application = QApplication.instance()
+        application.setProperty("frontendShutdownComplete", True)
+        application.quit()
+
+    def onExit(self):
+        """Final cleanup; closing a client never cancels the remote run."""
+        self.systemTrayIcon.hide()
+        self._detachFrontend()

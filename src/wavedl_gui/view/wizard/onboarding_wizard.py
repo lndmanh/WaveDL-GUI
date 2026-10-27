@@ -180,6 +180,7 @@ class OnboardingWizard(QWidget):
 
     def _on_data_validated(self, info):
         self.state.data_info = info
+        self.state.data_selection = self._data.path_selection
 
     def _on_model_selected(self, model_id: str):
         self.state.selected_model = model_id

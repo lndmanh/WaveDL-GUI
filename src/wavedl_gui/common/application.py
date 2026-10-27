@@ -1,7 +1,7 @@
 import sys
 import traceback
 
-from PySide6.QtCore import QIODevice, QSharedMemory, Signal
+from PySide6.QtCore import QEvent, QIODevice, QSharedMemory, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication
 
@@ -14,6 +14,22 @@ class SingletonApplication(QApplication):
 
     messageSig = Signal(object)
     logger = Logger("application")
+
+    def event(self, event):
+        """Route ordinary native quit requests through frontend drain handling.
+
+        Startup and applications without a registered coordinator retain Qt's
+        normal quit behaviour. This does not intercept forced OS termination.
+        """
+        if (
+            event.type() == QEvent.Type.Quit
+            and self.property("frontendShutdownManaged") is True
+            and self.property("frontendShutdownComplete") is not True
+        ):
+            signalBus.requestExitSig.emit()
+            event.ignore()
+            return True
+        return super().event(event)
 
     def __init__(self, argv: list[str], key: str):
         super().__init__(argv)

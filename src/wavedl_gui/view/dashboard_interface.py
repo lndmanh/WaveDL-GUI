@@ -30,6 +30,7 @@ from ..common.signal_bus import signalBus
 from ..components.convergence_card import ConvergenceCard, PerParamCard
 from ..components.loss_chart_card import LossChartCard
 from ..components.metric_card import MetricCard
+from ..components.result_plots_card import ResultPlotsCard
 from ..service.training_service import ProcessState, TrainingProgress
 
 
@@ -120,6 +121,9 @@ class _StatusBadge(QWidget):
         ProcessState.COMPLETED: ("Completed", "success"),
         ProcessState.FAILED: ("Failed", "error"),
         ProcessState.CANCELLED: ("Cancelled", "error"),
+        ProcessState.UNCERTAIN: ("Connection uncertain", "warning"),
+        ProcessState.QUEUED: ("Queued", "warning"),
+        ProcessState.HELD: ("Held", "warning"),
     }
 
     def __init__(self, parent=None):
@@ -295,6 +299,9 @@ class ProgressCard(SimpleCardWidget):
             ProcessState.COMPLETED: _success_color,
             ProcessState.FAILED: _error_color,
             ProcessState.CANCELLED: _error_color,
+            ProcessState.UNCERTAIN: _warning_color,
+            ProcessState.QUEUED: _warning_color,
+            ProcessState.HELD: _warning_color,
         }.get(state, _accent_color)()
 
         if state == ProcessState.COMPLETED:
@@ -303,6 +310,16 @@ class ProgressCard(SimpleCardWidget):
             self.subtitleLabel.setText(self.tr("Training encountered an error"))
         elif state == ProcessState.CANCELLED:
             self.subtitleLabel.setText(self.tr("Training was cancelled"))
+        elif state == ProcessState.UNCERTAIN:
+            self.subtitleLabel.setText(
+                self.tr("Run state is uncertain. Reconnect to resume observation.")
+            )
+        elif state == ProcessState.QUEUED:
+            self.subtitleLabel.setText(self.tr("Waiting for the execution host"))
+        elif state == ProcessState.HELD:
+            self.subtitleLabel.setText(
+                self.tr("The scheduler has held this allocation")
+            )
         elif state == ProcessState.IDLE:
             self.subtitleLabel.setText(
                 self.tr("Configure your project and press Start to begin")
@@ -494,6 +511,9 @@ class DashboardInterface(ScrollArea):
         # Track best-ever values for summary strip
         self._best_r2: float = -float("inf")
         self._prev_val_loss: float = float("inf")
+        self._history_snapshot = []
+        self._last_progress = None
+        self._last_state = ProcessState.IDLE
 
         self._init_ui()
         self._connect_signals()
@@ -600,6 +620,9 @@ class DashboardInterface(ScrollArea):
         # ── Log card ───────────────────────────────────────────────
         self.logCard = _LogCard(self.scrollWidget)
 
+        # ── Result plots card (hidden until plots are generated) ──
+        self.resultPlotsCard = ResultPlotsCard(self.scrollWidget)
+
         # ── Assemble layout ────────────────────────────────────────
         self.expandLayout.setSpacing(12)
         self.expandLayout.setContentsMargins(36, 10, 36, 0)
@@ -610,18 +633,33 @@ class DashboardInterface(ScrollArea):
         self.expandLayout.addWidget(self.lossChartCard)
         self.expandLayout.addWidget(analysisWidget)
         self.expandLayout.addWidget(self.logCard)
+        self.expandLayout.addWidget(self.resultPlotsCard)
 
     def _connect_signals(self):
         signalBus.trainingProgressSig.connect(self._on_progress)
         signalBus.trainingOutputSig.connect(self._on_output)
         signalBus.trainingStateChangedSig.connect(self._on_state_changed)
         signalBus.trainingCompletedSig.connect(self._on_completed)
+        signalBus.plotGeneratedSig.connect(self._on_plots_generated)
+        signalBus.plotStartedSig.connect(self._on_plots_started)
+        signalBus.plotStateChangedSig.connect(self._on_plot_state_changed)
+        self.resultPlotsCard.retryRequestedSig.connect(
+            signalBus.requestResumePlotsSig.emit
+        )
+        signalBus.historyUpdatedSig.connect(self._on_history)
 
     # ── Signal handlers ────────────────────────────────────────────
 
     @Slot(object)
     def _on_progress(self, progress: TrainingProgress):
         """Handle real-time progress update."""
+        if progress.epoch < 1:
+            self._last_progress = None
+            self.progressCard.update_progress(progress)
+            return
+        if progress == self._last_progress:
+            return
+        self._last_progress = progress
         self.progressCard.update_progress(progress)
 
         # ── MetricCards (with sparklines + trend deltas) ──
@@ -707,6 +745,34 @@ class DashboardInterface(ScrollArea):
             samples_per_sec=throughput,
         )
 
+    @Slot(list)
+    def _on_history(self, history):
+        """Replace abandoned branches; append only when the prior prefix agrees."""
+        if (
+            len(history) == len(self._history_snapshot) + 1
+            and history[:-1] == self._history_snapshot
+        ):
+            self._on_progress(history[-1])
+        else:
+            self.lossChartCard.clear()
+            for card in (
+                self.trainLossCard,
+                self.valLossCard,
+                self.r2Card,
+                self.lrCard,
+                self.pearsonCard,
+                self.gradNormCard,
+                self.maeCard,
+                self.epochTimeCard,
+            ):
+                card.reset()
+            self._last_progress = None
+            self._best_r2 = -float("inf")
+            self._prev_val_loss = float("inf")
+            for progress in history:
+                self._on_progress(progress)
+        self._history_snapshot = list(history)
+
     @Slot(str)
     def _on_output(self, line: str):
         """Append a log line and auto-scroll."""
@@ -717,11 +783,12 @@ class DashboardInterface(ScrollArea):
     @Slot(object)
     def _on_state_changed(self, state: ProcessState):
         """Update progress card when process state changes."""
+        self._last_state = state
         self.progressCard.set_state(state)
 
     @Slot(bool, str)
     def _on_completed(self, success: bool, message: str):
-        """Show an info bar on training completion."""
+        """Show an info bar on training completion and trigger plot spinner."""
         if success:
             InfoBar.success(
                 title=self.tr("Training Complete"),
@@ -729,6 +796,14 @@ class DashboardInterface(ScrollArea):
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=5000,
+            )
+        elif self._last_state == ProcessState.CANCELLED:
+            InfoBar.info(
+                title=self.tr("Training Cancelled"),
+                content=message,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=4000,
             )
         else:
             InfoBar.error(
@@ -738,6 +813,38 @@ class DashboardInterface(ScrollArea):
                 position=InfoBarPosition.TOP,
                 duration=5000,
             )
+
+    @Slot(bool, str, list)
+    def _on_plots_generated(self, success: bool, message: str, paths: list):
+        """Handle plot generation completion."""
+        if success and paths:
+            self.resultPlotsCard.setPlotPaths(paths)
+            InfoBar.success(
+                title=self.tr("Plots Ready"),
+                content=message,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+            )
+        else:
+            self.resultPlotsCard.reset()
+            InfoBar.warning(
+                title=self.tr("Plot Generation"),
+                content=message,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+            )
+
+    @Slot()
+    def _on_plots_started(self):
+        """Show the spinner only after the service starts a plot worker."""
+        self.resultPlotsCard.setGenerating()
+
+    @Slot(object, bool)
+    def _on_plot_state_changed(self, state, retry_available):
+        if state is ProcessState.UNCERTAIN:
+            self.resultPlotsCard.setReconnectRequired(retry_available)
 
     # ── Public API ─────────────────────────────────────────────────
 
@@ -760,6 +867,8 @@ class DashboardInterface(ScrollArea):
         self.perParamCard.reset()
 
         self.logCard.logOutput.clear()
+
+        self.resultPlotsCard.reset()
 
         self._best_r2 = -float("inf")
         self._prev_val_loss = float("inf")

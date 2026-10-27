@@ -81,8 +81,8 @@ TOOLTIPS = {
         "Must contain 'X' (inputs) and 'Y' (targets) arrays."
     ),
     "output_dir": (
-        "Directory where training outputs will be saved.\n"
-        "Includes: checkpoints, training curves, logs."
+        "Local folder for verified checkpoint and plot downloads.\n"
+        "The daemon owns a separate directory for each run."
     ),
     # Model Configuration
     "model": (
@@ -163,9 +163,8 @@ TOOLTIPS = {
         "Cache validation mode for data loading.\nSHA256: most secure. Size: fastest."
     ),
     "no_cache": (
-        "Delete cached data before each training run.\n"
-        "Forces data to be reloaded and preprocessed from scratch.\n"
-        "Useful when the data file has changed."
+        "Daemon runs already use isolated cache directories.\n"
+        "This legacy option never deletes client or previous-run data."
     ),
 }
 

@@ -24,13 +24,13 @@ from qfluentwidgets import (
     setFont,
 )
 
+from ..common.data_info import DataInfo
 from ..common.theme_colors import (
     accent_color as _accent_color,
     error_color as _error_color,
     muted_text_color as _muted_text_color,
     success_color as _success_color,
 )
-from ..common.utils import DataInfo
 from ..components.shared import (
     PropertyRow as _PropertyRow,
     SectionHeader as _SectionHeader,
@@ -93,6 +93,8 @@ class DataInfoCard(SimpleCardWidget):
         self._status_color = _success_color()
         self._init_ui()
         self.hide()
+        for label in (self.fileLabel, self.pathLabel, self.errorLabel):
+            label.setTextFormat(Qt.TextFormat.PlainText)
 
     # ── build UI ──────────────────────────────────────────────────────
 
@@ -195,7 +197,7 @@ class DataInfoCard(SimpleCardWidget):
         ideal_height = self.layout().sizeHint().height()
         self.setFixedHeight(ideal_height)
         self.show()
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     def _updateParentLayout(self):
         parent = self.parentWidget()
@@ -288,7 +290,7 @@ class DataInfoCard(SimpleCardWidget):
         self.data_info = None
         self.setFixedHeight(0)
         self.hide()
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     # ── Custom painting ───────────────────────────────────────────
 

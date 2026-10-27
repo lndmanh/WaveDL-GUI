@@ -181,7 +181,7 @@ class SystemInfoCard(SimpleCardWidget):
         self._refresh_timer.timeout.connect(self._refresh_gpu_stats)
         self._init_ui()
         self.populate()
-        QTimer.singleShot(0, self._adjustHeight)
+        QTimer.singleShot(0, self, self._adjustHeight)
 
     def _init_ui(self):
         self.setBorderRadius(10)
@@ -205,9 +205,11 @@ class SystemInfoCard(SimpleCardWidget):
 
         titleCol = QVBoxLayout()
         titleCol.setSpacing(2)
-        titleLabel = StrongBodyLabel(self.tr("System Environment"), self)
+        titleLabel = StrongBodyLabel(self.tr("This computer"), self)
         setFont(titleLabel, 15, QFont.Weight.DemiBold)
-        self.subtitleLabel = CaptionLabel(self.tr("Hardware & software overview"), self)
+        self.subtitleLabel = CaptionLabel(
+            self.tr("Local hardware only; daemon runtime is verified per run"), self
+        )
         self.subtitleLabel.setTextColor(_muted_text_color(), _muted_text_color())
         titleCol.addWidget(titleLabel)
         titleCol.addWidget(self.subtitleLabel)
@@ -373,7 +375,7 @@ class SystemInfoCard(SimpleCardWidget):
 
     def _adjustHeight(self):
         self.setFixedHeight(self.layout().sizeHint().height())
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     def _updateParentLayout(self):
         parent = self.parentWidget()

@@ -2,12 +2,12 @@
 WaveDL GUI - Wizard Step 3: Model Selection & Recommendation
 
 Embeds the shared ModelBrowserPanel with a recommendation banner and
-smart model suggestion based on data dimensionality and hardware.
+descriptive model suggestion based on data dimensionality, not client hardware.
 """
 
 from __future__ import annotations
 
-import platform
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -23,34 +23,27 @@ from qfluentwidgets import (
 )
 
 from ...common.constants.models import MODEL_INFO
-from ...common.utils import DataInfo, detect_gpus
 from ...components.model_selector_dialog import ModelBrowserPanel
 from ...components.shared import add_step_header
+
+
+if TYPE_CHECKING:
+    from ...common.utils import DataInfo
 
 
 # ─── Recommendation logic ────────────────────────────────────────────────────
 
 
 def _get_recommended_model(data_info: DataInfo | None) -> str:
-    """Pick a sensible default model based on hardware + data."""
+    """Suggest from descriptive dimensionality, never client/remote hardware."""
     dim = data_info.dimensionality if data_info else "2D"
 
-    gpus = detect_gpus()
-    has_gpu = len(gpus) > 0
-    is_mps = platform.system() == "Darwin" and has_gpu
-
     if dim == "1D":
-        return "tcn" if has_gpu else "tcn_small"
+        return "tcn_small"
     elif dim == "3D":
         return "resnet3d_18"
     else:  # 2D or default
-        if is_mps:
-            return "convnext_tiny"
-        elif has_gpu:
-            gpu_mem = gpus[0].memory_total if gpus else 0
-            return "convnext_small" if gpu_mem >= 16000 else "convnext_tiny"
-        else:
-            return "resnet18"
+        return "resnet18"
 
 
 # ─── Model step widget ───────────────────────────────────────────────────────
@@ -90,7 +83,7 @@ class ModelStep(QWidget):
         rec_lay = QHBoxLayout(self._rec_banner)
         rec_lay.setContentsMargins(14, 10, 14, 10)
         rec_lay.setSpacing(8)
-        rec_ic = IconWidget(FIF.COMPLETED, self._rec_banner)
+        rec_ic = IconWidget(FIF.INFO, self._rec_banner)
         rec_ic.setFixedSize(18, 18)
         rec_lay.addWidget(rec_ic)
         self._rec_label = CaptionLabel("", self._rec_banner)
@@ -120,6 +113,7 @@ class ModelStep(QWidget):
     def populate(self, data_info: DataInfo | None):
         """Populate the browser, filtering by data dimensionality."""
         self._data_info = data_info
+        self._browser.refresh_catalogue()
 
         # Set dim filter
         dim: int | None = None
@@ -133,7 +127,7 @@ class ModelStep(QWidget):
         rec_info = MODEL_INFO.get(self._recommended, {})
         rec_name = rec_info.get("display_name", self._recommended)
         self._rec_label.setText(
-            f"Recommended: {rec_name} — based on your hardware and data"
+            f"Suggested: {rec_name} — descriptive data dimensions only; daemon runtime support is not verified"
         )
         self._rec_banner.show()
 
@@ -146,11 +140,11 @@ class ModelStep(QWidget):
         """Update subtitle when the browser filter changes."""
         if shown < total:
             self._sub.setText(
-                f"Showing {shown} of {total} models compatible with your data."
+                f"Showing {shown} of {total} descriptions matching your data dimensions; runtime compatibility is not verified."
             )
         else:
             self._sub.setText(
-                f"Showing all {total} models. Incompatible models may not train correctly."
+                f"Showing all {total} descriptions. Runtime support must be established by the selected daemon."
             )
 
     def get_selected_model(self) -> str:

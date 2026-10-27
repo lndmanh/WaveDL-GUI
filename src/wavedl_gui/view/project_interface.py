@@ -8,13 +8,11 @@ viewing system information, and launching training.
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
 from typing import TYPE_CHECKING
 
 import yaml
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import QFileDialog, QWidget
 from qfluentwidgets import (
     ExpandLayout,
@@ -61,6 +59,8 @@ class ProjectInterface(ScrollArea):
 
         self._output_dir = cfg.get(cfg.outputFolder)
         self._parse_worker: DataParseWorker | None = None
+        self._parse_workers = []
+        self.data_selection = None
         self.settingLabel = TitleLabel(self.tr("Project Setup"), self)
 
         self.dataGroup = SettingCardGroup(self.tr("Training Data"), self.scrollWidget)
@@ -82,10 +82,10 @@ class ProjectInterface(ScrollArea):
             self.tr("Output Configuration"), self.scrollWidget
         )
         self.outputCard = FolderPickerCard(
-            title=self.tr("Output Directory"),
+            title=self.tr("Local download folder"),
             description=cfg.get(cfg.outputFolder),
             default_dir=cfg.get(cfg.outputFolder),
-            dialog_title=self.tr("Select Output Directory"),
+            dialog_title=self.tr("Select Local Download Folder"),
             parent=self.outputGroup,
         )
 
@@ -140,6 +140,13 @@ class ProjectInterface(ScrollArea):
 
     def _on_data_card_clicked(self):
         """Open file dialog and run data inspection on selection."""
+        if cfg.get(cfg.daemonPathRealm) == "remote":
+            from ..components.daemon_path_dialog import DaemonPathDialog
+
+            dialog = DaemonPathDialog(self.window())
+            if dialog.exec():
+                self.set_data_path(dialog.selection.path, dialog.selection)
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             self.tr("Select Training Data"),
@@ -157,22 +164,44 @@ class ProjectInterface(ScrollArea):
         if folder:
             self.set_output_dir(folder)
 
-    def set_data_path(self, path: str):
+    def set_data_path(self, path: str, selection=None):
         self.dataCard.set_path(path)
+        self.data_selection = selection
 
         # Cancel any running parse worker
         if self._parse_worker is not None and self._parse_worker.isRunning():
-            self._parse_worker.terminate()
-            self._parse_worker.wait()
+            self._parse_worker.stop()
 
         # Start async inspection (off the main thread)
-        self._parse_worker = DataParseWorker(path, parent=self)
-        self._parse_worker.resultReady.connect(self._on_data_parsed)
-        self._parse_worker.errorOccurred.connect(self._on_data_parse_error)
-        self._parse_worker.start()
+        worker = DataParseWorker(path, parent=self, path_selection=selection)
+        self._parse_worker = worker
+        self._parse_workers.append(worker)
+        worker.resultReady.connect(self._inspectionReady)
+        worker.errorOccurred.connect(self._inspectionError)
+        worker.finished.connect(self._inspectionFinished)
+        worker.start()
 
         # Start plot generation in parallel (its own background thread)
-        self.dataPlotsCard.set_data_path(path)
+        if cfg.get(cfg.daemonPathRealm) == "same_host":
+            self.dataPlotsCard.set_data_path(path)
+        else:
+            if selection is not None:
+                self.dataPlotsCard.set_data_path(path, path_selection=selection)
+            else:
+                self.dataPlotsCard.clear()
+
+    def _inspectionReady(self, info):
+        if self.sender() is self._parse_worker:
+            self._on_data_parsed(info)
+
+    def _inspectionError(self, error):
+        if self.sender() is self._parse_worker:
+            self._on_data_parse_error(error)
+
+    def _inspectionFinished(self):
+        worker = self.sender()
+        if worker in self._parse_workers:
+            self._parse_workers.remove(worker)
 
     def _on_data_parsed(self, info: DataInfo):
         """Handle successful data inspection."""
@@ -211,12 +240,7 @@ class ProjectInterface(ScrollArea):
                 duration=3000,
             )
             return
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", folder])
-        elif sys.platform == "win32":
-            os.startfile(folder)
-        else:
-            subprocess.Popen(["xdg-open", folder])
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _open_config_file(self):
         from ..common.setting import CONFIG_FILE
@@ -231,12 +255,7 @@ class ProjectInterface(ScrollArea):
                 duration=3000,
             )
             return
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", path])
-        elif sys.platform == "win32":
-            os.startfile(path)
-        else:
-            subprocess.Popen(["xdg-open", path])
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def _reset_settings(self):
         dialog = MessageBox(

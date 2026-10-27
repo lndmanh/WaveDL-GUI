@@ -11,13 +11,18 @@ from __future__ import annotations
 import gc
 import os
 from dataclasses import dataclass, field
-from typing import ClassVar
+from threading import Event
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, Slot
 from scipy.sparse import issparse
 
 from wavedl.utils.data import DataSource, get_data_source
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -26,6 +31,16 @@ _MAX_SAMPLES = 5_000
 _MAX_HIST_FEATURES = 8
 _MAX_CORR_COLS = 30
 _THREAD_STACK_SIZE = 16 * 1024 * 1024
+_LIVE_WORKERS: set[DataPlotsWorker] = set()
+
+
+class _LoadCancelled(Exception):
+    """Cooperative cancellation, not a user-visible data error."""
+
+
+def activeDataPlotWorkers() -> tuple[DataPlotsWorker, ...]:
+    """Retained workers for nonblocking application shutdown polling."""
+    return tuple(_LIVE_WORKERS)
 
 
 # ── Data bundle ──────────────────────────────────────────────────────────────
@@ -44,6 +59,7 @@ class DataBundle:
     input_stds: np.ndarray = field(default_factory=lambda: np.array([]))
     stat_feat_indices: np.ndarray = field(default_factory=lambda: np.array([]))
     scatter_feat_indices: np.ndarray = field(default_factory=lambda: np.array([]))
+    remote_preview: dict | None = None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -56,7 +72,9 @@ def _row_to_float(row) -> np.ndarray:
     return np.asarray(row, dtype=np.float32).ravel()
 
 
-def _subsample_from_handle(handle_data, n_total: int) -> np.ndarray:
+def _subsample_from_handle(
+    handle_data, n_total: int, check_stop: Callable[[], None] | None = None
+) -> np.ndarray:
     """Read at most _MAX_SAMPLES rows from a lazy handle into dense float32.
 
     Only the selected rows are materialised — the rest stays on disk.
@@ -73,8 +91,15 @@ def _subsample_from_handle(handle_data, n_total: int) -> np.ndarray:
     # Read rows one-by-one to handle heterogeneous types (sparse, object, etc.)
     rows = []
     for idx in indices:
+        if check_stop is not None:
+            check_stop()
         row = handle_data[int(idx)]
+        if check_stop is not None:
+            check_stop()
         rows.append(_row_to_float(row))
+
+    if not rows:
+        raise ValueError("Dataset contains no samples")
 
     # Stack — all rows now have the same length after _row_to_float
     first_len = rows[0].shape[0]
@@ -85,11 +110,15 @@ def _subsample_from_handle(handle_data, n_total: int) -> np.ndarray:
     max_len = max(r.shape[0] for r in rows)
     out = np.zeros((len(rows), max_len), dtype=np.float32)
     for i, r in enumerate(rows):
+        if check_stop is not None:
+            check_stop()
         out[i, : r.shape[0]] = r
     return out
 
 
-def _prepare_bundle(X: np.ndarray, Y: np.ndarray) -> DataBundle:
+def _prepare_bundle(
+    X: np.ndarray, Y: np.ndarray, check_stop: Callable[[], None] | None = None
+) -> DataBundle:
     """Compute statistics from already-subsampled arrays."""
     n = min(X.shape[0], Y.shape[0])
     X = X[:n]
@@ -97,6 +126,8 @@ def _prepare_bundle(X: np.ndarray, Y: np.ndarray) -> DataBundle:
 
     x_flat = X.reshape(X.shape[0], -1)
     y_flat = Y.reshape(Y.shape[0], -1)
+    if check_stop is not None:
+        check_stop()
 
     # Input histogram feature indices
     n_feats = x_flat.shape[1]
@@ -118,6 +149,8 @@ def _prepare_bundle(X: np.ndarray, Y: np.ndarray) -> DataBundle:
         corr_matrix = None
 
     # Input statistics
+    if check_stop is not None:
+        check_stop()
     max_stat = 40
     if n_feats > max_stat:
         stat_feat_indices = np.linspace(0, n_feats - 1, max_stat, dtype=int)
@@ -126,7 +159,11 @@ def _prepare_bundle(X: np.ndarray, Y: np.ndarray) -> DataBundle:
         stat_feat_indices = np.arange(n_feats)
         stat_flat = x_flat
     input_means = stat_flat.mean(axis=0)
+    if check_stop is not None:
+        check_stop()
     input_stds = stat_flat.std(axis=0)
+    if check_stop is not None:
+        check_stop()
 
     # Scatter feature indices
     n_scatter = min(6, n_feats)
@@ -178,28 +215,59 @@ class DataPlotsWorker(QThread):
     ]
 
     def __init__(self, file_path: str, parent=None):
-        super().__init__(parent)
+        # A QWidget must never destroy a still-running QThread. Retention is
+        # independent of its requesting card, until Qt emits finished.
+        super().__init__(None)
         self.setStackSize(_THREAD_STACK_SIZE)
         self._file_path = file_path
+        self._stop_requested = Event()
+        self.finished.connect(self._release)
+        if parent is not None:
+            parent.destroyed.connect(self.stop)
+
+    def start(self, *args, **kwargs):
+        _LIVE_WORKERS.add(self)
+        try:
+            super().start(*args, **kwargs)
+        except BaseException:
+            _LIVE_WORKERS.discard(self)
+            raise
+
+    @Slot()
+    def _release(self):
+        _LIVE_WORKERS.discard(self)
+        self.deleteLater()
+
+    @Slot()
+    def stop(self):
+        """Request cancellation; blocked native I/O finishes on its own."""
+        self._stop_requested.set()
+
+    def _check_stop(self):
+        if self._stop_requested.is_set():
+            raise _LoadCancelled
 
     def run(self):
         os.environ["OPENBLAS_NUM_THREADS"] = "1"
         os.environ["MKL_NUM_THREADS"] = "1"
         try:
+            self._check_stop()
             fmt = DataSource.detect_format(self._file_path)
             source = get_data_source(fmt)
+            self._check_stop()
 
             handle = source.load_mmap(self._file_path)
             try:
+                self._check_stop()
                 inp, outp = handle.inputs, handle.outputs
                 n_total = len(inp)
 
                 # Subsample directly from the lazy handle — only ~5 000 rows
                 # are ever materialised, keeping memory usage minimal.
-                X_sub = _subsample_from_handle(inp, n_total)
+                X_sub = _subsample_from_handle(inp, n_total, self._check_stop)
 
                 n_total_y = len(outp)
-                Y_sub = _subsample_from_handle(outp, n_total_y)
+                Y_sub = _subsample_from_handle(outp, n_total_y, self._check_stop)
             finally:
                 handle.close()
 
@@ -207,13 +275,18 @@ class DataPlotsWorker(QThread):
             if Y_sub.ndim == 1:
                 Y_sub = Y_sub.reshape(-1, 1)
 
-            bundle = _prepare_bundle(X_sub, Y_sub)
+            self._check_stop()
+            bundle = _prepare_bundle(X_sub, Y_sub, self._check_stop)
 
             # Explicitly free the subsampled arrays — bundle has its own copies
             del X_sub, Y_sub
             gc.collect()
 
+            self._check_stop()
             self.dataReady.emit(bundle)
 
+        except _LoadCancelled:
+            pass
         except Exception as e:
-            self.errorOccurred.emit(str(e))
+            if not self._stop_requested.is_set():
+                self.errorOccurred.emit(str(e))

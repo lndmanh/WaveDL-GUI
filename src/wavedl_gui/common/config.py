@@ -140,6 +140,20 @@ class Config(QConfig):
     deterministic = ConfigItem("Training", "Deterministic", False, BoolValidator())
     wandb = ConfigItem("Training", "Wandb", False, BoolValidator())
     noCache = ConfigItem("Training", "NoCache", False, BoolValidator())
+    # Connection preferences are not credentials. Bearers are read on workers
+    # from the explicitly selected private file and are never saved by QConfig.
+    daemonUrl = ConfigItem("Daemon", "Url", "http://127.0.0.1:8420")
+    daemonCredentialFile = ConfigItem("Daemon", "CredentialFile", "")
+    daemonPython = ConfigItem("Daemon", "Python", sys.executable)
+    daemonBackend = OptionsConfigItem(
+        "Daemon", "Backend", "local", OptionsValidator(["local", "slurm"])
+    )
+    daemonDevice = OptionsConfigItem(
+        "Daemon", "Device", "cpu", OptionsValidator(["auto", "cpu", "cuda", "mps"])
+    )
+    daemonPathRealm = OptionsConfigItem(
+        "Daemon", "PathRealm", "same_host", OptionsValidator(["same_host", "remote"])
+    )
     cacheValidate = OptionsConfigItem(
         "Training",
         "CacheValidate",
@@ -155,3 +169,18 @@ class Config(QConfig):
 cfg = Config()
 cfg.themeMode.value = Theme.AUTO
 qconfig.load(str(CONFIG_FILE.absolute()), cfg)
+
+
+def daemonConnection():
+    """Snapshot preferences without filesystem/network IO or secret retention."""
+    from ..service.daemon_contracts import DaemonConnection
+
+    return DaemonConnection(
+        url=cfg.get(cfg.daemonUrl),
+        credential_file=cfg.get(cfg.daemonCredentialFile),
+        python=cfg.get(cfg.daemonPython),
+        backend=cfg.get(cfg.daemonBackend),
+        device=cfg.get(cfg.daemonDevice),
+        path_realm=cfg.get(cfg.daemonPathRealm),
+        environment={},
+    )

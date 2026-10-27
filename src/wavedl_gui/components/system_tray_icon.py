@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+from PySide6.QtWidgets import QSystemTrayIcon
 from qfluentwidgets import Action, SystemTrayMenu
 
 from ..common.signal_bus import signalBus
@@ -16,7 +16,7 @@ class SystemTrayIcon(QSystemTrayIcon):
                     self.tr("Show panel"),
                     triggered=lambda: signalBus.appMessageSig.emit("show"),
                 ),
-                Action(self.tr("Exit"), triggered=QApplication.instance().exit),
+                Action(self.tr("Exit"), triggered=parent.requestExit),
             ]
         )
         self.setContextMenu(self.menu)

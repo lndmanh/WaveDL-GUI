@@ -98,13 +98,13 @@ class ControlsCard(SimpleCardWidget):
         super().__init__(parent)
         self._init_ui()
         self._connect_signals()
-        QTimer.singleShot(0, self._adjustHeight)
+        QTimer.singleShot(0, self, self._adjustHeight)
 
     # ── ExpandLayout fix ──────────────────────────────────────────────
 
     def _adjustHeight(self):
         self.setFixedHeight(self.layout().sizeHint().height())
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     def _updateParentLayout(self):
         parent = self.parentWidget()
@@ -208,6 +208,14 @@ class ControlsCard(SimpleCardWidget):
     @Slot(object)
     def _on_state_changed(self, state: ProcessState):
         """Enable/disable buttons based on training state."""
-        is_running = state in (ProcessState.STARTING, ProcessState.RUNNING)
+        is_running = state in (
+            ProcessState.STARTING,
+            ProcessState.RUNNING,
+            ProcessState.QUEUED,
+            ProcessState.HELD,
+            ProcessState.STOPPING,
+        )
+        uncertain = state == ProcessState.UNCERTAIN
+        self.startBtn.setText(self.tr("Reconnect" if uncertain else "Start Training"))
         self.startBtn.setEnabled(not is_running)
-        self.stopBtn.setEnabled(is_running)
+        self.stopBtn.setEnabled(is_running or uncertain)

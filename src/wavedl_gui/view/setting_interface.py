@@ -20,10 +20,12 @@ from qfluentwidgets import (
 )
 from qframelesswindow.utils import getSystemAccentColor
 
-from ..common.config import cfg
+from ..common.config import cfg, daemonConnection
 from ..common.setting import AUTHOR, FEEDBACK_URL, VERSION, YEAR
 from ..common.signal_bus import signalBus
+from ..components.daemon_connection_dialog import DaemonConnectionDialog
 from ..components.shared import SettingCardGroup
+from ..service.daemon_connection_worker import DaemonConnectionWorker
 
 
 class SettingInterface(ScrollArea):
@@ -36,6 +38,24 @@ class SettingInterface(ScrollArea):
 
         # setting label
         self.settingLabel = TitleLabel(self.tr("Settings"), self)
+        self._connectionWorker = None
+        self.daemonGroup = SettingCardGroup(
+            self.tr("Daemon connection"), self.scrollWidget
+        )
+        self.daemonCard = PushSettingCard(
+            self.tr("Configure"),
+            FIF.LINK,
+            self.tr("Execution host"),
+            cfg.get(cfg.daemonUrl),
+            self.daemonGroup,
+        )
+        self.connectionCheckCard = PushSettingCard(
+            self.tr("Check connection"),
+            FIF.SYNC,
+            self.tr("Connection status"),
+            self.tr("Connect before starting training, testing or inspection"),
+            self.daemonGroup,
+        )
 
         # personalization
         self.personalGroup = SettingCardGroup(
@@ -88,7 +108,7 @@ class SettingInterface(ScrollArea):
         self.outputFolderCard = PushSettingCard(
             self.tr("Choose"),
             FIF.FOLDER,
-            self.tr("Default output folder"),
+            self.tr("Default local download folder"),
             cfg.get(cfg.outputFolder),
             self.trainingGroup,
         )
@@ -181,6 +201,8 @@ class SettingInterface(ScrollArea):
         self.personalGroup.addSettingCard(self.zoomCard)
         self.personalGroup.addSettingCard(self.languageCard)
         self.personalGroup.addSettingCard(self.accentColorCard)
+        self.daemonGroup.addSettingCard(self.daemonCard)
+        self.daemonGroup.addSettingCard(self.connectionCheckCard)
 
         self.trainingGroup.addSettingCard(self.outputFolderCard)
         self.trainingGroup.addSettingCard(self.precisionCard)
@@ -197,6 +219,7 @@ class SettingInterface(ScrollArea):
         self.expandLayout.setSpacing(26)
         self.expandLayout.setContentsMargins(36, 10, 36, 0)
         self.expandLayout.addWidget(self.personalGroup)
+        self.expandLayout.addWidget(self.daemonGroup)
         self.expandLayout.addWidget(self.trainingGroup)
         self.expandLayout.addWidget(self.updateSoftwareGroup)
         self.expandLayout.addWidget(self.aboutGroup)
@@ -212,6 +235,53 @@ class SettingInterface(ScrollArea):
             self.tr("Configuration takes effect after restart"),
             duration=1500,
             parent=self,
+        )
+
+    def _configureDaemon(self):
+        dialog = DaemonConnectionDialog(self.window())
+        if dialog.exec():
+            dialog.savePreferences()
+            self.daemonCard.setContent(cfg.get(cfg.daemonUrl))
+            self.connectionCheckCard.setContent(
+                self.tr("Connection changed; check it before starting a run")
+            )
+
+    def _checkDaemon(self):
+        if self._connectionWorker is not None and self._connectionWorker.isRunning():
+            return
+        try:
+            connection = daemonConnection()
+        except (ValueError, TypeError):
+            self.connectionCheckCard.setContent(
+                self.tr("Configure a valid connection first")
+            )
+            return
+        self.connectionCheckCard.button.setEnabled(False)
+        self.connectionCheckCard.setContent(self.tr("Checking connection…"))
+        self._connectionWorker = DaemonConnectionWorker(connection, self)
+        self._connectionWorker.resultSig.connect(self._connectionReady)
+        self._connectionWorker.errorSig.connect(self._connectionError)
+        self._connectionWorker.finished.connect(self._connectionFinished)
+        self._connectionWorker.start()
+
+    def _connectionReady(self, health):
+        self.connectionCheckCard.setContent(self.tr("Connected to the daemon"))
+        InfoBar.success(
+            self.tr("Daemon connected"),
+            self.tr(
+                "Connection verified; run previews still verify the selected runtime"
+            ),
+            duration=3000,
+            parent=self,
+        )
+
+    def _connectionFinished(self):
+        self.connectionCheckCard.button.setEnabled(True)
+
+    def _connectionError(self, message):
+        self.connectionCheckCard.setContent(self.tr("Not connected"))
+        InfoBar.error(
+            self.tr("Connection unavailable"), message, duration=5000, parent=self
         )
 
     def _onOutputFolderCardClicked(self):
@@ -239,6 +309,8 @@ class SettingInterface(ScrollArea):
     def _connect_signals(self):
         """connect signal to slot"""
         cfg.appRestartSig.connect(self._showRestartTooltip)
+        self.daemonCard.clicked.connect(self._configureDaemon)
+        self.connectionCheckCard.clicked.connect(self._checkDaemon)
 
         # training
         self.outputFolderCard.clicked.connect(self._onOutputFolderCardClicked)

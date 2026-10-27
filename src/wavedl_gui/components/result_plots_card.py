@@ -9,11 +9,17 @@ QPixmap rendering for the already-saved PNG images.
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import (
+    QColor,
+    QDesktopServices,
+    QFont,
+    QImageReader,
+    QPainter,
+    QPainterPath,
+    QPixmap,
+)
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (
     CaptionLabel,
@@ -94,6 +100,8 @@ class ResultPlotsCard(SimpleCardWidget):
     when there are no plots to display.
     """
 
+    retryRequestedSig = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._image_paths: list[str] = []
@@ -128,6 +136,13 @@ class ResultPlotsCard(SimpleCardWidget):
         setFont(self._title_label, 10, QFont.Weight.Bold)
         header_row.addWidget(self._title_label)
         header_row.addStretch()
+
+        self.retryButton = TransparentPushButton(
+            FIF.SYNC, self.tr("Retry Plot Delivery"), self
+        )
+        self.retryButton.clicked.connect(self.retryRequestedSig.emit)
+        self.retryButton.hide()
+        header_row.addWidget(self.retryButton)
 
         self._openFolderBtn = TransparentPushButton(
             FIF.FOLDER, self.tr("Open Folder"), self
@@ -181,7 +196,7 @@ class ResultPlotsCard(SimpleCardWidget):
     def _showCard(self):
         self.setMinimumHeight(560)
         self.show()
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     def _updateParentLayout(self):
         parent = self.parentWidget()
@@ -198,12 +213,27 @@ class ResultPlotsCard(SimpleCardWidget):
         self._image_label.hide()
         self._pivot.hide()
         self._openFolderBtn.hide()
+        self.retryButton.hide()
+        self._spinner.show()
+        self._spinner_caption.setText(self.tr("Generating diagnostic plots…"))
         self._spinner_widget.show()
+        self._showCard()
+
+    def setReconnectRequired(self, retry_available=True):
+        """Stop the spinner and offer identity-preserving delivery retry."""
+        self._spinner.hide()
+        self._spinner_caption.setText(
+            self.tr("Plot connection or delivery is uncertain. Retry to reconnect.")
+        )
+        self._spinner_widget.show()
+        self.retryButton.setEnabled(retry_available)
+        self.retryButton.show()
         self._showCard()
 
     def setPlotPaths(self, paths: list[str]):
         """Populate the gallery with the given plot image paths."""
         self._spinner_widget.hide()
+        self.retryButton.hide()
 
         if not paths:
             self.hide()
@@ -237,10 +267,11 @@ class ResultPlotsCard(SimpleCardWidget):
         self._pivot.hide()
         self._openFolderBtn.hide()
         self._spinner_widget.hide()
+        self.retryButton.hide()
         self.setMinimumHeight(0)
         self.setFixedHeight(0)
         self.hide()
-        QTimer.singleShot(0, self._updateParentLayout)
+        QTimer.singleShot(0, self, self._updateParentLayout)
 
     # ── Internal ──────────────────────────────────────────────────────
 
@@ -252,7 +283,27 @@ class ResultPlotsCard(SimpleCardWidget):
         if not os.path.isfile(path):
             return
 
-        pixmap = QPixmap(path)
+        # Published bytes still cross a trust boundary. A .png name must never
+        # select Qt's SVG/HTML-capable content-sniffing plugins or a huge bitmap.
+        reader = QImageReader(path, b"png")
+        reader.setAutoDetectImageFormat(False)
+        reader.setDecideFormatFromContent(False)
+        size = reader.size()
+        if (
+            not reader.canRead()
+            or size.width() < 1
+            or size.height() < 1
+            or size.width() > 8192
+            or size.height() > 8192
+            or size.width() * size.height() > 16_777_216
+        ):
+            self._image_label.clear()
+            self._image_label.setText(
+                self.tr("This plot is not a supported, bounded PNG image.")
+            )
+            self._image_label.show()
+            return
+        pixmap = QPixmap.fromImage(reader.read())
         if pixmap.isNull():
             return
 
@@ -267,12 +318,7 @@ class ResultPlotsCard(SimpleCardWidget):
         folder = os.path.dirname(self._image_paths[0])
         if not os.path.isdir(folder):
             return
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", folder])
-        elif sys.platform == "win32":
-            os.startfile(folder)
-        else:
-            subprocess.Popen(["xdg-open", folder])
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     # ── Custom painting (accent bar matching other cards) ─────────────
 

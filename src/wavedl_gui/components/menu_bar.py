@@ -17,9 +17,15 @@ class MenuBar(QMenuBar):
         self.closeWindowAct = QAction(
             self.tr("Close Window"), shortcut="Ctrl+W", parent=self
         )
+        self.quitAct = QAction(
+            self.tr("Quit WaveDL"),
+            shortcuts=QKeySequence.StandardKey.Quit,
+            parent=self,
+        )
         self.fileMenu.addActions([self.openFileAct, self.settingsAct])
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.closeWindowAct)
+        self.fileMenu.addAction(self.quitAct)
 
         # window menu
         self.helpMenu = self.addMenu(self.tr("Help") + "(&H)")

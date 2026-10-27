@@ -80,6 +80,7 @@ class WizardState:
     data_path: str = ""
     output_dir: str = ""
     data_info: DataInfo | None = field(default=None, repr=False)
+    data_selection: object | None = field(default=None, repr=False)
 
     # Step 3 — model
     selected_model: str = "cnn"

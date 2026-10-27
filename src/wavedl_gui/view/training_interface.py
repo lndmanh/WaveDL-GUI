@@ -247,13 +247,14 @@ class TrainingInterface(ScrollArea):
 
         self.noCacheCard = SwitchSettingCard(
             FIF.DELETE,
-            self.tr("Disable Data Cache"),
+            self.tr("Legacy cache reset (CLI only)"),
             self.tr(
-                "Delete cached data before training so it is reloaded from scratch"
+                "Daemon runs use isolated caches; previous-run data is never deleted"
             ),
             configItem=cfg.noCache,
             parent=self.advancedGroup,
         )
+        self.noCacheCard.setEnabled(False)
 
         # Cross-validation section
         self.cvGroup = SettingCardGroup(self.tr("Cross-Validation"), self.scrollWidget)

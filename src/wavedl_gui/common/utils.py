@@ -20,6 +20,8 @@ from wavedl.utils.data import (
     get_data_source,
 )
 
+from .data_info import DataInfo
+
 
 def adjustFileName(name: str):
     """adjust file name
@@ -367,41 +369,6 @@ def get_gpu_summary() -> str:
     return f"{len(gpus)} GPUs: " + ", ".join(
         f"{gpu.name} ({gpu.memory_total} MB)" for gpu in gpus
     )
-
-
-@dataclass
-class DataInfo:
-    """Information about a dataset file."""
-
-    path: str
-    format: str  # npz, mat, hdf5, unknown
-    file_size: int  # bytes
-    num_samples: int
-    input_shape: tuple
-    output_shape: tuple
-    input_dtype: str
-    output_dtype: str
-    input_key: str = "X"
-    output_key: str = "Y"
-    dimensionality: str = ""  # 1D, 2D, 3D
-    error: str = ""
-
-    @property
-    def file_size_str(self) -> str:
-        """Human-readable file size."""
-        size = self.file_size
-        for unit in ["B", "KB", "MB", "GB"]:
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"
-
-    @property
-    def num_outputs(self) -> int:
-        """Number of output targets."""
-        if len(self.output_shape) >= 1:
-            return self.output_shape[-1]
-        return 0
 
 
 def inspect_data_file(path: str | Path) -> DataInfo:
