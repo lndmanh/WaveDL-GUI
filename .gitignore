@@ -135,7 +135,6 @@ tools/*
 !tools/browser_adoption_fixture.py
 !tools/stream_asgi_boundary.py
 !tools/export_web_training_schema.py
-!tools/verify_gui_ci_report.py
 !tools/verify_native_foundations_report.py
 !tools/run_user_owned_pytest.py
 !tools/run_web_acceptance.mjs

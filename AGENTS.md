@@ -9,14 +9,15 @@ wave-based inverse problems:
 - `web/` — Nuxt/Vue + TypeScript browser workstation; generated static assets are
   vendored into the daemon package
 
-The browser is the primary UI; `wavedl-train` also works without a daemon.
-Legacy Qt compatibility, old-user-data migration, a deprecation period and an
-intermediate Qt-retaining release are non-goals. `src/wavedl_gui/` may remain
-temporarily as unshipped historical source in this dirty checkout; do not treat
-it as active product code or claim it has been physically deleted. Preserve
-unrelated dirty changes and existing user files.
+The browser is the primary UI; `wavedl-train` also works without a daemon. The Qt
+desktop application has been physically removed from the repository; its source
+history is preserved at tag `archive/qt-desktop-2026-10-27`. Legacy Qt
+compatibility, old-user-data migration, a deprecation period and an
+intermediate Qt-retaining release are non-goals. Preserve unrelated dirty
+changes and existing user files.
 
-The 24 workstation capabilities remain functional product requirements.
+The 23 workstation capabilities remain functional product requirements; the
+offline/PWA capability is retired.
 API/protocol, durable-state, crash/replay recovery, security and ownership
 safeguards remain required. Validate a real site's filesystem/Slurm before
 declaring HPC support. Final release validation remains required; tagging or
@@ -104,25 +105,23 @@ Ruff handles import sorting (isort rules). Order: stdlib, third-party, local.
 - Multi-imports use `combine-as-imports = true`
 - `__init__.py` files may have unused imports (`F401` suppressed)
 
-Browser code follows the established `web/workstation/` imports and conventions;
-do not apply legacy Qt import rules to it.
+Browser code follows the established `web/workstation/` imports and conventions.
 
 ### Naming Conventions
 - **Classes**: `PascalCase` — `TrainingProgress`, `ProcessState`, `SignalBus`
 - **Functions/methods**: `snake_case` for Python core/daemon; existing camelCase conventions for browser TypeScript
 - **Private methods**: Single underscore prefix `_check_environment()`
-- **Config items**: Follow daemon contracts and existing browser types, not qfluentwidgets conventions
+- **Config items**: Follow daemon contracts and existing browser types
 - **Constants**: `UPPER_SNAKE` for true constants; preserve established local conventions
 - **Enums**: `PascalCase` class name, `UPPER_SNAKE` members (`ProcessState.IDLE`)
 - **Test classes**: `Test*` prefix; test methods: `test_*` with snake_case
-- Legacy Qt camelCase/signal conventions apply only when explicitly working on retained historical Qt source
 
 ### Type Annotations
 - Used in the ML layer: `def load_config(config_path: str) -> dict[str, Any]:`
 - Use modern syntax (`dict[str, Any]`, `list[float]`) not `typing.Dict`/`typing.List`
 - `from __future__ import annotations` used in newer files
 - Browser code uses TypeScript and Vue Composition API with `<script setup>`;
-  follow existing web types rather than the historical loosely typed Qt layer
+  follow existing web types
 - Dataclasses used for structured data (`@dataclass class TrainingProgress`)
 
 ### Error Handling
@@ -145,7 +144,7 @@ do not apply legacy Qt import rules to it.
   preserve ownership and crash-recovery contracts
 - **Browser**: Nuxt static SPA, Vue Composition API + TypeScript; follow existing
   `web/workstation/` components, composables and design conventions
-- **Offline**: Shell/assets only; service worker never intercepts `/api/**`
+- **Offline/PWA**: Retired capability; offline behavior is not a product requirement
 - **Execution**: Daemon owns runtime supervision; closing a browser detaches,
   cancellation is an explicit durable request
 

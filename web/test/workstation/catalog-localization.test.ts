@@ -41,7 +41,7 @@ const cnn: ModelDescription = {
 describe('catalogue localization preserves daemon authority', () => {
   it('covers all 71 complete bundled descriptions and best-for source signatures', () => {
     const source = readFileSync(
-      resolve(process.cwd(), '../src/wavedl_gui/common/constants/models.py'),
+      resolve(process.cwd(), '../src/wavedl_daemon/runs/model_metadata.py'),
       'utf8',
     );
     const models = [
