@@ -3,12 +3,12 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, shallowRef, watch } from 'vue';
 import { useForm } from 'vee-validate';
 import { describe, expect, it, vi } from 'vitest';
-import StorageMappingFields from '../../workstation/components/project/StorageMappingFields.vue';
-import ProjectContainer from '../../workstation/components/project/ProjectContainer.vue';
-import ResultOperationForm from '../../workstation/components/results/ResultOperationForm.vue';
-import TrainingPresets from '../../workstation/components/project/TrainingPresets.vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
+import StorageMappingFields from '../../app/components/project/StorageMappingFields.vue';
+import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
+import ResultOperationForm from '../../app/components/results/ResultOperationForm.vue';
+import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
 import { storageMapSchema } from '../../shared/schemas/storage-mapping';
 import {
   trainingDefaults,
@@ -16,12 +16,12 @@ import {
   type TrainingRequest,
 } from '../../shared/schemas/training-request';
 import { inferenceDefaults, resultRequestSchema } from '../../shared/schemas/result-request';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ArtifactClient } from '../../workstation/lib/artifact-client';
-import { ProjectPlan } from '../../workstation/lib/project-plan';
-import { ResultOperations } from '../../workstation/lib/result-operations';
-import { trainingYaml } from '../../workstation/lib/training-export';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ArtifactClient } from '../../app/lib/artifact-client';
+import { ProjectPlan } from '../../app/lib/project-plan';
+import { ResultOperations } from '../../app/lib/result-operations';
+import { trainingYaml } from '../../app/lib/training-export';
 
 const mappings = [{ host_root: '/data', execution_root: '/mounted/data' }];
 const sourceRun = '11111111-1111-4111-8111-111111111111';

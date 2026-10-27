@@ -2,10 +2,10 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { toRaw } from 'vue';
-import AdoptRunPanel from '../../workstation/components/runs/AdoptRunPanel.vue';
-import BrowseContainer from '../../workstation/components/catalog/BrowseContainer.vue';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import AdoptRunPanel from '../../app/components/runs/AdoptRunPanel.vue';
+import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ConnectionSession } from '../../app/lib/connection-session';
 const runId = '22222222-2222-4222-8222-222222222222';
 function json(body: object) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

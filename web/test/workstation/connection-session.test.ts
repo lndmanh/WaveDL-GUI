@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  ConnectionSession,
-  ConnectionSessionError,
-} from '../../workstation/lib/connection-session';
-import { DaemonApi, DaemonApiError } from '../../workstation/lib/daemon-api';
+import { ConnectionSession, ConnectionSessionError } from '../../app/lib/connection-session';
+import { DaemonApi, DaemonApiError } from '../../app/lib/daemon-api';
 
 const origin = 'http://localhost:8765';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };

@@ -2,13 +2,13 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { computed, defineComponent, h, shallowRef } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
-import DatasetInfoPanel from '../../workstation/components/datasets/DatasetInfoPanel.vue';
-import PreviewStatistics from '../../workstation/components/datasets/PreviewStatistics.vue';
-import PreviewPlot from '../../workstation/components/datasets/PreviewPlot.vue';
-import { DatasetInspectionApi } from '../../workstation/lib/dataset-inspection';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
+import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue';
+import PreviewStatistics from '../../app/components/datasets/PreviewStatistics.vue';
+import PreviewPlot from '../../app/components/datasets/PreviewPlot.vue';
+import { DatasetInspectionApi } from '../../app/lib/dataset-inspection';
+import { ConnectionSession } from '../../app/lib/connection-session';
 
 const chart = vi.hoisted(() => ({ create: vi.fn(), setScale: vi.fn(), destroy: vi.fn() }));
 vi.mock('uplot', () => ({

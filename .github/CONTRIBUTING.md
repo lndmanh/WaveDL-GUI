@@ -46,7 +46,7 @@ PYTHONPATH=src pytest unit_tests -m "not slow and not gpu"
 cd web
 npm run typecheck
 npm test
-npm run lint:workstation
+npm run lint
 npm run format:check
 npm run generate
 cd ..

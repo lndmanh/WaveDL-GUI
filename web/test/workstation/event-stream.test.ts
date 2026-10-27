@@ -5,8 +5,8 @@ import {
   INITIAL_CURSOR,
   streamRun,
   type RunEvent,
-} from '../../workstation/lib/event-stream';
-import { DaemonApi } from '../../workstation/lib/daemon-api';
+} from '../../app/lib/event-stream';
+import { DaemonApi } from '../../app/lib/daemon-api';
 
 const run = '11111111-1111-1111-1111-111111111111';
 const encoder = new TextEncoder();

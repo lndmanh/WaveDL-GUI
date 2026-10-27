@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
-import { quotePosix, trainingCommand, trainingYaml } from '../../workstation/lib/training-export';
+import { quotePosix, trainingCommand, trainingYaml } from '../../app/lib/training-export';
 const draft = trainingRequestSchema.parse({
   backend: 'local',
   operation: 'train',

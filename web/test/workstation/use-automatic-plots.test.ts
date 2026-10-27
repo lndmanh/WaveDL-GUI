@@ -2,10 +2,10 @@
 import { mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useAutomaticPlots } from '../../workstation/composables/useAutomaticPlots';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import { useAutomaticPlots } from '../../app/composables/useAutomaticPlots';
+import { ConnectionSession } from '../../app/lib/connection-session';
 import { trainingDefaults } from '../../shared/schemas/training-request';
-import { DaemonApi, type PlanView, type RunView } from '../../workstation/lib/daemon-api';
+import { DaemonApi, type PlanView, type RunView } from '../../app/lib/daemon-api';
 
 afterEach(() => vi.restoreAllMocks());
 

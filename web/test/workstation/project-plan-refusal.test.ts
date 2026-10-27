@@ -2,15 +2,15 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
-import ProjectContainer from '../../workstation/components/project/ProjectContainer.vue';
-import BrowseContainer from '../../workstation/components/catalog/BrowseContainer.vue';
-import CustomModelSelector from '../../workstation/components/project/CustomModelSelector.vue';
-import PlanApproval from '../../workstation/components/project/PlanApproval.vue';
-import ProjectGuide from '../../workstation/components/project/ProjectGuide.vue';
-import TrainingExport from '../../workstation/components/project/TrainingExport.vue';
-import TrainingPresets from '../../workstation/components/project/TrainingPresets.vue';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
+import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
+import PlanApproval from '../../app/components/project/PlanApproval.vue';
+import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
+import TrainingExport from '../../app/components/project/TrainingExport.vue';
+import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ConnectionSession } from '../../app/lib/connection-session';
 
 const ids = {
   plan_id: '11111111-1111-4111-8111-111111111111',

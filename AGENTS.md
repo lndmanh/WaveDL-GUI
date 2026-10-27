@@ -39,7 +39,7 @@ cd web
 npm ci
 npm run typecheck
 npm test
-npm run lint:workstation
+npm run lint
 npm run format:check
 npm run generate
 cd ..
@@ -105,7 +105,7 @@ Ruff handles import sorting (isort rules). Order: stdlib, third-party, local.
 - Multi-imports use `combine-as-imports = true`
 - `__init__.py` files may have unused imports (`F401` suppressed)
 
-Browser code follows the established `web/workstation/` imports and conventions.
+Browser code follows the established `web/app/` imports and conventions.
 
 ### Naming Conventions
 - **Classes**: `PascalCase` — `TrainingProgress`, `ProcessState`, `SignalBus`
@@ -143,7 +143,7 @@ Browser code follows the established `web/workstation/` imports and conventions.
 - **State**: Journal/SQLite projection, attempt-aware replay and durable intents;
   preserve ownership and crash-recovery contracts
 - **Browser**: Nuxt static SPA, Vue Composition API + TypeScript; follow existing
-  `web/workstation/` components, composables and design conventions
+  `web/app/` components, composables and design conventions
 - **Offline/PWA**: Retired capability; offline behavior is not a product requirement
 - **Execution**: Daemon owns runtime supervision; closing a browser detaches,
   cancellation is an explicit durable request
@@ -159,7 +159,7 @@ Browser code follows the established `web/workstation/` imports and conventions.
 |---|---|
 | `src/wavedl_daemon/` | Daemon CLI, HTTP API, storage and execution backends |
 | `src/wavedl/core/` | Shared protocol and lifecycle contracts |
-| `web/workstation/` | Browser application source |
+| `web/app/` | Browser application source |
 | `web/package.json` | Frontend build, tests and validation commands |
 | `tools/vendor_web_assets.py` | Vendor generated static browser output |
 | `src/wavedl/train.py` | CLI training entry point |

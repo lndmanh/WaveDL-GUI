@@ -2,9 +2,9 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
-import ConnectionPanel from '../../workstation/components/ConnectionPanel.vue';
-import { useDaemonConnection } from '../../workstation/composables/useDaemonConnection';
-import type { ConnectionState } from '../../workstation/lib/connection-session';
+import ConnectionPanel from '../../app/components/ConnectionPanel.vue';
+import { useDaemonConnection } from '../../app/composables/useDaemonConnection';
+import type { ConnectionState } from '../../app/lib/connection-session';
 
 const initial: ConnectionState = {
   status: 'disconnected',

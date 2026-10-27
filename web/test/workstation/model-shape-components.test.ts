@@ -2,16 +2,16 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
-import ProjectContainer from '../../workstation/components/project/ProjectContainer.vue';
-import BrowseContainer from '../../workstation/components/catalog/BrowseContainer.vue';
-import DatasetInfoPanel from '../../workstation/components/datasets/DatasetInfoPanel.vue';
-import ModelSelector from '../../workstation/components/catalog/ModelSelector.vue';
-import ModelList from '../../workstation/components/catalog/ModelList.vue';
-import { CatalogApi, type ModelDescription } from '../../workstation/lib/catalog-api';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import type { DatasetInspection } from '../../workstation/lib/dataset-inspection';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
+import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
+import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue';
+import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
+import ModelList from '../../app/components/catalog/ModelList.vue';
+import { CatalogApi, type ModelDescription } from '../../app/lib/catalog-api';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import type { DatasetInspection } from '../../app/lib/dataset-inspection';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
 
 const inspection: DatasetInspection = {
   format: 'npz',

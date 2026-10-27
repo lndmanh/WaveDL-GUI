@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  canRequestCancellation,
-  RunMonitor,
-  type RunTransport,
-} from '../../workstation/lib/run-monitor';
-import { DaemonApiError, type RunView } from '../../workstation/lib/daemon-api';
-import { CursorStore } from '../../workstation/lib/event-stream';
+import { canRequestCancellation, RunMonitor, type RunTransport } from '../../app/lib/run-monitor';
+import { DaemonApiError, type RunView } from '../../app/lib/daemon-api';
+import { CursorStore } from '../../app/lib/event-stream';
 const id = '11111111-1111-1111-1111-111111111111';
 function view(patch: Partial<RunView> = {}): RunView {
   return {

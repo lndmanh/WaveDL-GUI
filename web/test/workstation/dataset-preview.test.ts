@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ConnectionSession } from '../../app/lib/connection-session';
 import {
   DatasetPreviewApi,
   parseDatasetPreview,
   sampleMatrix,
-} from '../../workstation/lib/dataset-preview';
+} from '../../app/lib/dataset-preview';
 
 export function previewFixture() {
   const histogram = {

@@ -2,12 +2,12 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, shallowRef } from 'vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
-import DatasetPreviewPanel from '../../workstation/components/datasets/DatasetPreviewPanel.vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { DatasetPreviewApi, type DatasetPreview } from '../../workstation/lib/dataset-preview';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
+import DatasetPreviewPanel from '../../app/components/datasets/DatasetPreviewPanel.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { DatasetPreviewApi, type DatasetPreview } from '../../app/lib/dataset-preview';
 
 const selection = {
   root: 'data',

@@ -2,12 +2,12 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, shallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-import TrainingPresets from '../../workstation/components/project/TrainingPresets.vue';
+import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
-import { applyTrainingPreset, trainingPresetSchema } from '../../workstation/lib/training-presets';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ProjectPlan } from '../../workstation/lib/project-plan';
+import { applyTrainingPreset, trainingPresetSchema } from '../../app/lib/training-presets';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ProjectPlan } from '../../app/lib/project-plan';
 import type { z } from 'zod';
 
 async function setup() {

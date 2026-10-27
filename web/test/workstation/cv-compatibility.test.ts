@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import { z } from 'zod';
-import TrainingFields from '../../workstation/components/project/TrainingFields.vue';
+import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import {
   trainingConfigSchema,
   trainingDefaults,
@@ -12,15 +12,15 @@ import {
   type TrainingConfig,
   type TrainingRequest,
 } from '../../shared/schemas/training-request';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ProjectPlan } from '../../workstation/lib/project-plan';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ProjectPlan } from '../../app/lib/project-plan';
 import {
   applyTrainingPreferences,
   defaultTrainingPreferences,
   loadTrainingPreferences,
   saveTrainingPreferences,
-} from '../../workstation/lib/preferences';
+} from '../../app/lib/preferences';
 
 const unsupported: { name: keyof TrainingConfig; value: string | number | boolean }[] = [
   { name: 'resume', value: '/private/checkpoint.pth' },

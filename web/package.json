@@ -9,13 +9,13 @@
     "generate": "nuxt generate",
     "postinstall": "nuxt prepare",
     "preview": "nuxt preview",
-    "typecheck": "nuxt prepare && vue-tsc --noEmit -p tsconfig.workstation.json",
+    "typecheck": "nuxt prepare && vue-tsc --noEmit -p tsconfig.app.json",
     "test": "nuxt prepare && vitest run",
     "test:generated": "node --test test/generated/*.test.mjs",
     "test:browser": "node ../tools/run_web_acceptance.mjs",
-    "lint:workstation": "oxlint workstation nuxt.config.ts vitest.config.ts test/workstation test/generated",
-    "format:workstation": "oxfmt workstation nuxt.config.ts vitest.config.ts tsconfig.workstation.json test/workstation test/generated",
-    "format:check": "oxfmt --check workstation nuxt.config.ts vitest.config.ts tsconfig.workstation.json test/workstation test/generated"
+    "lint": "oxlint app nuxt.config.ts vitest.config.ts test/workstation test/generated",
+    "format": "oxfmt app nuxt.config.ts vitest.config.ts tsconfig.app.json test/workstation test/generated",
+    "format:check": "oxfmt --check app nuxt.config.ts vitest.config.ts tsconfig.app.json test/workstation test/generated"
   },
   "dependencies": {
     "@lucide/vue": "1.28.0",

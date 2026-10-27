@@ -14,7 +14,7 @@ import {
   applyTrainingPreferences,
   applyAppearance,
   PREFERENCES_LIMIT,
-} from '../../workstation/lib/preferences';
+} from '../../app/lib/preferences';
 import { trainingDefaults } from '../../shared/schemas/training-request';
 
 beforeEach(() => {

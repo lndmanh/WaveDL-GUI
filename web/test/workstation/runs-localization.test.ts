@@ -2,16 +2,16 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
-import MetricSummary from '../../workstation/components/runs/MetricSummary.vue';
-import StateBadge from '../../workstation/components/runs/StateBadge.vue';
-import LogPanel from '../../workstation/components/runs/LogPanel.vue';
-import RunList from '../../workstation/components/runs/RunList.vue';
-import RunDetail from '../../workstation/components/runs/RunDetail.vue';
-import EvaluationResultsPanel from '../../workstation/components/results/EvaluationResultsPanel.vue';
-import type { RunView } from '../../workstation/lib/daemon-api';
-import type { RunEvent } from '../../workstation/lib/event-stream';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
+import MetricSummary from '../../app/components/runs/MetricSummary.vue';
+import StateBadge from '../../app/components/runs/StateBadge.vue';
+import LogPanel from '../../app/components/runs/LogPanel.vue';
+import RunList from '../../app/components/runs/RunList.vue';
+import RunDetail from '../../app/components/runs/RunDetail.vue';
+import EvaluationResultsPanel from '../../app/components/results/EvaluationResultsPanel.vue';
+import type { RunView } from '../../app/lib/daemon-api';
+import type { RunEvent } from '../../app/lib/event-stream';
 
 const run: RunView = {
   run_id: 'raw-run',

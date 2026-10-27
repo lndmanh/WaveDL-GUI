@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  AutoPlotWorkflow,
-  type AutoPlotObservation,
-} from '../../workstation/lib/autoplot-workflow';
+import { AutoPlotWorkflow, type AutoPlotObservation } from '../../app/lib/autoplot-workflow';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
-import type { RunView } from '../../workstation/lib/daemon-api';
+import type { RunView } from '../../app/lib/daemon-api';
 const run: RunView = {
   run_id: '22222222-2222-4222-8222-222222222222',
   plan_id: '11111111-1111-4111-8111-111111111111',

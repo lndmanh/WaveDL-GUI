@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import RunDetail from '../../workstation/components/runs/RunDetail.vue';
-import type { RunMonitorSnapshot } from '../../workstation/lib/run-monitor';
+import RunDetail from '../../app/components/runs/RunDetail.vue';
+import type { RunMonitorSnapshot } from '../../app/lib/run-monitor';
 
 function snapshot(): RunMonitorSnapshot {
   return {

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import WorkstationShell from '../../workstation/components/WorkstationShell.vue';
+import WorkstationShell from '../../app/components/WorkstationShell.vue';
 
 describe('workstation navigation', () => {
   it('offers all implemented destinations without requiring daemon authentication', async () => {

@@ -2,11 +2,11 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toRaw } from 'vue';
-import ResultsContainer from '../../workstation/components/results/ResultsContainer.vue';
-import CvSummaryPanel from '../../workstation/components/results/CvSummaryPanel.vue';
-import ResultOperationForm from '../../workstation/components/results/ResultOperationForm.vue';
-import { ConnectionSession, type ConnectionState } from '../../workstation/lib/connection-session';
-import * as artifactClient from '../../workstation/lib/artifact-client';
+import ResultsContainer from '../../app/components/results/ResultsContainer.vue';
+import CvSummaryPanel from '../../app/components/results/CvSummaryPanel.vue';
+import ResultOperationForm from '../../app/components/results/ResultOperationForm.vue';
+import { ConnectionSession, type ConnectionState } from '../../app/lib/connection-session';
+import * as artifactClient from '../../app/lib/artifact-client';
 
 const runId = '22222222-2222-4222-8222-222222222222';
 function deferred<T>() {

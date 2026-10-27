@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import ResultsContainer from '../../workstation/components/results/ResultsContainer.vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import ResultsContainer from '../../app/components/results/ResultsContainer.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
 const run = '22222222-2222-4222-8222-222222222222';
 const health = { daemon_id: 'd', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
 function json(body: object) {

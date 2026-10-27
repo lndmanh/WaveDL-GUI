@@ -5,13 +5,13 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { Select } from '@/components/ui/select';
-import BrowseContainer from '../../workstation/components/catalog/BrowseContainer.vue';
-import ModelSelector from '../../workstation/components/catalog/ModelSelector.vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import { bundledModelMessages, modelPresentation } from '../../workstation/i18n/model-descriptions';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
-import { CatalogApi, type ModelDescription } from '../../workstation/lib/catalog-api';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import { bundledModelMessages, modelPresentation } from '../../app/i18n/model-descriptions';
+import type { WorkstationLocale } from '../../app/i18n/core';
+import { CatalogApi, type ModelDescription } from '../../app/lib/catalog-api';
+import { ConnectionSession } from '../../app/lib/connection-session';
 
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

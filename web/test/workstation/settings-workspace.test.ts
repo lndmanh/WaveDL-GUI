@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SettingsWorkspace from '../../workstation/components/settings/SettingsWorkspace.vue';
-import AppearanceSettings from '../../workstation/components/settings/AppearanceSettings.vue';
-import TrainingDefaultsSettings from '../../workstation/components/settings/TrainingDefaultsSettings.vue';
-import ProjectContainer from '../../workstation/components/project/ProjectContainer.vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
+import SettingsWorkspace from '../../app/components/settings/SettingsWorkspace.vue';
+import AppearanceSettings from '../../app/components/settings/AppearanceSettings.vue';
+import TrainingDefaultsSettings from '../../app/components/settings/TrainingDefaultsSettings.vue';
+import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
 import {
   defaultAppearance,
   appearanceSchema,
@@ -15,7 +15,7 @@ import {
   saveAppearance,
   saveTrainingPreferences,
   trainingPreferenceFields,
-} from '../../workstation/lib/preferences';
+} from '../../app/lib/preferences';
 
 beforeEach(() => {
   const items = new Map<string, string>();

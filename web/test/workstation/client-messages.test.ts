@@ -8,10 +8,10 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { trainingConfigSchema, trainingDefaults } from '../../shared/schemas/training-request';
 import { daemonCredentialSchema } from '../../shared/schemas/daemon-connection';
-import { useClientMessages } from '../../workstation/composables/useClientMessages';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import { clientMessages, translateClientMessage } from '../../workstation/i18n/client-messages';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
+import { useClientMessages } from '../../app/composables/useClientMessages';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import { clientMessages, translateClientMessage } from '../../app/i18n/client-messages';
+import type { WorkstationLocale } from '../../app/i18n/core';
 
 describe('client-owned diagnostic presentation', () => {
   it('keeps English contracts and unknown authoritative details intact', () => {
@@ -92,7 +92,7 @@ describe('client-owned diagnostic presentation', () => {
   });
 
   it('covers every fixed library Error/fail diagnostic and message property', () => {
-    const directory = resolve('workstation/lib');
+    const directory = resolve('app/lib');
     const missing: string[] = [];
     for (const file of readdirSync(directory).filter((name) => name.endsWith('.ts'))) {
       const source = ts.createSourceFile(

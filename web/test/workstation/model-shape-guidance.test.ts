@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { modelShapeGuidance } from '../../workstation/lib/model-shape-guidance';
-import type { DatasetInspection } from '../../workstation/lib/dataset-inspection';
+import { modelShapeGuidance } from '../../app/lib/model-shape-guidance';
+import type { DatasetInspection } from '../../app/lib/dataset-inspection';
 
 const model = { supportedDims: [1, 2, 3] } as const;
 const inspection = (inputShape: number[]): DatasetInspection => ({

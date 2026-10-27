@@ -7,11 +7,11 @@ import {
   translateKnownMessage,
   translateMessage,
   type WorkstationLocale,
-} from '../../workstation/i18n/core';
+} from '../../app/i18n/core';
 import {
   provideWorkstationLocale,
   useWorkstationI18n,
-} from '../../workstation/composables/useWorkstationI18n';
+} from '../../app/composables/useWorkstationI18n';
 
 const messages = defineMessages(
   { save: 'Save', count: '{count} jobs for {name}', failed: 'Request failed.' },

@@ -3,12 +3,12 @@ import { webcrypto } from 'node:crypto';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, ref, shallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-import { ArtifactClient } from '../../workstation/lib/artifact-client';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CV_SUMMARY_BUDGET, loadCvSummary, parseCvSummary } from '../../workstation/lib/cv-summary';
-import CvSummaryPanel from '../../workstation/components/results/CvSummaryPanel.vue';
-import { provideWorkstationLocale } from '../../workstation/composables/useWorkstationI18n';
-import type { WorkstationLocale } from '../../workstation/i18n/core';
+import { ArtifactClient } from '../../app/lib/artifact-client';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CV_SUMMARY_BUDGET, loadCvSummary, parseCvSummary } from '../../app/lib/cv-summary';
+import CvSummaryPanel from '../../app/components/results/CvSummaryPanel.vue';
+import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
+import type { WorkstationLocale } from '../../app/i18n/core';
 
 function fixture() {
   return {

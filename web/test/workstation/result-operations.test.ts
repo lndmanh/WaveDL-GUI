@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { inferenceDefaults, resultRequestSchema } from '../../shared/schemas/result-request';
-import { ResultOperations, checkpointOptions } from '../../workstation/lib/result-operations';
-import { ArtifactClient } from '../../workstation/lib/artifact-client';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { createResultOperationDefaults } from '../../workstation/lib/result-operation-defaults';
+import { ResultOperations, checkpointOptions } from '../../app/lib/result-operations';
+import { ArtifactClient } from '../../app/lib/artifact-client';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { createResultOperationDefaults } from '../../app/lib/result-operation-defaults';
 const sourceRun = '11111111-1111-4111-8111-111111111111';
 const ids = {
   run_id: '22222222-2222-4222-8222-222222222222',

@@ -8,7 +8,7 @@ import {
   applyTrainingPreset,
   trainingPresetSchema,
   trainingPresets,
-} from '../../workstation/lib/training-presets';
+} from '../../app/lib/training-presets';
 describe('same-schema training presets and authority bounds', () => {
   it('applies valid partial presets without retargeting dataset/model or dropping advanced fields', () => {
     const original = {

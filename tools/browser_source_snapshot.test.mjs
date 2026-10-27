@@ -26,7 +26,7 @@ test("source snapshot rejects unsafe paths, stale files, and inventory changes",
   const directory = await realpath(await mkdtemp(join(tmpdir(), "browser-source-test-")));
   try {
     const paths = [
-      "web/workstation/app.vue",
+      "web/app/app.vue",
       "web/app/pages/~offline.vue",
       "web/public/images/bg2@0,5x.jpg",
       "tools/vendor_web_assets.py",

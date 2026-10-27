@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import { CatalogApi } from '../../workstation/lib/catalog-api';
-import {
-  DatasetInspectionApi,
-  parseDatasetInspection,
-} from '../../workstation/lib/dataset-inspection';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import { CatalogApi } from '../../app/lib/catalog-api';
+import { DatasetInspectionApi, parseDatasetInspection } from '../../app/lib/dataset-inspection';
 
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
 const variable = (name: string, shape = [7, 4]) => ({

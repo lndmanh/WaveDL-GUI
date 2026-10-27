@@ -2,8 +2,8 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import PreviewPlot from '../../workstation/components/datasets/PreviewPlot.vue';
-import PreviewHeatmap from '../../workstation/components/datasets/PreviewHeatmap.vue';
+import PreviewPlot from '../../app/components/datasets/PreviewPlot.vue';
+import PreviewHeatmap from '../../app/components/datasets/PreviewHeatmap.vue';
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), destroy: vi.fn(), setData: vi.fn() }));
 vi.mock('uplot', () => ({

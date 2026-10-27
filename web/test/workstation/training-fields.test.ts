@@ -3,16 +3,16 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
-import TrainingFields from '../../workstation/components/project/TrainingFields.vue';
+import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import {
   trainingDefaults,
   trainingFieldMetadata,
   trainingConfigSchema,
 } from '../../shared/schemas/training-request';
 import { z } from 'zod';
-import ProjectContainer from '../../workstation/components/project/ProjectContainer.vue';
-import { ConnectionSession } from '../../workstation/lib/connection-session';
-import CustomModelSelector from '../../workstation/components/project/CustomModelSelector.vue';
+import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
+import { ConnectionSession } from '../../app/lib/connection-session';
+import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 
 describe('training controls coverage', () => {
   it('selects an explicit custom model through verified raw session authority in mounted Vue', async () => {

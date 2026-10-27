@@ -1,11 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { baseParse, NodeTypes, type RootNode, type TemplateChildNode } from '@vue/compiler-dom';
 import { parse } from '@vue/compiler-sfc';
 import { describe, expect, it } from 'vitest';
 
-const components = fileURLToPath(new URL('../../workstation/components', import.meta.url));
+const components = fileURLToPath(new URL('../../app/components', import.meta.url));
 const technicalText = new Set(['WaveDL', 'ONNX', 'D', 'English', 'Tiếng Việt']);
 const accessibleAttributes = new Set(['aria-label', 'title', 'placeholder', 'alt']);
 
@@ -46,7 +46,9 @@ function untranslatedTemplateCopy(source: string): string[] {
 
 describe('workstation locale template coverage', () => {
   it('covers every static display/accessibility phrase, apart from documented technical names', () => {
-    const files = componentFiles(components);
+    const files = componentFiles(components).filter(
+      (path) => !relative(components, path).startsWith(`ui${sep}`),
+    );
     expect(files.length).toBeGreaterThanOrEqual(43);
     const missed = files.flatMap((path) =>
       untranslatedTemplateCopy(readFileSync(path, 'utf8')).map(

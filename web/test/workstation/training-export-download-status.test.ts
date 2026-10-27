@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import TrainingExport from '../../workstation/components/project/TrainingExport.vue';
+import TrainingExport from '../../app/components/project/TrainingExport.vue';
 import { trainingDefaults, trainingRequestSchema } from '../../shared/schemas/training-request';
 
 const draft = trainingRequestSchema.parse({

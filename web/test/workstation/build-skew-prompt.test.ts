@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import BuildSkewPrompt from '../../workstation/components/BuildSkewPrompt.vue';
+import BuildSkewPrompt from '../../app/components/BuildSkewPrompt.vue';
 
 afterEach(() => vi.unstubAllGlobals());
 
