@@ -12,17 +12,20 @@ from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.requests import ClientDisconnect, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from wavedl_daemon.http.auth import (
     DEFAULT_ALLOWED_HOSTS,
     authority,
+    bearer_token,
     credential_bytes,
     require_auth,
     validate_origin_host,
 )
 from wavedl_daemon.http.bootstrap import (
+    BootstrapCapacityError,
+    BootstrapCredentials,
     BootstrapExchangeError,
     install_access_log_redaction,
 )
@@ -42,9 +45,12 @@ class SecurityBoundary:
         token: bytes,
         allowed_hosts: tuple[str, ...],
         bootstrap_enabled: bool = False,
+        bootstrap_credentials=None,
     ):
-        self.app, self.token, self.allowed_hosts = app, token, allowed_hosts
+        self.app, self.allowed_hosts = app, allowed_hosts
         self.bootstrap_enabled = bootstrap_enabled
+        self.bootstrap_credentials = bootstrap_credentials
+        self.token = b"" if bootstrap_credentials is not None else token
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "websocket":
@@ -57,18 +63,33 @@ class SecurityBoundary:
         try:
             validate_origin_host(request, self.allowed_hosts)
             if scope["path"] == "/api" or scope["path"].startswith("/api/"):
-                if not (
-                    self.bootstrap_enabled
-                    and scope["path"] == "/api/bootstrap"
-                    and scope["method"] == "POST"
-                ):
-                    require_auth(request, self.token)
                 identities = request.headers.getlist("x-wavedl-daemon-id")
                 if identities:
                     state = getattr(scope.get("app"), "state", None)
                     expected = getattr(state, "daemon_id", None)
                     if len(identities) != 1 or identities[0] != expected:
-                        raise HTTPException(409, "Daemon identity changed")
+                        raise HTTPException(
+                            409,
+                            "Daemon identity changed",
+                            headers={"X-WaveDL-Error-Code": "daemon_identity_changed"},
+                        )
+                if not (
+                    self.bootstrap_enabled
+                    and scope["path"] == "/api/bootstrap"
+                    and scope["method"] == "POST"
+                ):
+                    master = require_auth(
+                        request, self.token, sessions=self.bootstrap_credentials
+                    )
+                    if (
+                        scope["method"] == "POST"
+                        and scope["path"].startswith("/api/runs/")
+                        and scope["path"].rstrip("/").endswith("/events")
+                        and not master
+                    ):
+                        raise HTTPException(403, "Forbidden")
+                    scope["wavedl.auth_master"] = master
+                    scope["wavedl.auth_token"] = bearer_token(request)
         except HTTPException as exc:
             await JSONResponse(
                 {"error": exc.detail}, exc.status_code, headers=exc.headers
@@ -193,9 +214,9 @@ def create_app(
 ) -> Starlette:
     """No disk access, credentials generation, background work, or listener binding."""
     credential = credential_bytes(token)
-    if bootstrap_credentials is not None and not bootstrap_credentials.matches_token(
-        token
-    ):
+    bootstrap_enabled = bootstrap_credentials is not None
+    credential_pool = bootstrap_credentials or BootstrapCredentials(token)
+    if bootstrap_enabled and not credential_pool.matches_token(token):
         raise ValueError("Bootstrap credentials must belong to this daemon")
     if not allowed_hosts:
         raise ValueError("At least one explicit allowed host is required")
@@ -230,17 +251,52 @@ def create_app(
         if set(body) != {"code"}:
             raise HTTPException(400, "Invalid bootstrap request")
         try:
-            exchanged = bootstrap_credentials.exchange(body["code"])
+            exchanged = credential_pool.exchange(body["code"])
         except BootstrapExchangeError:
             raise HTTPException(401, "Unauthorized") from None
+        except BootstrapCapacityError:
+            raise HTTPException(503, "Session capacity reached") from None
         return JSONResponse(
-            {"access_token": exchanged, "token_type": "Bearer"},
+            {
+                "access_token": exchanged.token,
+                "token_type": "Bearer",
+                "expires_at": exchanged.expires_at,
+                "daemon_id": request.app.state.daemon_id,
+            },
             headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
         )
 
+    async def rotate_session(request):
+        token = request.scope.get("wavedl.auth_token")
+        try:
+            exchanged = credential_pool.rotate(token)
+        except BootstrapExchangeError:
+            raise HTTPException(401, "Unauthorized") from None
+        except BootstrapCapacityError:
+            raise HTTPException(503, "Session capacity reached") from None
+        return JSONResponse(
+            {
+                "access_token": exchanged.token,
+                "token_type": "Bearer",
+                "expires_at": exchanged.expires_at,
+                "daemon_id": request.app.state.daemon_id,
+            },
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
+    async def revoke_session(request):
+        credential_pool.revoke(request.scope.get("wavedl.auth_token"))
+        return Response(status_code=204)
+
     routes = [Route("/api/health", health, methods=["GET"])]
-    if bootstrap_credentials is not None:
+    if bootstrap_enabled:
         routes.append(Route("/api/bootstrap", bootstrap_exchange, methods=["POST"]))
+    routes.extend(
+        (
+            Route("/api/session", rotate_session, methods=["POST"]),
+            Route("/api/session", revoke_session, methods=["DELETE"]),
+        )
+    )
 
     if services is not None and hasattr(services, "run_service"):
         from wavedl_daemon.http.adoption import adoption_routes
@@ -289,7 +345,9 @@ def create_app(
                     (
                         logger,
                         install_access_log_redaction(
-                            bootstrap_credentials or token, logger
+                            credential_pool,
+                            logger,
+                            master_token=token,
                         ),
                     )
                 )
@@ -317,7 +375,8 @@ def create_app(
                 SecurityBoundary,
                 token=credential,
                 allowed_hosts=allowed_hosts,
-                bootstrap_enabled=bootstrap_credentials is not None,
+                bootstrap_enabled=bootstrap_enabled,
+                bootstrap_credentials=credential_pool,
             )
         ],
         exception_handlers={HTTPException: _http_error, Exception: _server_error},

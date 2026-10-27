@@ -11,7 +11,34 @@ function json(body: object, status = 200) {
   });
 }
 function session(fetcher: typeof fetch, online = true) {
-  return new ConnectionSession({ origin, buildId: '1.8.1', fetcher, online, timeoutMs: 1000 });
+  let daemonId = health.daemon_id;
+  const wrapped: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith('/api/session') && init?.method === 'POST')
+      return json({
+        access_token: `session-${'x'.repeat(35)}`,
+        token_type: 'Bearer',
+        expires_at: Date.now() + 86_400_000,
+        daemon_id: daemonId,
+      });
+    const response = await fetcher(input, init);
+    if (url.endsWith('/api/health') && response.ok) {
+      try {
+        const body = (await response.clone().json()) as { daemon_id?: string };
+        if (typeof body.daemon_id === 'string') daemonId = body.daemon_id;
+      } catch {
+        // The session under test owns malformed-response assertions.
+      }
+    }
+    return response;
+  };
+  return new ConnectionSession({
+    origin,
+    buildId: '1.8.1',
+    fetcher: wrapped,
+    online,
+    timeoutMs: 1000,
+  });
 }
 afterEach(() => {
   vi.useRealTimers();
@@ -72,8 +99,20 @@ describe('browser connection authority', () => {
     const receiverSensitive = vi.fn(function (this: typeof globalThis, input: RequestInfo | URL) {
       expect(this).toBe(globalThis);
       const body = String(input).endsWith('/api/bootstrap')
-        ? { token_type: 'Bearer', access_token: 'private-token' }
-        : health;
+        ? {
+            token_type: 'Bearer',
+            access_token: `session-${'b'.repeat(35)}`,
+            expires_at: Date.now() + 86_400_000,
+            daemon_id: health.daemon_id,
+          }
+        : String(input).endsWith('/api/session')
+          ? {
+              token_type: 'Bearer',
+              access_token: `session-${'c'.repeat(35)}`,
+              expires_at: Date.now() + 86_400_000,
+              daemon_id: health.daemon_id,
+            }
+          : health;
       return Promise.resolve(json(body));
     });
     vi.stubGlobal('fetch', receiverSensitive);
@@ -95,7 +134,12 @@ describe('browser connection authority', () => {
       expect(init?.credentials).toBe('omit');
       expect(init?.referrerPolicy).toBe('no-referrer');
       return String(input).endsWith('/api/bootstrap')
-        ? json({ token_type: 'Bearer', access_token: 'private-token' })
+        ? json({
+            token_type: 'Bearer',
+            access_token: `session-${'d'.repeat(35)}`,
+            expires_at: Date.now() + 86_400_000,
+            daemon_id: health.daemon_id,
+          })
         : json(health);
     });
     const owner = session(fetcher);
@@ -106,7 +150,7 @@ describe('browser connection authority', () => {
     ).toBe(true);
     expect(owner.snapshot().health).toEqual(health);
     expect(JSON.stringify(owner.snapshot())).not.toContain('private-token');
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it('strips bootstrap secrets while offline, without making any request', async () => {
     const fetcher = vi.fn<typeof fetch>();
@@ -198,7 +242,7 @@ describe('browser connection authority', () => {
       owner.perform(async () => {
         throw new DaemonApiError('identity', 'private-native-secret');
       }),
-    ).rejects.toMatchObject({ code: 'skew' });
+    ).rejects.toMatchObject({ code: 'identity' });
     await rejection;
     expect(owner.snapshot().status).toBe('skew');
     expect(owner.snapshot().message).not.toContain('private-native-secret');

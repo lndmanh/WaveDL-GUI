@@ -181,7 +181,7 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
                     )
                     print(
                         "Bootstrap expires in 120 seconds and can be exchanged once. "
-                        "Access tokens are never printed.",
+                        "The master token is never printed.",
                         file=output,
                         flush=True,
                     )

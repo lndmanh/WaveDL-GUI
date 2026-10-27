@@ -8,7 +8,7 @@ import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue
 import PreviewStatistics from '../../app/components/datasets/PreviewStatistics.vue';
 import PreviewPlot from '../../app/components/datasets/PreviewPlot.vue';
 import { DatasetInspectionApi } from '../../app/lib/dataset-inspection';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 
 const chart = vi.hoisted(() => ({ create: vi.fn(), setScale: vi.fn(), destroy: vi.fn() }));
 vi.mock('uplot', () => ({

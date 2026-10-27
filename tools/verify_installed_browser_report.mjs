@@ -41,7 +41,29 @@ export function verifyInstalledBrowserRecord(record, expectedWheelSha256) {
   assert.equal(Object.keys(install.assets).length, 33);
   assert(Object.values(install.assets).every(digest) && digest(install.assetManifestSha256));
   assert.equal(install.assets[".wavedl-assets.json"], install.assetManifestSha256);
-  assert.deepEqual(record.bootstrap, { removed: true, local: [], session: [], cookies: "" });
+  assert.equal(record.bootstrap.removed, true);
+  assert.equal(record.bootstrap.credentialKey, "wavedl.session.v1");
+  const browserStorage = record.bootstrap.storage;
+  assert.deepEqual(Object.keys(browserStorage).sort(), [
+    "bootstrapInUrl", "cookies", "credential", "credentialInUrl", "credentialStorage", "entries", "local", "session", "valid",
+  ]);
+  assert.equal(browserStorage.valid, true);
+  assert.equal(browserStorage.local, 0);
+  assert.equal(browserStorage.session, 1);
+  assert.equal(browserStorage.credential.present, true);
+  assert.deepEqual(Object.keys(browserStorage.credential).sort(), [
+    "daemonIdMatches", "expiresAtValid", "key", "masterTokenPresent", "originMatches", "present", "tokenInUrl", "valid",
+  ]);
+  assert.equal(browserStorage.credential.key, "wavedl.session.v1");
+  assert.equal(browserStorage.credential.valid, true);
+  assert.equal(browserStorage.credential.daemonIdMatches, true);
+  assert.equal(browserStorage.credential.originMatches, true);
+  assert.equal(browserStorage.credential.expiresAtValid, true);
+  assert.equal(browserStorage.credentialStorage, "session");
+  assert.equal(browserStorage.credential.masterTokenPresent, false);
+  assert.equal(browserStorage.credentialInUrl, false);
+  assert.equal(browserStorage.bootstrapInUrl, false);
+  assert.equal(browserStorage.cookies, "");
   const train = record.trainingManifest;
   assert(uuid(train.run_id));
   assert.equal(train.operation, "train");
@@ -124,7 +146,7 @@ export function verifyInstalledBrowserRecord(record, expectedWheelSha256) {
   assert(Array.isArray(record.runtimePids) && record.runtimePids.length === 3 && new Set(record.runtimePids).size === 3 && record.runtimePids.every(pid => Number.isSafeInteger(pid) && pid > 0));
   sameSet(record.runtimePids, record.finalRegistry.submissions.map(row => row.pid));
   assert.deepEqual(record.cleanup, { errors: [], browserAbsent: true, daemonReaped: true, listenerAbsent: true,
-    applicationShutdownComplete: true, daemonPidAbsent: true, runtimePidsAndGroupsAbsent: true, storageClosed: true, ownedRootsRemoved: true });
+    applicationShutdownComplete: true, daemonPidAbsent: true, runtimePidsAndGroupsAbsent: true, storageClosed: true, ownedRootsRemoved: true, credentialFileRemoved: true });
   assert(record.daemonExit && Object.keys(record.daemonExit).length === 2 &&
     (([0, 130].includes(record.daemonExit.code) && record.daemonExit.signal === null) ||
       (record.daemonExit.code === null && record.daemonExit.signal === "SIGINT")));

@@ -63,6 +63,8 @@ const trainingEnvelope = z.strictObject({
   preferences: trainingPreferencesSchema,
 });
 const appearanceKey = 'wavedl.appearance.v1';
+const keepSignedInKey = 'wavedl.keep-signed-in.v1';
+const keepSignedInSchema = z.boolean();
 function trainingKey(daemonId: string): string {
   if (!daemonId || daemonId.length > 256 || [...daemonId].some((char) => char.charCodeAt(0) < 32))
     throw new Error('Invalid daemon identity.');
@@ -83,11 +85,31 @@ export function loadAppearance(storage = browserStorage()): AppearancePreference
     return { ...defaultAppearance };
   }
 }
+export function loadKeepSignedIn(storage = browserStorage()): boolean {
+  try {
+    const raw = storage?.getItem(keepSignedInKey);
+    return typeof raw === 'string' && raw.length <= 5
+      ? keepSignedInSchema.parse(parseJson(raw))
+      : false;
+  } catch {
+    return false;
+  }
+}
 export function saveAppearance(value: AppearancePreferences, storage = browserStorage()): boolean {
   try {
     const parsed = appearanceEnvelope.parse({ version: 1, preferences: value });
     if (!storage) return false;
     storage.setItem(appearanceKey, boundedText(JSON.stringify(parsed)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+export function saveKeepSignedIn(value: boolean, storage = browserStorage()): boolean {
+  try {
+    const parsed = keepSignedInSchema.parse(value);
+    if (!storage) return false;
+    storage.setItem(keepSignedInKey, JSON.stringify(parsed));
     return true;
   } catch {
     return false;

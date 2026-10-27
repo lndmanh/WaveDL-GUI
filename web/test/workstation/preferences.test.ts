@@ -7,7 +7,9 @@ import {
   trainingPreferencesSchema,
   trainingPreferenceFields,
   loadAppearance,
+  loadKeepSignedIn,
   saveAppearance,
+  saveKeepSignedIn,
   loadTrainingPreferences,
   saveTrainingPreferences,
   resetTrainingPreferences,
@@ -58,6 +60,50 @@ describe('bounded browser preferences', () => {
     applyAppearance(defaultAppearance, root, false);
     expect(root.lang).toBe('en');
   });
+
+  it('defaults the keep-signed-in preference off for legacy envelopes and stores only a boolean', () => {
+    window.localStorage.setItem(
+      'wavedl.appearance.v1',
+      JSON.stringify({
+        version: 1,
+        preferences: {
+          theme: 'system',
+          accent: 'neutral',
+          zoom: 100,
+          language: 'en',
+          showProjectGuide: true,
+        },
+      }),
+    );
+    expect(loadKeepSignedIn()).toBe(false);
+    expect(loadAppearance()).not.toHaveProperty('keepSignedIn');
+
+    expect(saveKeepSignedIn(true)).toBe(true);
+    expect(loadKeepSignedIn()).toBe(true);
+    expect(window.localStorage.getItem('wavedl.keep-signed-in.v1')).toBe('true');
+    const stored = JSON.parse(window.localStorage.getItem('wavedl.appearance.v1') ?? '{}');
+    expect(stored.preferences).not.toHaveProperty('keepSignedIn');
+  });
+
+  it('keeps opt-out independent of a stale appearance save', () => {
+    const staleAppearance = loadAppearance();
+    expect(saveKeepSignedIn(true)).toBe(true);
+    expect(saveKeepSignedIn(false)).toBe(true);
+    expect(saveAppearance({ ...staleAppearance, theme: 'dark' })).toBe(true);
+    expect(loadKeepSignedIn()).toBe(false);
+    expect(window.localStorage.getItem('wavedl.keep-signed-in.v1')).toBe('false');
+    expect(appearanceSchema.safeParse({ ...staleAppearance, keepSignedIn: true }).success).toBe(
+      false,
+    );
+  });
+
+  it.each(['"true"', '{}', '[true]', ' true ', 'true'.repeat(100)])(
+    'rejects invalid or oversized sign-in preference %s',
+    (raw) => {
+      window.localStorage.setItem('wavedl.keep-signed-in.v1', raw);
+      expect(loadKeepSignedIn()).toBe(false);
+    },
+  );
 
   it.each(['fr', 'EN', 'vi-VN', '', null])(
     'rejects unsupported appearance language %s',

@@ -6,7 +6,7 @@ import {
   parseSelectionMetadata,
   pngPreviewBlob,
 } from '../../app/lib/artifact-client';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 const run = '22222222-2222-4222-8222-222222222222';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
 function json(body: object) {
@@ -138,7 +138,9 @@ describe('published artifact authority', () => {
     const download = calls.find((call) => call.path.endsWith('weights.bin'));
     expect(download?.init?.redirect).toBe('error');
     expect(download?.init?.credentials).toBe('omit');
-    expect(new Headers(download?.init?.headers).get('Authorization')).toBe('Bearer secret-token');
+    expect(new Headers(download?.init?.headers).get('Authorization')).toBe(
+      'Bearer session000000000000000000000000000000000001',
+    );
     expect(calls.every((call) => !call.path.includes('secret-token'))).toBe(true);
   });
   it('rejects checksum mismatch and truncation without publishing', async () => {

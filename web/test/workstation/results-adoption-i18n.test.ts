@@ -12,7 +12,7 @@ import AutomaticPlotStatus from '../../app/components/results/AutomaticPlotStatu
 import AdoptRunPanel from '../../app/components/runs/AdoptRunPanel.vue';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
 import { CatalogApi } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { inferenceDefaults } from '../../shared/schemas/result-request';
 import type { AutomaticPlotState } from '../../app/lib/autoplot-controller';
 

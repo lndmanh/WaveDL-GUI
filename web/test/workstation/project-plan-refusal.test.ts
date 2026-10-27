@@ -10,7 +10,7 @@ import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
 import TrainingExport from '../../app/components/project/TrainingExport.vue';
 import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
 import { CatalogApi } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 
 const ids = {
   plan_id: '11111111-1111-4111-8111-111111111111',
@@ -53,7 +53,9 @@ async function setup(timeoutMs = 1000) {
           kind: 'file',
         });
       if (path === '/api/runs/plan') {
-        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer credential');
+        expect(new Headers(init?.headers).get('Authorization')).toBe(
+          'Bearer session000000000000000000000000000000000001',
+        );
         return planResponse();
       }
       if (path === '/api/runs' || path === `/api/runs/${ids.run_id}`)

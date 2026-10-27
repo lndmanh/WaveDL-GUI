@@ -38,10 +38,12 @@ def test_single_use_exchange_does_not_open_health_or_cookie_auth():
         app, "/api/bootstrap", code=code, headers={"Origin": "http://localhost:8420"}
     )
     assert result.status_code == 200
-    assert result.json() == {
-        "access_token": "test-access-token",
-        "token_type": "Bearer",
-    }
+    body = result.json()
+    assert body["token_type"] == "Bearer"
+    assert body["daemon_id"] == "daemon"
+    assert isinstance(body["expires_at"], int)
+    assert body["access_token"] != "test-access-token"
+    session = body["access_token"]
     assert result.headers["cache-control"] == "no-store"
     assert request(app, "/api/bootstrap", code=code).status_code == 401
     assert (
@@ -62,6 +64,56 @@ def test_single_use_exchange_does_not_open_health_or_cookie_auth():
         ).status_code
         == 200
     )
+    rotated = request(
+        app, "/api/session", headers={"Authorization": f"Bearer {session}"}
+    )
+    assert rotated.status_code == 200
+    assert rotated.json()["access_token"] != session
+    assert (
+        request(
+            app, "/api/health", headers={"Authorization": f"Bearer {session}"}
+        ).status_code
+        == 401
+    )
+    assert (
+        request(
+            app,
+            "/api/session",
+            headers={"Authorization": f"Bearer {session}"},
+        ).status_code
+        == 401
+    )
+    assert (
+        request(
+            app,
+            "/api/session",
+            method="DELETE",
+            headers={"Authorization": f"Bearer {rotated.json()['access_token']}"},
+        ).status_code
+        == 204
+    )
+    assert (
+        request(
+            app,
+            "/api/health",
+            headers={"Authorization": f"Bearer {rotated.json()['access_token']}"},
+        ).status_code
+        == 401
+    )
+    assert (
+        request(
+            app,
+            "/api/session",
+            method="DELETE",
+            headers={"Authorization": f"Bearer {rotated.json()['access_token']}"},
+        ).status_code
+        == 401
+    )
+    master_rotated = request(
+        app, "/api/session", headers={"Authorization": "Bearer test-access-token"}
+    )
+    assert master_rotated.status_code == 200
+    assert master_rotated.json()["access_token"] != "test-access-token"
 
 
 @pytest.mark.parametrize(

@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from wavedl_daemon.http.app import create_app, read_json
+from wavedl_daemon.http.bootstrap import BootstrapCredentials
 from wavedl_daemon.storage.settings import Settings
 
 
@@ -51,6 +52,25 @@ def test_health_is_authenticated_minimal_identity_without_state_creation(app):
     assert TOKEN not in response.text
     assert not app.state.settings.state_root.exists()
     assert not app.state.settings.run_root.exists()
+
+
+def test_master_can_rotate_session_when_bootstrap_exchange_is_disabled(app):
+    response = request(app, method="POST", path="/api/session", headers=AUTH)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["token_type"] == "Bearer"
+    assert body["access_token"] != TOKEN
+    assert body["daemon_id"] == "daemon-test"
+    assert isinstance(body["expires_at"], int)
+    assert (
+        request(
+            app,
+            method="GET",
+            path="/api/health",
+            headers={"Authorization": f"Bearer {body['access_token']}"},
+        ).status_code
+        == 200
+    )
 
 
 @pytest.mark.parametrize(
@@ -103,8 +123,35 @@ def test_mismatched_backend_identity_is_rejected_before_mutating_endpoint(
         headers=AUTH | {"X-WaveDL-Daemon-ID": identity},
     )
     assert response.status_code == 409
+    assert response.headers["x-wavedl-error-code"] == "daemon_identity_changed"
     assert effects == []
     assert TOKEN not in response.text and "daemon-test" not in response.text
+
+
+def test_mismatched_daemon_identity_is_distinct_from_missing_auth(app):
+    response = request(
+        app,
+        path="/api/health",
+        headers={"X-WaveDL-Daemon-ID": "previous-daemon"},
+    )
+    assert response.status_code == 409
+    assert response.json() == {"error": "Daemon identity changed"}
+    assert response.headers["x-wavedl-error-code"] == "daemon_identity_changed"
+
+
+def test_domain_conflict_does_not_claim_daemon_identity_change(app):
+    async def conflict(request):
+        raise HTTPException(409, "Plan conflict")
+
+    app.router.routes.append(Route("/api/domain-conflict", conflict, methods=["POST"]))
+    response = request(
+        app,
+        method="POST",
+        path="/api/domain-conflict",
+        headers=AUTH,
+    )
+    assert response.status_code == 409
+    assert "x-wavedl-error-code" not in response.headers
 
 
 @pytest.mark.parametrize(
@@ -202,6 +249,56 @@ def test_cookie_and_query_credentials_never_authenticate(app):
         ).status_code
         == 401
     )
+
+
+def test_session_auth_does_not_grant_runtime_event_ingest(tmp_path):
+    credentials = BootstrapCredentials(TOKEN)
+    app = create_app(
+        None,
+        token=TOKEN,
+        daemon_id="daemon-test",
+        build_id="build-test",
+        bootstrap_credentials=credentials,
+    )
+
+    async def ingest(request):
+        return JSONResponse({"ok": True})
+
+    app.router.routes.append(
+        Route(
+            "/api/runs/12345678-1234-4234-8234-123456789abc/events",
+            ingest,
+            methods=["POST"],
+        )
+    )
+    app.router.routes.append(
+        Route(
+            "/api/runs/12345678-1234-4234-8234-123456789abc/events/",
+            ingest,
+            methods=["POST"],
+        )
+    )
+    session = credentials.mint_session()
+    path = "/api/runs/12345678-1234-4234-8234-123456789abc/events"
+    response = request(
+        app,
+        method="POST",
+        path=path,
+        headers={"Authorization": f"Bearer {session.token}"},
+    )
+    assert response.status_code == 403
+    assert request(app, method="POST", path=path, headers=AUTH).status_code == 200
+    trailing = path + "/"
+    assert (
+        request(
+            app,
+            method="POST",
+            path=trailing,
+            headers={"Authorization": f"Bearer {session.token}"},
+        ).status_code
+        == 403
+    )
+    assert request(app, method="POST", path=trailing, headers=AUTH).status_code == 200
 
 
 def test_multiple_authorization_headers_are_rejected(app):

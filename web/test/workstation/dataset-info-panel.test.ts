@@ -2,7 +2,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { DatasetInspectionApi, type DatasetInspection } from '../../app/lib/dataset-inspection';
 const selection = {

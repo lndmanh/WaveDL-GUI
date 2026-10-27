@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { DatasetInspectionApi, parseDatasetInspection } from '../../app/lib/dataset-inspection';
 
@@ -113,7 +113,7 @@ describe('header-only dataset inspection', () => {
     const { session, selection, fetcher, skew } = await setup();
     skew();
     await expect(new DatasetInspectionApi(session).inspect(selection)).rejects.toMatchObject({
-      code: 'skew',
+      code: 'identity',
     });
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/api/datasets/inspect'))).toBe(
       false,

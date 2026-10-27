@@ -30,11 +30,8 @@ def credential_bytes(token: str) -> bytes:
     return value
 
 
-def require_auth(request, token: str | bytes | None = None) -> None:
-    """Accept exactly one Bearer header, never URL parameters or cookies."""
-    expected = request.app.state.auth_token if token is None else token
-    if isinstance(expected, str):
-        expected = credential_bytes(expected)
+def _bearer_candidate(request) -> bytes:
+    """Return the single syntactically valid bearer value or an empty value."""
     values = request.headers.getlist("authorization")
     candidate = b""
     if len(values) == 1:
@@ -44,8 +41,38 @@ def require_auth(request, token: str | bytes | None = None) -> None:
                 candidate = b""
         except (UnicodeEncodeError, ValueError):
             candidate = b""
-    if not hmac.compare_digest(candidate, expected):
-        raise HTTPException(401, "Unauthorized", headers={"WWW-Authenticate": "Bearer"})
+    return candidate
+
+
+def bearer_token(request) -> str | None:
+    """Return a syntactically valid bearer for a route already checked by auth."""
+    candidate = _bearer_candidate(request)
+    return candidate.decode("ascii") if candidate else None
+
+
+def require_auth(request, token: str | bytes | None = None, *, sessions=None) -> bool:
+    """Accept one master or live session bearer, never URLs or cookies.
+
+    Return ``True`` for master authority and ``False`` for session authority so
+    the boundary can apply narrower route scopes without a second auth path.
+    """
+    expected = request.app.state.auth_token if token is None else token
+    if isinstance(expected, str):
+        expected = credential_bytes(expected)
+    candidate = _bearer_candidate(request)
+    if sessions is not None:
+        try:
+            presented = candidate.decode("ascii")
+        except UnicodeDecodeError:
+            presented = ""
+        kind = sessions.authorization_kind(presented)
+        if kind == "master":
+            return True
+        if kind == "session":
+            return False
+    elif hmac.compare_digest(candidate, expected):
+        return True
+    raise HTTPException(401, "Unauthorized", headers={"WWW-Authenticate": "Bearer"})
 
 
 def authority(value: str) -> tuple[str, int | None]:

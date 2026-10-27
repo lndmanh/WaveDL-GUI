@@ -5,7 +5,7 @@ import { toRaw } from 'vue';
 import AdoptRunPanel from '../../app/components/runs/AdoptRunPanel.vue';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
 import { CatalogApi } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 const runId = '22222222-2222-4222-8222-222222222222';
 function json(body: object) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

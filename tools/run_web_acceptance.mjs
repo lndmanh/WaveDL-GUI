@@ -13,6 +13,7 @@ import { fullTrainingFields } from './browser_training_fields_full.mjs';
 import { trainingValidation } from './browser_training_validation.mjs';
 import { submittedPlanProtection } from './browser_submitted_plan_protection.mjs';
 import { downloadNameProvenance } from './browser_download_names.mjs';
+import { observeCursorStorage } from './browser_cursor_storage.mjs';
 import { datasetParity } from './browser_dataset_parity.mjs';
 import { openTrainingEditor, editorFieldObservationExpression } from './browser_training_editor.mjs';
 import { createBrowserActions, controlExpression, actionableExpression, xpathLiteral, DRIVER_READINESS_MODE } from './browser_actions.mjs';
@@ -69,12 +70,12 @@ const delay = (ms) => new Promise((done) => setTimeout(done, ms));
 // Outputs are captured in memory, never echoed with argv (bootstrap is secret).
 async function command(executable, args, input, timeout = 35000) {
   if (executable === browser) {
-    assert(input === undefined, 'Browser commands must not receive untracked stdin');
+    assert(input === undefined || (args.includes('eval') && args.includes('--stdin')), 'Only an explicit browser evaluation may receive stdin');
     const environment = { ...process.env };
     for (const key of Object.keys(environment)) if (key.startsWith('AGENT_BROWSER_')) delete environment[key];
     const sessionFlag = args.indexOf('--session');
     if (sessionFlag >= 0) environment.AGENT_BROWSER_SESSION = args[sessionFlag + 1];
-    return boundedCommand(executable, args, { cwd: repo, env: browserTemporaryEnvironment(environment), timeout });
+    return boundedCommand(executable, args, { cwd: repo, env: browserTemporaryEnvironment(environment), timeout, input });
   }
   return await new Promise((done, fail) => {
     const environment = { ...process.env };
@@ -192,8 +193,8 @@ async function scenario(name) {
   const browserProfile = join(workspace, `${name}-browser-profile`);
   const replacingDaemon = name === 'port-reuse' || liveReplacement;
   const replacementRoot = replacingDaemon ? join(workspace, `${name}-replacement`) : null;
-  const tokenFile = replacingDaemon ? join(workspace, `${name}-private-bearer`) : null;
-  let sharedToken = replacingDaemon ? randomBytes(32).toString('base64url') : null;
+  const tokenFile = replacingDaemon || name === 'reload' ? join(workspace, `${name}-private-bearer`) : null;
+  let sharedToken = tokenFile ? randomBytes(32).toString('base64url') : null;
   if (sharedToken) privateSecrets.add(sharedToken);
   if (tokenFile) await writeFile(tokenFile, sharedToken, { flag: 'wx', mode: 0o600 });
   let replacement = null;
@@ -216,8 +217,16 @@ async function scenario(name) {
   };
   const cli = (...args) => command(browser, ['--session', session, ...(args[0] === 'open' ? ['--headed', String(browserHeaded), '--engine', 'chrome', '--profile', browserProfile, '--allowed-domains', '127.0.0.1,localhost', ...(browserExecutable ? ['--executable-path', browserExecutable] : []), '--args', browserLaunchArgs, '--download-path', downloads] : []), ...args]);
   const dom = async (script, timeout = 35000) => {
-    const output = await command(browser, ['--session', session, 'eval', '-b', Buffer.from(script).toString('base64')], undefined, timeout);
+    const output = await command(browser, ['--session', session, 'eval', '--stdin'], script, timeout);
     return JSON.parse(JSON.parse(output));
+  };
+  const storageExpression = (masterToken, daemonId = '', runId = '') =>
+    `(${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, ${JSON.stringify(daemonId)}, ${JSON.stringify(runId)}, { forbiddenToken: ${JSON.stringify(masterToken)}, origin: ${JSON.stringify(expectedBrowserOrigin)} })`;
+  const healthRequestCount = async () => {
+    const metadata = await readFile(join(root, '.request-metadata.jsonl'), 'utf8');
+    assert(Buffer.byteLength(metadata) <= 1024 * 1024, 'Reload request metadata exceeded its byte bound');
+    return metadata.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
+      .filter((request) => request.method === 'GET' && request.path === '/api/health' && request.status === 200).length;
   };
   const snapshot = async () => {
     if (expectedBrowserOrigin) {
@@ -263,7 +272,7 @@ async function scenario(name) {
     assert(record.replacementAccessMetadata.some((request) => request.method === 'GET' && request.path === '/api/health' && request.scopeHeaderPresent && request.status === 409), 'Replacement lacks genuine old-scope health identity conflict');
     assert(record.replacementAccessMetadata.every((request) => !['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) && !(request.path.startsWith(`/api/runs/${originalRunId}`) && request.status >= 200 && request.status < 300)), 'Replacement accepted foreign old-run read/replay or received mutating request');
   };
-  const fixture = spawn(python, ['tools/browser_daemon_fixture.py', '--root', root, '--unseeded', ...(fixtureWebAssets ? ['--web-assets', fixtureWebAssets] : []), ...(partialBest ? ['--partial-best', partialBest, '--request-metadata'] : []), ...(integrity ? ['--autoplot-metadata-integrity'] : []), ...(name === 'dataset-parity' ? ['--output-grid', '--request-metadata'] : []), ...(['training-validation', 'preset-import'].includes(name) ? ['--request-metadata'] : []), ...(name === 'lost-ack' ? ['--drop-submit-ack'] : []), ...(name === 'artifact-tamper' ? ['--tamper-artifact'] : []), ...(tokenFile ? ['--token-file', tokenFile] : []), ...(liveReplacement ? ['--record-process-results'] : [])], {
+  const fixture = spawn(python, ['tools/browser_daemon_fixture.py', '--root', root, '--unseeded', ...(fixtureWebAssets ? ['--web-assets', fixtureWebAssets] : []), ...(partialBest ? ['--partial-best', partialBest, '--request-metadata'] : []), ...(integrity ? ['--autoplot-metadata-integrity'] : []), ...(name === 'dataset-parity' ? ['--output-grid', '--request-metadata'] : []), ...(['training-validation', 'preset-import'].includes(name) ? ['--request-metadata'] : []), ...(name === 'reload' ? ['--request-metadata'] : []), ...(name === 'lost-ack' ? ['--drop-submit-ack'] : []), ...(name === 'artifact-tamper' ? ['--tamper-artifact'] : []), ...(tokenFile ? ['--token-file', tokenFile] : []), ...(liveReplacement ? ['--record-process-results'] : [])], {
     cwd: repo, env: { ...process.env, PYTHONPATH: join(repo, 'src'), OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -306,9 +315,9 @@ async function scenario(name) {
     check((await command(browser, ['session', 'list'])).includes(session), 'CLI confirms owned isolated browser session');
     await cli('wait', '--text', 'Connected');
     check(!(await cli('get', 'url')).includes('bootstrap'), 'Bootstrap removed from address bar');
-    const storage = await dom(`JSON.stringify({local:Object.keys(localStorage),session:Object.keys(sessionStorage),cookies:document.cookie})`);
+    const storage = await dom(`JSON.stringify(${storageExpression(sharedToken)})`);
     record.freshStorage = storage;
-    check(storage.local.length === 0 && storage.session.length === 0 && storage.cookies === '', 'Fresh browser has no persistent authentication');
+    check(storage.local === 0 && storage.session === 1 && storage.credential.present && storage.credential.key === 'wavedl.session.v1' && storage.credentialStorage === 'session' && storage.credential.valid && !storage.credential.masterTokenPresent && !storage.credentialInUrl && !storage.bootstrapInUrl && storage.cookies === '', 'Fresh browser stores only the bounded session envelope in sessionStorage, never the master bearer, URL credential or cookie');
     const manifest = await readFile(join(fixtureWebAssets ?? join(repo, 'src/wavedl_daemon/web_assets'), '.wavedl-assets.json'));
     if (fixtureWebAssets) record.explicitFixtureWebAssets = fixtureWebAssets;
     record.assetManifestSha256 = createHash('sha256').update(manifest).digest('hex');
@@ -561,7 +570,7 @@ async function scenario(name) {
             check(record.transportRetirementBeforeReplacement.historyAbsent && record.transportRetirementBeforeReplacement.credentialFieldEmpty && record.transportRetirementBeforeReplacement.noEnabledCancel, 'Retired transport scope remains cleared before explicit reauthentication');
             // Only this generated fixture credential, supplied dynamically in
             // memory; never a user credential or a literal in source/tool logs.
-            await fill('Daemon bearer credential', sharedToken);
+            await fill('Daemon master credential', sharedToken);
             record.explicitReauthAttempted = true;
             await button('Connect securely');
           } else {
@@ -621,9 +630,25 @@ async function scenario(name) {
       check(true, 'Recovered acknowledgment disables duplicate approval of the existing plan');
       record.fault = 'Fixture suppresses one successful backend submit ACK and replaces it with an empty proxy-style 503 after real acceptance';
     } else if (name === 'reload') {
+      const healthBeforeReload = await healthRequestCount();
       await cli('reload');
-      await cli('wait', '--text', 'Connect securely');
-      check(await dom(`JSON.stringify(document.querySelector('#daemon-bearer')?.value === '')`), 'Reload requires fresh memory-only credential');
+      const reloadDeadline = Date.now() + 15000;
+      let reloaded = false;
+      while (Date.now() < reloadDeadline) {
+        const state = await dom(`JSON.stringify({connected:document.body.innerText.includes('Connected'),urlHasQuery:location.search.length>0,urlHasHash:location.hash.length>0,storage:${storageExpression(sharedToken)}})`, 5000);
+        if (state.connected) {
+          reloaded = true;
+          check(!state.urlHasQuery && !state.urlHasHash && !state.storage.credentialInUrl && !state.storage.bootstrapInUrl, 'Reload keeps credentials out of the address bar before restoring the session');
+          check(state.storage.local === 0 && state.storage.session === 1 && state.storage.credential.present && state.storage.credentialStorage === 'session', 'Reload keeps the session envelope in sessionStorage and does not opt into persistent localStorage');
+          check(state.storage.credential.valid && !state.storage.credential.masterTokenPresent && !state.storage.credentialInUrl && !state.storage.bootstrapInUrl, 'Reload restores a bounded session envelope without exposing the master bearer');
+          const healthAfterReload = await healthRequestCount();
+          check(healthAfterReload > healthBeforeReload, 'Reload restore reruns the full handshake health check');
+          record.reloadHealth = { before: healthBeforeReload, after: healthAfterReload };
+          break;
+        }
+        await delay(100);
+      }
+      check(reloaded, 'Reload reconnects within a bounded deadline instead of waiting indefinitely for a login screen');
       check((await registry(root)).control[0].submission_requested === 0, 'Reload does not submit a preview');
     } else {
       await button('Approve and start this plan');

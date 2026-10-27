@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Select } from '@/components/ui/select';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { object } from '../../app/lib/daemon-api';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };

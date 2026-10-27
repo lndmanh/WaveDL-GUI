@@ -11,7 +11,7 @@ import {
 } from '../../shared/schemas/training-request';
 import { z } from 'zod';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 
 describe('training controls coverage', () => {

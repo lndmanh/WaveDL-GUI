@@ -1,4 +1,4 @@
-/** Browser-only, same-origin daemon transport. Credentials never enter storage. */
+/** Browser-only, same-origin daemon transport. Browser authority is session-scoped. */
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
 export interface Health {
@@ -6,6 +6,12 @@ export interface Health {
   build_id: string;
   protocol_min: number;
   protocol_max: number;
+}
+export interface SessionGrant {
+  access_token: string;
+  token_type: 'Bearer';
+  expires_at: number;
+  daemon_id: string;
 }
 export interface IdentityPins {
   daemonId?: string;
@@ -55,6 +61,7 @@ export class DaemonApiError extends Error {
     message: string,
     public readonly status?: number,
     public readonly buildMismatch = false,
+    public readonly daemonIdentityChanged = false,
   ) {
     super(message);
     this.name = 'DaemonApiError';
@@ -303,6 +310,30 @@ export function stripBootstrapUrl(input: string): {
   };
 }
 
+function sessionGrant(value: Json): SessionGrant | null {
+  if (
+    !object(value) ||
+    value.token_type !== 'Bearer' ||
+    typeof value.access_token !== 'string' ||
+    !sessionToken(value.access_token) ||
+    typeof value.expires_at !== 'number' ||
+    !Number.isSafeInteger(value.expires_at) ||
+    value.expires_at <= 0 ||
+    typeof value.daemon_id !== 'string' ||
+    !/^[\x21-\x7e]{1,256}$/.test(value.daemon_id)
+  )
+    return null;
+  return {
+    access_token: value.access_token,
+    token_type: 'Bearer',
+    expires_at: value.expires_at,
+    daemon_id: value.daemon_id,
+  };
+}
+function sessionToken(value: string): boolean {
+  return /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
 async function boundedJson(response: Response, limit = 2 * 1024 * 1024): Promise<Json> {
   if (response.headers.get('content-type')?.split(';', 1)[0]?.trim() !== 'application/json') {
     throw new DaemonApiError('response', 'Expected a JSON response');
@@ -342,6 +373,10 @@ async function boundedJson(response: Response, limit = 2 * 1024 * 1024): Promise
 export class DaemonApi {
   #token = '';
   #credentialRevision = 0;
+  #scopeRevision = 0;
+  #activeRequests = 0;
+  #rotation: Promise<void> | null = null;
+  #idleWaiters = new Set<() => void>();
   #responseRevisions = new WeakMap<Response, number>();
   #daemonId: string | undefined;
   #buildId: string | undefined;
@@ -399,43 +434,96 @@ export class DaemonApi {
     if (token !== this.#token) {
       this.#approvedPlans = new WeakMap();
       this.#credentialRevision++;
+      this.#scopeRevision++;
     }
+    this.#token = token;
+  }
+  setRotatedToken(token: string): void {
+    if (!sessionToken(token))
+      throw new DaemonApiError('authentication', 'Invalid bearer credential');
     this.#token = token;
   }
   clearToken(): void {
     this.#token = '';
     this.#approvedPlans = new WeakMap();
     this.#credentialRevision++;
+    this.#scopeRevision++;
   }
-  async bootstrap(input: string, replaceUrl: (url: string) => void): Promise<boolean> {
+  async bootstrap(input: string, replaceUrl: (url: string) => void): Promise<SessionGrant | null> {
     const stripped = stripBootstrapUrl(input);
     replaceUrl(stripped.url); // Synchronous removal MUST precede the first request.
     if (new URL(stripped.url).origin !== this.origin)
       throw new DaemonApiError('identity', 'Bootstrap origin differs');
     if (stripped.invalid)
       throw new DaemonApiError('authentication', 'Ambiguous bootstrap credential');
-    if (stripped.code === null) return false;
+    if (stripped.code === null) return null;
+    return this.exchangeBootstrapCode(stripped.code);
+  }
+  async exchangeBootstrapCode(code: string, signal?: AbortSignal): Promise<SessionGrant> {
+    if (!/^[A-Za-z0-9._~+/=-]{1,4096}$/.test(code))
+      throw new DaemonApiError('authentication', 'Invalid bootstrap credential');
     this.clearToken();
-    const response = await this.#request(
-      '/api/bootstrap',
-      'POST',
-      { code: stripped.code },
-      undefined,
-      true,
-    );
+    const response = await this.#request('/api/bootstrap', 'POST', { code }, signal, true);
     const body = await this.#json(response, 8192);
-    if (!object(body) || body.token_type !== 'Bearer' || typeof body.access_token !== 'string') {
+    const grant = sessionGrant(body);
+    if (!grant) {
       throw new DaemonApiError('response', 'Invalid bootstrap response');
     }
-    this.setToken(body.access_token);
+    this.setToken(grant.access_token);
+    return grant;
+  }
+  async rotateSession(signal?: AbortSignal): Promise<SessionGrant> {
+    if (this.#rotation) await this.#rotation;
+    if (signal?.aborted) throw new DaemonApiError('http', 'Session rotation was interrupted');
     const revision = this.#credentialRevision;
+    const presented = this.#token;
+    let release!: () => void;
+    this.#rotation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     try {
-      await this.health();
-    } catch (error) {
-      if (revision === this.#credentialRevision) this.clearToken();
-      throw error;
+      await this.#waitForIdle(signal);
+      if (
+        signal?.aborted ||
+        revision !== this.#credentialRevision ||
+        !presented ||
+        presented !== this.#token
+      )
+        throw new DaemonApiError('http', 'Session rotation was interrupted');
+      const grant = sessionGrant(
+        await this.#json(
+          await this.#request('/api/session', 'POST', undefined, signal, false, undefined, true),
+        ),
+      );
+      if (!grant) throw new DaemonApiError('response', 'Invalid session response');
+      if (signal?.aborted || revision !== this.#credentialRevision)
+        throw new DaemonApiError('http', 'Session rotation was interrupted');
+      this.setRotatedToken(grant.access_token);
+      return grant;
+    } finally {
+      this.#rotation = null;
+      release();
     }
-    return true;
+  }
+  async revokeSession(signal?: AbortSignal): Promise<void> {
+    await this.#request('/api/session', 'DELETE', undefined, signal);
+  }
+  async #waitForIdle(signal?: AbortSignal): Promise<void> {
+    if (this.#activeRequests === 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const done = () => {
+        this.#idleWaiters.delete(done);
+        signal?.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#idleWaiters.delete(done);
+        reject(new DaemonApiError('http', 'Session rotation was interrupted'));
+      };
+      this.#idleWaiters.add(done);
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) abort();
+    });
   }
   async health(signal?: AbortSignal): Promise<Health> {
     const body = await this.#json(await this.#request('/api/health', 'GET', undefined, signal));
@@ -463,10 +551,7 @@ export class DaemonApi {
       throw new DaemonApiError('protocol', 'Daemon protocol mismatch; update the daemon or client');
     }
     if (this.#daemonId && body.daemon_id !== this.#daemonId) {
-      throw new DaemonApiError(
-        'identity',
-        'Daemon identity or build changed; reconnect explicitly',
-      );
+      throw new DaemonApiError('identity', 'Daemon identity changed', 409, false, true);
     }
     if (this.#buildId && body.build_id !== this.#buildId)
       throw new DaemonApiError(
@@ -531,12 +616,12 @@ export class DaemonApi {
   async plan(request: JsonObject, idempotencyKey: string, signal?: AbortSignal): Promise<PlanView> {
     if (!idempotencyKey || idempotencyKey.length > 256 || /[\r\n]/.test(idempotencyKey))
       throw new DaemonApiError('response', 'Invalid idempotency key');
-    const revision = this.#credentialRevision;
+    const revision = this.#scopeRevision;
     this.#requestBody(request, idempotencyKey);
     const snapshot = structuredClone(request);
     freezeJson(snapshot);
     const value = await this.mutate('/api/runs/plan', snapshot, { idempotencyKey, signal });
-    if (revision !== this.#credentialRevision)
+    if (revision !== this.#scopeRevision)
       throw new DaemonApiError('authentication', 'Connection credential changed during request');
     if (
       !jsonObject(value) ||
@@ -572,7 +657,7 @@ export class DaemonApi {
     if (
       !this.authenticated ||
       !approval ||
-      approval.revision !== this.#credentialRevision ||
+      approval.revision !== this.#scopeRevision ||
       approval.daemonId !== this.#daemonId ||
       approval.buildId !== this.#buildId
     )
@@ -684,12 +769,20 @@ export class DaemonApi {
   }
   async #request(
     path: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'DELETE',
     body?: JsonObject,
     signal?: AbortSignal,
     bootstrap = false,
     idempotencyKey?: string,
+    rotation = false,
   ): Promise<Response> {
+    if (signal?.aborted) throw new DaemonApiError('http', 'Session rotation was interrupted');
+    if (!rotation && this.#rotation) {
+      const revision = this.#credentialRevision;
+      await this.#rotation;
+      if (signal?.aborted || revision !== this.#credentialRevision)
+        throw new DaemonApiError('http', 'Session rotation was interrupted');
+    }
     const url = this.#apiUrl(path);
     if (!bootstrap && !this.#token)
       throw new DaemonApiError('authentication', 'Enter the daemon bearer credential');
@@ -705,7 +798,9 @@ export class DaemonApi {
       15000,
     );
     const revision = this.#credentialRevision;
+    const presentedToken = this.#token;
     let response: Response;
+    this.#activeRequests++;
     try {
       response = await this.fetcher(url.href, {
         method,
@@ -719,6 +814,11 @@ export class DaemonApi {
       });
     } finally {
       clearTimeout(timer);
+      this.#activeRequests--;
+      if (this.#activeRequests === 0) {
+        for (const resolve of this.#idleWaiters) resolve();
+        this.#idleWaiters.clear();
+      }
     }
     if (revision !== this.#credentialRevision) {
       await response.body?.cancel();
@@ -728,19 +828,30 @@ export class DaemonApi {
     if (!response.ok) {
       await response.body?.cancel();
       if (response.status === 401) {
-        this.clearToken();
+        if (presentedToken === this.#token) {
+          this.clearToken();
+        }
         throw new DaemonApiError(
           'authentication',
           'Credential expired or rejected; enter it again',
           401,
+          false,
+          false,
         );
       }
+      const daemonIdentityChanged =
+        response.status === 409 &&
+        (url.pathname === '/api/health' ||
+          url.pathname === '/api/session' ||
+          response.headers.get('X-WaveDL-Error-Code') === 'daemon_identity_changed');
       throw new DaemonApiError(
-        // Health has no domain conflicts: its 409 fences a replaced daemon.
-        // Plan, dataset and adoption conflicts must remain recoverable errors.
-        response.status === 409 && url.pathname === '/api/health' ? 'identity' : 'http',
-        `Daemon request failed (${response.status})`,
+        daemonIdentityChanged ? 'identity' : 'http',
+        daemonIdentityChanged
+          ? 'Daemon identity changed'
+          : `Daemon request failed (${response.status})`,
         response.status,
+        false,
+        daemonIdentityChanged,
       );
     }
     return response;

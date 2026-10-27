@@ -121,6 +121,7 @@ describe('shell and settings live localization', () => {
 
   it('switches connection notices and validation while preserving an entered credential', async () => {
     const locale = shallowRef<WorkstationLocale>('en');
+    const message = shallowRef('Your session ended. Sign in again.');
     const Host = defineComponent({
       setup() {
         provideWorkstationLocale(locale);
@@ -130,7 +131,7 @@ describe('shell and settings live localization', () => {
               status: 'authentication',
               health: null,
               revision: 0,
-              message: 'Credential expired or rejected; enter it again.',
+              message: message.value,
             },
           });
       },
@@ -140,10 +141,13 @@ describe('shell and settings live localization', () => {
     await wrapper.get('#daemon-bearer').setValue('private-token');
     locale.value = 'vi';
     await flushPromises();
-    expect(wrapper.text()).toContain(
-      'Thông tin xác thực đã hết hạn hoặc bị từ chối; hãy nhập lại.',
-    );
+    expect(wrapper.text()).toContain('Phiên của bạn đã kết thúc. Hãy đăng nhập lại.');
     expect(wrapper.get('#daemon-bearer').element).toHaveProperty('value', 'private-token');
+    message.value = 'A different WaveDL daemon is now serving this address. Sign in again.';
+    await flushPromises();
+    expect(wrapper.text()).toContain(
+      'Một daemon WaveDL khác đang phục vụ địa chỉ này. Hãy đăng nhập lại.',
+    );
     await wrapper.get('#daemon-bearer').setValue('');
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() =>

@@ -16,7 +16,7 @@ vi.mock('#app', async () => {
   return { useHead };
 });
 vi.mock('../../app/composables/useDaemonConnection', async () => {
-  const { ConnectionSession } = await import('../../app/lib/connection-session');
+  const { ConnectionSession } = await import('./session-fixture');
   const vue = await import('vue');
   return {
     useDaemonConnection: () => {
@@ -51,6 +51,8 @@ vi.mock('../../app/composables/useDaemonConnection', async () => {
         state: vue.shallowReadonly(state),
         api: vue.shallowReadonly(api),
         canMutate: vue.computed(() => state.value.status === 'connected'),
+        keepSignedIn: vue.shallowRef(false),
+        setKeepSignedIn: vi.fn(),
         session,
         connect: (token: string) => session.connect(token),
         reconnect: (token: string) => session.reconnect(token),

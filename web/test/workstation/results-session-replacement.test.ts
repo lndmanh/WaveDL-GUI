@@ -5,7 +5,7 @@ import { toRaw } from 'vue';
 import ResultsContainer from '../../app/components/results/ResultsContainer.vue';
 import CvSummaryPanel from '../../app/components/results/CvSummaryPanel.vue';
 import ResultOperationForm from '../../app/components/results/ResultOperationForm.vue';
-import { ConnectionSession, type ConnectionState } from '../../app/lib/connection-session';
+import { ConnectionSession, type ConnectionState } from './session-fixture';
 import * as artifactClient from '../../app/lib/artifact-client';
 
 const runId = '22222222-2222-4222-8222-222222222222';
@@ -149,6 +149,7 @@ describe('results session replacement ownership', () => {
     });
     const wrapper = results(a.session);
     await wrapper.get('button').trigger('click');
+    await vi.waitFor(() => expect(a.calls).toContain(`/api/runs/${runId}/artifacts`));
     await wrapper.setProps({ runId: '44444444-4444-4444-8444-444444444444' });
     expect(a.signals.at(-1)?.aborted).toBe(true);
     await wrapper.get('button').trigger('click');

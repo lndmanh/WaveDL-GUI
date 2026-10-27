@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import ResultsContainer from '../../app/components/results/ResultsContainer.vue';
 import ArtifactList from '../../app/components/results/ArtifactList.vue';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import type { RunView } from '../../app/lib/daemon-api';
 import type { RunEvent } from '../../app/lib/event-stream';
 import type { RunMonitorSnapshot } from '../../app/lib/run-monitor';

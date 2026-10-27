@@ -8,7 +8,7 @@ import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
 import ModelList from '../../app/components/catalog/ModelList.vue';
 import { CatalogApi, type ModelDescription } from '../../app/lib/catalog-api';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import type { DatasetInspection } from '../../app/lib/dataset-inspection';
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import type { WorkstationLocale } from '../../app/i18n/core';

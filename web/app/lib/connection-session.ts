@@ -1,4 +1,17 @@
-import { DaemonApi, DaemonApiError, stripBootstrapUrl, type Health } from './daemon-api';
+import {
+  DaemonApi,
+  DaemonApiError,
+  stripBootstrapUrl,
+  type Health,
+  type SessionGrant,
+} from './daemon-api';
+import {
+  clearSessionCredentialArea,
+  removeMatchingSessionCredential,
+  saveSessionCredential,
+  type SessionCredential,
+  type SessionCredentialStorageArea,
+} from './session-credential';
 
 export type ConnectionStatus =
   | 'disconnected'
@@ -32,6 +45,7 @@ export class ConnectionSessionError extends Error {
       | 'unavailable'
       | 'stale'
       | 'authentication'
+      | 'identity'
       | 'skew'
       | 'response'
       | 'request',
@@ -56,6 +70,8 @@ export class ConnectionSession {
   #api: DaemonApi | null = null;
   #scope: AbortController | null = null;
   #daemonId: string | undefined;
+  #grant: SessionGrant | null = null;
+  #storageArea: SessionCredentialStorageArea = 'session';
   #online: boolean;
   readonly #fetcher: typeof fetch;
   readonly #timeoutMs: number;
@@ -104,11 +120,35 @@ export class ConnectionSession {
     this.#scope = null;
     this.#api?.clearToken();
     this.#api = null;
+    this.#grant = null;
   }
   detach(): void {
+    const token = this.#grant?.access_token;
+    if (token) removeMatchingSessionCredential(token);
     this.#revoke();
     this.#daemonId = undefined;
     this.#publish(this.#online ? 'disconnected' : 'offline');
+  }
+  /** Release only in-memory authority when the UI owner is disposed or reloaded. */
+  dispose(): void {
+    this.#revoke();
+  }
+  setKeepSignedIn(keepSignedIn: boolean): boolean {
+    const credential = this.sessionCredential;
+    const destination: SessionCredentialStorageArea = keepSignedIn ? 'local' : 'session';
+    if (!keepSignedIn) clearSessionCredentialArea('local');
+    if (!credential) {
+      this.#storageArea = destination;
+      return false;
+    }
+    if (!saveSessionCredential(credential, destination)) {
+      removeMatchingSessionCredential(credential.token);
+      return false;
+    }
+    if (destination === 'local' && this.#storageArea === 'session')
+      clearSessionCredentialArea('session');
+    this.#storageArea = destination;
+    return true;
   }
   setOnline(online: boolean): void {
     if (online === this.#online) return;
@@ -121,21 +161,67 @@ export class ConnectionSession {
         : 'Offline: live status and actions are unavailable.',
     );
   }
-  async connect(token: string): Promise<boolean> {
-    return this.#connect(async (api, signal) => {
-      api.setToken(token);
-      return api.health(signal);
-    });
+  async connect(token: string, keepSignedIn = false): Promise<boolean> {
+    return this.#connect(
+      async (api, signal) => {
+        api.setToken(token);
+        const health = await api.health(signal);
+        const grant = await api.rotateSession(signal);
+        if (grant.access_token === token) {
+          throw new DaemonApiError('response', 'The daemon returned its master credential.');
+        }
+        api.setRotatedToken(grant.access_token);
+        this.#assertGrantIdentity(grant, health);
+        return { health, grant };
+      },
+      keepSignedIn,
+      token,
+    );
   }
-  async reconnect(token: string): Promise<boolean> {
-    return this.connect(token);
+  async reconnect(token: string, keepSignedIn = false): Promise<boolean> {
+    return this.connect(token, keepSignedIn);
+  }
+  get sessionCredential(): SessionCredential | null {
+    if (!this.#grant || !this.#daemonId) return null;
+    return {
+      version: 1,
+      daemonId: this.#daemonId,
+      origin: this.#origin,
+      token: this.#grant.access_token,
+      expiresAt: this.#grant.expires_at,
+    };
+  }
+  async resume(credential: SessionCredential, keepSignedIn = false): Promise<boolean> {
+    if (credential.origin !== this.#origin) {
+      this.#fail(new DaemonApiError('identity', 'Daemon identity changed'));
+      return false;
+    }
+    this.#daemonId = credential.daemonId;
+    return this.#connect(
+      async (api, signal) => {
+        this.#daemonId = credential.daemonId;
+        api.setToken(credential.token);
+        const health = await api.health(signal);
+        const grant: SessionGrant = {
+          access_token: credential.token,
+          token_type: 'Bearer',
+          expires_at: credential.expiresAt,
+          daemon_id: health.daemon_id,
+        };
+        return { health, grant };
+      },
+      keepSignedIn,
+      credential.token,
+      false,
+    );
   }
   /** Raw stream consumers report fatal transport/contract errors to the owner. */
   reportFailure(error?: Error, expectedRevision?: number): void {
     if (expectedRevision !== undefined && expectedRevision !== this.#state.revision) return;
     if (error instanceof DaemonApiError && error.code === 'http') return;
     if (error instanceof ConnectionSessionError && error.code === 'stale') return;
-    this.#fail(error);
+    const rejectedToken = this.#grant?.access_token;
+    this.#fail(error, rejectedToken);
   }
   async bootstrap(input: string, replaceUrl: (url: string) => void): Promise<boolean> {
     // Strip credentials even when offline, before starting the connection work.
@@ -146,9 +232,46 @@ export class ConnectionSession {
       return false;
     }
     return this.#connect(async (api, signal) => {
-      if (!(await api.bootstrap(input, () => undefined))) return null;
-      return api.health(signal);
-    });
+      const grant = await api.bootstrap(input, () => undefined);
+      if (!grant) return null;
+      const health = await api.health(signal);
+      return { health, grant };
+    }, false);
+  }
+  async bootstrapCode(
+    code: string | null,
+    invalid = false,
+    keepSignedIn = false,
+  ): Promise<boolean> {
+    if (invalid || !code) {
+      this.#fail(new DaemonApiError('authentication', 'Enter the daemon bearer credential.'));
+      return false;
+    }
+    return this.#connect(async (api, signal) => {
+      const grant = await api.exchangeBootstrapCode(code, signal);
+      const health = await api.health(signal);
+      this.#assertGrantIdentity(grant, health);
+      return { health, grant };
+    }, keepSignedIn);
+  }
+  async disconnect(): Promise<void> {
+    const grant = this.#grant;
+    const daemonId = this.#daemonId;
+    const revoker =
+      grant && daemonId
+        ? new DaemonApi(this.#origin, { daemonId, buildId: this.#buildId }, this.#fetcher)
+        : null;
+    revoker?.setToken(grant?.access_token ?? '');
+    this.detach();
+    if (!revoker) return;
+    const standalone = new AbortController();
+    await this.#bounded(
+      (signal) => revoker.revokeSession(signal),
+      standalone.signal,
+      Math.min(this.#timeoutMs, 5000),
+    )
+      .catch(() => undefined)
+      .finally(() => revoker.clearToken());
   }
   async refresh(): Promise<boolean> {
     const revision = this.#state.revision;
@@ -162,7 +285,13 @@ export class ConnectionSession {
     }
   }
   async #connect(
-    handshake: (api: DaemonApi, signal: AbortSignal) => Promise<Health | null>,
+    handshake: (
+      api: DaemonApi,
+      signal: AbortSignal,
+    ) => Promise<{ health: Health; grant: SessionGrant } | null>,
+    keepSignedIn = false,
+    retirementToken?: string,
+    persistCredential = true,
   ): Promise<boolean> {
     this.#revoke();
     if (!this.#online) {
@@ -175,10 +304,15 @@ export class ConnectionSession {
     this.#publish('connecting');
     if (revision !== this.#state.revision || scope.signal.aborted) return false;
     let candidate: DaemonApi | null = null;
+    let presentedToken: string | undefined;
     try {
       let handshakeSignal = scope.signal;
-      const scopedFetch: typeof fetch = (input, init) =>
-        this.#fetcher(input, {
+      const scopedFetch: typeof fetch = (input, init) => {
+        const authorization = new Headers(init?.headers).get('Authorization');
+        presentedToken = authorization?.startsWith('Bearer ')
+          ? authorization.slice('Bearer '.length)
+          : undefined;
+        return this.#fetcher(input, {
           ...init,
           signal: AbortSignal.any([
             scope.signal,
@@ -186,13 +320,14 @@ export class ConnectionSession {
             ...(init?.signal ? [init.signal] : []),
           ]),
         });
+      };
       const api = new DaemonApi(
         this.#origin,
         { daemonId: this.#daemonId, buildId: this.#buildId },
         scopedFetch,
       );
       candidate = api;
-      const health = await this.#bounded(
+      const result = await this.#bounded(
         (signal) => {
           handshakeSignal = signal;
           return handshake(api, signal).finally(() => {
@@ -208,21 +343,40 @@ export class ConnectionSession {
         candidate.clearToken();
         return false;
       }
-      if (!health) {
+      if (!result) {
         candidate.clearToken();
         this.#scope = null;
         this.#publish('authentication', 'Enter the daemon bearer credential.');
         return false;
       }
-      this.#daemonId = health.daemon_id;
+      this.#assertGrantIdentity(result.grant, result.health);
+      this.#daemonId = result.health.daemon_id;
+      this.#grant = result.grant;
+      this.#storageArea = keepSignedIn ? 'local' : 'session';
       this.#api = candidate;
-      this.#publish('connected', null, Object.freeze(health));
+      const credential = this.sessionCredential;
+      if (persistCredential && credential) {
+        if (!saveSessionCredential(credential, this.#storageArea))
+          removeMatchingSessionCredential(credential.token);
+        else if (this.#storageArea === 'local') clearSessionCredentialArea('session');
+      }
+      this.#publish('connected', null, Object.freeze(result.health));
       return revision === this.#state.revision && this.api === candidate;
     } catch (error) {
+      const tokenRejected =
+        error instanceof DaemonApiError &&
+        (error.status === 401 || (error.status === 409 && error.daemonIdentityChanged));
+      const rejectedToken = tokenRejected ? (presentedToken ?? retirementToken) : undefined;
       candidate?.clearToken();
-      if (revision === this.#state.revision) this.#fail(error instanceof Error ? error : undefined);
+      if (revision === this.#state.revision) {
+        this.#fail(error instanceof Error ? error : undefined, rejectedToken);
+      }
       return false;
     }
+  }
+  #assertGrantIdentity(grant: SessionGrant, health: Health): void {
+    if (grant.daemon_id !== health.daemon_id)
+      throw new DaemonApiError('identity', 'Daemon identity changed', 409, false, true);
   }
   async perform<T>(
     work: (api: DaemonApi, signal: AbortSignal) => Promise<T>,
@@ -294,11 +448,20 @@ export class ConnectionSession {
     if (error instanceof ConnectionSessionError) return error;
     if (error instanceof DaemonApiError) {
       if (error.code === 'authentication')
-        return new ConnectionSessionError(
-          'authentication',
-          'Credential expired or rejected; enter it again.',
-        );
-      if (error.code === 'identity' || error.code === 'protocol')
+        return new ConnectionSessionError('authentication', 'Your session ended. Sign in again.');
+      if (error.code === 'identity')
+        return error.daemonIdentityChanged
+          ? new ConnectionSessionError(
+              'identity',
+              'A different WaveDL daemon is now serving this address. Sign in again.',
+              error.status,
+            )
+          : new ConnectionSessionError(
+              'identity',
+              'Daemon identity changed. Sign in again to verify this daemon.',
+              error.status,
+            );
+      if (error.code === 'protocol')
         return new ConnectionSessionError(
           'skew',
           'Daemon identity, build or protocol changed. Update the client or explicitly disconnect before changing daemon scope.',
@@ -322,11 +485,21 @@ export class ConnectionSession {
         : undefined,
     );
   }
-  #fail(error?: Error): void {
+  #fail(error?: Error, rejectedToken?: string): void {
     const safe = this.#safeError(error);
+    if (
+      rejectedToken &&
+      error instanceof DaemonApiError &&
+      (error.status === 401 || (error.status === 409 && error.daemonIdentityChanged))
+    )
+      removeMatchingSessionCredential(rejectedToken);
     this.#revoke();
     this.#publish(
-      safe.code === 'authentication' ? 'authentication' : safe.code === 'skew' ? 'skew' : 'error',
+      safe.code === 'authentication'
+        ? 'authentication'
+        : safe.code === 'identity' || safe.code === 'skew'
+          ? 'skew'
+          : 'error',
       safe.message,
       null,
       error instanceof DaemonApiError && error.buildMismatch,

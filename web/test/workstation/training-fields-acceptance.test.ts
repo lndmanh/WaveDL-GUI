@@ -15,7 +15,7 @@ import {
   type TrainingConfig,
 } from '../../shared/schemas/training-request';
 import { trainingCommand, trainingYaml } from '../../app/lib/training-export';
-import { ConnectionSession } from '../../app/lib/connection-session';
+import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import type { Json } from '../../app/lib/daemon-api';

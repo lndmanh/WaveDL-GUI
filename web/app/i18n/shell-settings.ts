@@ -26,8 +26,8 @@ export const shellSettingsMessages = defineMessages(
       'WaveDL daemon interface · Development foundation',
     'YOUR COMPUTE. YOUR WORKSPACE.': 'YOUR COMPUTE. YOUR WORKSPACE.',
     'Connect to your daemon.': 'Connect to your daemon.',
-    'Your daemon runs the experiments. This browser connects only to its current origin; credentials stay in memory.':
-      'Your daemon runs the experiments. This browser connects only to its current origin; credentials stay in memory.',
+    'Your daemon runs the experiments. This browser connects only to its current origin. An expiring session token stays in this tab unless you choose to keep it on this browser; your master credential is never saved.':
+      'Your daemon runs the experiments. This browser connects only to its current origin. An expiring session token stays in this tab unless you choose to keep it on this browser; your master credential is never saved.',
     'Connection identity changed': 'Connection identity changed',
     'Connection status': 'Connection status',
     'A newer WaveDL build is available': 'A newer WaveDL build is available',
@@ -35,9 +35,12 @@ export const shellSettingsMessages = defineMessages(
     'Connected to {daemonId} · build {buildId}': 'Connected to {daemonId} · build {buildId}',
     'Verify connection': 'Verify connection',
     Disconnect: 'Disconnect',
-    'Daemon bearer credential': 'Daemon bearer credential',
-    'Paste the credential provided by WaveDL. It is not saved to browser storage.':
-      'Paste the credential provided by WaveDL. It is not saved to browser storage.',
+    'Daemon master credential': 'Daemon master credential',
+    'Paste the credential provided by WaveDL. It is exchanged for an expiring session token and never saved.':
+      'Paste the credential provided by WaveDL. It is exchanged for an expiring session token and never saved.',
+    'Keep me signed in on this browser': 'Keep me signed in on this browser',
+    'Saves only the expiring session token in this browser. Your master credential is never saved.':
+      'Saves only the expiring session token in this browser. Your master credential is never saved.',
     'Connecting…': 'Connecting…',
     'Connect securely': 'Connect securely',
     'Disconnect and clear scope': 'Disconnect and clear scope',
@@ -103,6 +106,9 @@ export const shellSettingsMessages = defineMessages(
       'Offline: live status and actions are unavailable.',
     'Credential expired or rejected; enter it again.':
       'Credential expired or rejected; enter it again.',
+    'Your session ended. Sign in again.': 'Your session ended. Sign in again.',
+    'A different WaveDL daemon is now serving this address. Sign in again.':
+      'A different WaveDL daemon is now serving this address. Sign in again.',
     'Daemon identity, build or protocol changed. Update the client or explicitly disconnect before changing daemon scope.':
       'Daemon identity, build or protocol changed. Update the client or explicitly disconnect before changing daemon scope.',
     'The daemon returned an invalid response. Reconnect to verify its identity.':
@@ -134,8 +140,8 @@ export const shellSettingsMessages = defineMessages(
       'Giao diện daemon WaveDL · Nền tảng phát triển',
     'YOUR COMPUTE. YOUR WORKSPACE.': 'TÀI NGUYÊN CỦA BẠN. KHÔNG GIAN CỦA BẠN.',
     'Connect to your daemon.': 'Kết nối với daemon của bạn.',
-    'Your daemon runs the experiments. This browser connects only to its current origin; credentials stay in memory.':
-      'Daemon của bạn chạy các thí nghiệm. Trình duyệt này chỉ kết nối với nguồn hiện tại; thông tin xác thực chỉ lưu trong bộ nhớ.',
+    'Your daemon runs the experiments. This browser connects only to its current origin. An expiring session token stays in this tab unless you choose to keep it on this browser; your master credential is never saved.':
+      'Daemon của bạn chạy các thí nghiệm. Trình duyệt này chỉ kết nối với nguồn hiện tại. Mã phiên có thời hạn chỉ lưu trong tab này, trừ khi bạn chọn lưu trên trình duyệt; thông tin xác thực chính không bao giờ được lưu.',
     'Connection identity changed': 'Danh tính kết nối đã thay đổi',
     'Connection status': 'Trạng thái kết nối',
     'A newer WaveDL build is available': 'Đã có bản dựng WaveDL mới hơn',
@@ -143,9 +149,12 @@ export const shellSettingsMessages = defineMessages(
     'Connected to {daemonId} · build {buildId}': 'Đã kết nối với {daemonId} · bản dựng {buildId}',
     'Verify connection': 'Xác minh kết nối',
     Disconnect: 'Ngắt kết nối',
-    'Daemon bearer credential': 'Thông tin xác thực bearer của daemon',
-    'Paste the credential provided by WaveDL. It is not saved to browser storage.':
-      'Dán thông tin xác thực do WaveDL cung cấp. Thông tin này không được lưu vào bộ nhớ trình duyệt.',
+    'Daemon master credential': 'Thông tin xác thực chính của daemon',
+    'Paste the credential provided by WaveDL. It is exchanged for an expiring session token and never saved.':
+      'Dán thông tin xác thực do WaveDL cung cấp. Thông tin này được đổi lấy mã phiên có thời hạn và không bao giờ được lưu.',
+    'Keep me signed in on this browser': 'Giữ đăng nhập trên trình duyệt này',
+    'Saves only the expiring session token in this browser. Your master credential is never saved.':
+      'Chỉ lưu mã phiên có thời hạn trên trình duyệt này. Thông tin xác thực chính không bao giờ được lưu.',
     'Connecting…': 'Đang kết nối…',
     'Connect securely': 'Kết nối an toàn',
     'Disconnect and clear scope': 'Ngắt kết nối và xóa phạm vi',
@@ -211,6 +220,9 @@ export const shellSettingsMessages = defineMessages(
       'Ngoại tuyến: không có trạng thái trực tiếp và thao tác.',
     'Credential expired or rejected; enter it again.':
       'Thông tin xác thực đã hết hạn hoặc bị từ chối; hãy nhập lại.',
+    'Your session ended. Sign in again.': 'Phiên của bạn đã kết thúc. Hãy đăng nhập lại.',
+    'A different WaveDL daemon is now serving this address. Sign in again.':
+      'Một daemon WaveDL khác đang phục vụ địa chỉ này. Hãy đăng nhập lại.',
     'Daemon identity, build or protocol changed. Update the client or explicitly disconnect before changing daemon scope.':
       'Danh tính, bản dựng hoặc giao thức daemon đã thay đổi. Cập nhật ứng dụng hoặc chủ động ngắt kết nối trước khi đổi phạm vi daemon.',
     'The daemon returned an invalid response. Reconnect to verify its identity.':
