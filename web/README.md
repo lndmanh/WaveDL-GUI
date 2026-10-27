@@ -18,13 +18,11 @@ The active app imports selected existing shadcn primitives from `app/components/
 `app/assets/css/tailwind.css` provides the active semantic theme, using local system
 fonts only. `workstation/lib` contains the typed daemon client and stream foundation.
 
-The project was created with `create-nuxt-saas@2.1.1 init web --modules base,pwa --yes`.
-The `.nuxt-saas/` manifest is retained for generator three-way upgrades. Most of
-`app/`, `shared/`, `i18n/`, generator tests and configuration are retained **inert
-upstream scaffold**, not discovered, shipped or checked as the active application.
-Review generator upgrade diffs before accepting them; do not restore its backend
-or deployment defaults. The active typecheck checks all workstation TS/Vue and
-transitively imported UI components. Lint/format checks target active custom code.
+No upstream product scaffold is retained. `app/` holds the shared shadcn UI
+primitives and theme CSS, plus an inactive `app.vue` retained for verification
+until the workstation source merge. The active typecheck checks all workstation
+TS/Vue and transitively imported UI components. Lint/format checks target active
+custom code.
 
 There is no Cloudflare, NuxtHub, Sentry, account/auth backend, telemetry or remote
 font module. No Nitro server ships: `ssr: false` and static generation produce
