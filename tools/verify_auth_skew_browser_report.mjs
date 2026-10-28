@@ -163,7 +163,7 @@ export function verifyAuthSkewReport(report) {
   });
   assert.equal(
     report.tokenObservation,
-    "behavioral authority retirement only; private token bytes are not inspected",
+    "Storage is checked in-page for equality with the private master bearer; neither raw token is returned or recorded",
   );
   assert(
     report.assertions.some((value) => value.includes("real authenticated request returned 401")),
