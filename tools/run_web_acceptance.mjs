@@ -584,7 +584,7 @@ async function scenario(name) {
           }
         }
       } else await button('Approve and start this plan');
-      await cli('wait', '--fn', `document.body.innerText.includes('Connection identity changed') && document.body.innerText.includes('Daemon identity, build or protocol changed.')`);
+      await cli('wait', '--fn', `document.body.innerText.includes('Connection identity changed') && document.body.innerText.includes('A different WaveDL daemon is now serving this address. Sign in again.')`);
       check(await dom(`JSON.stringify(document.querySelector('#daemon-bearer')?.value === '' && Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.textContent.trim() === 'Disconnect and clear scope'))`), 'Identity skew requires explicit scope clearing and fresh credential; no automatic reconnection');
       check(await dom(`JSON.stringify(!document.querySelector('[aria-label="Approved normalized manifest"]') && !Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && !e.disabled && ['Approve and start this plan', 'Preview persisted plan', 'Request cancellation'].includes(e.textContent.trim())))`), 'Old immutable approval and mutation authority revoked after daemon replacement');
       check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Dataset: Not selected')) && !document.querySelector('[aria-label="Selected run"]') && !document.querySelector('[aria-label="Runtime metric history"]'))`), 'Old dataset selection, selected-run monitor and cursor-bearing history revoked');
