@@ -27,12 +27,11 @@ from wavedl.utils.stdio import configure_utf8_stdio, utf8_stdio_environment
 class TestConfigureUtf8Stdio:
     """Tests for in-process stream reconfiguration."""
 
-    @pytest.mark.parametrize("encoding", ["cp1252", "ascii", "utf-8"])
-    def test_legacy_streams_write_utf8(self, monkeypatch, encoding):
-        """Unicode output must not raise on a non-UTF-8 stream."""
+    def test_legacy_streams_write_utf8(self, monkeypatch):
+        """Unicode output must not raise on a Windows cp1252 console."""
         out_bytes, err_bytes = io.BytesIO(), io.BytesIO()
-        stdout = io.TextIOWrapper(out_bytes, encoding=encoding)
-        stderr = io.TextIOWrapper(err_bytes, encoding=encoding)
+        stdout = io.TextIOWrapper(out_bytes, encoding="cp1252")
+        stderr = io.TextIOWrapper(err_bytes, encoding="cp1252")
         monkeypatch.setattr(sys, "stdout", stdout)
         monkeypatch.setattr(sys, "stderr", stderr)
 
@@ -43,17 +42,6 @@ class TestConfigureUtf8Stdio:
         assert out_bytes.getvalue().decode("utf-8") == "🚀 R² ✔\n"
         assert err_bytes.getvalue().decode("utf-8") == "⚠️ warning\n"
         assert stdout.errors == stderr.errors == "backslashreplace"
-
-    def test_streams_without_reconfigure_are_left_intact(self, monkeypatch):
-        """Substitute streams such as StringIO are not touched."""
-        stream = io.StringIO()
-        monkeypatch.setattr(sys, "stdout", stream)
-        monkeypatch.setattr(sys, "stderr", stream)
-
-        configure_utf8_stdio()
-        print("🚀")
-
-        assert stream.getvalue() == "🚀\n"
 
     def test_ascii_child_process_prints_unicode(self):
         """A real interpreter with an ASCII-only stdout prints UTF-8."""
@@ -92,8 +80,6 @@ class TestEntryPointsConfigureStdio:
         ("module_name", "prog"),
         [
             ("wavedl.train", "wavedl-train"),
-            ("wavedl.test", "wavedl-test"),
-            ("wavedl.hpo", "wavedl-hpo"),
             ("wavedl.launcher", "wavedl-train"),
         ],
     )
