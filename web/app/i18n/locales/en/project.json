@@ -138,7 +138,7 @@
   "chooseDaemonDataset": "Choose daemon dataset",
   "trainingDataset": "Training dataset",
   "notSelected": "Not selected",
-  "datasetSelectionSummary": "Dataset: {path}{daemon}. Browser files are not uploaded.",
+  "datasetSelectionSummary": "{path}{daemon}. Browser files are not uploaded.",
   "daemonId": " · daemon {id}",
   "chooseModel": "Choose model",
   "modelSelectionSummary": "Model: {model}{custom}.",

@@ -6,7 +6,10 @@ import type { WorkstationLocale } from './core';
 export type BundledModelId = keyof typeof modelSourceHashes;
 export type ModelMessageKey =
   | `models.${BundledModelId}.description`
-  | `models.${BundledModelId}.bestFor`;
+  | `models.${BundledModelId}.bestFor`
+  | `models.${BundledModelId}.shortDescription`
+  | `models.${BundledModelId}.pros.first`
+  | `models.${BundledModelId}.pros.second`;
 
 export type ModelMessageTranslator = (key: ModelMessageKey) => string;
 
@@ -17,6 +20,8 @@ export const bundledModelMessages = {
 } as const;
 
 export interface ModelPresentation {
+  readonly shortDescription: string;
+  readonly pros: readonly string[];
   readonly description: string;
   readonly bestFor: string;
   readonly untranslated: boolean;
@@ -49,21 +54,30 @@ export function modelPresentation(
   locale: WorkstationLocale,
   translate: ModelMessageTranslator,
 ): ModelPresentation {
-  if (locale === 'en')
-    return { description: model.description, bestFor: model.bestFor, untranslated: false };
-  if (!isBundledModelId(model.id))
-    return { description: model.description, bestFor: model.bestFor, untranslated: true };
+  const original = {
+    description: model.description,
+    bestFor: model.bestFor,
+    shortDescription: model.shortDescription ?? '',
+    pros: model.pros?.slice(0, 2) ?? [],
+  };
+  if (locale === 'en') return { ...original, untranslated: false };
+  if (!isBundledModelId(model.id)) return { ...original, untranslated: true };
 
   const source = modelSourceHashes[model.id];
   if (
     hashModelSource(model.description) !== source.description ||
-    hashModelSource(model.bestFor) !== source.bestFor
+    hashModelSource(model.bestFor) !== source.bestFor ||
+    hashModelSource(original.shortDescription) !== source.shortDescription ||
+    hashModelSource(original.pros[0] ?? '') !== source.pros.first ||
+    hashModelSource(original.pros[1] ?? '') !== source.pros.second
   )
-    return { description: model.description, bestFor: model.bestFor, untranslated: true };
+    return { ...original, untranslated: true };
 
   return {
     description: translate(`models.${model.id}.description`),
     bestFor: translate(`models.${model.id}.bestFor`),
+    shortDescription: translate(`models.${model.id}.shortDescription`),
+    pros: [translate(`models.${model.id}.pros.first`), translate(`models.${model.id}.pros.second`)],
     untranslated: false,
   };
 }

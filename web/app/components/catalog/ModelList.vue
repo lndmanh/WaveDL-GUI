@@ -80,8 +80,8 @@ const presentations = computed(() =>
               <Sparkles aria-hidden="true" />{{ t('catalog.pretrained') }}
             </Badge>
           </div>
-          <CardDescription v-if="model.shortDescription">
-            {{ model.shortDescription }}
+          <CardDescription v-if="text.shortDescription">
+            {{ text.shortDescription }}
           </CardDescription>
         </CardHeader>
         <CardContent class="model-card-content">
@@ -125,10 +125,10 @@ const presentations = computed(() =>
                   <p v-if="text.untranslated" class="text-muted-foreground">
                     {{ t('catalog.untranslated') }}
                   </p>
-                  <template v-if="model.pros.length">
+                  <template v-if="text.pros.length">
                     <h5>{{ t('catalog.strengths') }}</h5>
                     <ul>
-                      <li v-for="pro in model.pros.slice(0, 2)" :key="pro">{{ pro }}</li>
+                      <li v-for="pro in text.pros" :key="pro">{{ pro }}</li>
                     </ul>
                   </template>
                 </div>

@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mountWithI18n as mount } from './mountWithI18n';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
+import ModelList from '../../app/components/catalog/ModelList.vue';
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import {
   bundledModelMessages,
@@ -41,11 +42,11 @@ const cnn: ModelDescription = {
   yearPublished: 1989,
   paramsM: 1.6,
   sizeMb: 6,
-  shortDescription: 'Simple convolutional baseline',
+  shortDescription: 'Simple convolutional network, fast and flexible',
   category: 'Classic CNNs',
   supportedDims: [1, 2, 3],
   pretrained: false,
-  pros: ['Fast'],
+  pros: ['Extremely fast training and inference', 'Very low memory footprint'],
   cons: ['Limited capacity'],
   computeTier: 'Edge',
   tags: ['baseline'],
@@ -55,9 +56,10 @@ const cnn: ModelDescription = {
 };
 
 function translateModel(key: ModelMessageKey): string {
-  const [, id, field] = key.split('.');
+  const [, id, field, strength] = key.split('.');
   const model = bundledModelMessages.vi[id as keyof typeof bundledModelMessages.vi];
-  return model?.[field as 'description' | 'bestFor'] ?? key;
+  if (field === 'pros') return model.pros[strength as 'first' | 'second'];
+  return model?.[field as 'description' | 'bestFor' | 'shortDescription'] ?? key;
 }
 
 describe('catalogue localization preserves daemon authority', () => {
@@ -67,7 +69,13 @@ describe('catalogue localization preserves daemon authority', () => {
       'utf8',
     );
     const { models } = JSON.parse(source) as {
-      models: { id: string; description: string; best_for: string }[];
+      models: {
+        id: string;
+        description: string;
+        best_for: string;
+        short_description: string;
+        pros: string[];
+      }[];
     };
     expect(models).toHaveLength(71);
     expect(Object.keys(bundledModelMessages.vi)).toHaveLength(models.length);
@@ -80,10 +88,22 @@ describe('catalogue localization preserves daemon authority', () => {
       expect(sourceHashes).toEqual({
         description: hashModelSource(model.description),
         bestFor: hashModelSource(model.best_for),
+        shortDescription: hashModelSource(model.short_description),
+        pros: {
+          first: hashModelSource(model.pros[0]!),
+          second: hashModelSource(model.pros[1]!),
+        },
       });
       const translation = bundledModelMessages.vi[model.id as keyof typeof bundledModelMessages.vi];
       expect(translation.description).not.toBe(model.description);
       expect(translation.bestFor).not.toBe(model.best_for);
+      expect(translation.shortDescription.trim()).not.toBe('');
+      expect(translation.shortDescription).not.toBe(model.short_description);
+      expect(Object.keys(translation.pros)).toEqual(['first', 'second']);
+      for (const [index, pro] of Object.values(translation.pros).entries()) {
+        expect(pro.trim()).not.toBe('');
+        expect(pro).not.toBe(model.pros[index]);
+      }
       expect(
         modelPresentation(
           {
@@ -94,6 +114,8 @@ describe('catalogue localization preserves daemon authority', () => {
             pretrained: false,
             description: model.description,
             bestFor: model.best_for,
+            shortDescription: model.short_description,
+            pros: model.pros,
           },
           'vi',
           translateModel,
@@ -107,15 +129,23 @@ describe('catalogue localization preserves daemon authority', () => {
       { ...cnn, id: 'custom_cnn' },
       { ...cnn, description: 'A custom daemon override <script>東京</script>' },
       { ...cnn, bestFor: 'My specialized experiment' },
+      { ...cnn, shortDescription: `${cnn.shortDescription}x` },
+      { ...cnn, pros: [`${cnn.pros[0]}x`, cnn.pros[1]!] },
+      { ...cnn, pros: [cnn.pros[0]!, `${cnn.pros[1]}x`] },
+      { ...cnn, pros: [cnn.pros[0]!] },
     ]) {
       expect(modelPresentation(model, 'vi', translateModel)).toEqual({
         description: model.description,
         bestFor: model.bestFor,
+        shortDescription: model.shortDescription,
+        pros: model.pros.slice(0, 2),
         untranslated: true,
       });
       expect(modelPresentation(model, 'en', translateModel)).toEqual({
         description: model.description,
         bestFor: model.bestFor,
+        shortDescription: model.shortDescription,
+        pros: model.pros.slice(0, 2),
         untranslated: false,
       });
     }
@@ -130,9 +160,44 @@ describe('catalogue localization preserves daemon authority', () => {
     expect(modelPresentation({ ...cnn, description }, 'vi', translateModel)).toEqual({
       description,
       bestFor: cnn.bestFor,
+      shortDescription: cnn.shortDescription,
+      pros: cnn.pros,
       untranslated: true,
     });
   });
+
+  it.each(['shortDescription', 'first pro', 'second pro'] as const)(
+    'renders authoritative English copy and the untranslated note after a changed %s',
+    async (field) => {
+      const model = Object.freeze({
+        ...cnn,
+        shortDescription:
+          field === 'shortDescription' ? `${cnn.shortDescription}x` : cnn.shortDescription,
+        pros: Object.freeze(
+          cnn.pros.map((pro, index) =>
+            (field === 'first pro' && index === 0) || (field === 'second pro' && index === 1)
+              ? `${pro}x`
+              : pro,
+          ),
+        ),
+      });
+      const wrapper = mount(
+        ModelList,
+        { props: { models: Object.freeze([model]), busy: false } },
+        createTestI18n('vi'),
+      );
+      expect(wrapper.get('[data-testid="model-card"]').text()).toContain(model.shortDescription);
+      await wrapper.get('[data-testid="model-details"]').trigger('click');
+      await nextTick();
+      expect(document.body.textContent).toContain(model.description);
+      expect(document.body.textContent).toContain(model.pros[0]);
+      expect(document.body.textContent).toContain(model.pros[1]);
+      expect(document.body.textContent).toContain('không có bản dịch đi kèm khớp nội dung');
+      await wrapper.get('[data-testid="model-select"]').trigger('click');
+      expect(wrapper.emitted('select')?.[0]?.[0]).toBe(model);
+      wrapper.unmount();
+    },
+  );
 
   it('reactively translates mounted model browsing while preserving search, unknown text and scoped selection', async () => {
     const models = [
@@ -198,7 +263,15 @@ describe('catalogue localization preserves daemon authority', () => {
     expect(wrapper.get('input').element.value).toBe('cnn');
     expect(wrapper.text()).toContain('CNN cổ điển');
     expect(wrapper.text()).toContain('Mô tả, không phải chứng nhận khi chạy');
+    expect(wrapper.findAll('[data-testid="model-card"]')[0]!.text()).toContain(
+      bundledModelMessages.vi.cnn.shortDescription,
+    );
+    expect(wrapper.findAll('[data-testid="model-card"]')[0]!.text()).not.toContain(
+      cnn.shortDescription,
+    );
     expect(document.body.textContent).toContain('Mạng nơ-ron tích chập cơ bản');
+    expect(document.body.textContent).toContain(bundledModelMessages.vi.cnn.pros.first);
+    expect(document.body.textContent).toContain(bundledModelMessages.vi.cnn.pros.second);
     await wrapper.findAll('[data-testid="model-details"]')[1]!.trigger('click');
     await nextTick();
     expect(document.body.textContent).toContain('<script>custom description</script>');
