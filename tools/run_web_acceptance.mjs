@@ -251,7 +251,8 @@ async function scenario(name) {
     const before = await registry(root);
     const authoredFields = ['Python interpreter', 'epochs', 'patience'].map(normalizeTrainingFieldLabel);
     const fieldValuesExpression = `JSON.stringify(${JSON.stringify(authoredFields)}.map(name => {
-      const label = Array.from(document.querySelectorAll('label')).find(e => e.getClientRects().length && e.textContent.trim() === name);
+      // Read the draft's own fields even when a tab hides them: their values must survive.
+      const label = Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e => e.textContent.trim() === name);
       return label ? document.getElementById(label.htmlFor)?.value : null;
     }))`;
     const valuesBefore = await dom(fieldValuesExpression);
