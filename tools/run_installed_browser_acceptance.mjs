@@ -161,7 +161,7 @@ console=prefix/'bin'/'wavedl-daemon';assert console.read_text().splitlines()[0]=
 assets=Path(wavedl_daemon.__file__).parent/'web_assets';files={str(p.relative_to(assets)):p.read_bytes() for p in assets.rglob('*') if p.is_file()}
 with zipfile.ZipFile(wheel) as z:
  original={n.removeprefix('wavedl_daemon/web_assets/'):z.read(n) for n in z.namelist() if n.startswith('wavedl_daemon/web_assets/') and not n.endswith('/')}
- assert files==original and len(files)==33
+ assert files==original
  assert not any(n.startswith('wavedl_gui') for n in z.namelist())
  metadata=email.parser.Parser().parsestr(z.read(next(n for n in z.namelist() if n.endswith('.dist-info/METADATA'))).decode('utf-8'))
  assert 'gui' not in metadata.get_all('Provides-Extra',[])

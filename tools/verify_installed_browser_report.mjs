@@ -37,8 +37,10 @@ export function verifyInstalledBrowserRecord(record, expectedWheelSha256) {
   assert.equal(install.observedSystemSitePackages, false);
   assert(record.installBudget.minimumFreeBytes >= 1024 ** 3 && record.installBudget.samples > 0 && record.installBudget.offlineOnly === true && record.installBudget.terminalExit === 0);
   assert.equal(record.pythonInterpreter, install.python);
-  assert.equal(install.assetCount, 33);
-  assert.equal(Object.keys(install.assets).length, 33);
+  // The runner proves the installed files equal the wheel and its manifest; the
+  // count must agree with the recorded digests rather than a fixed build size.
+  assert(Number.isSafeInteger(install.assetCount) && install.assetCount >= 2);
+  assert.equal(Object.keys(install.assets).length, install.assetCount);
   assert(Object.values(install.assets).every(digest) && digest(install.assetManifestSha256));
   assert.equal(install.assets[".wavedl-assets.json"], install.assetManifestSha256);
   assert.equal(record.bootstrap.removed, true);
