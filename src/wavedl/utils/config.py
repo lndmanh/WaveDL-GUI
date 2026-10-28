@@ -23,6 +23,7 @@ Version: 1.0.0
 """
 
 import argparse
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,7 +38,9 @@ from wavedl.core.configuration import (
 
 
 def save_config(
-    args: argparse.Namespace, output_path: str, exclude_keys: list[str] | None = None
+    args: argparse.Namespace,
+    output_path: str | Path,
+    exclude_keys: list[str] | None = None,
 ) -> str:
     """
     Save effective configuration to YAML for reproducibility.
@@ -105,7 +108,7 @@ def validate_config(
 
     valid_options = {
         "model": list_models(),
-        "loss": list_losses(),
+        "loss": [*list_losses(), "l1", "logcosh"],
         "optimizer": list_optimizers(),
         "scheduler": list_schedulers(),
     }
@@ -127,6 +130,38 @@ def validate_config(
                         f"Invalid {action.dest}='{config[action.dest]}'. "
                         f"Valid options: {list(action.choices)}"
                     )
+            if action.dest not in config or config[action.dest] is None:
+                continue
+            value = config[action.dest]
+            values = value if isinstance(value, (list, tuple)) else [value]
+            if action.type in (int, float):
+                for entry in values:
+                    valid_type = (
+                        type(entry) is int
+                        if action.type is int
+                        else type(entry) in (int, float)
+                    )
+                    if not valid_type or not math.isfinite(entry):
+                        type_name = getattr(action.type, "__name__", str(action.type))
+                        warnings.append(
+                            f"Invalid type/value for '{action.dest}': expected a finite "
+                            f"{type_name}, got {entry!r}"
+                        )
+            elif isinstance(
+                action, (argparse._StoreTrueAction, argparse._StoreFalseAction)
+            ):
+                if type(value) is not bool:
+                    warnings.append(
+                        f"Invalid type for '{action.dest}': expected a YAML boolean, got {value!r}"
+                    )
+            if (
+                not action.nargs
+                and not isinstance(action, argparse._AppendAction)
+                and isinstance(value, (list, tuple))
+            ):
+                warnings.append(
+                    f"'{action.dest}' requires a single value, got {value!r}"
+                )
 
     # Validate numeric ranges
     numeric_checks = {
@@ -136,19 +171,39 @@ def validate_config(
         "patience": (1, 1000, "Patience should be positive"),
         "cv": (0, 100, "CV folds should be 0-100"),
         "grad_accum_steps": (1, 256, "Gradient accumulation steps should be 1-256"),
+        "weight_decay": (0, math.inf, "Weight decay must be non-negative"),
+        "grad_clip": (0, math.inf, "Gradient clipping must be non-negative"),
+        "huber_delta": (1e-300, math.inf, "Huber delta must be positive"),
+        "min_lr": (0, math.inf, "Minimum learning rate must be non-negative"),
+        "scheduler_patience": (0, math.inf, "Scheduler patience must be non-negative"),
+        "scheduler_factor": (
+            1e-300,
+            1 - 1e-15,
+            "Scheduler factor must be between 0 and 1",
+        ),
+        "warmup_epochs": (1, math.inf, "Warmup epochs must be positive"),
+        "step_size": (1, math.inf, "Scheduler step size must be positive"),
+        "save_every": (0, math.inf, "Save interval must be non-negative (0 disables)"),
+        "seed": (0, 2**32 - 1, "Seed must fit an unsigned 32-bit integer"),
+        "workers": (-1, math.inf, "Workers must be -1 (automatic) or non-negative"),
+        "cv_bins": (2, math.inf, "CV bins must be at least 2"),
+        "momentum": (0, 1, "Momentum must be between 0 and 1"),
     }
 
     for key, (min_val, max_val, msg) in numeric_checks.items():
         if key in config:
             val = config[key]
             # Type check: ensure value is numeric before comparison
-            if not isinstance(val, (int, float)):
+            if type(val) not in (int, float):
                 warnings.append(
                     f"Invalid type for '{key}': expected number, got {type(val).__name__} ({val!r})"
                 )
                 continue
-            if not (min_val <= val <= max_val):
+            if not math.isfinite(val) or not (min_val <= val <= max_val):
                 warnings.append(f"{msg}: got {val}")
+
+    if config.get("cv") == 1:
+        warnings.append("CV must be 0 (disabled) or at least 2 folds.")
 
     # Check for unknown/unrecognized keys (helps catch typos)
     # Priority: explicit known_keys > parser-derived > hardcoded fallback
@@ -184,6 +239,7 @@ def validate_config(
             "loss",
             "huber_delta",
             "loss_weights",
+            "selection_metric",
             # Optimizer
             "optimizer",
             "momentum",
@@ -204,6 +260,7 @@ def validate_config(
             "deterministic",
             "cache_validate",
             "single_channel",
+            "allow_pickle",
             # Cross-validation
             "cv",
             "cv_stratify",

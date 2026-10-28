@@ -6,17 +6,17 @@ validation and configuration saving remain in wavedl.utils.config.
 
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    import argparse
     from collections.abc import Sequence
 
 
-def load_config(config_path: str) -> dict[str, Any]:
+def load_config(config_path: str | Path) -> dict[str, Any]:
     """
     Load configuration from a YAML file.
 
@@ -47,6 +47,10 @@ def load_config(config_path: str) -> dict[str, Any]:
 
     if config is None:
         config = {}
+    if not isinstance(config, dict):
+        raise ValueError(
+            "Configuration must be a YAML mapping of option names to values."
+        )
 
     # Handle nested configs (e.g., optimizer.lr -> optimizer_lr)
     config = _flatten_config(config)
@@ -67,15 +71,24 @@ def _flatten_config(
         {'optimizer': {'params': {'beta1': 0.9}}} -> {'optimizer_params_beta1': 0.9}
         {'lr': 1e-3} -> {'lr': 1e-3}
     """
-    items = []
+    items: list[tuple[str, Any]] = []
     for key, value in config.items():
+        if not isinstance(key, str):
+            raise ValueError("Configuration option names must be strings.")
+        if key == "_metadata":
+            continue
         new_key = f"{parent_key}{sep}{key}" if parent_key else key
         if isinstance(value, dict):
             # Recursively flatten, passing full accumulated key path
             items.extend(_flatten_config(value, new_key, sep).items())
         else:
             items.append((new_key, value))
-    return dict(items)
+    flattened = {}
+    for key, value in items:
+        if key in flattened:
+            raise ValueError(f"Conflicting configuration key after flattening: {key}")
+        flattened[key] = value
+    return flattened
 
 
 def merge_config_with_args(
@@ -129,13 +142,17 @@ def merge_config_with_args(
     # Map argparse dest -> declared type, used to coerce native YAML sequences
     # into the comma-separated string form expected by str-typed list args
     # (betas/milestones/loss_weights). merge bypasses argparse type casting.
-    arg_types: dict[str, type] = {}
+    arg_types: dict[str, Any] = {}
     sequence_args: set[str] = set()
     if parser is not None:
         for action in parser._actions:
             if action.type is not None:
                 arg_types[action.dest] = action.type
-            if action.nargs in ("+", "*") or isinstance(action.nargs, int):
+            if (
+                action.nargs in ("+", "*")
+                or isinstance(action.nargs, int)
+                or isinstance(action, argparse._AppendAction)
+            ):
                 sequence_args.add(action.dest)
 
     # Apply config values only where CLI didn't override

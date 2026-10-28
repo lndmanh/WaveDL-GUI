@@ -12,6 +12,10 @@ enabling dynamic model selection via command-line arguments.
                    CAFormer, PoolFormer, Vision Mamba, EfficientViT
     - 3D (volumes): ResNet3D, CNN, ResNet, ConvNeXt, ConvNeXt V2, DenseNet
 
+**Output Coverage**:
+    - Vector regression: every registered architecture except ``unet_field``
+    - Dense 2D regression: ``unet_field``
+
 Usage:
     from wavedl.models import get_model, list_models, MODEL_REGISTRY
 
@@ -46,7 +50,12 @@ from .base import BaseModel
 
 # Import model implementations (triggers registration via decorators)
 from .cnn import CNN
-from .convnext import ConvNeXtBase_, ConvNeXtSmall, ConvNeXtTiny
+from .convnext import (
+    ConvNeXtBase_,
+    ConvNeXtSmall,
+    ConvNeXtTiny,
+    ConvNeXtTinyPretrained,
+)
 
 # New models (v1.6+)
 from .convnext_v2 import (
@@ -56,7 +65,7 @@ from .convnext_v2 import (
     ConvNeXtV2Tiny,
     ConvNeXtV2TinyPretrained,
 )
-from .densenet import DenseNet121, DenseNet169
+from .densenet import DenseNet121, DenseNet121Pretrained, DenseNet169
 from .efficientnet import EfficientNetB0, EfficientNetB2, EfficientNetB4, EfficientNetB7
 from .efficientnetv2 import EfficientNetV2L, EfficientNetV2M, EfficientNetV2S
 from .mamba import Mamba1D, VimBase, VimSmall, VimTiny
@@ -65,23 +74,30 @@ from .registry import (
     MODEL_REGISTRY,
     build_model,
     get_model,
+    import_model_modules,
     list_models,
     register_model,
 )
 from .regnet import RegNetY1_6GF, RegNetY3_2GF, RegNetY8GF, RegNetY400MF, RegNetY800MF
-from .resnet import ResNet18, ResNet34, ResNet50
+from .resnet import (
+    ResNet18,
+    ResNet18Pretrained,
+    ResNet34,
+    ResNet50,
+    ResNet50Pretrained,
+)
 from .resnet3d import MC3_18, ResNet3D18
 from .s4d import S4D, S4DLarge, S4DSmall
 from .swin import SwinBase, SwinSmall, SwinTiny
 from .tcn import TCN, TCNLarge, TCNSmall
-from .unet import UNetRegression
+from .unet import UNetField, UNetRegression
 from .vit import ViTBase_, ViTSmall, ViTTiny
 from .wavenet import WaveNet, WaveNetLarge, WaveNetSmall
 
 
 # Optional timm-based models (imported conditionally)
 try:
-    from .caformer import CaFormerS18, CaFormerS36, PoolFormerS12
+    from .caformer import CaFormerM36, CaFormerS18, CaFormerS36, PoolFormerS12
     from .efficientvit import (
         EfficientViTB1,
         EfficientViTB2,
@@ -114,12 +130,14 @@ __all__ = [
     "ConvNeXtBase_",
     "ConvNeXtSmall",
     "ConvNeXtTiny",
+    "ConvNeXtTinyPretrained",
     "ConvNeXtV2Base",
     "ConvNeXtV2BaseLarge",
     "ConvNeXtV2Small",
     "ConvNeXtV2Tiny",
     "ConvNeXtV2TinyPretrained",
     "DenseNet121",
+    "DenseNet121Pretrained",
     "DenseNet169",
     "EfficientNetB0",
     "EfficientNetB2",
@@ -138,8 +156,10 @@ __all__ = [
     "RegNetY800MF",
     "ResNet3D18",
     "ResNet18",
+    "ResNet18Pretrained",
     "ResNet34",
     "ResNet50",
+    "ResNet50Pretrained",
     "S4DLarge",
     "S4DSmall",
     "SwinBase",
@@ -147,6 +167,7 @@ __all__ = [
     "SwinTiny",
     "TCNLarge",
     "TCNSmall",
+    "UNetField",
     "UNetRegression",
     "ViTBase_",
     "ViTSmall",
@@ -160,6 +181,7 @@ __all__ = [
     # Functions (lowercase, alphabetically)
     "build_model",
     "get_model",
+    "import_model_modules",
     "list_models",
     "register_model",
 ]
@@ -168,6 +190,7 @@ __all__ = [
 if _HAS_TIMM_MODELS:
     __all__.extend(
         [
+            "CaFormerM36",
             "CaFormerS18",
             "CaFormerS36",
             "EfficientViTB1",

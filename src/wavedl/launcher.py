@@ -333,6 +333,14 @@ def _terminate_child(
 
 def detect_gpus() -> int:
     """Auto-detect available GPUs using nvidia-smi."""
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible is not None:
+        devices = [
+            value.strip()
+            for value in visible.split(",")
+            if value.strip() and value.strip() != "-1"
+        ]
+        return max(1, len(devices))
     if shutil.which("nvidia-smi") is None:
         print("Warning: nvidia-smi not found, defaulting to NUM_GPUS=1")
         return 1
@@ -440,12 +448,6 @@ def setup_environment() -> None:
         # WANDB_MODE defaults to online (WandB default)
         print("💻 Local environment detected - using standard cache locations")
 
-    # Suppress non-critical warnings (both environments)
-    os.environ.setdefault(
-        "PYTHONWARNINGS",
-        "ignore::UserWarning,ignore::FutureWarning,ignore::DeprecationWarning",
-    )
-
 
 def handle_fast_path_args() -> int | None:
     """Handle utility flags that don't need accelerate launch.
@@ -455,11 +457,27 @@ def handle_fast_path_args() -> int | None:
     """
     # --list_models: print models and exit immediately
     if "--list_models" in sys.argv:
-        from wavedl.models import list_models
+        from wavedl.models import get_model, import_model_modules, list_models
 
-        print("Available models:")
+        import_parser = argparse.ArgumentParser(add_help=False)
+        import_parser.add_argument(
+            "--import", dest="import_modules", nargs="+", default=[]
+        )
+        import_args, _ = import_parser.parse_known_args()
+        import_model_modules(import_args.import_modules)
+
+        print("Available models (output contract):")
         for name in list_models():
-            print(f"  {name}")
+            model_class = get_model(name)
+            supports_field = getattr(model_class, "supports_spatial_output", False)
+            requires_field = getattr(model_class, "requires_spatial_output", False)
+            if requires_field:
+                output_contract = "dense 2D field"
+            elif supports_field:
+                output_contract = "vector + dense 2D field"
+            else:
+                output_contract = "vector"
+            print(f"  {name:<32} {output_contract}")
         return 0
 
     return None  # Continue to full launch
@@ -530,6 +548,7 @@ For full training options, see: python -m wavedl.train --help
     )
     parser.add_argument(
         "--mixed_precision",
+        "--precision",
         type=str,
         choices=["bf16", "fp16", "no"],
         default="bf16",
@@ -550,6 +569,14 @@ For full training options, see: python -m wavedl.train --help
     args.original_argv = tuple(sys.argv[1:])
     if args.num_gpus is not None and args.num_gpus < 1:
         parser.error("--num_gpus must be positive")
+    if args.num_machines < 1 or not 0 <= args.machine_rank < args.num_machines:
+        parser.error(
+            "--num_machines must be positive and --machine_rank must be within its range."
+        )
+    if args.num_machines > 1 and not args.main_process_ip:
+        parser.error("--main_process_ip is required for multi-node training.")
+    if args.main_process_port is not None and not 1 <= args.main_process_port <= 65535:
+        parser.error("--main_process_port must be between 1 and 65535.")
     if args.cpu and args.num_gpus is not None and args.num_gpus > 64:
         parser.error("--cpu supports at most 64 processes")
     if args.cpu and (args.num_machines != 1 or args.machine_rank != 0):
@@ -621,6 +648,23 @@ def main() -> int:
     else:
         num_gpus = detect_gpus()
 
+    # CV uses an independent single-process loop, so it must never be replicated.
+    cv_parser = argparse.ArgumentParser(add_help=False)
+    cv_parser.add_argument("--cv", type=int, default=None)
+    cv_parser.add_argument("--config", default=None)
+    cv_args, _ = cv_parser.parse_known_args(train_args)
+    launcher_config = {}
+    if cv_args.config:
+        from wavedl.utils.config import load_config
+
+        launcher_config = load_config(cv_args.config)
+    cv_folds = cv_args.cv if cv_args.cv is not None else launcher_config.get("cv", 0)
+    if cv_folds and cv_folds > 0:
+        if args.num_machines > 1:
+            print("Error: Cross-validation requires one machine.", file=sys.stderr)
+            return 2
+        num_gpus = 1
+
     from wavedl.launch_runtime import prepare_runtime
 
     train_args, child_environment = prepare_runtime(
@@ -635,7 +679,7 @@ def main() -> int:
         sys.executable,
         "-m",
         "accelerate.commands.launch",
-        f"--num_processes={num_gpus}",
+        f"--num_processes={num_gpus * args.num_machines}",
         f"--num_machines={args.num_machines}",
         f"--machine_rank={args.machine_rank}",
         f"--mixed_precision={args.mixed_precision}",
@@ -646,7 +690,7 @@ def main() -> int:
         cmd.append("--cpu")
 
     # Explicitly set multi_gpu to suppress accelerate auto-detection warning
-    if num_gpus > 1:
+    if num_gpus * args.num_machines > 1:
         cmd.append("--multi_gpu")
 
     # Add multi-node networking args if specified (required for some clusters)
@@ -699,9 +743,14 @@ def main() -> int:
     observer = None
     try:
         owns_group = os.name == "posix" and os.environ.get(_SUPERVISED_ENV) != "1"
-        proc = subprocess.Popen(
-            cmd, start_new_session=owns_group, env=child_environment
-        )
+        try:
+            proc = subprocess.Popen(
+                cmd, start_new_session=owns_group, env=child_environment
+            )
+        except OSError as error:
+            # Nothing was spawned, so there is no group to clean up.
+            print(f"Error: Could not launch training: {error}", file=sys.stderr)
+            return 1
         forwarder.process_group = proc.pid if owns_group else None
         forwarder.process = proc
         if owns_group:
@@ -764,7 +813,7 @@ def main() -> int:
         exit_code = 128 + forwarder.received_signal
 
     # Print summary
-    wandb_enabled = "--wandb" in train_args
+    wandb_enabled = "--wandb" in train_args or bool(launcher_config.get("wandb", False))
     print_summary(
         exit_code,
         wandb_enabled,

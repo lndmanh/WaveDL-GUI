@@ -218,7 +218,8 @@ def _test_config(config: dict) -> dict:
         if name in choices and value is not None and value not in choices[name]:
             raise ValueError("Invalid option choice")
     result = inference_defaults()
-    for name in ("operation", "device", "output_dir", "export_path"):
+    # Pickle loading executes code from the dataset; only direct CLI use may opt in.
+    for name in ("operation", "device", "output_dir", "export_path", "allow_pickle"):
         result.pop(name, None)
     result.update(config)
     if not result["checkpoint"] or not result["data_path"]:

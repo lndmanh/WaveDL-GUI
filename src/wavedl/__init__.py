@@ -11,6 +11,7 @@ Quick Start:
 
 For training:
     wavedl-train --model cnn --data_path train.npz
+    wavedl-train --model unet_field --data_path field_train.npz
     # or: python -m wavedl.train --model cnn --data_path train.npz
 
 For inference:
@@ -21,7 +22,7 @@ For inference:
 from importlib import import_module
 
 
-__version__ = "1.8.1"
+__version__ = "1.9.0"
 __author__ = "Ductho Le"
 __email__ = "ductho.le@outlook.com"
 __all__ = [

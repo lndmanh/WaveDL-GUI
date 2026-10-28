@@ -1,33 +1,29 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
-type: software
-title: "WaveDL: A Scalable Deep Learning Framework for Wave-Based Inverse Problems"
-version: 1.8.1
-date-released: 2026-06-18
-doi: 10.5281/zenodo.18012338
-url: "https://doi.org/10.5281/zenodo.18012338"
-repository-code: "https://github.com/ductho-le/WaveDL"
-license: MIT
+message: "If you use WaveDL, please cite the paper below."
+title: "WaveDL"
 authors:
   - family-names: "Le"
     given-names: "Ductho"
-    orcid: "https://orcid.org/0000-0002-3073-1416"
-    affiliation: "University of Alberta"
-keywords:
-  - deep learning
-  - inverse problems
-  - wave propagation
-  - non-destructive evaluation
-  - ultrasonic testing
-  - geophysics
-  - biomedical imaging
-  - material characterization
-  - regression
-  - PyTorch
-  - distributed training
-abstract: >-
-  WaveDL is a deep learning framework built for wave-based inverse problems —
-  from ultrasonic NDE and geophysics to biomedical
-  tissue characterization. It provides a robust, scalable training pipeline for
-  mapping multi-dimensional data to physical quantities, with support for
-  memory-mapped datasets, multi-GPU distributed training, and HPC deployment.
+preferred-citation:
+  type: article
+  title: "WaveDL: A Scalable Deep Learning Framework for Wave-Based Inverse Problems"
+  authors:
+    - family-names: "Le"
+      given-names: "Ductho"
+      orcid: "https://orcid.org/0000-0002-3073-1416"
+    - family-names: "Phan"
+      given-names: "Haidang"
+      orcid: "https://orcid.org/0000-0002-7404-268X"
+    - family-names: "Sacchi"
+      given-names: "Mauricio D."
+      orcid: "https://orcid.org/0000-0001-6654-6661"
+    - family-names: "Le"
+      given-names: "Lawrence H."
+      orcid: "https://orcid.org/0000-0003-1907-1258"
+  journal: "Computer Physics Communications"
+  volume: 329
+  start: 110400
+  year: 2026
+  month: 12
+  doi: 10.1016/j.cpc.2026.110400
+  url: "https://doi.org/10.1016/j.cpc.2026.110400"

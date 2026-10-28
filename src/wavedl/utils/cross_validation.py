@@ -31,10 +31,16 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import KFold, StratifiedKFold
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 
 from wavedl.core.protocol import finite_or_none
+
+from .data import _as_finite_float32
+from .targets import (
+    canonicalize_targets,
+    create_target_scaler,
+    flatten_targets_by_channel,
+)
 
 
 # ==============================================================================
@@ -51,7 +57,7 @@ class CVDataset(torch.utils.data.Dataset):
 
         Args:
             X: Input data with shape (N, *spatial_dims) or (N, C, *spatial_dims)
-            y: Target data (N, T)
+            y: Vector targets ``(N,T)`` or dense fields ``(N,C,H,W)``
             expected_spatial_ndim: Expected number of spatial dimensions (1, 2, or 3).
                 If provided, uses explicit logic instead of heuristics.
                 If None, falls back to ndim-based inference (legacy behavior).
@@ -90,10 +96,17 @@ class CVDataset(torch.utils.data.Dataset):
                 X = X[:, np.newaxis, :, :, :]
             # ndim >= 5 assumed to already have channel dimension
 
+        if len(X) != len(y) or len(X) == 0:
+            raise ValueError(
+                "CV inputs and targets must have equal nonzero sample counts."
+            )
+        if not np.isfinite(X).all() or not np.isfinite(y).all():
+            raise ValueError("CV inputs and targets must be finite.")
+
         # Use from_numpy to share memory (zero-copy) instead of torch.tensor
         # which creates a full copy. Requires contiguous C-order arrays.
-        X = np.ascontiguousarray(X, dtype=np.float32)
-        y = np.ascontiguousarray(y, dtype=np.float32)
+        X = np.ascontiguousarray(_as_finite_float32(X, "CV inputs"))
+        y = np.ascontiguousarray(_as_finite_float32(y, "CV targets"))
         self.X = torch.from_numpy(X)
         self.y = torch.from_numpy(y)
 
@@ -102,6 +115,19 @@ class CVDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.X[idx], self.y[idx]
+
+
+def _take_samples(values: Any, indices: np.ndarray) -> np.ndarray:
+    """Index array-like data while satisfying h5py's sorted-index contract."""
+
+    indices = np.asarray(indices)
+    if len(indices) < 2 or np.all(indices[:-1] <= indices[1:]):
+        return np.asarray(values[indices])
+    order = np.argsort(indices)
+    sorted_values = np.asarray(values[indices[order]])
+    inverse_order = np.empty_like(order)
+    inverse_order[order] = np.arange(len(order))
+    return sorted_values[inverse_order]
 
 
 # ==============================================================================
@@ -143,7 +169,7 @@ def train_fold(
     epochs: int,
     patience: int,
     grad_clip: float,
-    scaler: StandardScaler,
+    scaler: Any,
     logger: logging.Logger,
     *,
     grad_accum_steps: int = 1,
@@ -211,7 +237,16 @@ def train_fold(
 
             with autocast_context():
                 pred = model(x)
+                if pred.shape != y.shape:
+                    raise ValueError(
+                        f"Model output shape {tuple(pred.shape)} does not match "
+                        f"target shape {tuple(y.shape)}."
+                    )
                 loss = criterion(pred, y, x) if constrained else criterion(pred, y)
+            if not torch.isfinite(loss):
+                raise FloatingPointError(
+                    "Cross-validation training loss is non-finite."
+                )
             # Match Accelerator.backward: even a partial final window uses the
             # configured denominator rather than rescaling its residual gradients.
             backward_loss = loss / grad_accum_steps
@@ -258,7 +293,16 @@ def train_fold(
                 x, y = x.to(device), y.to(device)
                 with autocast_context():
                     pred = model(x)
+                    if pred.shape != y.shape:
+                        raise ValueError(
+                            f"Model output shape {tuple(pred.shape)} does not match "
+                            f"target shape {tuple(y.shape)}."
+                        )
                     loss = validation_criterion(pred, y)
+                if not torch.isfinite(loss):
+                    raise FloatingPointError(
+                        "Cross-validation validation loss is non-finite."
+                    )
 
                 val_loss += loss.item() * x.size(0)
                 val_samples += x.size(0)
@@ -271,7 +315,13 @@ def train_fold(
         # Compute metrics (guard for tiny datasets)
         y_pred = torch.cat(all_preds).numpy()
         y_true = torch.cat(all_targets).numpy()
-        r2 = r2_score(y_true, y_pred) if len(y_true) >= 2 else float("nan")
+        metric_true = flatten_targets_by_channel(y_true)
+        metric_pred = flatten_targets_by_channel(y_pred)
+        r2 = (
+            r2_score(metric_true, metric_pred)
+            if len(metric_true) >= 2
+            else float("nan")
+        )
         mae = np.abs((y_pred - y_true) * scaler.scale_).mean()
 
         history.append(
@@ -317,6 +367,11 @@ def train_fold(
             x, y = x.to(device), y.to(device)
             with autocast_context():
                 pred = model(x)
+            if pred.shape != y.shape:
+                raise ValueError(
+                    f"Model output shape {tuple(pred.shape)} does not match "
+                    f"target shape {tuple(y.shape)}."
+                )
             all_preds.append(pred.float().cpu())
             all_targets.append(y.cpu())
 
@@ -326,26 +381,34 @@ def train_fold(
     # Inverse transform for physical units
     y_pred_phys = scaler.inverse_transform(y_pred)
     y_true_phys = scaler.inverse_transform(y_true)
+    metric_pred = flatten_targets_by_channel(y_pred)
+    metric_true = flatten_targets_by_channel(y_true)
+    metric_pred_phys = flatten_targets_by_channel(y_pred_phys)
+    metric_true_phys = flatten_targets_by_channel(y_true_phys)
 
     results = {
         "fold": fold + 1,
         "best_val_loss": best_val_loss,
         "best_epoch": best_epoch,
-        "r2": r2_score(y_true, y_pred) if len(y_true) >= 2 else float("nan"),
-        "mae_normalized": mean_absolute_error(y_true, y_pred),
-        "mae_physical": mean_absolute_error(y_true_phys, y_pred_phys),
+        "r2": (
+            r2_score(metric_true, metric_pred)
+            if len(metric_true) >= 2
+            else float("nan")
+        ),
+        "mae_normalized": mean_absolute_error(metric_true, metric_pred),
+        "mae_physical": mean_absolute_error(metric_true_phys, metric_pred_phys),
         "epochs_trained": len(history),
         "history": history,
     }
 
     # Per-target metrics (guard for tiny folds)
-    for i in range(y_true.shape[1]):
-        if len(y_true) >= 2:
-            results[f"r2_target_{i}"] = r2_score(y_true[:, i], y_pred[:, i])
+    for i in range(metric_true.shape[1]):
+        if len(metric_true) >= 2:
+            results[f"r2_target_{i}"] = r2_score(metric_true[:, i], metric_pred[:, i])
         else:
             results[f"r2_target_{i}"] = float("nan")
         results[f"mae_target_{i}"] = mean_absolute_error(
-            y_true_phys[:, i], y_pred_phys[:, i]
+            metric_true_phys[:, i], metric_pred_phys[:, i]
         )
 
     return results
@@ -459,6 +522,7 @@ def run_cross_validation(
     logger: logging.Logger | None = None,
     device: torch.device | None = None,
     *,
+    out_shape: tuple[int, ...] | None = None,
     loss_weights: list[float] | None = None,
     huber_delta: float = 1.0,
     nesterov: bool = False,
@@ -483,7 +547,8 @@ def run_cross_validation(
         y: Target data
         model_name: Model architecture name
         in_shape: Input shape (excluding batch and channel)
-        out_size: Number of output targets
+        out_size: Number of vector targets or dense field channels
+        out_shape: Canonical per-sample target shape, e.g. ``(C,H,W)``
         folds: Number of CV folds
         stratify: Use stratified splitting
         stratify_bins: Number of bins for stratification
@@ -493,14 +558,15 @@ def run_cross_validation(
         patience: Early stopping patience
         weight_decay: Weight decay
         loss_name: Loss function name
+        loss_weights: Per-target or per-field-channel weights for weighted MSE
+        huber_delta: Transition threshold for Huber loss
+        pretrained: Whether to initialize pretrained model weights
         optimizer_name: Optimizer name
         scheduler_name: Scheduler name
         output_dir: Output directory
         workers: DataLoader workers
         seed: Random seed
         logger: Logger instance
-        loss_weights: Per-target weights for weighted MSE
-        huber_delta: Delta for Huber loss
         nesterov: Enable Nesterov momentum for SGD
         scheduler_gamma: Decay for step/multistep/exponential; None keeps factory defaults
         step_size: Epoch interval for StepLR
@@ -516,10 +582,10 @@ def run_cross_validation(
     """
     if not isinstance(X, np.ndarray) or not isinstance(y, np.ndarray):
         raise ValueError("Cross-validation inputs X and y must be NumPy arrays")
-    if X.ndim < 2 or y.ndim != 2:
+    if X.ndim < 2 or y.ndim not in (2, 4):
         raise ValueError(
             "Cross-validation inputs require X with at least 2 dimensions and "
-            "y with shape (samples, targets)"
+            "y with shape (samples, targets) or (samples, channels, height, width)"
         )
     if X.shape[0] != y.shape[0]:
         raise ValueError(
@@ -535,7 +601,23 @@ def run_cross_validation(
     if not np.isfinite(X).all() or not np.isfinite(y).all():
         raise ValueError("Cross-validation inputs must contain only finite values")
     # Setup
+    if epochs < 1 or patience < 1 or batch_size < 1:
+        raise ValueError("epochs, patience, and batch_size must be positive.")
     os.makedirs(output_dir, exist_ok=True)
+    y = canonicalize_targets(y)
+    inferred_out_shape = tuple(y.shape[1:])
+    if out_shape is None:
+        out_shape = inferred_out_shape
+    else:
+        out_shape = tuple(out_shape)
+        if out_shape != inferred_out_shape:
+            raise ValueError(
+                f"out_shape={out_shape} does not match targets {inferred_out_shape}."
+            )
+    if out_size != out_shape[0]:
+        raise ValueError(
+            f"out_size={out_size} does not match target channels {out_shape[0]}."
+        )
 
     if folds < 2:
         raise ValueError(
@@ -611,6 +693,11 @@ def run_cross_validation(
     logger.info(f"   Data shape: X={X.shape}, y={y.shape}")
 
     # Setup cross-validation
+    if stratify and len(out_shape) > 1:
+        raise ValueError(
+            "Stratified cross-validation is not defined for dense fields. "
+            "Disable --cv_stratify or provide specimen/model-level groups."
+        )
     if stratify:
         if y.ndim > 1 and y.shape[1] > 1:
             logger.warning(
@@ -630,14 +717,14 @@ def run_cross_validation(
                 "⚠️  StratifiedKFold failed (too few samples per bin). "
                 "Falling back to standard KFold."
             )
-            kfold = KFold(n_splits=folds, shuffle=True, random_state=seed)
-            splits = list(kfold.split(X))
+            standard_kfold = KFold(n_splits=folds, shuffle=True, random_state=seed)
+            splits = list(standard_kfold.split(X))
     else:
-        kfold = KFold(n_splits=folds, shuffle=True, random_state=seed)
-        splits = list(kfold.split(X))
+        standard_kfold = KFold(n_splits=folds, shuffle=True, random_state=seed)
+        splits = list(standard_kfold.split(X))
 
     # Import factories
-    from wavedl.models import build_model
+    from wavedl.models import build_model, get_model
     from wavedl.utils import get_optimizer, get_scheduler
     from wavedl.utils.cv_components import build_cv_criterion
 
@@ -650,23 +737,24 @@ def run_cross_validation(
         logger.info(f"   Train: {len(train_idx)} samples, Val: {len(val_idx)} samples")
 
         # Split data
-        X_train, X_val = X[train_idx], X[val_idx]
+        X_train = _take_samples(X, train_idx)
+        X_val = _take_samples(X, val_idx)
         y_train, y_val = y[train_idx], y[val_idx]
 
         # Fit scaler on training data only
-        scaler = StandardScaler()
-        y_train_scaled = scaler.fit_transform(y_train)
+        scaler = create_target_scaler(y_train)
+        y_train_scaled = scaler.transform(y_train)
         y_val_scaled = scaler.transform(y_val)
 
         # Create datasets and loaders with explicit spatial dimensionality
         spatial_ndim = len(in_shape)
         train_ds = CVDataset(
-            X_train.astype(np.float32),
+            X_train,
             y_train_scaled.astype(np.float32),
             expected_spatial_ndim=spatial_ndim,
         )
         val_ds = CVDataset(
-            X_val.astype(np.float32),
+            X_val,
             y_val_scaled.astype(np.float32),
             expected_spatial_ndim=spatial_ndim,
         )
@@ -695,8 +783,27 @@ def run_cross_validation(
         )
 
         # Build model
+        model_class = get_model(model_name)
+        if len(out_shape) > 1 and not getattr(
+            model_class, "supports_spatial_output", False
+        ):
+            raise ValueError(
+                f"Model '{model_name}' cannot produce dense output {out_shape}. "
+                "Use unet_field or another spatial-output model."
+            )
+        if len(out_shape) == 1 and getattr(
+            model_class, "requires_spatial_output", False
+        ):
+            raise ValueError(
+                f"Model '{model_name}' requires dense field targets, got {out_shape}."
+            )
+        model_kwargs = {"out_shape": out_shape} if len(out_shape) > 1 else {}
         model = build_model(
-            model_name, in_shape=in_shape, out_size=out_size, pretrained=pretrained
+            model_name,
+            in_shape=in_shape,
+            out_size=out_size,
+            pretrained=pretrained,
+            **model_kwargs,
         )
         model = model.to(device)
 
@@ -781,6 +888,7 @@ def run_cross_validation(
                     "epoch": int(results["best_epoch"]),
                     "epochs_trained": int(results["epochs_trained"]),
                     "best_val_loss": float(results["best_val_loss"]),
+                    "target_shape": tuple(out_shape),
                     "cross_validation_fold": fold + 1,
                 },
                 f,
@@ -811,6 +919,7 @@ def run_cross_validation(
     summary = {
         "config": {
             "model": model_name,
+            "target_shape": out_shape,
             "folds": folds,
             "stratify": stratify,
             "stratify_bins": stratify_bins,
@@ -819,6 +928,9 @@ def run_cross_validation(
             "epochs": epochs,
             "patience": patience,
             "loss": loss_name,
+            "loss_weights": loss_weights,
+            "huber_delta": huber_delta,
+            "pretrained": pretrained,
             "optimizer": optimizer_name,
             "scheduler": scheduler_name,
         },
@@ -853,8 +965,7 @@ def run_cross_validation(
         summary_save = {
             **summary,
             "fold_results": [
-                {k: v for k, v in r.items() if k != "history"}
-                for r in summary["fold_results"]
+                {k: v for k, v in r.items() if k != "history"} for r in fold_results
             ],
         }
         # R² is legitimately undefined for folds containing one validation

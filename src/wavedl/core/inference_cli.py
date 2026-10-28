@@ -22,7 +22,7 @@ def build_inference_parser(*, models=()) -> argparse.ArgumentParser:
         "--data_path",
         type=str,
         required=True,
-        help="Path to test data (NPZ or MAT format)",
+        help="Path to test data (NPZ, HDF5, or MAT v7.3 format)",
     )
 
     # Model specification
@@ -66,7 +66,7 @@ def build_inference_parser(*, models=()) -> argparse.ArgumentParser:
         type=str,
         nargs="+",
         default=None,
-        help="Parameter names for output (e.g., 'h' 'v11' 'v12')",
+        help="Parameter/channel names for output (e.g., 'h' 'v11' 'v12')",
     )
     parser.add_argument(
         "--input_channels",
@@ -74,6 +74,11 @@ def build_inference_parser(*, models=()) -> argparse.ArgumentParser:
         default=None,
         help="Explicit number of input channels. Bypasses auto-detection heuristics "
         "for ambiguous 4D shapes (e.g., 3D volumes with small depth).",
+    )
+    parser.add_argument(
+        "--allow_pickle",
+        action="store_true",
+        help="Allow trusted legacy NPZ object arrays (can execute arbitrary code).",
     )
 
     # Inference options
@@ -87,7 +92,9 @@ def build_inference_parser(*, models=()) -> argparse.ArgumentParser:
         "--output_dir", type=str, default=".", help="Directory for saving results"
     )
     parser.add_argument(
-        "--save_predictions", action="store_true", help="Save predictions to CSV"
+        "--save_predictions",
+        action="store_true",
+        help="Save vector predictions to CSV or dense fields to compressed NPZ",
     )
     parser.add_argument("--plot", action="store_true", help="Generate diagnostic plots")
     parser.add_argument(
@@ -130,7 +137,10 @@ def build_inference_parser(*, models=()) -> argparse.ArgumentParser:
         "--out_size",
         type=int,
         default=None,
-        help="Override output size (inferred from scaler.pkl if targets missing)",
+        help=(
+            "Override vector target count or field channel count "
+            "(inferred from scaler.pkl if targets are missing)"
+        ),
     )
 
     parser.add_argument(
