@@ -13,7 +13,9 @@ export const requiredCases = Object.freeze([
   'baseline', 'detach', 'reload', 'cancel', 'lost-ack',
   'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity',
 ]);
-const maxBytes = 1024 * 1024;
+// Bounds parsing only. The rebuilt dataset preview exports more views, so the
+// summary's download-directory checkpoints exceed 1 MiB on a passing run.
+const maxBytes = 4 * 1024 * 1024;
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 async function boundedFile(path) {
@@ -489,7 +491,7 @@ export async function verifySummary(summaryPath, manifestPath) {
     'Summary must be completed');
   assert(Array.isArray(summary.cases), 'Summary cases missing');
   assert.deepEqual(summary.cases.map((record) => record.name).sort(), [...requiredCases].sort(),
-    'Exactly the twelve required cases must appear once each');
+    'Exactly the required cases must appear once each');
   const inventory = JSON.parse((await boundedFile(join(repo, 'web/shared/training-options.json'))).toString('utf8'));
   for (const record of summary.cases) {
     checkRecord(record, hash, summary.browser, directory);
@@ -530,7 +532,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(`Browser acceptance verified: ${report.cases}/${requiredCases.length} passed; cleanup proven; assets ${report.assetManifestSha256}`);
   } catch (error) {
     // Never echo report contents, bootstrap URLs, argv, or private root paths.
-    console.error(`Browser acceptance evidence rejected (${error.code ?? 'INVALID_REPORT'}); all twelve current-build cases and cleanup proof are mandatory`);
+    console.error(`Browser acceptance evidence rejected (${error.code ?? 'INVALID_REPORT'}); all required current-build cases and cleanup proof are mandatory`);
     process.exitCode = 1;
   }
 }
