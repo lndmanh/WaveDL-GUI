@@ -12,7 +12,7 @@ provideShellScroll(scrollContainer);
     <div
       id="workspace"
       ref="scrollContainer"
-      class="shell-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+      class="shell-scroll relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
       data-shell-scroll
       tabindex="-1"
       data-testid="workstation-content"
