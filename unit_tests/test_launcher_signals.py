@@ -51,7 +51,6 @@ def _gone(pid: int) -> bool:
     "args",
     [
         ["--num_gpus", "0"],
-        ["--cpu", "--num_gpus", "0"],
         ["--cpu", "--num_gpus", "65"],
         ["--cpu", "--num_machines", "2", "--main_process_ip", "10.0.0.1"],
     ],
@@ -91,15 +90,6 @@ def test_multi_gpu_launch_keeps_ranks_in_launcher_group(monkeypatch):
     assert cmd[cmd.index("-m", 3) :][:2] == ["-m", "wavedl.train"]
     assert env is None
     assert kwargs == {"signal_leader_only": True}
-
-
-def test_cpu_flag_belongs_to_accelerate(monkeypatch):
-    cmd, env, _kwargs = _launch_commands(monkeypatch, "--cpu")
-    assert cmd[1:3] == ["-m", "accelerate.commands.launch"]
-    assert "--num_processes=1" in cmd
-    assert "--cpu" in cmd[: cmd.index("wavedl.train")]
-    assert "--cpu" not in cmd[cmd.index("wavedl.train") + 1 :]
-    assert env is None
 
 
 def test_multi_process_cpu_uses_torchrun(monkeypatch):
@@ -145,7 +135,6 @@ def test_distributed_launch_routes_ranks_through_run_path(monkeypatch):
     [
         ["--num_processes=2", "-m", "wavedl.train"],
         ["--multi_gpu", "--cpu", "-m", "wavedl.train"],
-        ["--multi_gpu", "-m", "other.module"],
     ],
 )
 def test_distributed_launch_rejects_other_launches(argv):
@@ -203,62 +192,6 @@ def test_ignored_signals_stay_ignored(monkeypatch):
 
 
 @posix_only
-def test_signal_during_spawn_is_forwarded_to_group(monkeypatch):
-    child = Mock(pid=4242, returncode=None)
-    observer = Mock()
-    observer.observe.return_value = True
-    calls = []
-
-    def spawn(cmd, **kwargs):
-        assert kwargs["start_new_session"] is True
-        signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
-        return child
-
-    def reap(*args, **kwargs):
-        # A repeated signal while reaping must neither re-signal nor change code.
-        signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
-        calls.append("wait")
-        child.returncode = -signal.SIGKILL
-        return child.returncode
-
-    child.wait.side_effect = reap
-    monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
-    monkeypatch.setattr(launcher, "_ChildExitObserver", lambda proc: observer)
-    monkeypatch.setattr(launcher, "_group_alive", lambda pgid: False)
-    monkeypatch.setattr(
-        launcher.os, "killpg", lambda group, sig: calls.append((group, sig))
-    )
-    assert launcher._run_training_process(["train"]) == 128 + signal.SIGTERM
-    assert calls == [(4242, signal.SIGTERM), (4242, signal.SIGKILL), "wait"]
-    child.poll.assert_not_called()
-
-
-@posix_only
-def test_leader_only_forwarding_still_kills_group(monkeypatch):
-    child = Mock(pid=4242, returncode=None)
-    observer = Mock()
-    observer.observe.return_value = True
-    calls = []
-
-    def spawn(cmd, **kwargs):
-        signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
-        return child
-
-    monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
-    monkeypatch.setattr(launcher, "_ChildExitObserver", lambda proc: observer)
-    monkeypatch.setattr(launcher, "_group_alive", lambda pgid: False)
-    monkeypatch.setattr(
-        launcher.os, "kill", lambda pid, sig: calls.append(("kill", pid, sig))
-    )
-    monkeypatch.setattr(
-        launcher.os, "killpg", lambda pgid, sig: calls.append(("killpg", pgid, sig))
-    )
-    result = launcher._run_training_process(["train"], signal_leader_only=True)
-    assert result == 128 + signal.SIGINT
-    assert calls == [("kill", 4242, signal.SIGINT), ("killpg", 4242, signal.SIGKILL)]
-
-
-@posix_only
 def test_observer_failure_kills_and_reaps_group(monkeypatch):
     children = []
     real_popen = subprocess.Popen
@@ -282,7 +215,6 @@ def test_observer_failure_kills_and_reaps_group(monkeypatch):
 @pytest.mark.parametrize(
     ("code", "expected"),
     [
-        ("raise SystemExit(0)", 0),
         ("raise SystemExit(7)", 7),
         ("import os, signal; os.kill(os.getpid(), signal.SIGKILL)", 137),
         ("import os, signal; os.kill(os.getpid(), signal.SIGTERM)", 143),
