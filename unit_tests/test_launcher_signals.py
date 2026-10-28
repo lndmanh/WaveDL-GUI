@@ -192,6 +192,31 @@ def test_ignored_signals_stay_ignored(monkeypatch):
 
 
 @posix_only
+def test_leader_only_forwarding_still_kills_group(monkeypatch):
+    child = Mock(pid=4242, returncode=None)
+    observer = Mock()
+    observer.observe.return_value = True
+    calls = []
+
+    def spawn(cmd, **kwargs):
+        signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
+        return child
+
+    monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
+    monkeypatch.setattr(launcher, "_ChildExitObserver", lambda proc: observer)
+    monkeypatch.setattr(launcher, "_group_alive", lambda pgid: False)
+    monkeypatch.setattr(
+        launcher.os, "kill", lambda pid, sig: calls.append(("kill", pid, sig))
+    )
+    monkeypatch.setattr(
+        launcher.os, "killpg", lambda pgid, sig: calls.append(("killpg", pgid, sig))
+    )
+    result = launcher._run_training_process(["train"], signal_leader_only=True)
+    assert result == 128 + signal.SIGINT
+    assert calls == [("kill", 4242, signal.SIGINT), ("killpg", 4242, signal.SIGKILL)]
+
+
+@posix_only
 def test_observer_failure_kills_and_reaps_group(monkeypatch):
     children = []
     real_popen = subprocess.Popen
