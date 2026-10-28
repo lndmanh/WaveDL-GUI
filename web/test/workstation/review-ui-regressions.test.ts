@@ -11,6 +11,9 @@ import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
 import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
+import TrainingExport from '../../app/components/project/TrainingExport.vue';
+import EnvironmentFields from '../../app/components/project/EnvironmentFields.vue';
+import type { TrainingRequest } from '../../shared/schemas/training-request';
 import { MetricHistory } from '../../app/lib/metric-history';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
@@ -275,4 +278,22 @@ it('announces an empty directory after navigating the searchable root picker', a
   expect(wrapper.get('[role="status"]').text()).toBe('This directory has no selectable entries.');
   wrapper.unmount();
   owner.detach();
+});
+
+it('keeps secondary export and environment panels closed until deliberately opened', async () => {
+  // Acceptance scripts prove that opening these panels is a deliberate, side-effect-free action.
+  const panels = [
+    mount(TrainingExport, { props: { draft: {} as TrainingRequest, disabled: false } }),
+    mount(EnvironmentFields, { props: { environment: {}, disabled: false } }),
+  ];
+  for (const wrapper of panels) {
+    const trigger = wrapper.get('[data-slot="collapsible-trigger"]');
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+    expect(wrapper.get('[data-slot="collapsible-content"]').classes()).toContain(
+      'data-[state=closed]:hidden',
+    );
+    await trigger.trigger('click');
+    expect(trigger.attributes('aria-expanded')).toBe('true');
+    wrapper.unmount();
+  }
 });

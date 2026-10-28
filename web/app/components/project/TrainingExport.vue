@@ -57,11 +57,14 @@ async function copy() {
 }
 </script>
 <template>
-  <Collapsible :default-open="true">
+  <Collapsible>
     <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
       {{ t('project.standaloneConfigurationExport') }}
     </CollapsibleTrigger>
-    <CollapsibleContent class="mt-4 flex flex-col gap-4">
+    <CollapsibleContent
+      :force-mount="true"
+      class="mt-4 flex flex-col gap-4 data-[state=closed]:hidden"
+    >
       <p>{{ t('project.exportHelp') }}</p>
       <div class="flex flex-wrap gap-2">
         <Badge variant="outline">{{ t('project.exportSamePaths') }}</Badge>

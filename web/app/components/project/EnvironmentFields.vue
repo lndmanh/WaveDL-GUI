@@ -38,7 +38,7 @@ function remove(key: string) {
 }
 </script>
 <template>
-  <Collapsible :default-open="true">
+  <Collapsible>
     <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
       {{ t('project.explicitRuntimeEnvironment') }}
     </CollapsibleTrigger>
