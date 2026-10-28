@@ -111,7 +111,10 @@ describe('project plan refusal feedback', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain(refusal));
     expect(wrapper.text()).not.toContain('sensitive internal detail');
     expect(JSON.stringify(wrapper.getComponent(TrainingExport).props('draft'))).toBe(draftBefore);
-    expect(wrapper.text()).toContain('Dataset: /data/train.npz');
+    expect(
+      wrapper.get('button[aria-label^="Dataset: /data/train.npz"]').attributes('aria-label'),
+    ).toBe('Dataset: /data/train.npz · daemon daemon-one. Browser files are not uploaded.');
+    expect(wrapper.find('button[aria-label^="Dataset: Dataset:"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Model: custom_model');
     expect(calls.filter((path) => path === '/api/runs/plan')).toHaveLength(1);
     expect(wrapper.findComponent(PlanApproval).exists()).toBe(false);

@@ -138,7 +138,7 @@
   "chooseDaemonDataset": "Chọn bộ dữ liệu trên daemon",
   "trainingDataset": "Bộ dữ liệu huấn luyện",
   "notSelected": "Chưa chọn",
-  "datasetSelectionSummary": "Bộ dữ liệu: {path}{daemon}. Tệp trình duyệt không được tải lên.",
+  "datasetSelectionSummary": "{path}{daemon}. Tệp trình duyệt không được tải lên.",
   "daemonId": " · daemon {id}",
   "chooseModel": "Chọn mô hình",
   "modelSelectionSummary": "Mô hình: {model}{custom}.",

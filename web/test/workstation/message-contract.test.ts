@@ -120,6 +120,15 @@ function validMessageKey(key: string): boolean {
 }
 
 describe('message contracts', () => {
+  it('leaves the dataset label to the InfoChip without repeating it in the summary', () => {
+    for (const locale of ['en', 'vi'] as const) {
+      expect(messages[locale].project.datasetSelectionSummary).toMatch(/^\{path\}\{daemon\}\./);
+      expect(messages[locale].project.datasetSelectionSummary).not.toMatch(
+        /^(Dataset|Bộ dữ liệu):/,
+      );
+    }
+  });
+
   it('covers every closed state/operation/runtime enum and every derived key in both languages', () => {
     expect(Object.keys(runStateMessageKeys).sort()).toEqual([...RUN_STATES].sort());
     expect(Object.keys(runOperationMessageKeys).sort()).toEqual(['plot', 'test', 'train']);
@@ -208,6 +217,9 @@ describe('message contracts', () => {
       ...Object.keys(modelSourceHashes).flatMap((id) => [
         `models.${id}.description`,
         `models.${id}.bestFor`,
+        `models.${id}.shortDescription`,
+        `models.${id}.pros.first`,
+        `models.${id}.pros.second`,
       ]),
     ]);
     for (const file of [...sourceFiles(app), ...sourceFiles(resolve('shared/schemas'))].filter(
