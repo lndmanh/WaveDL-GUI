@@ -2,7 +2,7 @@
 import { mountWithI18n as mount } from './mountWithI18n';
 import { computed, defineComponent, h, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
-import WorkstationShell from '../../app/components/WorkstationShell.vue';
+import WorkstationShell from '../../app/components/shell/WorkstationShell.vue';
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import type { WorkstationLocale } from '../../app/i18n/core';
 import {
@@ -14,25 +14,19 @@ import {
 describe('workstation navigation', () => {
   it('offers all implemented destinations without requiring daemon authentication', async () => {
     const wrapper = mount(WorkstationShell, {
-      props: { status: 'disconnected', section: 'experiments' },
+      props: { status: 'disconnected', section: 'experiments', overlay: null },
     });
     const navigation = wrapper.get(`[data-testid="${WORKSTATION_SHELL_TEST_IDS.navigation}"]`);
-    const controls = navigation.findAll('button');
-    expect(controls.map((button) => button.text())).toEqual([
-      'Experiments',
-      'New training run',
-      'Datasets',
-      'Results',
-      'Adopt standalone run',
-      'Connection',
-      'Settings',
-    ]);
-    expect(controls).toHaveLength(WORKSTATION_SECTION_IDS.length);
-    expect(controls.map((button) => button.attributes('data-testid'))).toEqual(
-      WORKSTATION_SECTION_IDS.map(workstationNavTestId),
+    for (const section of WORKSTATION_SECTION_IDS) {
+      const control = wrapper.get(`[data-testid="${workstationNavTestId(section)}"]`);
+      expect(control.attributes('disabled')).toBeUndefined();
+      expect(control.attributes('aria-label') || control.text()).not.toBe('');
+    }
+    expect(navigation.find(`[data-testid="${workstationNavTestId('adopt')}"]`).exists()).toBe(
+      false,
     );
     await navigation.get(`[data-testid="${workstationNavTestId('settings')}"]`).trigger('click');
-    expect(wrapper.emitted('navigate')).toEqual([['settings']]);
+    expect(wrapper.emitted('update:overlay')).toContainEqual(['settings']);
     wrapper.unmount();
   });
 
@@ -46,6 +40,7 @@ describe('workstation navigation', () => {
             h(WorkstationShell, {
               status: 'disconnected',
               section: 'experiments',
+              overlay: null,
             });
         },
       });
@@ -57,7 +52,7 @@ describe('workstation navigation', () => {
       for (const section of WORKSTATION_SECTION_IDS) {
         const selector = `[data-testid="${workstationNavTestId(section)}"]`;
         expect(wrapper.findAll(selector)).toHaveLength(1);
-        expect(navigation.get(selector).exists()).toBe(true);
+        expect(wrapper.get(selector).exists()).toBe(true);
       }
       expect(
         navigation
@@ -70,10 +65,13 @@ describe('workstation navigation', () => {
           .attributes('aria-current'),
       ).toBeUndefined();
       for (const section of WORKSTATION_SECTION_IDS) {
-        await navigation.get(`[data-testid="${workstationNavTestId(section)}"]`).trigger('click');
+        await wrapper.get(`[data-testid="${workstationNavTestId(section)}"]`).trigger('click');
       }
       expect(shell.emitted('navigate')).toEqual(
-        WORKSTATION_SECTION_IDS.map((section) => [section]),
+        ['experiments', 'project', 'datasets', 'results'].map((section) => [section]),
+      );
+      expect(shell.emitted('update:overlay')).toEqual(
+        expect.arrayContaining([['adopt'], ['connection'], ['settings']]),
       );
       expect(wrapper.get(`[data-testid="${WORKSTATION_SHELL_TEST_IDS.content}"]`).exists()).toBe(
         true,

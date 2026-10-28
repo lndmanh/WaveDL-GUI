@@ -323,7 +323,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     await actions.button("Connection", false, { locator: '[data-testid="nav-connection"]' });
     report.connectionNavigation = await observe(`({
       panelPresent: !!document.querySelector('section[aria-labelledby="connection-title"]'),
-      navCurrent: document.querySelector('[data-testid="nav-connection"][aria-current="page"]')?.textContent.trim(),
+      overlayOpen: !!document.querySelector('[role="dialog"] section[aria-labelledby="connection-title"]'),
       authenticationNotice: document.body.innerText.includes('Your session ended. Sign in again.'),
       identityNotice: document.body.innerText.includes('Connection identity changed'),
     })`);

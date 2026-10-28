@@ -66,6 +66,7 @@ export async function authoringParity(driver) {
   await fill('epochs', '19');
   await button('Save training defaults');
   await cli('wait', '--text', 'Defaults saved for new drafts on this daemon.');
+  await button('Close overlay');
   await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
   check((await values(['epochs']))[0] === '10000', 'Saved new-run preference did not mutate the existing project draft');
 
@@ -100,6 +101,7 @@ export async function authoringParity(driver) {
   await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
   await expand('Training and optional W&B defaults');
   check((await values(['epochs']))[0] === '19', 'Project reset preserved separately saved browser new-run preference');
+  await button('Close overlay');
   await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
   await author();
   await expand('Standalone configuration export');

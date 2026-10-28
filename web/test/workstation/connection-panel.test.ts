@@ -20,6 +20,19 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 describe('connection UI ownership', () => {
+  it('presents a compact connection card with one credential field and one primary action', () => {
+    const wrapper = mount(ConnectionPanel, { props: { state: initial } });
+
+    expect(wrapper.get('[data-testid="connection-card"]').exists()).toBe(true);
+    expect(wrapper.get('#connection-title').text()).toBe('Connect to your daemon.');
+    expect(wrapper.text()).toContain('Execution belongs to the daemon.');
+    expect(wrapper.findAll('input')).toHaveLength(1);
+    expect(wrapper.findAll('button[type="submit"]')).toHaveLength(1);
+    expect(wrapper.get('#daemon-bearer').attributes('aria-describedby')).toBe('daemon-bearer-help');
+    expect(wrapper.get('#keep-signed-in').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('validates bearer, emits only a deliberate connect, then clears it from the DOM', async () => {
     const wrapper = mount(ConnectionPanel, { props: { state: initial } });
     await wrapper.get('form').trigger('submit');
@@ -91,12 +104,44 @@ describe('connection UI ownership', () => {
         },
       },
     });
+    expect(wrapper.get('[data-testid="connection-live-chip"]').text()).toContain('Connected');
+    expect(wrapper.get('[data-testid="connection-live-chip"]').text()).toContain('verified-id');
+    expect(wrapper.get('[data-testid="connection-live-chip"]').text()).toContain('1.8.1');
     expect(wrapper.text()).toContain('verified-id');
     expect(wrapper.find('input[type="password"]').exists()).toBe(false);
     expect(wrapper.get('#keep-signed-in').attributes('aria-checked')).toBe('false');
     await wrapper.findAll('button')[1]?.trigger('click');
     expect(wrapper.emitted('detach')).toEqual([[]]);
     expect(wrapper.emitted('cancel')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('keeps the disconnect hedge verbatim behind a labelled, click-reachable popover', async () => {
+    const wrapper = mount(ConnectionPanel, {
+      attachTo: document.body,
+      props: {
+        state: {
+          status: 'connected',
+          revision: 1,
+          message: null,
+          health: { daemon_id: 'verified-id', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 },
+        },
+      },
+    });
+    const hedge =
+      'Disconnecting never cancels running jobs. An offline page cannot confirm live status or perform actions. A changed daemon identity requires an explicit disconnect before starting a new scope.';
+    expect(document.body.textContent).not.toContain(hedge);
+    const trigger = wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Connection details');
+    expect(trigger?.attributes('aria-haspopup')).toBe('dialog');
+    // Assert on the first render: happy-dom's focus emulation later trips reka's
+    // dismiss-on-focus-outside, which a real browser does not.
+    await trigger?.trigger('click');
+    expect(trigger?.attributes('aria-expanded')).toBe('true');
+    expect(
+      document.querySelector('[data-testid="connection-disconnect-help"]')?.textContent?.trim(),
+    ).toBe(hedge);
     wrapper.unmount();
   });
 

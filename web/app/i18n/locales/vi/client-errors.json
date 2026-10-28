@@ -52,8 +52,6 @@
   "autoPlotAckMismatch": "Xác nhận vẽ tự động không khớp với kế hoạch đã lưu",
   "autoPlotAcknowledged": "Daemon đã xác nhận tác vụ vẽ biểu đồ chẩn đoán.",
   "autoPlotAlreadySubmitted": "Vẽ tự động thuộc một quy trình huấn luyện đã gửi.",
-  "autoPlotIntentMissing": "Vẽ tự động chưa có yêu cầu đã ghi nhận đủ điều kiện.",
-  "autoPlotMustUseItsPersistedPlan": "Vẽ tự động phải dùng kế hoạch đã lưu.",
   "invalidDaemonCatalogResponse": "Phản hồi danh mục daemon không hợp lệ",
   "catalogSelectionStale": "Chọn lại từ daemon đã xác thực hiện tại.",
   "invalidBrowseLocation": "Vị trí duyệt không hợp lệ.",

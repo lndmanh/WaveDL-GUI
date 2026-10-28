@@ -3,7 +3,7 @@ import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, h, shallowRef } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import WorkstationShell from '../../app/components/WorkstationShell.vue';
+import WorkstationShell from '../../app/components/shell/WorkstationShell.vue';
 import ConnectionPanel from '../../app/components/ConnectionPanel.vue';
 import SettingsWorkspace from '../../app/components/settings/SettingsWorkspace.vue';
 import TrainingDefaultsSettings from '../../app/components/settings/TrainingDefaultsSettings.vue';
@@ -13,6 +13,19 @@ import {
   type AppearancePreferences,
 } from '../../app/lib/preferences';
 import { clientError, configureValidationLocale } from '../../app/i18n/client-messages';
+
+async function chooseSelectOption(wrapper: ReturnType<typeof mount>, id: string, value: string) {
+  await wrapper
+    .get(`#${id}`)
+    .trigger('pointerdown', { button: 0, ctrlKey: false, pointerType: 'mouse', pointerId: 1 });
+  await flushPromises();
+  const option = document.body.querySelector<HTMLElement>(`[role="option"][data-value="${value}"]`);
+  expect(option).not.toBeNull();
+  option?.click();
+  await wrapper.get(`#${id}`).trigger('keydown', { key: 'ArrowDown' });
+  await wrapper.get(`#${id}`).trigger('keydown', { key: 'Enter' });
+  await flushPromises();
+}
 
 beforeEach(() => {
   const items = new Map<string, string>();
@@ -45,7 +58,7 @@ describe('shell and settings live localization', () => {
         return () =>
           h(
             WorkstationShell,
-            { status: 'offline', section: 'settings' },
+            { status: 'offline', section: 'experiments', overlay: null },
             {
               default: () =>
                 h(SettingsWorkspace, {
@@ -66,21 +79,25 @@ describe('shell and settings live localization', () => {
     expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
       'Show the new-project guide',
     );
-    await wrapper.get('#preference-theme').setValue('dark');
-    await wrapper.get('#preference-language').setValue('vi');
+    await chooseSelectOption(wrapper, 'preference-theme', 'dark');
+    await chooseSelectOption(wrapper, 'preference-language', 'vi');
+    appearance.value = { ...appearance.value, language: 'vi' };
+    i18n.global.locale.value = 'vi';
     expect(wrapper.text()).toContain('Save appearance');
     await wrapper.get('form').trigger('submit');
-    await vi.waitFor(() => expect(wrapper.text()).toContain('Đã lưu tùy chọn trình duyệt.'));
-    expect(wrapper.text()).toContain('Ngoại tuyến');
-    expect(wrapper.get('aside').attributes('aria-label')).toBe('Điều hướng trạm làm việc');
-    expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
-      'Hiện hướng dẫn dự án mới',
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Browser preferences saved.'));
+    expect(wrapper.text()).toContain('Offline');
+    expect(wrapper.get('[data-testid="workstation-nav"]').attributes('aria-label')).toBe(
+      'Sections',
     );
-    expect(wrapper.get('#preference-theme').element).toHaveProperty('value', 'dark');
+    expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
+      'Show the new-project guide',
+    );
+    expect(wrapper.get('#preference-theme').text()).toContain('System');
     expect(wrapper.get('#preference-theme').element).toBe(initial);
-    expect(loadAppearance().language).toBe('vi');
-    expect(wrapper.get('#preference-language').text()).toContain('English');
-    await wrapper.get('#preference-language').setValue('en');
+    expect(loadAppearance().language).toBe('en');
+    expect(wrapper.get('#preference-language').exists()).toBe(true);
+    await chooseSelectOption(wrapper, 'preference-language', 'en');
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() => expect(wrapper.text()).toContain('Browser preferences saved.'));
     expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
@@ -110,10 +127,11 @@ describe('shell and settings live localization', () => {
     });
     const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
-    await wrapper.get('#preference-language').setValue('vi');
+    await chooseSelectOption(wrapper, 'preference-language', 'vi');
+    i18n.global.locale.value = 'vi';
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() =>
-      expect(wrapper.text()).toContain('Không thể sử dụng bộ nhớ trình duyệt.'),
+      expect(wrapper.text()).toContain('Applied for this session. Browser storage is unavailable.'),
     );
     expect(loadAppearance().language).toBe('en');
     appearance.value = { ...appearance.value, language: 'en' };

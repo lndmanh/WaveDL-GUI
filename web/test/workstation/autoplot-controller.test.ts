@@ -246,6 +246,7 @@ async function setup(
       sourceRun = train,
       processes = 1,
       imports: string[] = [],
+      model = 'cnn',
     ) => {
       trainingPlan = approved(cv);
       trainingPlan.preview.topology = {
@@ -258,6 +259,8 @@ async function setup(
       trainingPlan.request_id = sourceRun.request_id;
       const sourceManifest = JSON.parse(String(trainingPlan.preview.manifest_json));
       sourceManifest.run_id = sourceRun.run_id;
+      sourceManifest.resolved_config.import_modules = imports;
+      sourceManifest.resolved_config.model = model;
       trainingPlan.preview.manifest_json = JSON.stringify(sourceManifest);
       trainingPlan.preview.target = backend;
       const request = trainingRequestSchema.parse({
@@ -265,7 +268,7 @@ async function setup(
         operation: 'train',
         config: {
           ...trainingDefaults,
-          model: 'cnn',
+          model,
           data_path: '/approved/train.npz',
           import_modules: imports,
           cv,
@@ -312,6 +315,66 @@ async function setup(
   };
 }
 describe('actual captured automatic plot coordinator', () => {
+  it('isolates captured imports and run identity and reconstructs the same durable plot key', async () => {
+    const keys: string[] = [];
+    for (let reconstruction = 0; reconstruction < 2; reconstruction++) {
+      const owner = await setup();
+      try {
+        const imports = ['custom_models.registration', 'custom_losses'];
+        const plan = await owner.approve(0, 'local', undefined, train, 1, imports, 'custom_model');
+        const captured = structuredClone(train);
+        owner.controller.capture(captured, plan);
+        imports.push('later_unapproved_module');
+        captured.backend = 'slurm';
+        captured.run_id = plot.run_id;
+        owner.losePlan(true);
+        await owner.controller.observeFresh(train);
+        owner.losePlan(false);
+        await owner.controller.retry();
+        expect(owner.bodies).toHaveLength(2);
+        expect(owner.bodies[1]).toBe(owner.bodies[0]);
+        expect(owner.keys[1]).toBe(owner.keys[0]);
+        const request = JSON.parse(owner.bodies[0] ?? '');
+        expect(request.config.model).toBe('custom_model');
+        expect(request.config.import_modules).toEqual([
+          'custom_models.registration',
+          'custom_losses',
+        ]);
+        expect(request.config.data_path).toBe('/approved/train.npz');
+        expect(request.runtime.python).toBe('/approved/python');
+        expect(request.operation).toBe('plot');
+        keys.push(owner.keys[0] ?? '');
+        await owner.controller.observeFresh(train);
+        expect(owner.bodies).toHaveLength(2);
+      } finally {
+        owner.controller.dispose();
+        owner.session.detach();
+      }
+    }
+    expect(keys[0]).toBe(`web-autoplot-v1:${train.run_id}:${train.request_id}:gen-000005`);
+    expect(keys[1]).toBe(keys[0]);
+  });
+  it.each([
+    { uncertainty: true },
+    { state: 'running' as const },
+    { evidence: { native_pending: true } },
+    { cancellation_requested: true },
+    { run_id: plot.run_id },
+    { request_id: plot.request_id },
+    { plan_id: plot.plan_id },
+    { attempt: 2 },
+  ])('does not plan from ineligible fresh evidence %j', async (update) => {
+    const owner = await setup();
+    try {
+      owner.controller.capture(train, await owner.approve());
+      await owner.controller.observeFresh({ ...train, ...update });
+      expect(owner.bodies).toHaveLength(0);
+      expect(owner.routes).not.toContain('POST /api/runs');
+    } finally {
+      owner.controller.dispose();
+      owner.session.detach();
+    }
+  });
   it('does not submit or rewrite resource authority when the daemon cannot express the plot plan', async () => {
     const owner = await setup();
     try {

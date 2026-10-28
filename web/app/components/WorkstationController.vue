@@ -6,12 +6,13 @@ import type { DaemonApiError, RunView } from '../lib/daemon-api';
 import { CLIENT_BUILD_ID } from '../lib/build-identity';
 import { useDaemonConnection } from '../composables/useDaemonConnection';
 import { useAutomaticPlots } from '../composables/useAutomaticPlots';
-import WorkstationShell from './WorkstationShell.vue';
+import WorkstationShell from './shell/WorkstationShell.vue';
 import ConnectionPanel from './ConnectionPanel.vue';
 import RunsWorkspace from './runs/RunsWorkspace.vue';
 import BuildSkewPrompt from './BuildSkewPrompt.vue';
 import AutomaticPlotStatus from './results/AutomaticPlotStatus.vue';
 import { applyAppearance, loadAppearance, type AppearancePreferences } from '../lib/preferences';
+import { useShellLayout } from '../composables/useShellLayout';
 const ProjectContainer = defineAsyncComponent(() => import('./project/ProjectContainer.vue'));
 const DatasetsWorkspace = defineAsyncComponent(() => import('./datasets/DatasetsWorkspace.vue'));
 const ResultsContainer = defineAsyncComponent(() => import('./results/ResultsContainer.vue'));
@@ -23,11 +24,18 @@ const connection = useDaemonConnection({
   buildId: CLIENT_BUILD_ID,
 });
 const { state, api, keepSignedIn } = connection;
+const connectionProps = computed(() => ({ state: state.value, keepSignedIn: keepSignedIn.value }));
+const connectionListeners = {
+  connect: connection.connect,
+  reconnect: connection.reconnect,
+  'update:keepSignedIn': connection.setKeepSignedIn,
+  detach: connection.detach,
+  refresh: connection.refresh,
+};
 const automaticPlots = useAutomaticPlots(connection.session);
 const automaticPlotState = automaticPlots.state;
-const section = shallowRef<
-  'experiments' | 'project' | 'datasets' | 'results' | 'settings' | 'adopt' | 'connection'
->('experiments');
+const { activeSection: section } = useShellLayout();
+const overlay = shallowRef<'connection' | 'settings' | 'adopt' | null>(null);
 const appearance = shallowRef(loadAppearance());
 provideWorkstationLocale(computed(() => appearance.value.language));
 // Keep the head manager in sync too: its deferred startup render otherwise
@@ -55,9 +63,11 @@ const resultsOpened = shallowRef(false);
 const submittedRun = shallowRef<string | null>(null);
 watch(section, (value) => {
   if (value === 'project') projectOpened.value = true;
-  if (value === 'adopt') adoptionOpened.value = true;
   if (value === 'datasets') datasetsOpened.value = true;
   if (value === 'results') resultsOpened.value = true;
+});
+watch(overlay, (value) => {
+  if (value === 'adopt') adoptionOpened.value = true;
 });
 watch(
   () => state.value.revision,
@@ -71,6 +81,7 @@ function submitted(run: RunView) {
 }
 function monitorRun(runId: string) {
   submittedRun.value = runId;
+  overlay.value = null;
   section.value = 'experiments';
 }
 const reportFailure = computed(() => {
@@ -80,7 +91,30 @@ const reportFailure = computed(() => {
 </script>
 
 <template>
-  <WorkstationShell :status="state.status" :section="section" @navigate="section = $event">
+  <WorkstationShell
+    v-model:overlay="overlay"
+    :status="state.status"
+    :section="section"
+    @navigate="section = $event"
+  >
+    <template #connection>
+      <ConnectionPanel v-bind="connectionProps" v-on="connectionListeners" />
+    </template>
+    <template #settings>
+      <SettingsWorkspace
+        :daemon-id="state.health?.daemon_id ?? null"
+        :appearance="appearance"
+        @appearance-changed="appearanceChanged"
+      />
+    </template>
+    <template #adopt>
+      <AdoptRunPanel
+        v-if="adoptionOpened && !!api"
+        :session="connection.session"
+        @adopted-run-id="monitorRun"
+      />
+      <ConnectionPanel v-else v-bind="connectionProps" v-on="connectionListeners" />
+    </template>
     <AutomaticPlotStatus
       :state="automaticPlotState"
       @retry="automaticPlots.retry"
@@ -88,14 +122,9 @@ const reportFailure = computed(() => {
       @monitor="monitorRun"
     />
     <ConnectionPanel
-      v-if="section === 'connection' || (!api && section !== 'settings')"
-      :state="state"
-      :keep-signed-in="keepSignedIn"
-      @connect="connection.connect"
-      @reconnect="connection.reconnect"
-      @update:keep-signed-in="connection.setKeepSignedIn"
-      @detach="connection.detach"
-      @refresh="connection.refresh"
+      v-if="!api && overlay !== 'connection' && overlay !== 'adopt'"
+      v-bind="connectionProps"
+      v-on="connectionListeners"
     />
     <ProjectContainer
       v-if="projectOpened"
@@ -111,12 +140,6 @@ const reportFailure = computed(() => {
       :session="connection.session"
     >
     </DatasetsWorkspace>
-    <AdoptRunPanel
-      v-if="adoptionOpened"
-      v-show="!!api && section === 'adopt'"
-      :session="connection.session"
-      @adopted-run-id="monitorRun"
-    />
     <RunsWorkspace
       v-if="!!api"
       v-show="section === 'experiments'"
@@ -133,12 +156,6 @@ const reportFailure = computed(() => {
       :session="connection.session"
       :run-id="submittedRun"
       @run-selected="monitorRun"
-    />
-    <SettingsWorkspace
-      v-if="section === 'settings'"
-      :daemon-id="state.health?.daemon_id ?? null"
-      :appearance="appearance"
-      @appearance-changed="appearanceChanged"
     />
     <BuildSkewPrompt :visible="state.buildMismatch === true" />
   </WorkstationShell>
