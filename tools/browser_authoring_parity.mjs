@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Real UI-only authoring slice. No Vue/private transport state or API mutations.
 import assert from 'node:assert/strict';
 import { readFile, writeFile, access } from 'node:fs/promises';
@@ -10,13 +11,13 @@ export async function authoringParity(driver) {
   const inventory = JSON.parse(await readFile(join(repo, 'web/shared/training-options.json'), 'utf8'));
   const defaults = Object.fromEntries(inventory.map((option) => [option.name, option.default]));
   const values = async (labels) => dom(`JSON.stringify(${JSON.stringify(labels)}.map(name => {
-    const label=Array.from(document.querySelectorAll('label')).find(e=>e.getClientRects().length&&e.textContent.trim()===name);
+    const label=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e=>e.textContent.trim()===name);
     const control=label ? document.getElementById(label.htmlFor) : null;
-    return control ? control.value : null;
+    return control ? (control.getAttribute('data-value') ?? control.value) : null;
   }))`);
   const select = (label, value) => actions.select(label, value);
   const expand = async (text) => {
-    const isOpen = await dom(`JSON.stringify(${controlExpression('summary', text)}[0]?.closest('details')?.open)`);
+    const isOpen = await dom(`JSON.stringify(${controlExpression('summary', text)}[0]?.getAttribute('aria-expanded') === 'true')`);
     if (!isOpen) {
       const before = await registry(root);
       await actions.expandSummary(text);
@@ -48,13 +49,13 @@ export async function authoringParity(driver) {
   // Exercise backward/forward navigation using the existing genuine selections.
   await button('Use guided steps');
   await button('Previous step');
-  await cli('wait', '--fn', `Array.from(document.querySelectorAll('p')).some(e=>e.getClientRects().length&&e.textContent.includes('samples.npz'))`);
+  await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.getClientRects().length&&e.textContent.includes('samples.npz'))`);
   await button('Next step');
-  await cli('wait', '--fn', `Array.from(document.querySelectorAll('p')).some(e=>e.getClientRects().length&&e.textContent.trim().startsWith('Model: cnn'))`);
+  await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.getClientRects().length&&e.textContent.trim().startsWith('Model: cnn'))`);
   await button('Next step');
   await button('Previous step');
   await button('Show full editor');
-  record.guidedSelectionsPreserved = await dom(`JSON.stringify(Array.from(document.querySelectorAll('p')).some(e=>e.textContent.trim().startsWith('Dataset: ')&&e.textContent.includes('/samples.npz'))&&Array.from(document.querySelectorAll('p')).some(e=>e.textContent.trim().startsWith('Model: cnn')))`);
+  record.guidedSelectionsPreserved = await dom(`JSON.stringify(Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Dataset: ')&&e.textContent.includes('/samples.npz'))&&Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn')))`);
   check(record.guidedSelectionsPreserved, 'Guided backward/forward navigation preserved genuine daemon dataset and catalogue model');
 
   await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
@@ -91,7 +92,7 @@ export async function authoringParity(driver) {
   await button('Confirm reset');
   const resetValues = await values(['epochs', 'batch size', 'Python interpreter']);
   check(Number(resetValues[0]) === defaults.epochs && Number(resetValues[1]) === defaults.batch_size && resetValues[2] === interpreter, 'Confirmed project reset restored bundled defaults and preserved execution interpreter');
-  check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('p')).some(e=>e.textContent.trim().startsWith('Dataset: ')&&e.textContent.includes('/samples.npz'))&&Array.from(document.querySelectorAll('p')).some(e=>e.textContent.trim().startsWith('Model: cnn')))`), 'Confirmed reset preserved selected daemon dataset and catalogue model');
+  check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Dataset: ')&&e.textContent.includes('/samples.npz'))&&Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn')))`), 'Confirmed reset preserved selected daemon dataset and catalogue model');
   record.resetContract = { restoredBundledDefaults: true, savedNewRunEpochs: 19, restoredEpochs: Number(resetValues[0]), interpreterPreserved: true };
   const afterResetDownload = await exportYaml('authoring-after-reset.yaml');
   check(afterResetDownload.config.data_path === beforeResetDownload.config.data_path && afterResetDownload.config.model === beforeResetDownload.config.model && afterResetDownload.config.epochs === defaults.epochs, 'Actual reset exports preserve dataset/model and restore bundled defaults in the unchanged browser download directory');
@@ -109,8 +110,8 @@ export async function authoringParity(driver) {
   check([' ', "'", '$', ';'].every((character) => exported.config.data_path.includes(character)), 'Actual selected daemon dataset path exercises spaces, quote and shell metacharacters');
   check(!['runtime', 'environment', 'token', 'access_token', 'output_dir'].some((key) => key in exported.config), 'YAML contains no runtime credentials/environment or allocated daemon output directory');
   await button('Copy standalone CLI command');
-  await cli('wait', '--fn', `Array.from(document.querySelectorAll('pre')).some(e=>e.getClientRects().length&&e.textContent.includes('wavedl.launcher'))`);
-  const text = await dom(`JSON.stringify(Array.from(document.querySelectorAll('pre')).find(e=>e.getClientRects().length&&e.textContent.includes('wavedl.launcher'))?.textContent)`);
+  await cli('wait', '--fn', `Array.from(document.querySelectorAll('[aria-label="Copied standalone command"]')).some(e=>e.getClientRects().length&&e.textContent.includes('wavedl.launcher'))`);
+  const text = await dom(`JSON.stringify(Array.from(document.querySelectorAll('[aria-label="Copied standalone command"]')).find(e=>e.getClientRects().length&&e.textContent.includes('wavedl.launcher'))?.textContent)`);
   const argv = JSON.parse(await command(python, ['-c', 'import json,shlex,sys; print(json.dumps(shlex.split(sys.stdin.read())))'], text));
   check(argv[0] === interpreter && argv.includes(`--data_path=${exported.config.data_path}`) && argv.includes('--mixed_precision') && argv[argv.indexOf('--mixed_precision') + 1] === 'no', 'Generated POSIX command parses to exact interpreter, quoted metacharacter dataset path and precision alias');
   check(argv.includes('--output_dir') && argv[argv.indexOf('--output_dir') + 1] === './results' && !text.includes(join(root, 'runs')) && !/Bearer|access_token|Authorization/.test(text), 'Standalone command uses only explicit ./results output and no allocated daemon target or credentials');
@@ -157,6 +158,7 @@ export async function authoringParity(driver) {
 
   await button('Preview persisted plan');
   await cli('wait', '--text', 'Persisted plan for approval');
+  await openPlanDisclosure({ cli, dom });
   const first = await capturePlan();
   check(first.state.plans === 1, 'First explicit preview persists exactly one unsubmitted plan');
   await fill('epochs', '12');
@@ -170,8 +172,10 @@ export async function authoringParity(driver) {
   await fill('batch size', '8');
   await button('Preview persisted plan');
   await cli('wait', '--text', 'Persisted plan for approval');
+  await openPlanDisclosure({ cli, dom });
   const final = await capturePlan();
   check(final.state.plans === 2 && final.rows.some((row) => JSON.stringify(row) === JSON.stringify(first.rows[0])), 'Valid revised preview persists a new plan while preserving original immutable plan');
+  await openPlanDisclosure({ cli, dom });
   const approved = JSON.parse(await dom(`JSON.stringify(document.querySelector('[aria-label="Approved normalized manifest"]')?.textContent)`));
   check(approved.resolved_config.epochs === 12 && Object.entries(authored).filter(([key]) => key !== 'epochs').every(([key, value]) => approved.resolved_config[key] === value), 'Revised persisted approval exactly matches validated UI-authored representative values');
   const lateExport = await exportYaml('authoring-after-preview.yaml');

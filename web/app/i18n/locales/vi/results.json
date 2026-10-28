@@ -1,4 +1,9 @@
 {
+  "ownershipOnly": "Đã xác nhận quyền sở hữu, chưa xác minh giám sát",
+  "exactIdentity": "Định danh tệp chính xác",
+  "explicitSource": "Checkpoint rõ ràng, kế hoạch đã duyệt",
+  "trustedCode": "Chỉ chạy mã đáng tin cậy",
+  "verifiedPng": "Xem trước PNG đã xác minh",
   "publications": "Chỉ liệt kê các bản công bố đã hoàn tất và được xác minh. Tệp tải xuống được kiểm tra trước khi lưu.",
   "generationAttempt": "Thế hệ / lần chạy",
   "artifact": "Tệp kết quả",

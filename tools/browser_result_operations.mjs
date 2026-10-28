@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Focused explicit CPU evaluation through public DOM and the existing owned runner.
 import assert from 'node:assert/strict';
 
@@ -24,14 +25,14 @@ export async function resultOperations({ cli, dom, button, actions, registry, po
   await actions.button('Results', false, { locator: '[data-testid="nav-results"]' });
   await button('Refresh artifacts');
   record.resultOperationStage = 'verified-checkpoint-options';
-  await cli('wait', '--fn', `Array.from(document.getElementById('source-generation')?.options ?? []).some(option => option.value && !option.disabled)`);
-  const options = await observe('Array.from(document.querySelector("#source-generation").options).filter(o=>o.value&&!o.disabled).map(o=>({value:o.value,label:o.textContent.trim()}))');
+  await cli('wait', '--fn', '!!document.getElementById("source-generation")');
+  const options = (await actions.options('Source checkpoint generation')).filter(option => option.value && !option.disabled);
   const chosen = options.find(option => option.label.endsWith('best'));
   assert(chosen, 'Published best classification must be explicitly selected');
   await actions.select('Source checkpoint generation', chosen.value);
   record.resultOperationStage = 'select-evaluation-dataset';
-  const locator = await actions.readyControl('field', 'Configured root', false,
-    { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Configured root"]` });
+  const locator = await actions.readyControl('field', 'Search roots and paths', false,
+    { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Search roots and paths"]` });
   await cli('click', locator);
   await actions.option('datasets');
   await actions.button('Select file samples.npz', false, { scope });
@@ -53,6 +54,7 @@ export async function resultOperations({ cli, dom, button, actions, registry, po
   await actions.fill('ONNX opset (11–17)', '17');
   record.resultOperationStage = 'preview-evaluation';
   await actions.button('Preview evaluation / plot plan', false, { scope });
+  await openPlanDisclosure({ cli, dom });
   await cli('wait', '--fn', `${planElement} !== null`);
   const preview = async () => JSON.parse(await observe(`${planElement}.textContent`));
   const abandoned = await preview();
@@ -62,6 +64,7 @@ export async function resultOperations({ cli, dom, button, actions, registry, po
   const revoked = await registry(root);
   assert(revoked.control.every(control => control.submission_requested === (before.control.some(prior=>prior.plan_id===control.plan_id) ? 1 : 0)), 'Draft change cannot submit obsolete preview');
   await actions.button('Preview evaluation / plot plan', false, { scope });
+  await openPlanDisclosure({ cli, dom });
   await cli('wait', '--fn', `${planElement} !== null`);
   const approved = await preview();
   assert.notEqual(approved.run_id, abandoned.run_id);

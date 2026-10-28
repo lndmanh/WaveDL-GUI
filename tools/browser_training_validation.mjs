@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Real-browser negative authoring and runtime validation.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -48,7 +49,7 @@ export async function trainingValidation(driver) {
     ["cv", "1"], ["Python interpreter", "python"],
   ];
   for (const text of ["Optimizer, loss and scheduling", "Data, checkpoints and cross-validation"]) {
-    const open = await dom(`JSON.stringify(${controlExpression("summary", text)}[0]?.closest('details')?.open)`);
+    const open = await dom(`JSON.stringify(${controlExpression("summary", text)}[0]?.getAttribute('aria-expanded') === 'true')`);
     if (!open) await summary(text);
   }
   const receipts = async () => {
@@ -64,7 +65,7 @@ export async function trainingValidation(driver) {
   const observation = async (label) => dom(`JSON.stringify((()=>{
     const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()===${JSON.stringify(label)});
     const e=labels.length===1?document.getElementById(labels[0].htmlFor):null;
-    return {id:e?.id,value:e?.getAttribute('aria-checked')??e?.value??null,invalid:e?.getAttribute('aria-invalid'),error:e?.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]')?.textContent||''};
+    return {id:e?.id,value:e?.getAttribute('aria-checked')??e?.getAttribute('data-value')??e?.value??null,invalid:e?.getAttribute('aria-invalid'),error:e?.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]')?.textContent||''};
   })())`);
   for (const [name, value] of invalid) {
     const beforeCase = await state();
@@ -206,6 +207,8 @@ export async function trainingValidation(driver) {
   await fill("workers", "0");
   await button("Preview persisted plan");
   await cli("wait", "--text", "Persisted plan for approval");
+  await openPlanDisclosure({ cli, dom });
+  await openPlanDisclosure({ cli, dom });
   const approved = JSON.parse(await dom('JSON.stringify(document.querySelector("[aria-label=\\"Approved normalized manifest\\"]")?.textContent)'));
   const rows = JSON.parse(await command(python, ["-c",
     'import json,sqlite3,sys;from pathlib import Path;c=sqlite3.connect((Path(sys.argv[1])/"state"/"registry.db").resolve().as_uri()+"?mode=ro",uri=True);print(json.dumps(list(c.execute("SELECT plan_id,request_payload_json,plan_json FROM plans"))))', root]));
@@ -229,6 +232,8 @@ export async function trainingValidation(driver) {
   await fill("cv", "2");
   await button("Preview persisted plan");
   await cli("wait", "--text", "Persisted plan for approval");
+  await openPlanDisclosure({ cli, dom });
+  await openPlanDisclosure({ cli, dom });
   const recoveredApproval = JSON.parse(await dom('JSON.stringify(document.querySelector("[aria-label=\\"Approved normalized manifest\\"]")?.textContent)'));
   const recoveredRows = JSON.parse(await command(python, ["-c",
     'import json,sqlite3,sys;from pathlib import Path;c=sqlite3.connect((Path(sys.argv[1])/"state"/"registry.db").resolve().as_uri()+"?mode=ro",uri=True);print(json.dumps(list(c.execute("SELECT plan_id,request_payload_json,plan_json FROM plans"))))', root]));

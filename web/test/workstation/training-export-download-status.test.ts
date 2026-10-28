@@ -32,7 +32,10 @@ describe('training YAML export status', () => {
       .mockImplementation(() => undefined);
     const wrapper = mount(TrainingExport, { props: { draft, disabled: false } });
 
-    await wrapper.get('button').trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Download YAML')!
+      .trigger('click');
 
     expect(click).toHaveBeenCalledOnce();
     expect(wrapper.text()).toContain('export requested');
@@ -53,7 +56,10 @@ describe('training YAML export status', () => {
     });
     const wrapper = mount(TrainingExport, { props: { draft, disabled: false } });
 
-    await wrapper.get('button').trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Download YAML')!
+      .trigger('click');
 
     expect(wrapper.text()).toContain('YAML export could not be requested');
     expect(wrapper.text()).not.toContain('Validate all training');

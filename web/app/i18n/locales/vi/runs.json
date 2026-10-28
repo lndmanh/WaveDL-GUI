@@ -1,4 +1,7 @@
 {
+  "boundedDiagnostics": "Cửa sổ nhật ký giới hạn",
+  "shortDiagnostics": "Chẩn đoán rút gọn",
+  "chartDetails": "Chi tiết tương tác biểu đồ",
   "operationTrain": "Huấn luyện",
   "operationTest": "Đánh giá",
   "operationPlot": "Vẽ biểu đồ",

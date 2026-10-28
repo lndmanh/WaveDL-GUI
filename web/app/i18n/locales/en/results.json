@@ -1,4 +1,9 @@
 {
+  "ownershipOnly": "Ownership confirmed, supervision unverified",
+  "exactIdentity": "Exact artifact identity",
+  "explicitSource": "Explicit checkpoint, approved plan",
+  "trustedCode": "Trusted runtime code only",
+  "verifiedPng": "Verified PNG previews",
   "publications": "Only verified, completed publications are listed. Downloads are checked before saving.",
   "generationAttempt": "Generation / attempt",
   "artifact": "Artifact",

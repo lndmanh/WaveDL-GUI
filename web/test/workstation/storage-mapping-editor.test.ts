@@ -129,11 +129,19 @@ describe('explicit storage mapping authoring', () => {
     });
     const wrapper = mount(host);
     await flushPromises();
-    expect(wrapper.text()).toContain(
-      'does not upload files, mount storage, resolve symlinks or verify access',
+    const infoLabels = wrapper
+      .findAll('button')
+      .map((button) => button.attributes('aria-label') ?? '');
+    expect(infoLabels.some((label) => label.includes('does not upload files, mount storage'))).toBe(
+      true,
     );
-    expect(wrapper.text()).toContain('interpreter path is an execution-realm path');
-    await wrapper.findAll('button')[0]?.trigger('click');
+    expect(
+      infoLabels.some((label) => label.includes('interpreter path is an execution-realm')),
+    ).toBe(true);
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Remove mapping 1')
+      ?.trigger('click');
     await flushPromises();
     expect(getValues().storage_map).toEqual([
       { host_root: '/second', execution_root: '/mounted/second' },
@@ -147,10 +155,16 @@ describe('explicit storage mapping authoring', () => {
     expect(getErrors()).toContain('storage_map');
     await wrapper.get('input[name="storage_map[0].host_root"]').setValue('/second');
     expect(await validateDraft()).toBe(true);
-    await wrapper.findAll('button')[0]?.trigger('click');
-    await wrapper.findAll('button')[0]?.trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Remove mapping 1')
+      ?.trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Remove mapping 1')
+      ?.trigger('click');
     await flushPromises();
-    expect(getValues().storage_map).toEqual([]);
+    expect(getValues().storage_map).toBeUndefined();
     expect(wrapper.findAll('input')).toHaveLength(0);
     expect(await validateDraft()).toBe(true);
     wrapper.unmount();
@@ -180,7 +194,12 @@ describe('explicit storage mapping authoring', () => {
     expect(editors[0]?.props('mappings')).toBeUndefined();
     expect(editors[1]?.props('mappings')).toEqual([]);
     for (const editor of editors) {
-      await editor.get('button').trigger('click');
+      const toggle = editor.get('button[data-slot="collapsible-trigger"]');
+      if (toggle.attributes('aria-expanded') === 'false') await toggle.trigger('click');
+      await editor
+        .findAll('button')
+        .find((button) => button.text() === 'Add mapping')
+        ?.trigger('click');
       await editor.get('input[name$="host_root"]').setValue('/data');
       await editor.get('input[name$="execution_root"]').setValue('/mounted/data');
       expect(editor.props('mappings')).toEqual(mappings);
@@ -236,8 +255,14 @@ describe('explicit storage mapping authoring', () => {
     const wrapper = mount(host, undefined, i18n);
     await flushPromises();
     expect(snapshots.every((value) => !Object.hasOwn(value, 'storage_map'))).toBe(true);
-    for (const editor of wrapper.findAllComponents(StorageMappingFields))
-      await editor.get('button').trigger('click');
+    for (const editor of wrapper.findAllComponents(StorageMappingFields)) {
+      const toggle = editor.get('button[data-slot="collapsible-trigger"]');
+      if (toggle.attributes('aria-expanded') === 'false') await toggle.trigger('click');
+      await editor
+        .findAll('button')
+        .find((button) => button.text() === 'Add mapping')
+        ?.trigger('click');
+    }
     expect(
       snapshots.every(
         (value) =>
@@ -274,7 +299,9 @@ describe('explicit storage mapping authoring', () => {
       },
     });
     const wrapper = mount(host);
-    expect(wrapper.get('details').attributes('open')).toBeDefined();
+    expect(wrapper.get('button[data-slot="collapsible-trigger"]').attributes('aria-expanded')).toBe(
+      'true',
+    );
     await wrapper.get('input[name$="host_root"]').setValue('/data/../escape');
     expect(wrapper.get('input[name$="host_root"]').attributes('aria-invalid')).toBe('true');
     expect(wrapper.text()).toContain('parent traversal');

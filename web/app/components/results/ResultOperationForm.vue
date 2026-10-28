@@ -4,6 +4,14 @@ import { useClientMessages } from '../../composables/useClientMessages';
 import { onBeforeUnmount, shallowRef, watch, toRaw } from 'vue';
 import { useForm, Field as VeeField } from 'vee-validate';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Field, FieldLabel, FieldError, FieldGroup } from '@/components/ui/field';
 import InferenceFields from './InferenceFields.vue';
 import { resultRequestSchema } from '../../../shared/schemas/result-request';
@@ -22,6 +30,7 @@ import RuntimeFields from '../project/RuntimeFields.vue';
 import EnvironmentFields from '../project/EnvironmentFields.vue';
 import StorageMappingFields from '../project/StorageMappingFields.vue';
 import PlanApproval from '../project/PlanApproval.vue';
+import InfoChip from '../common/InfoChip.vue';
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 function fieldMessage(message: string): string {
@@ -85,9 +94,8 @@ const unsubscribe = toRaw(props.session).subscribe((state) => {
     data.value = null;
   }
 });
-function chooseSource(event: Event) {
-  if (!(event.target instanceof HTMLSelectElement)) return;
-  const value = event.target.value;
+function chooseSource(value: unknown) {
+  if (typeof value !== 'string') return;
   const selected = sources.value.find(
     (item) => item.selectable && item.artifact.generation === value,
   )?.artifact;
@@ -117,8 +125,8 @@ function chooseData(selected: DataSelection) {
   data.value = selected;
   setFieldValue('config.data_path', selected.path);
 }
-function exportValue(event: Event): 'onnx' | null {
-  return event.target instanceof HTMLSelectElement && event.target.value === 'onnx' ? 'onnx' : null;
+function exportValue(value: unknown): 'onnx' | null {
+  return value === 'onnx' ? 'onnx' : null;
 }
 async function work(action: (signal: AbortSignal) => Promise<void>) {
   if (busy.value) return;
@@ -168,49 +176,65 @@ onBeforeUnmount(() => {
 <template>
   <section class="flex flex-col gap-5 border-t pt-6" aria-labelledby="inference-title">
     <h2 id="inference-title" class="text-xl font-semibold">{{ t('results.evaluatePlots') }}</h2>
-    <p class="text-sm text-muted-foreground">{{ t('results.sourceHelp') }}</p>
+    <InfoChip :label="t('results.explicitSource')" :text="t('results.sourceHelp')" uncertain />
     <BrowseContainer :session="session" @select="chooseData" />
     <form class="flex flex-col gap-5" @submit.prevent="preview">
       <FieldGroup>
         <Field
           ><FieldLabel for="source-generation">{{ t('results.sourceGeneration') }}</FieldLabel
-          ><select id="source-generation" :disabled="busy" @change="chooseSource">
-            <option value="">{{ t('results.choosePublication') }}</option>
-            <option
-              v-for="item in sources"
-              :key="item.artifact.generation"
-              :value="item.artifact.generation"
-              :disabled="!item.selectable"
-            >
-              {{ sourceLabel(item) }}
-            </option>
-          </select></Field
+          ><Select :disabled="busy" @update:model-value="chooseSource"
+            ><SelectTrigger id="source-generation" :data-value="source?.generation ?? ''"
+              ><SelectValue :placeholder="t('results.choosePublication')" /></SelectTrigger
+            ><SelectContent
+              ><SelectGroup
+                ><SelectItem
+                  v-for="item in sources"
+                  :key="item.artifact.generation"
+                  :value="item.artifact.generation"
+                  :disabled="!item.selectable"
+                >
+                  {{ sourceLabel(item) }}
+                </SelectItem></SelectGroup
+              ></SelectContent
+            ></Select
+          ></Field
         >
         <VeeField v-slot="{ field, errors }" name="operation"
           ><Field :data-invalid="!!errors.length"
             ><FieldLabel for="result-operation">{{ t('results.operation') }}</FieldLabel
-            ><select
-              id="result-operation"
-              v-bind="field"
+            ><Select
+              :model-value="field.value"
+              @update:model-value="field.onChange"
               :disabled="busy"
               :aria-invalid="!!errors.length"
-            >
-              <option value="test">{{ t('results.evaluate') }}</option>
-              <option value="plot">{{ t('results.generatePlots') }}</option></select
+              ><SelectTrigger id="result-operation" :data-value="field.value"
+                ><SelectValue /></SelectTrigger
+              ><SelectContent
+                ><SelectGroup
+                  ><SelectItem value="test">{{ t('results.evaluate') }}</SelectItem
+                  ><SelectItem value="plot">{{
+                    t('results.generatePlots')
+                  }}</SelectItem></SelectGroup
+                ></SelectContent
+              ></Select
             ><FieldError v-if="errors.length" :errors="errors.map(fieldMessage)" /></Field
         ></VeeField>
         <VeeField v-slot="{ field, errors }" name="config.export"
           ><Field :data-invalid="!!errors.length"
             ><FieldLabel for="result-export">{{ t('results.modelExport') }}</FieldLabel
-            ><select
-              id="result-export"
-              :value="field.value ?? ''"
+            ><Select
+              :model-value="field.value ?? ''"
+              @update:model-value="(value) => field.onChange(exportValue(value))"
               :disabled="busy"
               :aria-invalid="!!errors.length"
-              @change="field.onChange(exportValue($event))"
-            >
-              <option value="">{{ t('results.none') }}</option>
-              <option value="onnx">ONNX</option></select
+              ><SelectTrigger id="result-export" :data-value="field.value ?? 'none'"
+                ><SelectValue :placeholder="t('results.none')" /></SelectTrigger
+              ><SelectContent
+                ><SelectGroup
+                  ><SelectItem value="none">{{ t('results.none') }}</SelectItem
+                  ><SelectItem value="onnx">ONNX</SelectItem></SelectGroup
+                ></SelectContent
+              ></Select
             ><FieldError v-if="errors.length" :errors="errors.map(fieldMessage)" /></Field
         ></VeeField>
         <InferenceFields :disabled="busy" />

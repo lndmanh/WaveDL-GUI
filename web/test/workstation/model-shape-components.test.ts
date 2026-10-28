@@ -4,7 +4,7 @@ import { flushPromises } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue';
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
 import ModelList from '../../app/components/catalog/ModelList.vue';
@@ -28,8 +28,18 @@ const inspection: DatasetInspection = {
 const model: ModelDescription = {
   id: 'cnn',
   displayName: 'CNN',
+  architectureFamily: 'CNN',
+  authorInstitution: 'Example',
+  yearPublished: 1989,
+  paramsM: 1.6,
+  sizeMb: 6,
+  shortDescription: 'Simple convolutional baseline',
   description: 'Guidance',
   bestFor: 'Baseline',
+  pros: ['Fast'],
+  cons: ['Limited capacity'],
+  computeTier: 'Edge',
+  tags: ['baseline'],
   category: 'Classic CNNs',
   supportedDims: [1],
   pretrained: false,
@@ -74,24 +84,25 @@ describe('model dataset guidance UI', () => {
     const wrapper = mount(Provider);
     expect(wrapper.text()).toContain('Dimension mismatch');
     expect(wrapper.text()).toContain('32 × 32');
-    expect(wrapper.text()).toContain('not runtime validation');
+    await wrapper.get('[data-testid="model-details"]').trigger('click');
+    await nextTick();
+    expect(document.body.textContent).toContain('not runtime validation');
     expect(wrapper.get('button').attributes('disabled')).toBeUndefined();
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="model-select"]').trigger('click');
     expect(wrapper.getComponent(ModelList).emitted('select')?.[0]?.[0]).toEqual(model);
     data.value = { ...inspection, inputShape: [32] };
     await nextTick();
-    expect(wrapper.text()).toContain('runtime compatibility remain unverified');
+    expect(wrapper.text()).toContain('Dimensions described');
     locale.value = 'vi';
     await nextTick();
-    expect(wrapper.text()).toContain('Mẫu dữ liệu: 32');
-    expect(wrapper.text()).toContain('vẫn chưa được xác minh');
+    expect(wrapper.text()).toContain('Có mô tả số chiều');
     data.value = { ...inspection, inputShape: [3, 128, 128] };
     await nextTick();
-    expect(wrapper.text()).toContain('Mẫu dữ liệu chưa rõ');
+    expect(wrapper.text()).toContain('Hình dạng chưa rõ');
     expect(wrapper.text()).not.toContain('Không khớp số chiều');
     data.value = null;
     await nextTick();
-    expect(wrapper.text()).toContain('Chưa có gợi ý hình dạng');
+    expect(wrapper.text()).toContain('Chưa kiểm tra hình dạng');
     wrapper.unmount();
   });
 
@@ -102,9 +113,9 @@ describe('model dataset guidance UI', () => {
     const second = await api.resolve('data', 'second.npz');
     const wrapper = mount(ProjectContainer, {
       props: { session },
-      global: { stubs: { BrowseContainer: true, DatasetInfoPanel: true, ModelSelector: true } },
+      global: { stubs: { DatasetPathPicker: true, DatasetInfoPanel: true, ModelSelector: true } },
     });
-    const browse = wrapper.getComponent(BrowseContainer);
+    const browse = wrapper.getComponent(DatasetPathPicker);
     const panel = wrapper.getComponent(DatasetInfoPanel);
     const selector = wrapper.getComponent(ModelSelector);
     expect(selector.props('singleChannel')).toBe(false);

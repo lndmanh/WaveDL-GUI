@@ -128,7 +128,7 @@ function checkDatasetParity(record) {
       'Input key': 'X', 'Output key': 'y', 'Input shape': '32', 'Output shape': '12',
       'Input dtype': expected.inputDtype, 'Output dtype': expected.outputDtype, 'File size': 'Unknown',
     }, 'Actual visible header must match genuine dataset metadata');
-    assert(typeof item.bounds === 'string' && item.bounds.includes(`Bounded preview: ${expected.rows} of ${expected.rows} rows.`)
+    assert(typeof item.bounds === 'string' && (item.bounds.includes(`${expected.rows} of ${expected.rows} rows sampled`) || item.bounds.includes(`Bounded preview: ${expected.rows} of ${expected.rows} rows.`))
       && item.bounds.includes('not a full-dataset analysis'), 'Bounded dataset scope must be visible');
     checkDatasetStatistics(item.statistics, expected);
     assert(Array.isArray(item.views) && item.views.length === datasetViews.length, 'Six dataset views required');

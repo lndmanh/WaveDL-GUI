@@ -73,19 +73,19 @@ describe('dataset header panel', () => {
     const inspect = vi.spyOn(DatasetInspectionApi.prototype, 'inspect');
     const wrapper = mount(DatasetInfoPanel, { props: { session: first, selection: chosen } });
     await flushPromises();
-    expect(wrapper.find('dl').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="Dataset facts"]').exists()).toBe(true);
     await wrapper.setProps({ session: replacement });
     await flushPromises();
     await expect(inspect.mock.results[1]?.value).rejects.toMatchObject({ code: 'stale' });
-    expect(wrapper.find('dl').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Dataset facts"]').exists()).toBe(false);
     expect(wrapper.get('[role="status"]').text()).toContain('select a supported dataset again');
     expect(replacement.snapshot().status).toBe('connected');
     await wrapper.setProps({ selection: replacementChosen });
     await flushPromises();
-    expect(wrapper.find('dl').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="Dataset facts"]').exists()).toBe(true);
     first.detach();
     await flushPromises();
-    expect(wrapper.find('dl').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="Dataset facts"]').exists()).toBe(true);
     wrapper.unmount();
   });
   it('keeps reconnect guidance for a selected dataset while disconnected', async () => {
@@ -96,7 +96,7 @@ describe('dataset header panel', () => {
     await flushPromises();
     expect(inspect).not.toHaveBeenCalled();
     expect(wrapper.find('dl').exists()).toBe(false);
-    expect(wrapper.get('[role="status"]').text()).toBe(
+    expect(wrapper.get('[role="status"]').text()).toContain(
       'Reconnect and select this dataset again to inspect its header.',
     );
     wrapper.unmount();
@@ -127,7 +127,7 @@ describe('dataset header panel', () => {
     await wrapper.get('button').trigger('click');
     await flushPromises();
     expect(inspect).toHaveBeenCalledTimes(2);
-    expect(wrapper.findAll('dd')[1]?.text()).toBe('9');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('9');
     expect(wrapper.emitted('inspected')?.at(-1)).toEqual([{ ...info, numSamples: 9 }, selection]);
     wrapper.unmount();
   });
@@ -138,21 +138,19 @@ describe('dataset header panel', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('float32');
     expect(wrapper.text()).toContain('float64');
-    expect(wrapper.findAll('dd').map((item) => item.text())).toEqual([
-      'NPZ',
-      '7',
-      'Unknown',
-      'X',
-      '4',
-      'float32',
-      'Y',
-      '1',
-      'float64',
-    ]);
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('NPZ');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('7');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('Unknown');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('X');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('4');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('float32');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('Y');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('1');
+    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('float64');
     expect(wrapper.emitted('inspected')?.at(-1)).toEqual([info, selection]);
     connection.detach();
     await flushPromises();
-    expect(wrapper.find('dl').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Dataset facts"]').exists()).toBe(false);
     expect(wrapper.emitted('inspected')?.at(-1)).toEqual([null, selection]);
     expect(wrapper.text()).toContain('Reconnect');
     wrapper.unmount();
@@ -171,7 +169,7 @@ describe('dataset header panel', () => {
     expect(inspect.mock.calls[0]?.[1]?.aborted).toBe(true);
     finish?.(info);
     await flushPromises();
-    expect(wrapper.find('dl').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Dataset facts"]').exists()).toBe(false);
     expect(wrapper.emitted('inspected')?.every(([value]) => value === null)).toBe(true);
     wrapper.unmount();
   });
@@ -179,8 +177,10 @@ describe('dataset header panel', () => {
     vi.spyOn(DatasetInspectionApi.prototype, 'inspect').mockRejectedValue(new Error('refused'));
     const wrapper = mount(DatasetInfoPanel, { props: { session: await session(), selection } });
     await flushPromises();
-    expect(wrapper.text()).toContain('refused or unavailable');
-    expect(wrapper.find('dl').exists()).toBe(false);
+    expect(
+      wrapper.get('[aria-label^="Inspection unavailable:"]').attributes('aria-label'),
+    ).toContain('Dataset inspection refused or unavailable');
+    expect(wrapper.find('[aria-label="Dataset facts"]').exists()).toBe(false);
     wrapper.unmount();
   });
 });

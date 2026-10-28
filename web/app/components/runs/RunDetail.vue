@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
-import { computed } from 'vue';
+import { computed, onMounted, shallowRef } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
   canRequestCancellation,
   nativePending,
   type RunMonitorSnapshot,
 } from '../../lib/run-monitor';
-import StateBadge from './StateBadge.vue';
+import RunStateChip from './RunStateChip.vue';
 import LogPanel from './LogPanel.vue';
 import MetricSummary from './MetricSummary.vue';
 import MetricsChart from './MetricsChart.vue';
@@ -27,6 +27,10 @@ function backendLabel(backend: string): string {
 }
 const props = defineProps<{ snapshot: RunMonitorSnapshot }>();
 defineEmits<{ cancel: []; replay: []; close: [] }>();
+const logTarget = shallowRef<HTMLElement | null>(null);
+onMounted(() => {
+  logTarget.value = document.querySelector<HTMLElement>('#shell-panel-tab-logs');
+});
 const pending = computed(() => props.snapshot.run !== null && nativePending(props.snapshot.run));
 const metricsUnavailable = computed(
   () =>
@@ -52,7 +56,12 @@ const canCancel = computed(() =>
     </div>
     <template v-if="snapshot.run"
       ><p class="identity">{{ snapshot.run.run_id }}</p>
-      <StateBadge :run="snapshot.run" :stale="snapshot.freshness !== 'fresh'" />
+      <RunStateChip
+        :run="snapshot.run"
+        :stale="snapshot.freshness !== 'fresh'"
+        :progress="metricSummary.progress"
+        :explanation="pending ? t('runs.pendingNote') : undefined"
+      />
       <p>
         {{ backendLabel(snapshot.run.backend) }} ·
         {{ t(runOperationMessageKeys[snapshot.run.operation]) }} ·
@@ -62,13 +71,10 @@ const canCancel = computed(() =>
             : t('runs.attempt', { attempt: snapshot.run.attempt ?? t('runs.notAllocated') })
         }}
       </p>
-      <p v-if="pending">
-        {{ t('runs.pendingNote') }}
-      </p></template
-    >
+    </template>
     <p>{{ t('runs.eventConnection', { status: t(runStreamMessageKeys[snapshot.stream]) }) }}</p>
-    <p v-if="snapshot.freshness !== 'fresh'" role="status">
-      {{ t('runs.lifecycleNote') }}
+    <p v-if="snapshot.freshness !== 'fresh'" class="sr-only" role="status" aria-live="polite">
+      {{ t('runs.stale') }}
     </p>
     <p v-if="snapshot.message" role="status">
       {{ clientMessage(snapshot.message) }}
@@ -83,14 +89,21 @@ const canCancel = computed(() =>
         }}</Button
       ><Button variant="outline" @click="$emit('replay')">{{ t('runs.replay') }}</Button>
     </div>
-    <MetricSummary :summary="metricSummary" :unconfirmed="metricsUnconfirmed" />
+    <MetricSummary
+      :summary="metricSummary"
+      :records="chartRecords"
+      :unconfirmed="metricsUnconfirmed"
+    />
     <MetricsChart :records="chartRecords" :unavailable="metricsUnavailable" />
     <EvaluationResultsPanel
       :run="snapshot.run"
       :events="snapshot.events"
       :freshness="snapshot.freshness"
     />
-    <LogPanel :events="snapshot.events" :truncated="snapshot.truncated" />
+    <Teleport v-if="logTarget && snapshot.events.length" to="#shell-panel-tab-logs" defer>
+      <LogPanel :events="snapshot.events" :truncated="snapshot.truncated" />
+    </Teleport>
+    <LogPanel v-else-if="!logTarget" :events="snapshot.events" :truncated="snapshot.truncated" />
   </section>
 </template>
 <style scoped>

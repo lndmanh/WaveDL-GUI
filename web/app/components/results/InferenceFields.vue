@@ -4,8 +4,17 @@ import { useClientMessages } from '../../composables/useClientMessages';
 import { Field as VeeField } from 'vee-validate';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Field, FieldLabel, FieldError, FieldDescription, FieldGroup } from '@/components/ui/field';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Field, FieldLabel, FieldError, FieldGroup } from '@/components/ui/field';
 import { inferenceFieldMessageKeys } from '../../i18n/dynamic-keys';
+import InfoChip from '../common/InfoChip.vue';
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 defineProps<{ disabled: boolean }>();
@@ -41,9 +50,6 @@ function listValue(input: string | number): string[] | null {
 }
 function nullableText(input: string | number): string | null {
   return input === '' ? null : String(input);
-}
-function formatValue(event: Event): string {
-  return event.target instanceof HTMLSelectElement ? event.target.value : '';
 }
 </script>
 <template>
@@ -86,16 +92,24 @@ function formatValue(event: Event): string {
     <VeeField v-slot="{ field, errors }" name="config.format"
       ><Field :data-invalid="!!errors.length"
         ><FieldLabel for="inference-format">{{ t('results.datasetFormat') }}</FieldLabel
-        ><select
-          id="inference-format"
-          :value="field.value"
+        ><Select
+          :model-value="field.value"
           :disabled="disabled"
           :aria-invalid="!!errors.length"
-          @change="field.onChange(formatValue($event))"
-        >
-          <option v-for="value in ['auto', 'npz', 'mat', 'hdf5']" :key="value" :value="value">
-            {{ value === 'auto' ? t('results.auto') : value }}
-          </option></select
+          @update:model-value="field.onChange"
+          ><SelectTrigger id="inference-format" :data-value="field.value"
+            ><SelectValue /></SelectTrigger
+          ><SelectContent
+            ><SelectGroup>
+              <SelectItem
+                v-for="value in ['auto', 'npz', 'mat', 'hdf5']"
+                :key="value"
+                :value="value"
+              >
+                {{ value === 'auto' ? t('results.auto') : value }}
+              </SelectItem></SelectGroup
+            ></SelectContent
+          ></Select
         ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField v-slot="{ field, errors }" name="config.import_modules">
@@ -109,7 +123,7 @@ function formatValue(event: Event): string {
           @update:model-value="field.onChange(listValue($event) ?? [])"
           @blur="field.onBlur"
         />
-        <FieldDescription>{{ t('results.importModulesHelp') }}</FieldDescription>
+        <InfoChip :label="t('results.trustedCode')" :text="t('results.importModulesHelp')" />
         <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
       </Field>
     </VeeField>
@@ -135,8 +149,11 @@ function formatValue(event: Event): string {
           :disabled="disabled"
           :aria-invalid="!!errors.length"
           @update:model-value="field.onChange(listValue($event))"
-          @blur="field.onBlur" /><FieldDescription>{{ t('results.formatHelp') }}</FieldDescription
-        ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
+          @blur="field.onBlur" /><InfoChip
+          :label="t('results.verifiedPng')"
+          :text="t('results.formatHelp')" /><FieldError
+          v-if="errors.length"
+          :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField
       v-for="item in flags"

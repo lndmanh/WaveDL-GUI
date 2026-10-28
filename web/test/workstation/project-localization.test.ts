@@ -14,7 +14,7 @@ import {
 } from '../../shared/schemas/training-request';
 import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 import PlanApproval from '../../app/components/project/PlanApproval.vue';
 import TrainingExport from '../../app/components/project/TrainingExport.vue';
@@ -205,11 +205,11 @@ describe('project presentation localization', () => {
     const wrapper = mount(
       host,
       {
-        global: { stubs: { BrowseContainer: true, ModelSelector: true, DatasetInfoPanel: true } },
+        global: { stubs: { DatasetPathPicker: true, ModelSelector: true, DatasetInfoPanel: true } },
       },
       i18n,
     );
-    wrapper.getComponent(BrowseContainer).vm.$emit('select', data);
+    wrapper.getComponent(DatasetPathPicker).vm.$emit('select', data);
     wrapper.getComponent(CustomModelSelector).vm.$emit('select', model);
     await nextTick();
     await wrapper.get('input[name="runtime.python"]').setValue('/usr/bin/python3');
@@ -231,11 +231,12 @@ describe('project presentation localization', () => {
     expect(calls).toHaveLength(requests);
     expect(wrapper.getComponent(PlanApproval).props('plan')).toBe(preview);
     expect(wrapper.text()).toContain('/data/English name.npz');
+    await wrapper.get('[data-testid="plan-raw-disclosure"]').trigger('click');
     expect(wrapper.text()).toContain('Do not translate daemon evidence');
     expect(wrapper.text()).toContain('Kế hoạch đã lưu để phê duyệt');
     expect(trainingYaml(wrapper.getComponent(TrainingExport).props('draft'))).toBe(yaml);
     expect(trainingCommand(wrapper.getComponent(TrainingExport).props('draft'))).toBe(command);
-    await wrapper.getComponent(PlanApproval).get('button').trigger('click');
+    await wrapper.getComponent(PlanApproval).get('button[data-slot="button"]').trigger('click');
     await vi.waitFor(() =>
       expect(calls.filter((call) => call.path === '/api/runs')).toHaveLength(1),
     );
@@ -263,7 +264,10 @@ describe('project presentation localization', () => {
       setup: () => () => h(TrainingExport, { draft, disabled: false }),
     });
     const wrapper = mount(host, undefined, i18n);
-    await wrapper.findAll('button')[1]?.trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Copy standalone CLI command')
+      ?.trigger('click');
     expect(wrapper.get('[role="status"]').text()).toBe(
       'Choose explicit CPU or CUDA for a reproducible standalone command.',
     );

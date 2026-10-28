@@ -4,6 +4,7 @@ import { useClientMessages } from '../../composables/useClientMessages';
 import { computed, onBeforeUnmount, shallowRef, toRaw, useId, watch } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
 import { Button } from '@/components/ui/button';
+import InfoChip from '../common/InfoChip.vue';
 import { Input } from '@/components/ui/input';
 import { Field, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field';
 import { adoptionFormSchema } from '../../../shared/schemas/adoption-request';
@@ -119,7 +120,7 @@ onBeforeUnmount(() => {
   <section class="flex flex-col gap-5" :aria-label="t('results.adoptAria')" :aria-busy="busy">
     <header>
       <h2 class="text-lg font-semibold">{{ t('results.adoptTitle') }}</h2>
-      <p class="text-sm text-muted-foreground">{{ t('results.adoptHelp') }}</p>
+      <InfoChip :label="t('results.adoptTitle')" :text="t('results.adoptHelp')" uncertain />
     </header>
     <BrowseContainer
       :session="session"
@@ -135,7 +136,11 @@ onBeforeUnmount(() => {
       role="status"
       class="break-all text-sm"
     >
-      {{ t('results.retainedRequest', { path: frozenPath, attempt: frozenAttempt ?? '' }) }}
+      <InfoChip
+        :label="t('results.retryAdoption')"
+        :text="t('results.retainedRequest', { path: frozenPath, attempt: frozenAttempt ?? '' })"
+        uncertain
+      />
     </p>
     <form class="flex flex-col gap-4" @submit.prevent="submit">
       <VeeField v-slot="{ field, errors }" name="attempt">
@@ -162,7 +167,13 @@ onBeforeUnmount(() => {
             : t('results.confirmAdoption')
       }}</Button>
     </form>
-    <p v-if="message" :role="status === 'confirmed' ? 'status' : 'alert'" class="text-sm">
+    <InfoChip
+      v-if="message === 'results.adopted'"
+      :label="t('results.ownershipOnly')"
+      :text="t('results.adopted')"
+      uncertain
+    />
+    <p v-else-if="message" :role="status === 'confirmed' ? 'status' : 'alert'" class="text-sm">
       {{
         typeof message === 'string' && message.startsWith('results.')
           ? t(message)

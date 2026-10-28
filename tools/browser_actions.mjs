@@ -16,8 +16,8 @@ export function controlLocator(kind, name, { scope } = {}) {
   const literal = xpathLiteral(name);
   const base = scope ? `(${scope})` : '';
   if (kind === 'button') return `xpath=${base}//button[@aria-label=${literal} or normalize-space(.)=${literal}]`;
-  if (kind === 'summary') return `xpath=${base}//summary[normalize-space(.)=${literal}]`;
-  if (kind === 'option') return `xpath=${base}//*[@role="option" and normalize-space(.)=${literal}]`;
+  if (kind === 'summary') return `xpath=${base}//*[self::summary or (self::button and @aria-expanded)][normalize-space(.)=${literal}]`;
+  if (kind === 'option') return `xpath=${base}//*[@role="option" and (@data-value=${literal} or normalize-space(.)=${literal})]`;
   if (kind === 'field') return `xpath=//*[@id=${base}//label[normalize-space(.)=${literal}]/@for]`;
   throw new Error(`Unsupported browser control kind: ${kind}`);
 }
@@ -69,7 +69,7 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
   const describe = async (kind, name, options = {}) => dom(`JSON.stringify(${controlExpression(kind, name, options)}.map(element => ({
     tag: element.tagName, text: element.getAttribute('aria-label') || element.textContent.trim(),
     visible: !!element.getClientRects().length, disabled: !!element.disabled,
-    leaf: element.children.length === 0, value: element.value,
+    leaf: element.children.length === 0, value: element.getAttribute('data-value') ?? element.value,
     id: element.id, locator: element.id ? '#' + CSS.escape(element.id) : null,
     labels: Array.from(element.labels ?? []).map(label => label.textContent.trim())
   })))`);
@@ -77,6 +77,26 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
     await snapshot();
     let controls = await describe(kind, name, options);
     if (optional && controls.length === 0) return false;
+    if (!controls.some(control => control.visible)) {
+      const reveals = await dom(`JSON.stringify(${controlExpression(kind, name, options)}.flatMap(element => {
+        const actions = [];
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+          if (parent.matches('[role="tabpanel"][data-state="inactive"]')) {
+            const id = parent.getAttribute('aria-labelledby');
+            if (id && document.getElementById(id)) actions.push('#' + CSS.escape(id));
+          } else if (parent.matches('[data-slot="collapsible-content"][data-state="closed"]') && parent.id) {
+            const trigger = document.querySelector('[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]');
+            if (trigger) actions.push('[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]');
+          }
+        }
+        return actions.reverse();
+      }))`);
+      for (const locator of new Set(reveals)) {
+        await cli('scrollintoview', locator);
+        await cli('click', locator);
+      }
+      if (reveals.length) controls = await describe(kind, name, options);
+    }
     // Render readiness must precede semantic discovery; a snapshot alone is not
     // a readiness barrier. Duplicates fail closed, including hidden duplicates
     // because native semantic locators choose the first DOM match.
@@ -92,7 +112,6 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
     assert(controls[0].visible, `${name} is not exposed in the DOM`);
     if (kind === 'field') assert(controls[0].id && controls[0].locator, `Visible field ${name} requires an existing stable ID`);
     if (kind === 'field' && options.verifyNativeLabel) assert(controls[0].labels?.length === 1 && controls[0].labels[0] === name, `Explicit field ${name} lost its native label association`);
-    if (kind === 'summary') assert(controls[0].leaf, `Native exact-text summary must be a leaf: ${name}`);
     const locator = kind === 'field' ? controls[0].locator : (options.locator ?? controlLocator(kind, name, options));
     await cli('scrollintoview', locator);
     const exposureOptions = { locator, verifyNativeLabel: options.verifyNativeLabel };
@@ -131,9 +150,30 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
     },
     async select(label, value) {
       const locator = await prepare('field', label);
-      await cli('select', locator, String(value));
+      const control = (await describe('field', label, { locator }))[0];
+      if (control?.tag === 'SELECT') await cli('select', locator, String(value));
+      else {
+        await cli('click', locator);
+        await this.option(String(value || 'none'));
+      }
       const controls = await describe('field', label, { locator });
-      assert(controls.length === 1 && controls[0].value === String(value), `UI select ${label} did not retain authored value`);
+      assert(controls.length === 1 && (controls[0].value === String(value) || controls[0].value === String(value || 'none')), `UI select ${label} did not retain authored value`);
+    },
+    async options(label) {
+      const locator = await prepare('field', label);
+      const control = (await describe('field', label, { locator }))[0];
+      if (control?.tag === 'SELECT') return dom(`JSON.stringify(Array.from(document.querySelector(${JSON.stringify(locator)}).options).map(option => ({value: option.value, label: option.textContent.trim(), disabled: option.disabled})))`);
+      await cli('click', locator);
+      await cli('wait', '--fn', '!!document.querySelector("[role=option]")');
+      const result = await dom('JSON.stringify(Array.from(document.querySelectorAll("[role=option]")).map(option => ({value: option.getAttribute("data-value"), label: option.textContent.trim(), disabled: option.getAttribute("aria-disabled") === "true"})))');
+      await cli('press', 'Escape');
+      return result;
+    },
+    async openPlan() {
+      await cli('wait', '--fn', 'Array.from(document.querySelectorAll("[data-testid=plan-raw-disclosure]")).some(element => element.getClientRects().length)');
+      const opened = await dom('JSON.stringify(Array.from(document.querySelectorAll("[data-testid=plan-raw-disclosure]")).filter(element => element.getClientRects().length).map(element => ({expanded:element.getAttribute("aria-expanded"),locator:"#"+CSS.escape(element.id)})))');
+      assert(opened.length === 1, 'Exactly one visible persisted-plan disclosure is required');
+      if (opened[0].expanded !== 'true') await this.button('Full persisted execution plan', false, { locator: opened[0].locator });
     },
     async option(name, options = {}) {
       const locator = await prepare('option', name, false, options);
@@ -141,11 +181,15 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
     },
     async expandSummary(name) {
       const locator = await prepare('summary', name);
-      const expression = `${controlExpression('summary', name)}[0]?.closest('details')?.open`;
+      const expression = `(() => { const element = ${controlExpression('summary', name)}[0]; return element?.tagName === 'SUMMARY' ? element.closest('details')?.open : element?.getAttribute('aria-expanded') === 'true'; })()`;
       assert(await dom(`JSON.stringify(${expression})`) === false, `Summary ${name} must begin closed`);
       await cli('click', locator);
       await cli('wait', '--fn', `${expression} === true`);
       assert(await dom(`JSON.stringify(${expression})`) === true, `Summary ${name} did not expand`);
     },
   };
+}
+
+export async function openPlanDisclosure({ cli, dom }) {
+  await createBrowserActions({ cli, dom, snapshot: () => cli('snapshot', '-i') }).openPlan();
 }

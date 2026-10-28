@@ -4,7 +4,7 @@ import { flushPromises } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 import PlanApproval from '../../app/components/project/PlanApproval.vue';
 import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
@@ -67,7 +67,7 @@ async function setup(timeoutMs = 1000) {
   expect(await session.connect('credential')).toBe(true);
   const wrapper = mount(ProjectContainer, {
     props: { session },
-    global: { stubs: { BrowseContainer: true, ModelSelector: true, DatasetInfoPanel: true } },
+    global: { stubs: { DatasetPathPicker: true, ModelSelector: true, DatasetInfoPanel: true } },
   });
   cleanups.push(() => {
     wrapper.unmount();
@@ -80,7 +80,7 @@ async function setup(timeoutMs = 1000) {
       ?.trigger('click');
   const catalogue = new CatalogApi(session);
   const data = await catalogue.resolve('data', 'train.npz');
-  wrapper.getComponent(BrowseContainer).vm.$emit('select', data);
+  wrapper.getComponent(DatasetPathPicker).vm.$emit('select', data);
   const model = await catalogue.selectCustomModel('custom_model');
   wrapper.getComponent(CustomModelSelector).vm.$emit('select', model);
   await nextTick();

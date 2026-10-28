@@ -2,6 +2,8 @@
 import { useI18n } from 'vue-i18n';
 import { onBeforeUnmount, shallowRef, toRaw, watch } from 'vue';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import InfoChip from '../common/InfoChip.vue';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { DataSelection } from '../../lib/catalog-api';
 import { DatasetInspectionApi, type DatasetInspection } from '../../lib/dataset-inspection';
@@ -100,31 +102,62 @@ onBeforeUnmount(() => {
         t('datasets.stopInspecting')
       }}</Button>
     </div>
-    <p class="text-sm text-muted-foreground">
-      {{ t('datasets.headerHelp') }}
-    </p>
+    <InfoChip :label="t('datasets.headerDetails')" :text="t('datasets.headerHelp')" />
     <p v-if="busy" role="status">{{ t('datasets.headerLoading') }}</p>
-    <p v-else-if="message" role="status">{{ t(message) }}</p>
+    <div v-else-if="message" role="status">
+      <InfoChip
+        :label="t(message)"
+        :text="
+          message === 'datasets.inspectionUnavailable'
+            ? t('datasets.inspectionDetails')
+            : t(message)
+        "
+        uncertain
+      />
+    </div>
     <p v-else-if="!selection" role="status">{{ t('datasets.chooseDataset') }}</p>
-    <dl v-if="info" class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
-      <dt>{{ t('datasets.format') }}</dt>
-      <dd>{{ info.format.toUpperCase() }}</dd>
-      <dt>{{ t('datasets.samples') }}</dt>
-      <dd>{{ info.numSamples }}</dd>
-      <dt>{{ t('datasets.fileSize') }}</dt>
-      <dd>{{ t('datasets.unknown') }}</dd>
-      <dt>{{ t('datasets.inputKey') }}</dt>
-      <dd>{{ info.inputKey }}</dd>
-      <dt>{{ t('datasets.inputShape') }}</dt>
-      <dd>{{ info.inputShape.join(' × ') || t('datasets.scalar') }}</dd>
-      <dt>{{ t('datasets.inputDtype') }}</dt>
-      <dd>{{ info.inputDtype }}</dd>
-      <dt>{{ t('datasets.outputKey') }}</dt>
-      <dd>{{ info.outputKey }}</dd>
-      <dt>{{ t('datasets.outputShape') }}</dt>
-      <dd>{{ info.outputShape.join(' × ') }}</dd>
-      <dt>{{ t('datasets.outputDtype') }}</dt>
-      <dd>{{ info.outputDtype }}</dd>
+    <dl v-if="info" class="flex flex-wrap gap-2" :aria-label="t('datasets.infoChips')">
+      <dt class="sr-only">{{ t('datasets.format') }}</dt>
+      <dd>
+        <Badge variant="outline">{{ info.format.toUpperCase() }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.samples') }}</dt>
+      <dd>
+        <Badge variant="outline">{{ info.numSamples }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.fileSize') }}</dt>
+      <dd>
+        <Badge variant="outline">{{ t('datasets.unknown') }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.inputKey') }}</dt>
+      <dd>
+        <Badge variant="secondary">{{ info.inputKey }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.inputShape') }}</dt>
+      <dd>
+        <Badge variant="secondary">{{ info.inputShape.join(' × ') || t('datasets.scalar') }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.inputDtype') }}</dt>
+      <dd>
+        <Badge variant="secondary">{{ info.inputDtype }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.outputKey') }}</dt>
+      <dd>
+        <Badge variant="secondary">{{ info.outputKey }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.outputShape') }}</dt>
+      <dd>
+        <Badge variant="secondary">{{
+          info.outputShape.join(' × ') || t('datasets.scalar')
+        }}</Badge>
+      </dd>
+      <dt class="sr-only">{{ t('datasets.outputDtype') }}</dt>
+      <dd>
+        <Badge variant="secondary">{{ info.outputDtype }}</Badge>
+      </dd>
     </dl>
+    <p v-if="selection" class="break-all text-xs text-muted-foreground">
+      {{ selection.relativePath }}
+    </p>
   </section>
 </template>

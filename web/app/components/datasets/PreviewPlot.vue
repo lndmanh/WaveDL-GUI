@@ -5,6 +5,7 @@ import { onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'v
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { Button } from '@/components/ui/button';
+import InfoChip from '../common/InfoChip.vue';
 
 const { t, locale } = useI18n({ useScope: 'global' });
 
@@ -142,7 +143,13 @@ onBeforeUnmount(() => {
     />
     <p v-if="message" role="status">{{ t('datasets.chartUnavailable') }}</p>
     <p v-if="exportMessage" role="status" aria-live="polite">
-      {{ t(exportMessage) }}
+      <InfoChip
+        v-if="exportMessage === 'datasets.pngExportRequested'"
+        :label="t('datasets.pngRequested')"
+        :text="t(exportMessage)"
+        uncertain
+      />
+      <template v-else>{{ t(exportMessage) }}</template>
     </p>
     <div class="flex flex-wrap gap-2">
       <Button variant="ghost" size="sm" :disabled="!plot" @click="reset">{{
@@ -152,9 +159,7 @@ onBeforeUnmount(() => {
         t('datasets.exportPng')
       }}</Button>
     </div>
-    <p class="text-muted-foreground text-xs">
-      {{ t('datasets.plotHelp') }}
-    </p>
+    <InfoChip :label="t('datasets.plotDetails')" :text="t('datasets.plotHelp')" />
   </figure>
 </template>
 

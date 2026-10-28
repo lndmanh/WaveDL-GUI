@@ -1,4 +1,7 @@
 {
+  "boundedDiagnostics": "Bounded journal window",
+  "shortDiagnostics": "Shortened diagnostics",
+  "chartDetails": "Chart interaction details",
   "operationTrain": "train",
   "operationTest": "test",
   "operationPlot": "plot",

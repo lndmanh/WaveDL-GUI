@@ -8,7 +8,7 @@ import { CatalogApi } from '../../app/lib/catalog-api';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
 import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
 import TrainingExport from '../../app/components/project/TrainingExport.vue';
-import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 
 const cleanups: (() => void)[] = [];
@@ -45,7 +45,7 @@ async function setup() {
   expect(await session.connect('credential')).toBe(true);
   const wrapper = mount(ProjectContainer, {
     props: { session },
-    global: { stubs: { BrowseContainer: true, ModelSelector: true, DatasetInfoPanel: true } },
+    global: { stubs: { DatasetPathPicker: true, ModelSelector: true, DatasetInfoPanel: true } },
   });
   cleanups.push(() => {
     wrapper.unmount();
@@ -56,7 +56,7 @@ async function setup() {
   const catalogue = new CatalogApi(session);
   async function selectData() {
     wrapper
-      .getComponent(BrowseContainer)
+      .getComponent(DatasetPathPicker)
       .vm.$emit('select', await catalogue.resolve('data', 'train.npz'));
     await nextTick();
   }

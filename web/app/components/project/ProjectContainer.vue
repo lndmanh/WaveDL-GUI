@@ -3,10 +3,13 @@ import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
 import { runStateMessageKeys } from '../../i18n/dynamic-keys';
 import DatasetInfoPanel from '../datasets/DatasetInfoPanel.vue';
+import DatasetPathPicker from '../datasets/DatasetPathPicker.vue';
 import { computed, onBeforeUnmount, shallowRef, watch, toRaw } from 'vue';
 import { useForm } from 'vee-validate';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   trainingDefaults,
   trainingRequestSchema,
@@ -22,7 +25,6 @@ import type { PlanView, RunView } from '../../lib/daemon-api';
 import { CatalogApi, type DataSelection, type ModelSelection } from '../../lib/catalog-api';
 import { ProjectPlan } from '../../lib/project-plan';
 import type { DatasetInspection } from '../../lib/dataset-inspection';
-import BrowseContainer from '../catalog/BrowseContainer.vue';
 import ModelSelector from '../catalog/ModelSelector.vue';
 import TrainingFields from './TrainingFields.vue';
 import RuntimeFields from './RuntimeFields.vue';
@@ -35,6 +37,7 @@ import TrainingPresets from './TrainingPresets.vue';
 import ProjectGuide from './ProjectGuide.vue';
 import { applyTrainingPreset, trainingPresetSchema } from '../../lib/training-presets';
 import type { z } from 'zod';
+import InfoChip from '../common/InfoChip.vue';
 
 const { locale, t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
@@ -84,9 +87,11 @@ const displayMessage = computed(() =>
             : 'project.notSubmittedYet',
         ),
       })
-    : message.value.startsWith('project.')
-      ? t(message.value)
-      : clientMessage(message.value),
+    : message.value === 'project.submissionAckUnknown'
+      ? t('project.submissionOutcomeUnknown')
+      : message.value.startsWith('project.')
+        ? t(message.value)
+        : clientMessage(message.value),
 );
 const connected = shallowRef(false);
 const resetConfirmation = shallowRef(false);
@@ -304,9 +309,10 @@ onBeforeUnmount(() => {
       <h1 id="project-title" class="text-3xl font-medium">
         {{ t('project.buildATrainingRun') }}
       </h1>
-      <p class="mt-3 text-muted-foreground">
-        {{ t('project.authoringHelp') }}
-      </p>
+      <div class="flex flex-wrap items-center gap-3">
+        <p class="mt-3 text-muted-foreground">{{ t('project.authoringHelp') }}</p>
+        <span class="text-sm text-muted-foreground">{{ t('project.noAutomaticStart') }}</span>
+      </div>
     </header>
     <Alert v-if="!connected"
       ><AlertTitle>{{ t('project.verifiedConnectionRequired') }}</AlertTitle
@@ -322,54 +328,75 @@ onBeforeUnmount(() => {
     />
     <Alert v-if="message" role="alert"
       ><AlertTitle>{{ t('project.planningStatus') }}</AlertTitle
-      ><AlertDescription>{{ displayMessage }}</AlertDescription></Alert
-    >
+      ><AlertDescription v-if="message !== 'project.submissionAckUnknown'">{{
+        displayMessage
+      }}</AlertDescription>
+      <InfoChip
+        v-else
+        :label="t('project.submissionOutcomeUnknown')"
+        :text="t('project.submissionAckUnknown')"
+        uncertain
+      />
+    </Alert>
     <div v-show="!guided || step === 0" class="flex flex-col gap-3">
-      <details :open="guided">
-        <summary class="cursor-pointer font-medium">
+      <Collapsible :default-open="guided">
+        <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
           {{ t('project.chooseDaemonDataset') }}
-        </summary>
-        <BrowseContainer
-          :session="session"
-          :label="t('project.trainingDataset')"
-          @select="selectData"
-        />
-      </details>
-      <p>
-        {{
-          t('project.datasetSelectionSummary', {
-            path: data?.path ?? t('project.notSelected'),
-            daemon: data ? t('project.daemonId', { id: data.daemonId }) : '',
-          })
-        }}
-      </p>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <DatasetPathPicker
+            :session="session"
+            :label="t('project.trainingDataset')"
+            @select="selectData"
+          />
+        </CollapsibleContent>
+      </Collapsible>
+      <div class="flex flex-wrap gap-2">
+        <Badge variant="outline" data-testid="selected-dataset">
+          {{
+            t('project.datasetSelectionSummary', {
+              path: data?.path ?? t('project.notSelected'),
+              daemon: data ? t('project.daemonId', { id: data.daemonId }) : '',
+            })
+          }}
+        </Badge>
+      </div>
       <DatasetInfoPanel :session="session" :selection="data" @inspected="inspectData" />
     </div>
     <div v-show="!guided || step === 1" class="flex flex-col gap-3">
-      <details :open="guided">
-        <summary class="cursor-pointer font-medium">
+      <Collapsible :default-open="guided">
+        <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
           {{ t('project.chooseModel') }}
-        </summary>
-        <ModelSelector
-          :session="session"
-          :inspection="datasetInspection"
-          :single-channel="values.config.single_channel"
-          @select="selectModel"
-        />
-      </details>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <ModelSelector
+            :session="session"
+            :inspection="datasetInspection"
+            :single-channel="values.config.single_channel"
+            @select="selectModel"
+          />
+        </CollapsibleContent>
+      </Collapsible>
       <CustomModelSelector
         :session="session"
         :disabled="busy || !connected"
         @select="selectModel"
       />
-      <p>
-        {{
-          t('project.modelSelectionSummary', {
-            model: model?.model ?? t('project.notSelected'),
-            custom: model?.source === 'custom' ? t('project.customUnverified') : '',
-          })
-        }}
-      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" data-testid="selected-model">
+          {{
+            t('project.modelSelectionSummary', {
+              model: model?.model ?? t('project.notSelected'),
+              custom: model?.source === 'custom' ? t('project.customUnverified') : '',
+            })
+          }}
+        </Badge>
+        <InfoChip
+          :label="t('project.modelCompatibilityChip')"
+          :text="t('project.modelCompatibilityDetails')"
+          uncertain
+        />
+      </div>
     </div>
     <div v-show="!guided || step === 2">
       <TrainingPresets :disabled="busy" @apply="applyPreset" />
@@ -411,9 +438,7 @@ onBeforeUnmount(() => {
         :aria-label="t('project.confirmReset')"
         class="flex flex-col gap-3"
       >
-        <p>
-          {{ t('project.resetHelp') }}
-        </p>
+        <p class="text-sm text-muted-foreground">{{ t('project.resetHelp') }}</p>
         <div class="flex gap-3">
           <Button type="button" @click="reset">{{ t('project.confirmReset') }}</Button
           ><Button type="button" variant="outline" @click="resetConfirmation = false">{{
@@ -439,14 +464,16 @@ onBeforeUnmount(() => {
       <h2 class="text-xl font-medium">
         {{ t('project.daemonAcknowledgedTheRun') }}
       </h2>
-      <p>
-        {{
+      <InfoChip
+        :label="t('project.submissionEvidence')"
+        :text="
           t('project.submissionAckHelp', {
             run: acknowledged.run_id,
             state: stateLabel(acknowledged.state),
           })
-        }}
-      </p>
+        "
+        uncertain
+      />
       <Button type="button" variant="outline" class="self-start" @click="openAcknowledged">{{
         t('project.openAcknowledgedRun')
       }}</Button>

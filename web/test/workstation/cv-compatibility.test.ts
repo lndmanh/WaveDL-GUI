@@ -99,7 +99,13 @@ describe('CV authoring compatibility', () => {
       const control = wrapper.get(`[id$="-training-${name}"]`);
       await expect.poll(() => control.attributes('aria-invalid')).toBe('true');
       expect(preview).not.toHaveBeenCalled();
-      await control.setValue(correction);
+      if (control.element.tagName === 'BUTTON') {
+        const select = wrapper
+          .findAllComponents({ name: 'Select' })
+          .find((item) => item.props('name') === `config.${name}`);
+        if (!select) throw new Error(`Missing select for ${name}`);
+        select.vm.$emit('update:modelValue', correction);
+      } else await control.setValue(correction);
       await vi.waitFor(async () => expect((await form.validate()).valid).toBe(true));
       await wrapper.trigger('submit');
       await expect.poll(() => preview.mock.calls.length).toBe(1);
@@ -198,10 +204,19 @@ describe('CV authoring compatibility', () => {
               {
                 id: 'cnn',
                 display_name: 'CNN',
+                architecture_family: 'CNN',
+                author_institution: 'Example',
+                year_published: 1989,
+                params_m: 1.6,
+                size_mb: 6,
+                short_description: 'Simple convolutional baseline',
                 description: 'Network',
                 best_for: 'Waves',
+                pros: ['Fast'],
+                cons: ['Limited capacity'],
+                compute_tier: 'Edge',
+                tags: ['baseline'],
                 supported_dims: [2],
-                category: 'cnn',
                 is_pretrained: false,
               },
             ],

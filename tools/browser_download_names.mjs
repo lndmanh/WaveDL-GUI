@@ -69,8 +69,8 @@ export async function downloadNameProvenance(driver) {
   await button('Refresh artifacts');
   await cli('wait', '--text', 'Download');
   const basenameWanted = 'checkpoint_selection.json';
-  const rowsExpression = `Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('tbody tr')).filter(row => row.cells[1]?.textContent.trim() === ${JSON.stringify(basenameWanted)})`;
-  const rows = await dom(`JSON.stringify(${rowsExpression}.map(row => ({ identity: row.cells[0].textContent.trim(), path: row.cells[1].textContent.trim() })))`);
+  const rowsExpression = `Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('[data-artifact-path]')).filter(row => row.getAttribute('data-artifact-path') === ${JSON.stringify(basenameWanted)})`;
+  const rows = await dom(`JSON.stringify(${rowsExpression}.map(row => ({ identity: row.getAttribute('data-artifact-generation') + ' / ' + row.getAttribute('data-artifact-attempt'), path: row.getAttribute('data-artifact-path') })))`);
   assert(Array.isArray(rows), 'Published artifact rows unavailable');
   const publications = [];
   for (const row of rows) {
@@ -96,7 +96,7 @@ export async function downloadNameProvenance(driver) {
   for (const [index, publication] of selected.entries()) {
     const filename = expectedNames[index];
     await snapshot();
-    const scope = `//section[@aria-labelledby="results-title"]//tbody/tr[normalize-space(td[1])=${xpathLiteral(`${publication.generation} / ${publication.attempt}`)} and normalize-space(td[2])=${xpathLiteral(publication.path)}]`;
+    const scope = `//section[@aria-labelledby="results-title"]//*[@data-artifact-generation=${xpathLiteral(publication.generation)} and @data-artifact-path=${xpathLiteral(publication.path)}]`;
     const selector = await actions.readyControl('button', 'Download', false, { scope });
     assert(selector, 'Exact independent publication download control missing or disabled');
     await cli('scrollintoview', selector);
@@ -164,7 +164,7 @@ with tempfile.TemporaryDirectory(prefix='alias-source-',dir=root) as temporary:
     const source = await boundedBytes(join(root, 'runs', runId, 'checkpoints', aliasPublication.generation, path));
     assert(source.length === identity.size && createHash('sha256').update(source).digest('hex') === identity.sha256);
     await snapshot();
-    const scope = `//section[@aria-labelledby="results-title"]//tbody/tr[normalize-space(td[1])=${xpathLiteral(`${aliasPublication.generation} / ${aliasPublication.attempt}`)} and normalize-space(td[2])=${xpathLiteral(path)}]`;
+    const scope = `//section[@aria-labelledby="results-title"]//*[@data-artifact-generation=${xpathLiteral(aliasPublication.generation)} and @data-artifact-path=${xpathLiteral(path)}]`;
     const selector = await actions.readyControl('button', 'Download', false, { scope });
     assert(selector, 'Alias download row must be a real enabled public control');
     await cli('scrollintoview', selector);

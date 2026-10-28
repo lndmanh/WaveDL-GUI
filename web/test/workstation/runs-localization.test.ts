@@ -3,7 +3,7 @@ import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
 import MetricSummary from '../../app/components/runs/MetricSummary.vue';
-import StateBadge from '../../app/components/runs/StateBadge.vue';
+import RunStateChip from '../../app/components/runs/RunStateChip.vue';
 import LogPanel from '../../app/components/runs/LogPanel.vue';
 import RunList from '../../app/components/runs/RunList.vue';
 import RunDetail from '../../app/components/runs/RunDetail.vue';
@@ -35,40 +35,207 @@ const event: RunEvent = {
   payload: { message: 'Training loss' },
 };
 describe('run presentation localization', () => {
-  it('renders every scheduler/lifecycle state without collapsing uncertainty', async () => {
-    const states = [
-      ['queued', false, 'queued'],
-      ['held', false, 'held'],
-      ['running', false, 'running'],
-      ['terminal_unknown', true, 'terminal unknown'],
-      ['observation_unavailable', true, 'observation unavailable'],
-      ['supervision_lost', true, 'supervision lost'],
-      ['completed', false, 'completed'],
-    ] as const;
-    const i18n = createTestI18n('en');
-    const wrapper = mount(
-      defineComponent({
-        setup: () => () =>
-          h(
-            'div',
-            states.map(([state, uncertainty]) =>
-              h(StateBadge, {
-                key: state,
-                run: { ...run, run_id: `run-${state}`, state, uncertainty },
-              }),
-            ),
-          ),
-      }),
-      undefined,
-      i18n,
-    );
-    const text = wrapper.text();
-    for (const [, , label] of states) expect(text).toContain(label);
-    expect(
-      wrapper.findAll('[data-slot="badge"]').filter((badge) => badge.text().includes('uncertain')),
-    ).toHaveLength(3);
+  it('leaves the shell logs target empty until there are events and clears it when retired', async () => {
+    const target = document.createElement('div');
+    target.id = 'shell-panel-tab-logs';
+    document.body.append(target);
+    const snapshot = {
+      run,
+      freshness: 'fresh',
+      events: [],
+      liveEvents: [],
+      stream: 'live',
+      message: '',
+      cancellation: 'idle',
+      truncated: false,
+      metrics: [],
+      summary: { progress: null, best: null, latest: null },
+    };
+    const wrapper = mount(RunDetail, {
+      props: { snapshot },
+      global: { stubs: { MetricsChart: true } },
+    });
+    await nextTick();
+    expect(target.childElementCount).toBe(0);
+    await wrapper.setProps({ snapshot: { ...snapshot, events: [event] } });
+    expect(target.textContent).toContain('Training loss');
+    await wrapper.setProps({ snapshot });
+    expect(target.childElementCount).toBe(0);
     wrapper.unmount();
+    target.remove();
   });
+  it.each(['en', 'vi'] as const)(
+    'renders all fourteen states with icons and tones in %s',
+    (locale) => {
+      const states = [
+        {
+          state: 'planned',
+          en: 'planned',
+          vi: 'đã lập kế hoạch',
+          icon: 'file-text',
+          tone: 'outline',
+        },
+        { state: 'pending', en: 'pending', vi: 'đang chờ', icon: 'clock', tone: 'secondary' },
+        {
+          state: 'submission_unknown',
+          en: 'submission unknown',
+          vi: 'chưa rõ việc gửi',
+          icon: 'circle-help',
+          tone: 'warning',
+        },
+        { state: 'submitted', en: 'submitted', vi: 'đã gửi', icon: 'send', tone: 'blue' },
+        { state: 'queued', en: 'queued', vi: 'trong hàng đợi', icon: 'list-ordered', tone: 'blue' },
+        { state: 'held', en: 'held', vi: 'tạm giữ', icon: 'pause-circle', tone: 'warning' },
+        { state: 'running', en: 'running', vi: 'đang chạy', icon: 'loader-2', tone: 'blue' },
+        {
+          state: 'stopping',
+          en: 'stopping',
+          vi: 'đang dừng',
+          icon: 'circle-stop',
+          tone: 'warning',
+        },
+        {
+          state: 'completed',
+          en: 'completed',
+          vi: 'hoàn tất',
+          icon: 'circle-check',
+          tone: 'success',
+        },
+        { state: 'failed', en: 'failed', vi: 'thất bại', icon: 'circle-x', tone: 'destructive' },
+        { state: 'cancelled', en: 'cancelled', vi: 'đã hủy', icon: 'ban', tone: 'secondary' },
+        {
+          state: 'terminal_unknown',
+          en: 'terminal unknown',
+          vi: 'chưa rõ trạng thái kết thúc',
+          icon: 'circle-help',
+          tone: 'warning',
+        },
+        {
+          state: 'observation_unavailable',
+          en: 'observation unavailable',
+          vi: 'không có quan sát',
+          icon: 'eye-off',
+          tone: 'secondary',
+        },
+        {
+          state: 'supervision_lost',
+          en: 'supervision lost',
+          vi: 'mất giám sát',
+          icon: 'unplug',
+          tone: 'warning',
+        },
+      ] as const;
+      const dashedStates = new Set([
+        'submission_unknown',
+        'terminal_unknown',
+        'observation_unavailable',
+        'supervision_lost',
+      ]);
+      const i18n = createTestI18n(locale);
+      const wrapper = mount(
+        defineComponent({
+          setup: () => () =>
+            h(
+              'div',
+              states.map(({ state }) =>
+                h(RunStateChip, {
+                  key: state,
+                  run: { ...run, run_id: `run-${state}`, state, uncertainty: false },
+                  progress:
+                    state === 'running' ? { epoch: 1, totalEpochs: 4, fraction: 0.25 } : null,
+                }),
+              ),
+            ),
+        }),
+        undefined,
+        i18n,
+      );
+      expect(wrapper.findAll('[data-run-state]')).toHaveLength(states.length);
+      for (const entry of states) {
+        const chip = wrapper.get(`[data-run-state="${entry.state}"]`);
+        expect(chip.text()).toContain(entry[locale]);
+        expect(chip.attributes('data-run-icon')).toBe(entry.icon);
+        expect(chip.attributes('data-effective-icon')).toBe(entry.icon);
+        expect(chip.attributes('data-run-tone')).toBe(entry.tone);
+        expect(chip.find('svg[data-lucide-icon]').attributes('data-lucide-icon')).toBe(entry.icon);
+        expect(chip.classes().includes('run-state-chip--dashed')).toBe(
+          dashedStates.has(entry.state),
+        );
+        if (entry.tone === 'blue') {
+          expect(chip.classes()).toContain(
+            entry.state === 'running' ? 'run-state-chip--blue' : 'run-state-chip--blue-outline',
+          );
+        } else {
+          const toneClass = {
+            outline: 'text-foreground',
+            secondary: 'bg-secondary',
+            warning: 'bg-yellow-500',
+            success: 'bg-green-500',
+            destructive: 'bg-destructive',
+          }[entry.tone];
+          expect(chip.classes()).toContain(toneClass);
+        }
+      }
+      expect(wrapper.find('.run-state-progress [data-slot="progress"]').exists()).toBe(true);
+      expect(
+        wrapper.get('.run-state-progress [role="progressbar"]').attributes('aria-valuenow'),
+      ).toBe('25');
+      wrapper.unmount();
+    },
+  );
+
+  it.each(['en', 'vi'] as const)(
+    'exposes uncertainty and stale evidence through keyboard and touch in %s',
+    async (locale) => {
+      const i18n = createTestI18n(locale);
+      const wrapper = mount(
+        defineComponent({
+          setup: () => () =>
+            h('div', [
+              h(RunStateChip, { run: { ...run, state: 'completed', uncertainty: true } }),
+              h(RunStateChip, { run, stale: true }),
+            ]),
+        }),
+        { attachTo: document.body },
+        i18n,
+      );
+      const uncertainChip = wrapper.get('[data-run-state="completed"]');
+      expect(uncertainChip.attributes('data-uncertain')).toBe('true');
+      expect(uncertainChip.attributes('data-effective-icon')).toBe('circle-help');
+      expect(uncertainChip.classes()).toContain('run-state-chip--dashed');
+      expect(uncertainChip.attributes('tabindex')).toBe('0');
+      await uncertainChip.trigger('keydown.enter');
+      await nextTick();
+      expect(document.body.textContent).toContain(
+        locale === 'en'
+          ? 'Lifecycle is not currently confirmed.'
+          : 'Vòng đời hiện chưa được xác nhận.',
+      );
+      await uncertainChip.trigger('keydown.space');
+      await nextTick();
+
+      const staleChip = wrapper.get('[data-run-state="running"]');
+      expect(staleChip.attributes('data-stale')).toBe('true');
+      expect(staleChip.attributes('data-prefix')).toBe('wifi-off');
+      expect(staleChip.classes()).toContain('run-state-chip--dimmed');
+      expect(staleChip.text()).toContain(
+        locale === 'en' ? 'last observed, stale' : 'quan sát gần nhất, đã cũ',
+      );
+      expect(
+        staleChip
+          .findAll('svg[data-lucide-icon]')
+          .map((icon) => icon.attributes('data-lucide-icon')),
+      ).toEqual(['wifi-off', 'loader-2']);
+      await staleChip.trigger('click');
+      await nextTick();
+      expect(document.body.textContent).toContain(
+        locale === 'en'
+          ? 'not proof that the run is still running or has finished.'
+          : 'không chứng minh lượt chạy vẫn đang chạy hoặc đã kết thúc.',
+      );
+      wrapper.unmount();
+    },
+  );
 
   it('localizes known operation/backend labels without changing run identity or action payloads', async () => {
     const i18n = createTestI18n('vi');
@@ -133,7 +300,7 @@ describe('run presentation localization', () => {
         setup: () => () =>
           h('div', [
             h(RunList, { runs: [run], loading: false, page: 0 }),
-            h(StateBadge, { run, stale: true }),
+            h(RunStateChip, { run, stale: true }),
             h(LogPanel, { events: [event], truncated: true }),
             h(MetricSummary, {
               summary: {

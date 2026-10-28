@@ -31,16 +31,24 @@ describe('results publication boundary', () => {
               }),
     });
     expect(await session.connect('token')).toBe(true);
+    const panel = document.createElement('div');
+    panel.id = 'shell-panel-tab-artifacts';
+    document.body.append(panel);
     const wrapper = mount(ResultsContainer, { props: { session, runId: run } });
-    expect(wrapper.get('button').attributes('disabled')).toBeUndefined();
-    await wrapper.get('button').trigger('click');
+    await flushPromises();
+    expect(panel.childElementCount).toBe(0);
+    expect(wrapper.get('[data-testid="results-refresh"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await vi.waitFor(() => expect(wrapper.text()).toContain('private.onnx'));
+    expect(panel.textContent).toContain('private.onnx');
     expect(wrapper.find('iframe').exists()).toBe(false);
     expect(wrapper.find('object').exists()).toBe(false);
     session.detach();
     await flushPromises();
     expect(wrapper.text()).not.toContain('private.onnx');
+    expect(panel.childElementCount).toBe(0);
     wrapper.unmount();
+    panel.remove();
   });
   it('does not create download URLs before an explicit verified action or for active SVG', async () => {
     const create = vi.spyOn(URL, 'createObjectURL');
@@ -65,7 +73,7 @@ describe('results publication boundary', () => {
     });
     await session.connect('token');
     const wrapper = mount(ResultsContainer, { props: { session, runId: run } });
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     expect(create).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain('View PNG');
@@ -113,7 +121,7 @@ describe('results publication boundary', () => {
     await session.connect('token');
     const wrapper = mount(ResultsContainer, { props: { session, runId: run } });
     try {
-      await wrapper.get('button').trigger('click');
+      await wrapper.get('[data-testid="results-refresh"]').trigger('click');
       await vi.waitFor(() => expect(wrapper.text()).toContain('weights.bin'));
       await wrapper
         .findAll('button')

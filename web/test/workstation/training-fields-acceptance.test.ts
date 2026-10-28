@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import { z } from 'zod';
+import { Select } from '@/components/ui/select';
 import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import {
   trainingConfigSchema,
@@ -104,6 +105,12 @@ async function authorEveryControl() {
     if (option.kind === 'boolean') {
       await control.trigger('click');
       expect(control.attributes('aria-checked')).toBe('true');
+    } else if (option.choices.length) {
+      const select = wrapper
+        .findAllComponents(Select)
+        .find((component) => component.props('name') === `config.${option.name}`);
+      if (!select) throw new Error(`Missing Select for ${option.name}`);
+      select.vm.$emit('update:modelValue', String(value));
     } else {
       await control.setValue(Array.isArray(value) ? value.join('\n') : String(value));
     }
@@ -177,10 +184,19 @@ describe('exhaustive training field authoring acceptance', () => {
               {
                 id: 'resnet18',
                 display_name: 'ResNet18',
+                architecture_family: 'CNN',
+                author_institution: 'Example',
+                year_published: 2015,
+                params_m: 11.7,
+                size_mb: 45,
+                short_description: 'Residual convolutional baseline',
                 description: 'Network',
                 best_for: 'Waves',
+                pros: ['Stable'],
+                cons: ['Larger model'],
+                compute_tier: 'Medium',
+                tags: ['residual'],
                 supported_dims: [2],
-                category: 'cnn',
                 is_pretrained: false,
               },
             ],

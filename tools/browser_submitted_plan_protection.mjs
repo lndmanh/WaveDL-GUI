@@ -53,8 +53,8 @@ print(json.dumps([dict(row) for row in c.execute("SELECT * FROM execution_contro
     return snapshot;
   };
   const ui = async () => dom(`JSON.stringify((()=>{
-    const field=name=>{const label=Array.from(document.querySelectorAll('label')).find(e=>e.getClientRects().length&&e.textContent.trim()===name);return label?document.getElementById(label.htmlFor)?.value:null};
-    const paragraphs=Array.from(document.querySelectorAll('p')).map(e=>e.textContent.trim());
+    const field=name=>{const label=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e=>e.textContent.trim()===name);const control=label&&document.getElementById(label.htmlFor);return control?.getAttribute('data-value') ?? control?.value ?? null};
+    const paragraphs=Array.from(document.querySelectorAll('p,[data-testid="selected-dataset"],[data-testid="selected-model"]')).map(e=>e.textContent.trim());
     const ack=document.querySelector('[aria-label="Acknowledged training run"]');
     return {epochs:field('epochs'),batchSize:field('batch size'),python:field('Python interpreter'),device:field('Device'),
       dataPath:paragraphs.find(t=>t.startsWith('Dataset: '))?.slice(9).replace(/ · daemon.*$/,''),model:paragraphs.find(t=>t.startsWith('Model: '))?.split(' ')[1]?.replace(/\\.$/,''),

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import TrainingFields from '../../app/components/project/TrainingFields.vue';
+import { Select } from '@/components/ui/select';
 import {
   trainingDefaults,
   trainingFieldMetadata,
@@ -55,11 +56,43 @@ describe('training controls coverage', () => {
       expect(wrapper.get(`label[for="${id}"]`).text()).toBe(option.name.replaceAll('_', ' '));
       const control = wrapper.get(`[id="${id}"]`);
       if (option.multiple) expect(control.element.tagName).toBe('TEXTAREA');
-      else if (option.choices.length) expect(control.element.tagName).toBe('SELECT');
-      else if (option.kind === 'integer' || option.kind === 'number')
+      else if (option.choices.length) {
+        expect(control.element.tagName).toBe('BUTTON');
+        expect(control.attributes('data-value')).toBe(String(option.default));
+      } else if (option.kind === 'integer' || option.kind === 'number')
         expect(control.attributes('type')).toBe('number');
     }
     expect(wrapper.text()).toContain('never deletes previous run data');
+    wrapper.unmount();
+  });
+  it('changes a choice through its public combobox role and keeps the schema value', async () => {
+    let values: { config: Record<string, unknown> } | undefined;
+    const host = defineComponent({
+      setup() {
+        const form = useForm({
+          initialValues: { config: structuredClone(trainingDefaults) },
+          validationSchema: z.object({ config: trainingConfigSchema }),
+        });
+        values = form.values;
+        return () => h(TrainingFields, { disabled: false });
+      },
+    });
+    const wrapper = mount(host);
+    await flushPromises();
+    const loss = wrapper.get('[id$="-training-loss"]');
+    expect(loss.attributes('role')).toBe('combobox');
+    expect(loss.attributes('data-value')).toBe('mse');
+    await loss.trigger('keydown', { key: 'ArrowDown' });
+    await flushPromises();
+    expect(document.body.querySelector('[role="option"][data-value="mae"]')).not.toBeNull();
+    const select = wrapper
+      .findAllComponents(Select)
+      .find((component) => component.props('name') === 'config.loss');
+    expect(select).toBeDefined();
+    select?.vm.$emit('update:modelValue', 'mae');
+    await flushPromises();
+    expect(wrapper.get('[id$="-training-loss"]').attributes('data-value')).toBe('mae');
+    expect(values?.config.loss).toBe('mae');
     wrapper.unmount();
   });
   it('never automatically plans/submits or cancels daemon work on mount/navigation', async () => {

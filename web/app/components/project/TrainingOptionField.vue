@@ -4,12 +4,22 @@ import { useI18n } from 'vue-i18n';
 import { trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
 import { Field as VeeField } from 'vee-validate';
 import { computed, useId } from 'vue';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Field, FieldLabel, FieldDescription, FieldError } from '@/components/ui/field';
 import type { Json } from '../../lib/daemon-api';
 import { trainingFieldMetadata } from '../../../shared/schemas/training-request';
+import InfoChip from '../common/InfoChip.vue';
 
 const { clientMessage } = useClientMessages();
 const { t } = useI18n({ useScope: 'global' });
@@ -19,6 +29,16 @@ const messageKeys = trainingFieldMessageKeys[props.name];
 const idPrefix = useId();
 const controlId = computed(() => `${idPrefix}-training-${props.name}`);
 const label = computed(() => (messageKeys ? t(messageKeys.label) : props.name));
+const description = computed(() => (messageKeys ? t(messageKeys.description) : props.name));
+const defaultText = computed(() => {
+  if (
+    !option ||
+    option.default === null ||
+    (Array.isArray(option.default) && !option.default.length)
+  )
+    return t('project.none');
+  return Array.isArray(option.default) ? option.default.join(', ') : String(option.default);
+});
 function listText(value: Json): string {
   return Array.isArray(value) ? value.join('\n') : '';
 }
@@ -35,32 +55,54 @@ function stringValue(value: string | number): string | null {
 }
 </script>
 <template>
-  <VeeField v-if="option" v-slot="{ field, errors }" :name="`config.${name}`">
+  <VeeField v-if="option" v-slot="{ field, errors }" :name="`config.${name}`" :keep-value="true">
     <Field :data-invalid="!!errors.length">
-      <FieldLabel :for="controlId">{{ label }}</FieldLabel>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <FieldLabel :for="controlId">{{ label }}</FieldLabel>
+        <InfoChip
+          v-if="description.length > 80"
+          :label="t('project.fieldHelp')"
+          :text="description"
+        />
+      </div>
       <Checkbox
         v-if="option.kind === 'boolean'"
         :id="controlId"
         :aria-label="label"
+        :data-testid="`training-field-${name}`"
         :model-value="field.value"
         :disabled="disabled"
         :aria-invalid="!!errors.length"
         @update:model-value="field.onChange"
         @blur="field.onBlur"
       />
-      <select
+      <Select
         v-else-if="option.choices.length"
-        :id="controlId"
-        v-bind="field"
+        :model-value="String(field.value)"
+        :name="field.name"
         :disabled="disabled"
-        :aria-invalid="!!errors.length"
-        class="option-select"
+        @update:model-value="field.onChange"
       >
-        <option v-for="choice in option.choices" :key="choice" :value="choice">{{ choice }}</option>
-      </select>
+        <SelectTrigger
+          :id="controlId"
+          :data-value="String(field.value)"
+          :aria-invalid="!!errors.length"
+          @blur="field.onBlur"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem v-for="choice in option.choices" :key="choice" :value="choice">
+              {{ choice }}
+            </SelectItem>
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <Textarea
         v-else-if="option.multiple"
         :id="controlId"
+        :data-testid="`training-field-${name}`"
         :model-value="listText(field.value)"
         :disabled="disabled"
         :aria-invalid="!!errors.length"
@@ -70,6 +112,7 @@ function stringValue(value: string | number): string | null {
       <Input
         v-else-if="option.kind === 'number' || option.kind === 'integer'"
         :id="controlId"
+        :data-testid="`training-field-${name}`"
         type="number"
         :step="option.kind === 'integer' ? 1 : 'any'"
         :model-value="field.value"
@@ -81,26 +124,23 @@ function stringValue(value: string | number): string | null {
       <Input
         v-else
         :id="controlId"
+        :data-testid="`training-field-${name}`"
         :model-value="field.value ?? ''"
         :disabled="disabled"
         :aria-invalid="!!errors.length"
         @update:model-value="field.onChange(stringValue($event))"
         @blur="field.onBlur"
       />
-      <FieldDescription
-        >{{ messageKeys ? t(messageKeys.description) : name
-        }}{{ option.multiple ? t('project.enterOneValuePerLine') : '' }}</FieldDescription
-      >
+      <FieldDescription v-if="description.length <= 80">
+        {{ description }}{{ option.multiple ? t('project.enterOneValuePerLine') : '' }}
+      </FieldDescription>
+      <div class="flex flex-wrap gap-2">
+        <Badge variant="outline">{{ t('project.defaultValue', { value: defaultText }) }}</Badge>
+        <Badge v-if="option.multiple" variant="secondary">
+          {{ t('project.oneValuePerLine') }}
+        </Badge>
+      </div>
       <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
     </Field>
   </VeeField>
 </template>
-<style scoped>
-.option-select {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px;
-  background: var(--background);
-  width: 100%;
-}
-</style>

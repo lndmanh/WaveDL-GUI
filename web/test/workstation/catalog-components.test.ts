@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { Select } from '@/components/ui/select';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
 import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
@@ -31,15 +33,18 @@ describe('catalogue UI isolation', () => {
     const wrapper = mount(BrowseContainer, { props: { session } });
     await flushPromises();
     expect(session.snapshot().status).toBe('error');
-    expect(wrapper.text()).toContain('Catalogue unavailable');
+    expect(wrapper.text()).toContain('Dataset paths are unavailable');
     expect(wrapper.text()).not.toContain('Ask your daemon operator');
-    expect(wrapper.getComponent(Select).props('disabled')).toBe(true);
+    expect(wrapper.get('[data-testid="dataset-path-search"]').attributes('disabled')).toBeDefined();
     expect(wrapper.emitted('select')).toBeUndefined();
     malformed = false;
     expect(await session.reconnect('token')).toBe(true);
-    await vi.waitFor(() => expect(wrapper.getComponent(Select).props('disabled')).toBe(false));
-    expect(wrapper.text()).not.toContain('Catalogue unavailable');
-    expect(wrapper.getComponent(Select).props('disabled')).toBe(false);
+    await vi.waitFor(() =>
+      expect(
+        wrapper.get('[data-testid="dataset-path-search"]').attributes('disabled'),
+      ).toBeUndefined(),
+    );
+    expect(wrapper.text()).not.toContain('Dataset paths are unavailable');
     wrapper.unmount();
     session.detach();
   });
@@ -54,8 +59,18 @@ describe('catalogue UI isolation', () => {
           {
             id: 'cnn',
             display_name: 'CNN',
+            architecture_family: 'CNN',
+            author_institution: 'Example',
+            year_published: 1989,
+            params_m: 1.6,
+            size_mb: 6,
+            short_description: 'Simple convolutional baseline',
             description: 'Guidance only',
             best_for: 'Baseline',
+            pros: ['Fast'],
+            cons: ['Limited capacity'],
+            compute_tier: 'Edge',
+            tags: ['baseline'],
             supported_dims: [1, 2, 3],
             is_pretrained: false,
           },
@@ -89,7 +104,7 @@ describe('catalogue UI isolation', () => {
       await vi.waitFor(() => expect(wrapper.findAll('li')).toHaveLength(1));
       expect(wrapper.text()).not.toContain('Model catalogue unavailable');
       expect(wrapper.text()).toContain('not runtime certification');
-      expect(wrapper.text()).toContain('Shape guidance unavailable');
+      expect(wrapper.text()).toContain('Shape not inspected');
       wrapper.unmount();
       session.detach();
     },
@@ -115,7 +130,10 @@ describe('catalogue UI isolation', () => {
     });
     const wrapper = mount(BrowseContainer, { props: { session } });
     await flushPromises();
-    wrapper.getComponent(Select).vm.$emit('update:modelValue', 'research');
+    expect(wrapper.getComponent(DatasetPathPicker).props('allowDirectory')).toBe(false);
+    expect(wrapper.get('section').attributes('aria-label')).toBe('Dataset path');
+    await wrapper.get('[data-testid="dataset-path-search"]').trigger('focus');
+    await wrapper.get('[role="option"][data-value="research"]').trigger('click');
     await flushPromises();
     await wrapper
       .findAll('button')
@@ -134,6 +152,19 @@ describe('catalogue UI isolation', () => {
     wrapper.unmount();
     session.detach();
   });
+  it('forwards the optional directory-selection mode and label to the path picker', async () => {
+    const session = await connected(async () => json({ roots: [{ id: 'runs' }] }));
+    const wrapper = mount(BrowseContainer, {
+      props: { session, allowDirectory: true, label: 'Standalone run directory' },
+    });
+    await flushPromises();
+    const picker = wrapper.getComponent(DatasetPathPicker);
+    expect(picker.props('allowDirectory')).toBe(true);
+    expect(picker.props('label')).toBe('Standalone run directory');
+    expect(wrapper.get('section').attributes('aria-label')).toBe('Standalone run directory');
+    wrapper.unmount();
+    session.detach();
+  });
   it('does not show or emit a stale directory result when cancelled', async () => {
     let finish: ((response: Response) => void) | undefined;
     const session = await connected(async (url) =>
@@ -145,7 +176,8 @@ describe('catalogue UI isolation', () => {
     );
     const wrapper = mount(BrowseContainer, { props: { session } });
     await flushPromises();
-    wrapper.getComponent(Select).vm.$emit('update:modelValue', 'data');
+    await wrapper.get('[data-testid="dataset-path-search"]').trigger('focus');
+    await wrapper.get('[role="option"][data-value="data"]').trigger('click');
     await vi.waitFor(() => expect(finish).toBeDefined());
     await wrapper
       .findAll('button')
@@ -174,7 +206,7 @@ describe('catalogue UI isolation', () => {
     await flushPromises();
     session.detach();
     await flushPromises();
-    expect(wrapper.getComponent(Select).props('disabled')).toBe(true);
+    expect(wrapper.get('[data-testid="dataset-path-search"]').attributes('disabled')).toBeDefined();
     wrapper.unmount();
   });
   it('renders model names as plaintext, emits only scoped metadata, and clears it on detach', async () => {
@@ -188,8 +220,18 @@ describe('catalogue UI isolation', () => {
           {
             id: 'cnn',
             display_name: name,
+            architecture_family: 'CNN',
+            author_institution: 'Example',
+            year_published: 1989,
+            params_m: 1.6,
+            size_mb: 6,
+            short_description: 'Simple convolutional baseline',
             description: 'Guidance',
             best_for: 'Baseline',
+            pros: ['Fast'],
+            cons: ['Limited capacity'],
+            compute_tier: 'Edge',
+            tags: ['baseline'],
             supported_dims: [1, 2, 3],
             is_pretrained: false,
           },
@@ -199,6 +241,20 @@ describe('catalogue UI isolation', () => {
     const wrapper = mount(ModelSelector, { props: { session } });
     await flushPromises();
     expect(wrapper.text()).toContain('not runtime certification');
+    const certification = wrapper
+      .findAll('button')
+      .find((button) =>
+        button
+          .attributes('aria-label')
+          ?.includes('Bundled architecture descriptions provide guidance only.'),
+      );
+    expect(certification).toBeDefined();
+    expect(certification?.classes()).toContain('border-dashed');
+    await certification?.trigger('click');
+    await flushPromises();
+    expect(document.body.textContent).toContain(
+      'Bundled architecture descriptions provide guidance only. Planning and execution on your daemon validate the actual environment and data compatibility.',
+    );
     expect(wrapper.text()).toContain(name);
     expect(wrapper.find('img').exists()).toBe(false);
     await wrapper
@@ -218,6 +274,53 @@ describe('catalogue UI isolation', () => {
     await flushPromises();
     expect(wrapper.text()).not.toContain(name);
     wrapper.unmount();
+  });
+  it('shows the full structured catalogue with bounded, composable facets and original choices', async () => {
+    const metadata = {
+      source: 'bundled_metadata',
+      runtime_verified: false,
+      ...JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), '../src/wavedl_daemon/runs/model_metadata.json'),
+          'utf8',
+        ),
+      ),
+    } as unknown;
+    const session = await connected(async () => json(metadata));
+    const wrapper = mount(ModelSelector, { props: { session } });
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="model-card"]')).toHaveLength(71);
+    expect(wrapper.findAll('[data-testid="facet-family"]')).toHaveLength(5);
+    expect(wrapper.findAll('[data-testid="facet-tier"]')).toHaveLength(4);
+    expect(wrapper.findAll('[data-testid="facet-dimension"]')).toHaveLength(3);
+    expect(wrapper.findAll('[data-testid="facet-category"]')).toHaveLength(8);
+    expect(wrapper.find('[data-testid="facet-tag"]').exists()).toBe(false);
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Next models')).toBe(false);
+
+    await wrapper
+      .findAll('[data-testid="facet-family"]')
+      .find((button) => button.text() === 'CNN')
+      ?.trigger('click');
+    expect(wrapper.findAll('[data-testid="model-card"]')).toHaveLength(42);
+    await wrapper
+      .findAll('[data-testid="facet-category"]')
+      .find((button) => button.text() === 'Classic CNNs')
+      ?.trigger('click');
+    expect(wrapper.findAll('[data-testid="model-card"]')).toHaveLength(9);
+    await wrapper.findAll('[data-testid="facet-pretrained"]').at(0)?.trigger('click');
+    expect(wrapper.findAll('[data-testid="model-card"]')).toHaveLength(3);
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Clear filters')
+      ?.trigger('click');
+    expect(wrapper.findAll('[data-testid="model-card"]')).toHaveLength(71);
+
+    await wrapper.findAll('[data-testid="model-select"]')[0]!.trigger('click');
+    const selection = wrapper.getComponent(ModelSelector).emitted('select')?.[0]?.[0];
+    expect(selection).toEqual({ model: 'cnn', daemonId: 'daemon-one' });
+    expect(() => new CatalogApi(session).assertSelection(selection)).not.toThrow();
+    wrapper.unmount();
+    session.detach();
   });
   it('unmount aborts outstanding metadata work without cancelling daemon runs', async () => {
     let signal: AbortSignal | null | undefined;

@@ -125,10 +125,12 @@ docs/**
 !docs/superpowers/
 !docs/superpowers/plans/
 !docs/superpowers/plans/2026-10-08-migration-acceptance-ledger.md
+!docs/superpowers/plans/2026-10-28-ux-prose-ledger.md
 
 .VSCodeCounter
 
 tools/*
+!tools/measure_ux_prose.mjs
 !tools/browser_asset_proof.mjs
 !tools/browser_files.mjs
 !tools/browser_process.mjs

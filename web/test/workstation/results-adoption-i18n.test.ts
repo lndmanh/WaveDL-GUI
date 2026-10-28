@@ -92,8 +92,8 @@ describe('results and adoption language presentation', () => {
     expect(wrapper.get<HTMLInputElement>('#inference-input_key').element.value).toBe(
       'raw_input_key',
     );
-    expect(wrapper.get<HTMLSelectElement>('#inference-format').element.value).toBe('auto');
-    expect(wrapper.get('#inference-format option').text()).toBe('Tự động');
+    expect(wrapper.getComponent({ name: 'Select' }).props('modelValue')).toBe('auto');
+    expect(wrapper.get('#inference-format').attributes('role')).toBe('combobox');
     expect(wrapper.text()).toContain('Mô-đun đăng ký tùy chỉnh');
     expect(wrapper.get<HTMLInputElement>('#inference-import-modules').element.value).toBe(
       'custom_registration',

@@ -45,7 +45,7 @@ describe('run cancellation control', () => {
     expect(button().attributes('disabled')).toBeDefined();
     await button().trigger('click');
     expect(wrapper.emitted('cancel')).toBeUndefined();
-    expect(wrapper.get('[data-slot="badge"]').text()).toBe('running');
+    expect(wrapper.get('[data-run-state="running"]').text()).toContain('running');
     await wrapper.setProps({ snapshot: { ...initial, cancellation: 'unknown' } });
     expect(button().attributes('disabled')).toBeUndefined();
     await button().trigger('click');
@@ -57,7 +57,7 @@ describe('run cancellation control', () => {
       },
     });
     expect(button().attributes('disabled')).toBeDefined();
-    expect(wrapper.get('[data-slot="badge"]').text()).toBe('stopping');
+    expect(wrapper.get('[data-run-state="stopping"]').text()).toContain('stopping');
     wrapper.unmount();
   });
   it('renders no cancellation authority for absent or confirmed terminal runs', async () => {

@@ -156,9 +156,10 @@ describe('published CV summary contract', () => {
     const wrapper = mount(Host, undefined, i18n);
     try {
       expect(downloads).toHaveLength(0);
-      expect(wrapper.get('button').attributes('disabled')).toBeDefined();
-      await wrapper.get('select').setValue('gen-000001');
-      await wrapper.get('button').trigger('click');
+      expect(wrapper.findAll('button').at(-1)?.attributes('disabled')).toBeDefined();
+      wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'gen-000001');
+      await flushPromises();
+      await wrapper.findAll('button').at(-1)!.trigger('click');
       await vi.waitFor(() => expect(wrapper.text()).toContain('Overall mean'));
       expect(wrapper.text()).toContain('Unavailable');
       expect(wrapper.text()).toContain('Parameter 0');
@@ -166,20 +167,21 @@ describe('published CV summary contract', () => {
       await flushPromises();
       expect(wrapper.text()).toContain('Trung bình tổng thể');
       expect(wrapper.text()).toContain('Không có');
-      expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('gen-000001');
+      expect(wrapper.getComponent({ name: 'Select' }).props('modelValue')).toBe('gen-000001');
       expect(downloads).toHaveLength(1);
       listed.value = [...artifacts];
       await flushPromises();
       expect(wrapper.text()).not.toContain('Trung bình tổng thể');
-      expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('');
-      await wrapper.get('select').setValue('gen-000002');
-      await wrapper.get('button').trigger('click');
+      expect(wrapper.getComponent({ name: 'Select' }).props('modelValue')).toBe('');
+      wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'gen-000002');
+      await flushPromises();
+      await wrapper.findAll('button').at(-1)!.trigger('click');
       await vi.waitFor(() => expect(wrapper.text()).toContain('Trung bình tổng thể'));
       expect(downloads[1]).toContain('/gen-000002/cv_summary.json');
       session.detach();
       await flushPromises();
       expect(wrapper.text()).not.toContain('Trung bình tổng thể');
-      expect(wrapper.get('button').attributes('disabled')).toBeDefined();
+      expect(wrapper.findAll('button').at(-1)?.attributes('disabled')).toBeDefined();
     } finally {
       wrapper.unmount();
       session.detach();

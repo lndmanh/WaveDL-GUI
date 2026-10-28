@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Real Chromium + vendored static app + real daemon. No API response mocks.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, access, realpath } from 'node:fs/promises';
@@ -345,14 +346,14 @@ async function scenario(name) {
     }
     // Guided authoring leaves the dataset details open; selecting from the real catalogue resolves daemon paths.
     const rootSnapshot = await snapshot();
-    assert(rootSnapshot.includes('combobox "Configured root"'), 'Configured root combobox missing');
-    const rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Configured root"]';
-    const preparedRoot = await actions.readyControl('field', 'Configured root', false, { locator: rootSelector });
+    assert(rootSnapshot.includes('combobox "Search roots and paths"'), 'Search roots and paths combobox missing');
+    const rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Search roots and paths"]';
+    const preparedRoot = await actions.readyControl('field', 'Search roots and paths', false, { locator: rootSelector });
     await cli('click', preparedRoot);
     await actions.option('datasets');
     await cli('wait', '--text', 'samples.npz');
     await button('Select file samples.npz');
-    await cli('wait', '--fn', `Array.from(document.querySelectorAll('p')).some(e => e.textContent.trim().startsWith('Dataset: ') && e.textContent.includes('/samples.npz'))`);
+    await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Dataset: ') && e.textContent.includes('/samples.npz'))`);
     await button('Next step');
     await cli('wait', '--text', 'Choose CNN');
     if (name === 'wizard-progression') {
@@ -367,7 +368,7 @@ async function scenario(name) {
       assert.deepEqual(record.wizardAfterInvalidModel, beforeInvalidModel);
     }
     await button('Choose CNN');
-    await cli('wait', '--fn', `Array.from(document.querySelectorAll('p')).some(e => e.textContent.trim().startsWith('Model: cnn'))`);
+    await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Model: cnn'))`);
     try {
       record.trainingEditorReadiness = await openTrainingEditor({ button, cli, dom });
     } catch (error) {
@@ -468,6 +469,7 @@ async function scenario(name) {
     }
     await button('Preview persisted plan');
     await cli('wait', '--text', 'Persisted plan for approval');
+    await openPlanDisclosure({ cli, dom });
     const planned = await registry(root);
     if (name === 'wizard-progression') record.wizardPreviewRegistry = planned;
     check(planned.plans === 1 && planned.control[0].submission_requested === 0, 'Plan persisted before approval; no submission intent');
@@ -504,7 +506,7 @@ async function scenario(name) {
         assert(Date.now() < metricsDeadline && producer?.cursor && producer.cursor.attempt > 0 && producer.cursor.seq >= 1 && producer.journalMatches, 'Real persisted runtime metric and matching producer journal required before replacement');
         record.initialRuntimeCursor = producer.cursor;
         record.initialMetricEvidence = { persistedMetricCount: producer.metrics, persistedLogCount: producer.logs, producerJournalMatches: producer.journalMatches, durableCursors: producer.durableCursors };
-        await cli('wait', '--fn', `(() => { const history=document.querySelector('[aria-label="Runtime metric history"]'); const current=document.querySelector('[aria-label="Current runtime metrics"]'); return /Active checkpoint lineage · [1-9][0-9]* steps/.test(history?.innerText ?? '') && !!history?.querySelector('canvas') && !!current?.querySelector('progress'); })()`);
+        await cli('wait', '--fn', `(() => { const history=document.querySelector('[aria-label="Runtime metric history"]'); const current=document.querySelector('[aria-label="Current runtime metrics"]'); return /Active checkpoint lineage · [1-9][0-9]* steps/.test(history?.innerText ?? '') && !!history?.querySelector('canvas') && !!current?.querySelector('[role="progressbar"]'); })()`);
         record.liveMonitorBeforeReplacement = await dom(`JSON.stringify((() => {
           const selected=document.querySelector('[aria-label="Selected run"]');
           const history=document.querySelector('[aria-label="Runtime metric history"]');
@@ -584,7 +586,7 @@ async function scenario(name) {
       await cli('wait', '--fn', `document.body.innerText.includes('Connection identity changed') && document.body.innerText.includes('Daemon identity, build or protocol changed.')`);
       check(await dom(`JSON.stringify(document.querySelector('#daemon-bearer')?.value === '' && Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.textContent.trim() === 'Disconnect and clear scope'))`), 'Identity skew requires explicit scope clearing and fresh credential; no automatic reconnection');
       check(await dom(`JSON.stringify(!document.querySelector('[aria-label="Approved normalized manifest"]') && !Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && !e.disabled && ['Approve and start this plan', 'Preview persisted plan', 'Request cancellation'].includes(e.textContent.trim())))`), 'Old immutable approval and mutation authority revoked after daemon replacement');
-      check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('p')).some(e => e.textContent.trim().startsWith('Dataset: Not selected')) && !document.querySelector('[aria-label="Selected run"]') && !document.querySelector('[aria-label="Runtime metric history"]'))`), 'Old dataset selection, selected-run monitor and cursor-bearing history revoked');
+      check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Dataset: Not selected')) && !document.querySelector('[aria-label="Selected run"]') && !document.querySelector('[aria-label="Runtime metric history"]'))`), 'Old dataset selection, selected-run monitor and cursor-bearing history revoked');
       record.replacementAfterStaleSubmit = await registry(replacementRoot);
       check(record.replacementAfterStaleSubmit.plans === 0 && record.replacementAfterStaleSubmit.control.length === 0 && record.replacementAfterStaleSubmit.executions.length === 0 && record.replacementAfterStaleSubmit.runs.length === 0, 'Stale browser submission creates zero replacement plans, submission intent, executions or runs');
       if (liveReplacement) {
@@ -764,7 +766,7 @@ for p in sorted(r.glob('gen-*/COMPLETE.json')):
 else: raise ValueError('Diagnostic PNG missing')`, root, plot.run_id]));
             assert.deepEqual(png.inventory, { size: png.size, sha256: png.sha256 });
             record.partialBestStage = 'preview-click';
-            await actions.button('View PNG', false, { locator: `xpath=//tr[td[normalize-space(.)='${png.generation} / ${png.attempt}']][td[normalize-space(.)='scatter_all.png']]//button[normalize-space(.)='View PNG']` });
+            await actions.button('View PNG', false, { locator: `xpath=//*[@data-artifact-generation='${png.generation}'][@data-artifact-path='scatter_all.png']//button[normalize-space(.)='View PNG']` });
             record.partialBestStage = 'image-decode';
             await cli('wait', '--fn', 'Array.from(document.images).some(image=>image.alt==="Verified published diagnostic plot"&&image.complete&&image.naturalWidth>0)');
             record.partialBestStage = 'image-scroll';
@@ -773,7 +775,7 @@ else: raise ValueError('Diagnostic PNG missing')`, root, plot.run_id]));
             record.partialBestRaster = await dom(`(async()=>{const image=Array.from(document.images).find(i=>i.alt==='Verified published diagnostic plot'&&i.complete&&i.naturalWidth>0);if(!image||!image.src.startsWith('blob:'))throw Error('Verified raster absent');const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const context=canvas.getContext('2d');context.drawImage(image,0,0);const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(v=>v.toString(16).padStart(2,'0')).join('');return JSON.stringify({width:canvas.width,height:canvas.height,rgbaSha256:await hash(context.getImageData(0,0,canvas.width,canvas.height).data)});})()`);
             assert.deepEqual(record.partialBestRaster, { width: png.width, height: png.height, rgbaSha256: png.rgbaSha256 });
             record.partialBestStage = 'native-download';
-            const pngDownload = await actions.readyControl('button', 'Download', false, { scope: `//tr[td[normalize-space(.)='${png.generation} / ${png.attempt}']][td[normalize-space(.)='scatter_all.png']]` });
+            const pngDownload = await actions.readyControl('button', 'Download', false, { scope: `//*[@data-artifact-generation='${png.generation}'][@data-artifact-path='scatter_all.png']` });
             const pngDownloadPath = join(downloads, 'partial-best-verified.png');
             await cli('download', pngDownload, pngDownloadPath);
             const downloadedPng = await readFile(pngDownloadPath);
@@ -848,14 +850,14 @@ print(json.dumps([{ "planId":r[0],"manifest":json.loads(json.loads(r[1])["manife
         await cli('wait', '--text', 'Download');
         if (name === 'artifact-tamper') record.artifactTamperStage = 'select-published-history-row';
         const row = await dom(`JSON.stringify((() => {
-          const rows = Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('tbody tr'));
-          const row = ${name === 'artifact-tamper' ? "rows.find(row => row.cells[1]?.textContent.trim() === 'training_history.csv')" : 'rows[0]'};
-          return row ? Array.from(row.cells).slice(0, 3).map(cell => cell.textContent.trim()) : null;
+          const rows = Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('[data-artifact-path]'));
+          const row = ${name === 'artifact-tamper' ? "rows.find(row => row.getAttribute('data-artifact-path') === 'training_history.csv')" : 'rows[0]'};
+          return row ? [row.dataset.artifactGeneration + ' / ' + row.dataset.artifactAttempt, row.dataset.artifactPath, row.dataset.artifactSize] : null;
         })())`);
         assert(row, 'No real published artifact row');
         const generation = row[0].split('/')[0].trim();
         const artifactPath = row[1];
-        const artifactScope = `//section[@aria-labelledby="results-title"]//tbody/tr[normalize-space(td[1])=${xpathLiteral(row[0].replace(/\s+/g, ' ').trim())} and normalize-space(td[2])=${xpathLiteral(artifactPath)}]`;
+        const artifactScope = `//section[@aria-labelledby="results-title"]//*[@data-artifact-generation=${xpathLiteral(row[0].split('/')[0].trim())} and @data-artifact-path=${xpathLiteral(artifactPath)}]`;
         const runId = JSON.parse(record.approvedPlan).run_id;
         const complete = JSON.parse(await readFile(join(root, 'runs', runId, 'checkpoints', generation, 'COMPLETE.json'), 'utf8'));
         const identity = complete.files[artifactPath];

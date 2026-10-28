@@ -2,7 +2,8 @@
 import { useI18n } from 'vue-i18n';
 import type { RunView } from '../../lib/daemon-api';
 import { Button } from '@/components/ui/button';
-import StateBadge from './StateBadge.vue';
+import RunStateChip from './RunStateChip.vue';
+import InfoChip from '../common/InfoChip.vue';
 import { runOperationMessageKeys } from '../../i18n/dynamic-keys';
 const { t } = useI18n({ useScope: 'global' });
 defineProps<{
@@ -23,16 +24,18 @@ defineEmits<{ select: [runId: string]; refresh: []; page: [offset: number] }>();
       }}</Button>
     </div>
     <p v-if="!runs.length">{{ loading ? t('runs.loadingRuns') : t('runs.noRuns') }}</p>
-    <p v-if="lastRefreshed" class="text-muted-foreground text-xs">
-      {{ t('runs.listSnapshot', { time: lastRefreshed }) }}
-    </p>
+    <InfoChip
+      v-if="lastRefreshed"
+      :label="lastRefreshed"
+      :text="t('runs.listSnapshot', { time: lastRefreshed })"
+    />
     <ul class="items">
       <li v-for="run in runs" :key="run.run_id">
         <Button variant="ghost" class="run-row" @click="$emit('select', run.run_id)">
           <span class="identity"
             ><strong>{{ t(runOperationMessageKeys[run.operation]) }}</strong
             ><small>{{ run.run_id }}</small></span
-          ><StateBadge :run="run" :stale="staleRunIds?.has(run.run_id)" />
+          ><RunStateChip :run="run" :stale="staleRunIds?.has(run.run_id)" />
         </Button>
       </li>
     </ul>

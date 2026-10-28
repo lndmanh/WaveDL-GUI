@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Additive supported ONNX export-only subgate; ordinary public DOM approval.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -21,13 +22,13 @@ export async function onnxExport({ cli, dom, button, actions, registry, pollRegi
   const trainingRow = `xpath=//button[contains(@class,"run-row")][.//small[normalize-space(.)=${xpathLiteral(approvedManifest.run_id)}]]`;
   await cli('wait', '--fn', `document.evaluate(${JSON.stringify(trainingRow.slice(6))},document,null,XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null).snapshotLength===1`);
   await cli('click', trainingRow); await actions.button('Results', false, { locator: '[data-testid="nav-results"]' }); await button('Refresh artifacts');
-  await cli('wait', '--fn', `Array.from(document.getElementById('source-generation')?.options ?? []).some(option => option.value && !option.disabled)`);
-  const options = await observe('Array.from(document.querySelector("#source-generation").options).filter(o=>o.value&&!o.disabled).map(o=>({value:o.value,label:o.textContent.trim()}))');
+  await cli('wait', '--fn', '!!document.getElementById("source-generation")');
+  const options = (await actions.options('Source checkpoint generation')).filter(option => option.value && !option.disabled);
   const selected = options.find(option => option.label.endsWith('best'));
   assert(selected, 'Genuine published best checkpoint required');
   await actions.select('Source checkpoint generation', selected.value);
-  const rootLocator = await actions.readyControl('field', 'Configured root', false,
-    { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Configured root"]` });
+  const rootLocator = await actions.readyControl('field', 'Search roots and paths', false,
+    { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Search roots and paths"]` });
   await cli('click', rootLocator); await actions.option('datasets');
   await actions.button('Select file samples.npz', false, { scope });
   await actions.fill('Python interpreter', record.pythonInterpreter, { scope });
@@ -39,6 +40,7 @@ export async function onnxExport({ cli, dom, button, actions, registry, pollRegi
   record.onnxStage = 'preview-export';
   const before = await registry(root);
   await actions.button('Preview evaluation / plot plan', false, { scope });
+  await openPlanDisclosure({ cli, dom });
   await cli('wait', '--fn', `${plan} !== null`);
   const approved = JSON.parse(await observe(`${plan}.textContent`));
   assert.equal(approved.operation, 'test'); assert.equal(approved.resolved_config.export, 'onnx');
@@ -57,12 +59,12 @@ export async function onnxExport({ cli, dom, button, actions, registry, pollRegi
     return run?.state === 'completed';
   }, 'Supported CPU ONNX export completed', 90000);
   await actions.button('Results', false, { locator: '[data-testid="nav-results"]' }); await button('Refresh artifacts');
-  await cli('wait', '--fn', `Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('tbody tr')).some(row=>row.cells[1]?.textContent.trim().endsWith('.onnx'))`);
-  const rows = await observe(`Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('tbody tr')).map(row=>Array.from(row.cells).slice(0,3).map(cell=>cell.textContent.trim()))`);
+  await cli('wait', '--fn', `Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('[data-artifact-path]')).some(row=>row.getAttribute('data-artifact-path').endsWith('.onnx'))`);
+  const rows = await observe(`Array.from(document.querySelector('#results-title').closest('section').querySelectorAll('[data-artifact-path]')).map(row=>[row.dataset.artifactGeneration + ' / ' + row.dataset.artifactAttempt, row.dataset.artifactPath, row.dataset.artifactSize])`);
   const onnxRows = rows.filter(row => row[1].endsWith('.onnx'));
   assert.equal(onnxRows.length, 1, 'One exact published ONNX artifact required');
   const row = onnxRows[0], generation = row[0].split('/')[0].trim(), path = row[1];
-  const artifactScope = `//section[@aria-labelledby="results-title"]//tbody/tr[normalize-space(td[1])=${xpathLiteral(row[0].replace(/\s+/g, ' ').trim())} and normalize-space(td[2])=${xpathLiteral(path)}]`;
+  const artifactScope = `//section[@aria-labelledby="results-title"]//*[@data-artifact-generation=${xpathLiteral(row[0].split('/')[0].trim())} and @data-artifact-path=${xpathLiteral(path)}]`;
   assert.deepEqual(await readdir(downloads), [], 'Download directory must begin empty');
   const download = await actions.readyControl('button', 'Download', false, { scope: artifactScope });
   await cli('download', download, join(downloads, 'verified-model.onnx'));

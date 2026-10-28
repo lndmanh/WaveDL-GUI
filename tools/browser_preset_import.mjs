@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Real Chromium file-input coverage for the JSON training-preset authority gate.
 // The caller supplies the same public-DOM driver used by browser_authoring_parity.
 import { createHash } from 'node:crypto';
@@ -17,13 +18,12 @@ async function draftSnapshot(dom) {
     const fields = Object.fromEntries(labels.map((name) => {
       const label = Array.from(form?.querySelectorAll('label') ?? []).find((node) => node.textContent.trim() === name);
       const control = label ? document.getElementById(label.htmlFor) : null;
-      return [name, control ? { value: control.value, checked: control.checked ?? null } : null];
+      return [name, control ? { value: control.getAttribute('data-value') ?? control.value, checked: control.checked ?? null } : null];
     }));
-    const text = Array.from(document.querySelectorAll('p')).map((node) => node.textContent.trim())
-      .filter((value) => value.startsWith('Dataset: ') || value.startsWith('Model: '));
+    const text = Array.from(document.querySelectorAll('[data-testid="selected-dataset"],[data-testid="selected-model"]')).map((node) => node.textContent.trim());
     const controls = Array.from(form?.querySelectorAll('input,select,textarea,[role="checkbox"]') ?? [])
       .map((node) => ({ id: node.id, name: node.getAttribute('name'), role: node.getAttribute('role'),
-        value: node.value ?? null, checked: node.checked ?? node.getAttribute('aria-checked') ?? null }));
+        value: node.getAttribute('data-value') ?? node.value ?? null, checked: node.checked ?? node.getAttribute('aria-checked') ?? null }));
     return { fields, selection: text, controls };
   })())`);
 }
@@ -52,9 +52,11 @@ export async function browserPresetImport(driver) {
   // leave this exact SQL row and visible approval untouched.
   await button('Preview persisted plan');
   await cli('wait', '--text', 'Persisted plan for approval');
+  await openPlanDisclosure({ cli, dom });
   const planned = await capture();
   check(planned.registry.plans === 1 && planned.registry.control.every((row) => row.submission_requested === 0),
     'Preset gate starts from one real unsubmitted persisted plan');
+  await openPlanDisclosure({ cli, dom });
   const approved = await dom('JSON.stringify(document.querySelector(\'[aria-label="Approved normalized manifest"]\')?.textContent)');
   check(!!approved, 'Preset gate exposes an approved normalized manifest before import');
   const refusals = [];
@@ -122,7 +124,9 @@ export async function browserPresetImport(driver) {
   'Valid import preserves selected daemon dataset, model, interpreter and unrelated training values');
   await button('Preview persisted plan');
   await cli('wait', '--text', 'Persisted plan for approval');
+  await openPlanDisclosure({ cli, dom });
   const final = await capture();
+  await openPlanDisclosure({ cli, dom });
   const finalApproved = await dom('JSON.stringify(document.querySelector(\'[aria-label="Approved normalized manifest"]\')?.textContent)');
   const manifest = JSON.parse(finalApproved);
   check(final.registry.plans === 2 && final.registry.control.every((row) => row.submission_requested === 0) && final.registry.executions.length === 0
