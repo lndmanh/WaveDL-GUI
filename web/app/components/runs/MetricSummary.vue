@@ -9,7 +9,7 @@ import type { MetricRecord, MetricSummary } from '../../lib/metric-history';
 import MetricHealthPanel from './MetricHealthPanel.vue';
 import PerParameterMetrics from './PerParameterMetrics.vue';
 
-const { t } = useI18n({ useScope: 'global' });
+const { t, locale } = useI18n({ useScope: 'global' });
 const props = defineProps<{
   summary: MetricSummary;
   unconfirmed?: boolean;
@@ -37,11 +37,26 @@ function sparkline(index: number): string {
     .join(' ');
 }
 function display(value: number | null | undefined, suffix = ''): string {
-  return value == null ? t('runs.unavailable') : `${value}${suffix}`;
+  return value == null
+    ? t('runs.unavailable')
+    : `${new Intl.NumberFormat(locale.value, { maximumSignificantDigits: 4 }).format(value)}${suffix}`;
 }
 const metrics = computed(() => {
   const current = props.summary.current;
   if (!current) return [];
+  const exactValues = [
+    current.trainLoss,
+    current.validationLoss,
+    current.r2,
+    current.learningRate,
+    current.pearson,
+    current.gradientNorm,
+    current.mae,
+    current.epochSeconds,
+    current.bestR2,
+    current.elapsedSeconds,
+    current.patience ? `${current.patience.used} / ${current.patience.maximum}` : null,
+  ];
   return [
     { label: t('runs.trainLoss'), value: display(current.trainLoss) },
     { label: t('runs.valLoss'), value: display(current.validationLoss) },
@@ -59,7 +74,7 @@ const metrics = computed(() => {
         ? `${current.patience.used} / ${current.patience.maximum}`
         : t('runs.unavailable'),
     },
-  ];
+  ].map((metric, index) => ({ ...metric, exact: exactValues[index] }));
 });
 </script>
 <template>
@@ -87,11 +102,15 @@ const metrics = computed(() => {
             :aria-label="t('runs.epochProgress')"
           />
         </div>
-        <p v-if="summary.best !== null">{{ t('runs.bestVal', { value: summary.best }) }}</p>
+        <p v-if="summary.best !== null" :title="String(summary.best)">
+          {{ t('runs.bestVal', { value: display(summary.best) }) }}
+        </p>
         <dl v-if="metrics.length" class="metric-grid">
           <div v-for="(metric, index) in metrics.slice(0, 4)" :key="metric.label" class="kpi-tile">
             <dt>{{ metric.label }}</dt>
-            <dd>{{ metric.value }}</dd>
+            <dd :title="metric.exact == null ? undefined : String(metric.exact)">
+              {{ metric.value }}
+            </dd>
             <svg v-if="sparkline(index)" class="sparkline" viewBox="0 0 120 32" aria-hidden="true">
               <path :d="sparkline(index)" fill="none" stroke="currentColor" stroke-width="2" />
             </svg>
@@ -100,10 +119,12 @@ const metrics = computed(() => {
         <dl v-if="metrics.length > 4" class="metric-grid metric-grid-secondary">
           <div v-for="metric in metrics.slice(4)" :key="metric.label">
             <dt>{{ metric.label }}</dt>
-            <dd>{{ metric.value }}</dd>
+            <dd :title="metric.exact == null ? undefined : String(metric.exact)">
+              {{ metric.value }}
+            </dd>
           </div>
         </dl>
-        <p v-if="summary.latest && !summary.current">
+        <p v-if="summary.latest && !summary.current" :title="String(summary.latest.value)">
           {{ summary.latest.name }}: {{ display(summary.latest.value) }} {{ summary.latest.unit }}
         </p>
         <template v-if="summary.current">
@@ -120,7 +141,7 @@ const metrics = computed(() => {
 <style scoped>
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: 1.25rem;
 }
 .metric-grid dt {
@@ -130,15 +151,16 @@ const metrics = computed(() => {
 .metric-grid dd {
   margin: 0.25rem 0 0;
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .kpi-tile {
   position: relative;
   min-height: 5.5rem;
+  min-width: 0;
 }
 .sparkline {
   display: block;
-  width: 7.5rem;
+  width: min(7.5rem, 100%);
   height: 2rem;
   margin-top: 0.5rem;
   color: var(--primary);

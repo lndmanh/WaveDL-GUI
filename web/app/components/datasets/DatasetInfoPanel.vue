@@ -117,44 +117,64 @@ onBeforeUnmount(() => {
     </div>
     <p v-else-if="!selection" role="status">{{ t('datasets.chooseDataset') }}</p>
     <dl v-if="info" class="flex flex-wrap gap-2" :aria-label="t('datasets.infoChips')">
-      <dt class="sr-only">{{ t('datasets.format') }}</dt>
-      <dd>
-        <Badge variant="outline">{{ info.format.toUpperCase() }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.samples') }}</dt>
-      <dd>
-        <Badge variant="outline">{{ info.numSamples }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.fileSize') }}</dt>
-      <dd>
-        <Badge variant="outline">{{ t('datasets.unknown') }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.inputKey') }}</dt>
-      <dd>
-        <Badge variant="secondary">{{ info.inputKey }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.inputShape') }}</dt>
-      <dd>
-        <Badge variant="secondary">{{ info.inputShape.join(' × ') || t('datasets.scalar') }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.inputDtype') }}</dt>
-      <dd>
-        <Badge variant="secondary">{{ info.inputDtype }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.outputKey') }}</dt>
-      <dd>
-        <Badge variant="secondary">{{ info.outputKey }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.outputShape') }}</dt>
-      <dd>
-        <Badge variant="secondary">{{
-          info.outputShape.join(' × ') || t('datasets.scalar')
-        }}</Badge>
-      </dd>
-      <dt class="sr-only">{{ t('datasets.outputDtype') }}</dt>
-      <dd>
-        <Badge variant="secondary">{{ info.outputDtype }}</Badge>
-      </dd>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.format') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="outline">{{ info.format.toUpperCase() }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.samples') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="outline">{{ info.numSamples }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.fileSize') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="outline">{{ t('datasets.unknown') }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.inputKey') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="secondary">{{ info.inputKey }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.inputShape') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="secondary">{{
+            info.inputShape.join(' × ') || t('datasets.scalar')
+          }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.inputDtype') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="secondary">{{ info.inputDtype }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.outputKey') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="secondary">{{ info.outputKey }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.outputShape') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="secondary">{{
+            info.outputShape.join(' × ') || t('datasets.scalar')
+          }}</Badge>
+        </dd>
+      </div>
+      <div class="flex min-w-0 max-w-full items-baseline gap-2 rounded-lg border px-3 py-2 text-sm">
+        <dt class="text-muted-foreground">{{ t('datasets.outputDtype') }}</dt>
+        <dd class="min-w-0 break-all font-medium">
+          <Badge variant="secondary">{{ info.outputDtype }}</Badge>
+        </dd>
+      </div>
     </dl>
     <p v-if="selection" class="break-all text-xs text-muted-foreground">
       {{ selection.relativePath }}

@@ -10,11 +10,20 @@ export async function authoringParity(driver) {
     root, downloads, check, record, interpreter, python, command, repo } = driver;
   const inventory = JSON.parse(await readFile(join(repo, 'web/shared/training-options.json'), 'utf8'));
   const defaults = Object.fromEntries(inventory.map((option) => [option.name, option.default]));
-  const values = async (labels) => dom(`JSON.stringify(${JSON.stringify(labels)}.map(name => {
-    const label=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e=>e.textContent.trim()===name);
-    const control=label ? document.getElementById(label.htmlFor) : null;
-    return control ? (control.getAttribute('data-value') ?? control.value) : null;
-  }))`);
+  const values = async (labels) => {
+    const observed = [];
+    for (const name of labels) {
+      await actions.showTrainingField(name);
+      const value = await dom(`JSON.stringify((() => {
+        const label=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e=>e.getClientRects().length&&e.textContent.trim()===${JSON.stringify(name)});
+        const control=label ? document.getElementById(label.htmlFor) : null;
+        return control ? (control.getAttribute('data-value') ?? control.value) : null;
+      })())`);
+      assert(value !== null, `Visible field label is required: ${name}`);
+      observed.push(value);
+    }
+    return observed;
+  };
   const select = (label, value) => actions.select(label, value);
   const expand = async (text) => {
     const isOpen = await dom(`JSON.stringify(${controlExpression('summary', text)}[0]?.getAttribute('aria-expanded') === 'true')`);
@@ -49,13 +58,13 @@ export async function authoringParity(driver) {
   // Exercise backward/forward navigation using the existing genuine selections.
   await button('Use guided steps');
   await button('Previous step');
-  await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.getClientRects().length&&e.textContent.includes('samples.npz'))`);
+  await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset]')).some(e=>e.getClientRects().length&&e.textContent.trim()==='samples.npz')`);
   await button('Next step');
   await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.getClientRects().length&&e.textContent.trim().startsWith('Model: cnn'))`);
   await button('Next step');
   await button('Previous step');
   await button('Show full editor');
-  record.guidedSelectionsPreserved = await dom(`JSON.stringify(Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Dataset: ')&&e.textContent.includes('/samples.npz'))&&Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn')))`);
+  record.guidedSelectionsPreserved = await dom(`JSON.stringify((()=>{const dataset=document.querySelector('[data-testid="selected-dataset"]');const details=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: Dataset: '));return dataset?.textContent.trim()==='samples.npz'&&details?.getAttribute('aria-label').includes('/samples.npz')&&Array.from(document.querySelectorAll('[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn'));})())`);
   check(record.guidedSelectionsPreserved, 'Guided backward/forward navigation preserved genuine daemon dataset and catalogue model');
 
   await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
@@ -63,26 +72,26 @@ export async function authoringParity(driver) {
   record.downloadSettingsGuidance = await dom(`JSON.stringify(document.querySelector('#downloads-heading')?.closest('section')?.innerText)`);
   check(record.downloadSettingsGuidance.includes('Your browser chooses where'), 'Settings honestly exposes browser-owned download guidance, not an invented workstation folder preference');
   await expand('Training and optional W&B defaults');
-  await fill('epochs', '19');
+  await fill('Epochs', '19');
   await button('Save training defaults');
   await cli('wait', '--text', 'Defaults saved for new drafts on this daemon.');
   await button('Close overlay');
   await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
-  check((await values(['epochs']))[0] === '10000', 'Saved new-run preference did not mutate the existing project draft');
+  check((await values(['Epochs']))[0] === '10000', 'Saved new-run preference did not mutate the existing project draft');
 
   const authored = { epochs: 11, patience: 4, batch_size: 8, lr: 0.003,
     seed: 37, workers: 0, precision: 'no', weight_decay: 0.002 };
   const author = async () => {
-    for (const [label, value] of [['epochs', authored.epochs], ['patience', authored.patience],
-      ['batch size', authored.batch_size], ['lr', authored.lr], ['seed', authored.seed]]) await fill(label, String(value));
+    for (const [label, value] of [['Epochs', authored.epochs], ['Early stopping patience', authored.patience],
+      ['Batch size', authored.batch_size], ['Learning rate', authored.lr], ['Random seed', authored.seed]]) await fill(label, String(value));
     await expand('Optimizer, loss and scheduling');
-    await fill('weight decay', String(authored.weight_decay));
+    await fill('Weight decay', String(authored.weight_decay));
     await expand('Data, checkpoints and cross-validation');
-    await fill('workers', '0');
-    await select('precision', 'no');
+    await fill('Data loader workers', '0');
+    await select('Mixed precision', 'no');
   };
   await author();
-  const labels = ['epochs', 'patience', 'batch size', 'lr', 'seed', 'workers', 'precision', 'weight decay', 'Python interpreter'];
+  const labels = ['Epochs', 'Early stopping patience', 'Batch size', 'Learning rate', 'Random seed', 'Data loader workers', 'Mixed precision', 'Weight decay', 'Python interpreter'];
   const beforeReset = await values(labels);
   await expand('Standalone configuration export');
   const beforeResetDownload = await exportYaml('authoring-before-reset.yaml');
@@ -91,16 +100,16 @@ export async function authoringParity(driver) {
   check(JSON.stringify(await values(labels)) === JSON.stringify(beforeReset), 'Cancelling reset preserved all representative authored values and interpreter');
   await button('Reset training defaults');
   await button('Confirm reset');
-  const resetValues = await values(['epochs', 'batch size', 'Python interpreter']);
+  const resetValues = await values(['Epochs', 'Batch size', 'Python interpreter']);
   check(Number(resetValues[0]) === defaults.epochs && Number(resetValues[1]) === defaults.batch_size && resetValues[2] === interpreter, 'Confirmed project reset restored bundled defaults and preserved execution interpreter');
-  check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Dataset: ')&&e.textContent.includes('/samples.npz'))&&Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn')))`), 'Confirmed reset preserved selected daemon dataset and catalogue model');
+  check(await dom(`JSON.stringify((()=>{const dataset=document.querySelector('[data-testid="selected-dataset"]');const details=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: Dataset: '));return dataset?.textContent.trim()==='samples.npz'&&details?.getAttribute('aria-label').includes('/samples.npz')&&Array.from(document.querySelectorAll('[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn'));})())`), 'Confirmed reset preserved the selected dataset filename, its full daemon path and catalogue model');
   record.resetContract = { restoredBundledDefaults: true, savedNewRunEpochs: 19, restoredEpochs: Number(resetValues[0]), interpreterPreserved: true };
   const afterResetDownload = await exportYaml('authoring-after-reset.yaml');
   check(afterResetDownload.config.data_path === beforeResetDownload.config.data_path && afterResetDownload.config.model === beforeResetDownload.config.model && afterResetDownload.config.epochs === defaults.epochs, 'Actual reset exports preserve dataset/model and restore bundled defaults in the unchanged browser download directory');
   await access(beforeResetDownload.path); await access(afterResetDownload.path);
   await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
   await expand('Training and optional W&B defaults');
-  check((await values(['epochs']))[0] === '19', 'Project reset preserved separately saved browser new-run preference');
+  check((await values(['Epochs']))[0] === '19', 'Project reset preserved separately saved browser new-run preference');
   await button('Close overlay');
   await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
   await author();
@@ -163,15 +172,15 @@ export async function authoringParity(driver) {
   await openPlanDisclosure({ cli, dom });
   const first = await capturePlan();
   check(first.state.plans === 1, 'First explicit preview persists exactly one unsubmitted plan');
-  await fill('epochs', '12');
+  await fill('Epochs', '12');
   check(await dom(`JSON.stringify(!document.querySelector('[aria-label="Approved normalized manifest"]')&&!Array.from(document.querySelectorAll('button')).some(e=>e.getClientRects().length&&!e.disabled&&e.textContent.trim()==='Approve and start this plan'))`), 'Editing a field revokes the old visible approval immediately');
   const unchanged = await capturePlan();
   check(JSON.stringify(first.rows) === JSON.stringify(unchanged.rows), 'Editing draft leaves original daemon plan bytes immutable');
-  await fill('batch size', '0');
+  await fill('Batch size', '0');
   await button('Preview persisted plan');
   await cli('wait', '--text', 'Review the validation errors');
   check((await registry(root)).plans === 1, 'Invalid numeric range is blocked before a second API plan is created');
-  await fill('batch size', '8');
+  await fill('Batch size', '8');
   await button('Preview persisted plan');
   await cli('wait', '--text', 'Persisted plan for approval');
   await openPlanDisclosure({ cli, dom });

@@ -186,7 +186,7 @@ export async function main(reportPath, mode = "query_only") {
       assert.equal(snapshot.phase, phase); report.snapshots.push(snapshot);
       for (const fault of [mode]) {
         const expected = snapshot.cases[fault].view;
-        const badge = expected.state === "completed" ? "completed" : "terminal unknown · uncertain";
+        const badge = expected.state === "completed" ? "Completed" : "Terminal unknown · uncertain";
         assert(["completed", "terminal_unknown"].includes(expected.state));
         await actions.button(expected.run_id, false, { locator: runRowLocator(expected.run_id) });
         const matches = `(value => value && value.runId === ${JSON.stringify(expected.run_id)} && value.badge === ${JSON.stringify(badge)} && value.emptyMetrics === true && value.uncertain === ${JSON.stringify(expected.uncertainty)})(${selectedObservationExpression})`;

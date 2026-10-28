@@ -103,7 +103,11 @@ function remove(index: number) {
         <FieldSet v-for="(mapping, index) in mappings" :key="index">
           <FieldLegend variant="label">{{ t('storage.row', { number: index + 1 }) }}</FieldLegend>
           <FieldGroup>
-            <VeeField v-slot="{ field }" :name="`storage_map[${index}].host_root`">
+            <VeeField
+              v-slot="{ field }"
+              :name="`storage_map[${index}].host_root`"
+              :keep-value="true"
+            >
               <Field
                 :data-invalid="!!rootErrors(index, 'host_root').length"
                 :data-disabled="disabled"
@@ -133,7 +137,11 @@ function remove(index: number) {
                 />
               </Field>
             </VeeField>
-            <VeeField v-slot="{ field }" :name="`storage_map[${index}].execution_root`">
+            <VeeField
+              v-slot="{ field }"
+              :name="`storage_map[${index}].execution_root`"
+              :keep-value="true"
+            >
               <Field
                 :data-invalid="!!rootErrors(index, 'execution_root').length"
                 :data-disabled="disabled"

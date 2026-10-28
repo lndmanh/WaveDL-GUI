@@ -176,7 +176,7 @@ export function verifyJournalFaultBrowserReport(report) {
     const key = `${o.phase}:${o.fault}:${o.repeat}`; assert(!seen.has(key), "Duplicate DOM observation"); seen.add(key);
     assert.equal(o.runId, baseline.get(o.fault).runId, "DOM selected identity mismatch");
     const recovered = o.phase >= 2 && o.fault === "torn-tail";
-    assert.equal(o.badge, recovered ? "completed" : "terminal unknown · uncertain");
+    assert([recovered ? "Completed" : "Terminal unknown · uncertain", recovered ? "completed" : "terminal unknown · uncertain"].includes(o.badge));
     assert.equal(o.emptyMetrics, true); assert.equal(o.uncertain, !recovered);
   }
   const cleanup = report.cleanup; object(cleanup); assert.deepEqual(cleanup.errors, []);

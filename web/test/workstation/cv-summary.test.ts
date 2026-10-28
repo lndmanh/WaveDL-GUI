@@ -8,6 +8,7 @@ import { ArtifactClient } from '../../app/lib/artifact-client';
 import { ConnectionSession } from './session-fixture';
 import { CV_SUMMARY_BUDGET, loadCvSummary, parseCvSummary } from '../../app/lib/cv-summary';
 import CvSummaryPanel from '../../app/components/results/CvSummaryPanel.vue';
+import { chooseSelectOption } from './select-interaction';
 
 function fixture() {
   return {
@@ -157,7 +158,7 @@ describe('published CV summary contract', () => {
     try {
       expect(downloads).toHaveLength(0);
       expect(wrapper.findAll('button').at(-1)?.attributes('disabled')).toBeDefined();
-      wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'gen-000001');
+      await chooseSelectOption(wrapper.get('[role="combobox"]'), 'gen-000001');
       await flushPromises();
       await wrapper.findAll('button').at(-1)!.trigger('click');
       await vi.waitFor(() => expect(wrapper.text()).toContain('Overall mean'));
@@ -173,7 +174,7 @@ describe('published CV summary contract', () => {
       await flushPromises();
       expect(wrapper.text()).not.toContain('Trung bình tổng thể');
       expect(wrapper.getComponent({ name: 'Select' }).props('modelValue')).toBe('');
-      wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'gen-000002');
+      await chooseSelectOption(wrapper.get('[role="combobox"]'), 'gen-000002');
       await flushPromises();
       await wrapper.findAll('button').at(-1)!.trigger('click');
       await vi.waitFor(() => expect(wrapper.text()).toContain('Trung bình tổng thể'));

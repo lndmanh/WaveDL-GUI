@@ -35,7 +35,6 @@
   "contextTopology": "Topology",
   "planScopeChip": "Plan scope",
   "planManifestHelp": "Review the daemon plan before approval.",
-  "exportDownloadDetails": "Download details",
   "planManifestDetailsFull": "This is the daemon's immutable normalized configuration, manifest, paths, command and warnings—not a prediction from your draft. Read it before starting. Submission sends only this exact plan ID.",
   "planContext": "Plan context",
   "noPlanDifferences": "The plan matches the training defaults.",

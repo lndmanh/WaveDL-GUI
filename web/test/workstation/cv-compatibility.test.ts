@@ -6,6 +6,7 @@ import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import { z } from 'zod';
 import TrainingFields from '../../app/components/project/TrainingFields.vue';
+import { chooseSelectOption } from './select-interaction';
 import {
   trainingConfigSchema,
   trainingDefaults,
@@ -100,11 +101,7 @@ describe('CV authoring compatibility', () => {
       await expect.poll(() => control.attributes('aria-invalid')).toBe('true');
       expect(preview).not.toHaveBeenCalled();
       if (control.element.tagName === 'BUTTON') {
-        const select = wrapper
-          .findAllComponents({ name: 'Select' })
-          .find((item) => item.props('name') === `config.${name}`);
-        if (!select) throw new Error(`Missing select for ${name}`);
-        select.vm.$emit('update:modelValue', correction);
+        await chooseSelectOption(control, correction);
       } else await control.setValue(correction);
       await vi.waitFor(async () => expect((await form.validate()).valid).toBe(true));
       await wrapper.trigger('submit');

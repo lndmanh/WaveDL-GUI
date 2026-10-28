@@ -241,6 +241,10 @@ describe('catalogue UI isolation', () => {
     const wrapper = mount(ModelSelector, { props: { session } });
     await flushPromises();
     expect(wrapper.text()).toContain('not runtime certification');
+    const shapeGuidance = wrapper.get('button[aria-label^="Shape not inspected:"]');
+    expect(shapeGuidance.attributes('aria-label')).toBe(
+      'Shape not inspected: Shape guidance unavailable. Select and inspect a dataset from the current daemon; unsupported or unknown sample layouts require runtime review. Model selection remains available.',
+    );
     const certification = wrapper
       .findAll('button')
       .find((button) =>

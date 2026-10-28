@@ -411,3 +411,117 @@ exact epistemic hedges are intentionally preserved, not shortened to game the me
 - `#shell-panel-tab-logs` and `#shell-panel-tab-artifacts` receive no element when empty.
 - The targets are expected to exist by section mount; standalone mounts retain an inline fallback.
 - No vendored web assets or frozen acceptance reports were regenerated.
+
+## 2026-10-28 orchestrator review corrections
+
+All review fixes are uncommitted follow-ups to the integrated 52c7ff0 baseline.
+
+- Restored complete hedge assertions and exact ordered dataset facts. Details remain in each chip's accessible text and its own tooltip.
+- Added explicit live status regions for adoption confirmation, export-requested state, empty catalog/root/directory states, and retained the complete lifecycle announcement.
+- `project.datasetSelectionSummary` now supplies the full path and daemon identity to the Dataset InfoChip; the selected badge shows only the filename (or the explicit not-selected state).
+- Training labels are human-readable and sentence-cased. Machine config keys, raw metric values, states, request IDs, and transport bodies are unchanged.
+- Only empty `Available: ()` suffixes were removed from training descriptions. No epistemic hedge was deleted.
+- The premature unconditional export-requested disclosure was removed; its exact text is announced only after a request.
+- New Stepper registry files use existing reka-ui and the existing utils alias. No dependency or lockfile change remains.
+- Browser helpers retain exact visible labels and scoped visibility checks; legacy CLI field names resolve to the current English label.
+- Fault-report readers accept the two exact historical/current capitalization forms; frozen reports are not rewritten.
+- Review prose metric (integrated HEAD -> working tree): **244 -> 244 over 80**, **118 -> 118 over 160**. The length-neutral label changes preserve long hedges.
+
+### Review key-by-key copy ledger
+
+| Catalog/key | Before | After |
+| --- | --- | --- |
+| `en/project.json:exportDownloadDetails` | Download details | (removed) |
+| `en/results.json:openArtifacts` | (added) | Open artifacts |
+| `en/runs.json:operationTrain` | train | Train |
+| `en/runs.json:operationTest` | test | Test |
+| `en/runs.json:operationPlot` | plot | Plot |
+| `en/runs.json:planned` | planned | Planned |
+| `en/runs.json:pending` | pending | Pending |
+| `en/runs.json:submissionUnknown` | submission unknown | Submission unknown |
+| `en/runs.json:submitted` | submitted | Submitted |
+| `en/runs.json:queued` | queued | Queued |
+| `en/runs.json:held` | held | Held |
+| `en/runs.json:running` | running | Running |
+| `en/runs.json:stopping` | stopping | Stopping |
+| `en/runs.json:completed` | completed | Completed |
+| `en/runs.json:failed` | failed | Failed |
+| `en/runs.json:cancelled` | cancelled | Cancelled |
+| `en/runs.json:terminalUnknown` | terminal unknown | Terminal unknown |
+| `en/runs.json:observationUnavailable` | observation unavailable | Observation unavailable |
+| `en/runs.json:supervisionLost` | supervision lost | Supervision lost |
+| `en/runs.json:updatedTime` | (added) | Updated {time} |
+| `en/runs.json:logs` | (added) | Logs |
+| `en/training-fields.json:model.label` | model | Model architecture |
+| `en/training-fields.json:model.description` | Model architecture to train. Available: () | Model architecture to train |
+| `en/training-fields.json:import_modules.label` | import modules | Registration modules |
+| `en/training-fields.json:pretrained.label` | pretrained | Pretrained weights |
+| `en/training-fields.json:batch_size.label` | batch size | Batch size |
+| `en/training-fields.json:lr.label` | lr | Learning rate |
+| `en/training-fields.json:epochs.label` | epochs | Epochs |
+| `en/training-fields.json:patience.label` | patience | Early stopping patience |
+| `en/training-fields.json:weight_decay.label` | weight decay | Weight decay |
+| `en/training-fields.json:grad_clip.label` | grad clip | Gradient clipping |
+| `en/training-fields.json:grad_accum_steps.label` | grad accum steps | Gradient accumulation steps |
+| `en/training-fields.json:loss.label` | loss | Loss function |
+| `en/training-fields.json:loss.description` | Loss function for training. Available: () | Loss function for training |
+| `en/training-fields.json:huber_delta.label` | huber delta | Huber delta |
+| `en/training-fields.json:loss_weights.label` | loss weights | Loss weights |
+| `en/training-fields.json:optimizer.label` | optimizer | Optimizer |
+| `en/training-fields.json:optimizer.description` | Optimizer for training. Available: () | Optimizer for training |
+| `en/training-fields.json:momentum.label` | momentum | Momentum |
+| `en/training-fields.json:nesterov.label` | nesterov | Nesterov momentum |
+| `en/training-fields.json:betas.label` | betas | Beta coefficients |
+| `en/training-fields.json:scheduler.label` | scheduler | Learning rate schedule |
+| `en/training-fields.json:scheduler.description` | LR scheduler. Available: () | LR scheduler |
+| `en/training-fields.json:scheduler_patience.label` | scheduler patience | Learning rate patience |
+| `en/training-fields.json:min_lr.label` | min lr | Minimum learning rate |
+| `en/training-fields.json:scheduler_factor.label` | scheduler factor | Learning rate reduction factor |
+| `en/training-fields.json:warmup_epochs.label` | warmup epochs | Warmup epochs |
+| `en/training-fields.json:step_size.label` | step size | Scheduler step interval |
+| `en/training-fields.json:milestones.label` | milestones | Scheduler milestones |
+| `en/training-fields.json:data_path.label` | data path | Training dataset |
+| `en/training-fields.json:workers.label` | workers | Data loader workers |
+| `en/training-fields.json:seed.label` | seed | Random seed |
+| `en/training-fields.json:deterministic.label` | deterministic | Deterministic training |
+| `en/training-fields.json:cache_validate.label` | cache validate | Cache validation |
+| `en/training-fields.json:single_channel.label` | single channel | Single-channel data |
+| `en/training-fields.json:cv.label` | cv | Cross-validation folds |
+| `en/training-fields.json:cv_stratify.label` | cv stratify | Stratified cross-validation |
+| `en/training-fields.json:cv_bins.label` | cv bins | Stratification bins |
+| `en/training-fields.json:resume.label` | resume | Resume checkpoint |
+| `en/training-fields.json:save_every.label` | save every | Checkpoint interval |
+| `en/training-fields.json:fresh.label` | fresh | Fresh training |
+| `en/training-fields.json:compile.label` | compile | Compile model |
+| `en/training-fields.json:precision.label` | precision | Mixed precision |
+| `en/training-fields.json:constraint.label` | constraint | Constraint expressions |
+| `en/training-fields.json:constraint_file.label` | constraint file | Constraint file |
+| `en/training-fields.json:constraint_weight.label` | constraint weight | Constraint weights |
+| `en/training-fields.json:constraint_reduction.label` | constraint reduction | Constraint reduction |
+| `en/training-fields.json:wandb.label` | wandb | W&B logging |
+| `en/training-fields.json:wandb_watch.label` | wandb watch | W&B gradient tracking |
+| `en/training-fields.json:project_name.label` | project name | W&B project name |
+| `en/training-fields.json:run_name.label` | run name | W&B run name |
+| `vi/project.json:exportDownloadDetails` | Chi tiết tải xuống | (removed) |
+| `vi/results.json:openArtifacts` | (added) | Mở tệp |
+| `vi/runs.json:planned` | đã lập kế hoạch | Đã lập kế hoạch |
+| `vi/runs.json:pending` | đang chờ | Đang chờ |
+| `vi/runs.json:submissionUnknown` | chưa rõ việc gửi | Chưa rõ việc gửi |
+| `vi/runs.json:submitted` | đã gửi | Đã gửi |
+| `vi/runs.json:queued` | trong hàng đợi | Trong hàng đợi |
+| `vi/runs.json:held` | tạm giữ | Tạm giữ |
+| `vi/runs.json:running` | đang chạy | Đang chạy |
+| `vi/runs.json:stopping` | đang dừng | Đang dừng |
+| `vi/runs.json:completed` | hoàn tất | Hoàn tất |
+| `vi/runs.json:failed` | thất bại | Thất bại |
+| `vi/runs.json:cancelled` | đã hủy | Đã hủy |
+| `vi/runs.json:terminalUnknown` | chưa rõ trạng thái kết thúc | Chưa rõ trạng thái kết thúc |
+| `vi/runs.json:observationUnavailable` | không có quan sát | Không có quan sát |
+| `vi/runs.json:supervisionLost` | mất giám sát | Mất giám sát |
+| `vi/runs.json:updatedTime` | (added) | Cập nhật {time} |
+| `vi/runs.json:logs` | (added) | Nhật ký |
+
+### Verification boundaries
+
+Happy-dom regression tests cover live regions, ordered facts, accessible full hedges, real Select interactions, scoped tool exposure, horizontal booleans, stepper states, localized labels, non-default badges, numeric precision/exact-value titles, pagination, sibling state chips, filename-only selection badges, and shell-tab opening.
+Actual 375px overflow and panel-height measurements require a real browser; happy-dom has no layout engine. No real-browser acceptance run or regenerated frozen/vendor artifacts is claimed.

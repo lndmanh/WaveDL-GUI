@@ -119,7 +119,7 @@ else: raise RuntimeError('Inference producer hello absent')`, root, identity.pla
   record.inferenceCancellation.requestId = identity.requestId;
   record.inferenceCancellation.before = beforeCancel;
   record.inferenceCancellation.approved = plan;
-  record.inferenceCancellation.cancelledUi = await observe(`document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'cancelled'`);
+  record.inferenceCancellation.cancelledUi = await observe(`document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'Cancelled'`);
   record.inferenceCancellation.runtime = JSON.parse(await command(python, ['-c', `import os,json,sqlite3,sys
 from pathlib import Path
 r=Path(sys.argv[1]); c=sqlite3.connect((r/'state/registry.db').resolve().as_uri()+'?mode=ro',uri=True)

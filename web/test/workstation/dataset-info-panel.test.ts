@@ -127,7 +127,7 @@ describe('dataset header panel', () => {
     await wrapper.get('button').trigger('click');
     await flushPromises();
     expect(inspect).toHaveBeenCalledTimes(2);
-    expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('9');
+    expect(wrapper.findAll('dd')[1]?.text()).toBe('9');
     expect(wrapper.emitted('inspected')?.at(-1)).toEqual([{ ...info, numSamples: 9 }, selection]);
     wrapper.unmount();
   });
@@ -147,6 +147,30 @@ describe('dataset header panel', () => {
     expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('Y');
     expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('1');
     expect(wrapper.get('[aria-label="Dataset facts"]').text()).toContain('float64');
+    const facts = wrapper.get('[aria-label="Dataset facts"]');
+    expect(facts.findAll('dt').map((label) => label.text())).toEqual([
+      'Format',
+      'Samples',
+      'File size',
+      'Input key',
+      'Input shape',
+      'Input dtype',
+      'Output key',
+      'Output shape',
+      'Output dtype',
+    ]);
+    expect(facts.findAll('dt').every((label) => !label.classes().includes('sr-only'))).toBe(true);
+    expect(wrapper.findAll('dd').map((value) => value.text())).toEqual([
+      'NPZ',
+      '7',
+      'Unknown',
+      'X',
+      '4',
+      'float32',
+      'Y',
+      '1',
+      'float64',
+    ]);
     expect(wrapper.emitted('inspected')?.at(-1)).toEqual([info, selection]);
     connection.detach();
     await flushPromises();

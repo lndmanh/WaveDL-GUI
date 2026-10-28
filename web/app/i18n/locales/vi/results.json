@@ -57,6 +57,7 @@
   "resultsHelp": "Chọn một lần chạy trong Thí nghiệm. Tệp xuất sử dụng chính xác thế hệ, kích thước và định danh SHA-256.",
   "working": "Đang xử lý…",
   "refresh": "Làm mới tệp kết quả",
+  "openArtifacts": "Mở tệp",
   "artifactStatus": "Trạng thái tệp kết quả",
   "selectExperiment": "Trước tiên hãy chọn một thí nghiệm.",
   "verifiedPlot": "Biểu đồ chẩn đoán đã công bố và xác minh",

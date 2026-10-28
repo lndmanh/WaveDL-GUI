@@ -1,4 +1,4 @@
-import { openPlanDisclosure } from './browser_actions.mjs';
+import { openPlanDisclosure, normalizeTrainingFieldLabel } from './browser_actions.mjs';
 // Full real-browser authoring slice. It deliberately stops at plan preview:
 // no training execution, remote host, or Windows path is exercised here.
 import assert from "node:assert/strict";
@@ -103,7 +103,7 @@ export async function fullTrainingFields(driver) {
   assert.deepEqual(before.executions, []);
   assert.equal(options.length, 46);
   const nativeActions = [];
-  const labelFor = (name) => name.replaceAll("_", " ");
+  const labelFor = (name) => normalizeTrainingFieldLabel(name);
   const details = {
     "Optimizer, loss and scheduling": [
       "weight_decay",

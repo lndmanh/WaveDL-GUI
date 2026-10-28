@@ -57,7 +57,10 @@ function stringValue(value: string | number): string | null {
 <template>
   <VeeField v-if="option" v-slot="{ field, errors }" :name="`config.${name}`" :keep-value="true">
     <Field :data-invalid="!!errors.length">
-      <div class="flex flex-wrap items-center justify-between gap-2">
+      <div
+        v-if="option.kind !== 'boolean'"
+        class="flex flex-wrap items-center justify-between gap-2"
+      >
         <FieldLabel :for="controlId">{{ label }}</FieldLabel>
         <InfoChip
           v-if="description.length > 80"
@@ -65,17 +68,19 @@ function stringValue(value: string | number): string | null {
           :text="description"
         />
       </div>
-      <Checkbox
-        v-if="option.kind === 'boolean'"
-        :id="controlId"
-        :aria-label="label"
-        :data-testid="`training-field-${name}`"
-        :model-value="field.value"
-        :disabled="disabled"
-        :aria-invalid="!!errors.length"
-        @update:model-value="field.onChange"
-        @blur="field.onBlur"
-      />
+      <Field v-if="option.kind === 'boolean'" orientation="horizontal" class="max-w-full">
+        <Checkbox
+          :id="controlId"
+          :aria-label="label"
+          :data-testid="`training-field-${name}`"
+          :model-value="field.value"
+          :disabled="disabled"
+          :aria-invalid="!!errors.length"
+          @update:model-value="field.onChange"
+          @blur="field.onBlur"
+        />
+        <FieldLabel :for="controlId">{{ label }}</FieldLabel>
+      </Field>
       <Select
         v-else-if="option.choices.length"
         :model-value="String(field.value)"
@@ -130,6 +135,11 @@ function stringValue(value: string | number): string | null {
         :aria-invalid="!!errors.length"
         @update:model-value="field.onChange(stringValue($event))"
         @blur="field.onBlur"
+      />
+      <InfoChip
+        v-if="option.kind === 'boolean' && description.length > 80"
+        :label="t('project.fieldHelp')"
+        :text="description"
       />
       <FieldDescription v-if="description.length <= 80">
         {{ description }}{{ option.multiple ? t('project.enterOneValuePerLine') : '' }}

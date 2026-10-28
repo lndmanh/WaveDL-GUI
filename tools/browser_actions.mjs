@@ -1,10 +1,32 @@
 // Public-DOM browser actions for agent-browser 0.26. No application-state writes.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { isDeepStrictEqual } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 export const MAX_EXPOSURE_OBSERVATIONS = 8;
 export const EXPOSURE_OBSERVATION_TIMEOUT_MS = 15000;
+
+const trainingFields = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'web/app/i18n/locales/en/training-fields.json'),
+    'utf8',
+  ),
+);
+const trainingFieldLabels = Object.fromEntries(
+  Object.entries(trainingFields).flatMap(([name, value]) => {
+    if (!value || typeof value !== 'object' || !('label' in value) || typeof value.label !== 'string')
+      return [];
+    return [[name, value.label], [value.label.toLowerCase().replaceAll(' ', '_'), value.label]];
+  }),
+);
+
+export function normalizeTrainingFieldLabel(name) {
+  const key = name.trim().toLowerCase().replaceAll(' ', '_');
+  return trainingFieldLabels[key] ?? name;
+}
 
 export function xpathLiteral(value) {
   if (!value.includes("'")) return `'${value}'`;
@@ -13,7 +35,7 @@ export function xpathLiteral(value) {
 }
 
 export function controlLocator(kind, name, { scope } = {}) {
-  const literal = xpathLiteral(name);
+  const literal = xpathLiteral(kind === 'field' ? normalizeTrainingFieldLabel(name) : name);
   const base = scope ? `(${scope})` : '';
   if (kind === 'button') return `xpath=${base}//button[@aria-label=${literal} or normalize-space(.)=${literal}]`;
   if (kind === 'summary') return `xpath=${base}//*[self::summary or (self::button and @aria-expanded)][normalize-space(.)=${literal}]`;
@@ -41,11 +63,12 @@ export function controlExpression(kind, name, options = {}) {
 export const DRIVER_READINESS_MODE = 'sync-exposure-poll-and-two-controller-dom-observations';
 
 export function exposureExpression(kind, name, options = {}) {
+  const exposedName = kind === 'field' ? normalizeTrainingFieldLabel(name) : name;
   return `(() => {
     const controls = ${controlExpression(kind, name, options)};
     if (controls.length !== 1) return false;
     const element = controls[0];
-    ${options.verifyNativeLabel ? `if (element.labels?.length !== 1 || element.labels[0].textContent.trim() !== ${JSON.stringify(name)}) return false;` : ''}
+    ${options.verifyNativeLabel ? `if (element.labels?.length !== 1 || element.labels[0].textContent.trim() !== ${JSON.stringify(exposedName)}) return false;` : ''}
     if (!element.isConnected || !element.getClientRects().length || element.disabled || element.matches(':disabled') || element.getAttribute('aria-disabled') === 'true') return false;
     const rect = element.getBoundingClientRect();
     if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) || rect.width <= 0 || rect.height <= 0) return false;
@@ -77,33 +100,48 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
     await snapshot();
     let controls = await describe(kind, name, options);
     if (optional && controls.length === 0) return false;
+    let attemptedReveal = false;
     if (!controls.some(control => control.visible)) {
-      const reveals = await dom(`JSON.stringify(${controlExpression(kind, name, options)}.flatMap(element => {
-        const actions = [];
-        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const reveal = await dom(`JSON.stringify((() => {
+        const element = ${controlExpression(kind, name, options)}[0];
+        for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
           if (parent.matches('[role="tabpanel"][data-state="inactive"]')) {
-            const id = parent.getAttribute('aria-labelledby');
-            if (id && document.getElementById(id)) actions.push('#' + CSS.escape(id));
-          } else if (parent.matches('[data-slot="collapsible-content"][data-state="closed"]') && parent.id) {
+            const panelId = parent.id;
+            const trigger = Array.from(document.querySelectorAll('[role="tab"][aria-controls]'))
+              .find(candidate => candidate.getAttribute('aria-controls') === panelId);
+            if (trigger?.getAttribute('data-testid') === 'training-tab-essentials') return null;
+            if (trigger) return '#'+CSS.escape(trigger.id);
+            return null;
+          }
+          if (parent.matches('[data-slot="collapsible-content"][data-state="closed"]')) {
             const trigger = document.querySelector('[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]');
-            if (trigger) actions.push('[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]');
+            if (trigger) return '[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]';
+            return null;
           }
         }
-        return actions.reverse();
-      }))`);
-      for (const locator of new Set(reveals)) {
-        await cli('scrollintoview', locator);
-        await cli('click', locator);
+        return null;
+      })())`);
+      if (reveal) {
+        attemptedReveal = true;
+        await cli('scrollintoview', reveal);
+        await cli('click', reveal);
+        controls = await describe(kind, name, options);
+        const exposed = controls.filter(control => control.visible);
+        assert(exposed.length > 0, `${name} is not exposed in the DOM`);
       }
-      if (reveals.length) controls = await describe(kind, name, options);
     }
     // Render readiness must precede semantic discovery; a snapshot alone is not
     // a readiness barrier. Duplicates fail closed, including hidden duplicates
     // because native semantic locators choose the first DOM match.
-    if (!controls.some(control => control.visible)) {
-      await cli('wait', '--fn', `${controlExpression(kind, name, options)}.some(element => element.getClientRects().length)`);
+    if (!controls.some(control => control.visible) && !attemptedReveal) {
+      try {
+        await cli('wait', '--fn', `${controlExpression(kind, name, options)}.some(element => element.getClientRects().length)`);
+      } catch {
+        assert.fail(`${name} is not exposed in the DOM`);
+      }
       controls = await describe(kind, name, options);
     }
+    assert(controls.some(control => control.visible), `${name} is not exposed in the DOM`);
     // Retained Settings/Project forms can have identical hidden labels. Fields
     // are acted on only through the existing unique ID of the visible control.
     if (kind === 'field') controls = controls.filter(control => control.visible);
@@ -111,7 +149,7 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
     assert(!controls[0].disabled, `${name} unexpectedly disabled`);
     assert(controls[0].visible, `${name} is not exposed in the DOM`);
     if (kind === 'field') assert(controls[0].id && controls[0].locator, `Visible field ${name} requires an existing stable ID`);
-    if (kind === 'field' && options.verifyNativeLabel) assert(controls[0].labels?.length === 1 && controls[0].labels[0] === name, `Explicit field ${name} lost its native label association`);
+    if (kind === 'field' && options.verifyNativeLabel) assert(controls[0].labels?.length === 1 && controls[0].labels[0] === normalizeTrainingFieldLabel(name), `Explicit field ${name} lost its native label association`);
     const locator = kind === 'field' ? controls[0].locator : (options.locator ?? controlLocator(kind, name, options));
     await cli('scrollintoview', locator);
     const exposureOptions = { locator, verifyNativeLabel: options.verifyNativeLabel };
@@ -134,6 +172,17 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
   return {
     describe,
     readyControl: prepare,
+    async showTrainingField(label, options = {}) {
+      const matchingTab = await dom(`JSON.stringify((() => {
+        const controls = ${controlExpression('field', label, options)};
+        const field = controls.find(element => element.getClientRects().length) ?? controls.find(element => element.closest('section[aria-labelledby="project-title"]')?.getClientRects().length) ?? controls[0];
+        const panel = field?.closest('[role="tabpanel"][data-state="inactive"]');
+        if (!panel) return null;
+        const trigger = Array.from(document.querySelectorAll('[role="tab"][aria-controls]')).find(element => element.getAttribute('aria-controls') === panel.id);
+        return trigger?.matches('[data-testid="training-tab-essentials"],[data-testid="training-tab-advanced"]') ? { locator: '#' + CSS.escape(trigger.id), name: trigger.textContent.trim() } : null;
+      })())`);
+      if (matchingTab) await this.button(matchingTab.name, false, { locator: matchingTab.locator });
+    },
     async button(name, optional = false, options = {}) {
       const locator = await prepare('button', name, optional, options);
       if (!locator) return false;
@@ -142,13 +191,15 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
       return true;
     },
     async fill(label, value, options = {}) {
+      await this.showTrainingField(label, options);
       const locator = await prepare('field', label, false, { ...options, verifyNativeLabel: !!options.locator });
       await cli('fill', locator, String(value));
       const controls = await describe('field', label, { locator });
       assert(controls.length === 1 && controls[0].value === String(value), `UI field ${label} did not retain authored value`);
-      if (options.locator) assert(controls[0].labels?.length === 1 && controls[0].labels[0] === label, `Explicit field ${label} lost its native label association after fill`);
+      if (options.locator) assert(controls[0].labels?.length === 1 && controls[0].labels[0] === normalizeTrainingFieldLabel(label), `Explicit field ${label} lost its native label association after fill`);
     },
     async select(label, value) {
+      await this.showTrainingField(label);
       const locator = await prepare('field', label);
       const control = (await describe('field', label, { locator }))[0];
       if (control?.tag === 'SELECT') await cli('select', locator, String(value));

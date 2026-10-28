@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import type { RuntimeMetricSummary } from '../../lib/metric-history';
-const { t } = useI18n({ useScope: 'global' });
+const { t, locale } = useI18n({ useScope: 'global' });
 defineProps<{ parameters: RuntimeMetricSummary['parameters'] }>();
 </script>
 <template>
@@ -10,7 +10,15 @@ defineProps<{ parameters: RuntimeMetricSummary['parameters'] }>();
     <dl class="flex flex-wrap gap-4">
       <div v-for="parameter in parameters" :key="parameter.name">
         <dt>{{ parameter.name }}</dt>
-        <dd>{{ parameter.value === null ? t('runs.unavailable') : parameter.value }}</dd>
+        <dd :title="parameter.value === null ? undefined : String(parameter.value)">
+          {{
+            parameter.value === null
+              ? t('runs.unavailable')
+              : new Intl.NumberFormat(locale, { maximumSignificantDigits: 4 }).format(
+                  parameter.value,
+                )
+          }}
+        </dd>
       </div>
     </dl>
     <p v-if="!parameters.length" class="text-muted-foreground text-sm">

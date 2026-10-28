@@ -352,14 +352,27 @@ onBeforeUnmount(() => {
         </CollapsibleContent>
       </Collapsible>
       <div class="flex flex-wrap gap-2">
-        <Badge variant="outline" data-testid="selected-dataset">
+        <Badge
+          variant="outline"
+          class="max-w-full whitespace-normal break-all"
+          data-testid="selected-dataset"
+        >
           {{
-            t('project.datasetSelectionSummary', {
-              path: data?.path ?? t('project.notSelected'),
-              daemon: data ? t('project.daemonId', { id: data.daemonId }) : '',
-            })
+            data
+              ? data.path.split(/[\\/]/).filter(Boolean).at(-1)
+              : `${t('project.dataset')}: ${t('project.notSelected')}`
           }}
         </Badge>
+        <InfoChip
+          v-if="data"
+          :label="t('project.dataset')"
+          :text="
+            t('project.datasetSelectionSummary', {
+              path: data.path,
+              daemon: t('project.daemonId', { id: data.daemonId }),
+            })
+          "
+        />
       </div>
       <DatasetInfoPanel :session="session" :selection="data" @inspected="inspectData" />
     </div>

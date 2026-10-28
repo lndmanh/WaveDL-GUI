@@ -12,7 +12,9 @@ import ResultOperationForm from './ResultOperationForm.vue';
 import EvaluationResultsPanel from './EvaluationResultsPanel.vue';
 import type { RunMonitorSnapshot } from '../../lib/run-monitor';
 import InfoChip from '../common/InfoChip.vue';
+import { useShellLayout } from '../../composables/useShellLayout';
 const { t } = useI18n({ useScope: 'global' });
+const shellLayout = useShellLayout();
 const props = defineProps<{
   session: ConnectionSession;
   runId: string | null;
@@ -130,13 +132,20 @@ onBeforeUnmount(() => {
         </h2>
         <InfoChip :label="t('results.exactIdentity')" :text="t('results.resultsHelp')" />
       </div>
-      <Button
-        data-testid="results-refresh"
-        variant="outline"
-        :disabled="!runId || busy || !session.api"
-        @click="refresh"
-        >{{ busy ? t('results.working') : t('results.refresh') }}</Button
-      >
+      <div class="flex flex-wrap gap-2">
+        <Button
+          data-testid="results-refresh"
+          variant="outline"
+          :disabled="!runId || busy || !session.api"
+          @click="refresh"
+          >{{ busy ? t('results.working') : t('results.refresh') }}</Button
+        ><Button
+          v-if="artifacts.length"
+          variant="outline"
+          @click="shellLayout.setActiveTab('artifacts')"
+          >{{ t('results.openArtifacts') }}</Button
+        >
+      </div>
     </div>
     <Alert v-if="message"
       ><AlertTitle>{{ t('results.artifactStatus') }}</AlertTitle

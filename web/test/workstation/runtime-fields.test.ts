@@ -6,6 +6,7 @@ import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import RuntimeFields from '../../app/components/project/RuntimeFields.vue';
 import { Select } from '../../app/components/ui/select';
+import { openSelect, pressSelectOption } from './select-interaction';
 
 const expectedLabels = [
   'Python interpreter',
@@ -84,8 +85,17 @@ describe('runtime fields accessible identity', () => {
         .find((control) => control.props('name') === 'backend');
       expect(backend?.props('modelValue')).toBe('local');
       expect(backend?.props('name')).toBe('backend');
-      backend?.vm.$emit('update:modelValue', 'slurm');
-      await flushPromises();
+      if (!backend) throw new Error('Missing backend Select');
+      const backendTrigger = backend.get('[role="combobox"]');
+      await openSelect(backendTrigger);
+      const listbox = document.body.querySelector('[role="listbox"]');
+      expect(listbox).not.toBeNull();
+      expect(
+        Array.from(listbox?.querySelectorAll('[role="option"]') ?? []).map((option) =>
+          option.getAttribute('data-value'),
+        ),
+      ).toEqual(['local', 'slurm']);
+      await pressSelectOption('slurm');
       expect(backend?.props('modelValue')).toBe('slurm');
       expect(wrapper.findAll('input[type="number"]')).toHaveLength(3);
       const machines = wrapper.get('input[id$="topology-num_machines"]');

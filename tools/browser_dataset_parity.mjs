@@ -479,8 +479,8 @@ print(json.dumps(results,allow_nan=False))
     check(info.Format === name.split('.').at(-1).toUpperCase() && Number(info.Samples) === expected.rows && info['Input key'] === 'X' && info['Output key'] === 'y' && info['Input shape'] === expected.inputShape.join(' × ') && info['Output shape'] === expected.outputShape.join(' × ') && info['Input dtype'] === expected.inputDtype && info['Output dtype'] === expected.outputDtype && info['File size'] === 'Unknown', `${name}: genuine metadata header matches file shapes, keys and dtypes; unavailable size is honest`);
     const tabNames = await firstObserve('tabs-public-dom', ()=>dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('[role="tab"]')).map(e=>e.textContent.trim()))`));
     check(JSON.stringify(tabNames) === JSON.stringify(views), `${name}: all six dataset views exposed as tabs`);
-    const bounds = await firstObserve('bounds-public-dom', ()=>dom(`JSON.stringify(${preview}.querySelector('[data-testid="preview-bounds"]')?.textContent.trim() + ' ' + Array.from(${preview}.querySelectorAll('button[aria-label]')).map(button => button.getAttribute('aria-label')).join(' '))`));
-    check(bounds.includes(`${expected.rows} of ${expected.rows} rows sampled`) && bounds.includes('not a full-dataset analysis'), `${name}: bounded preview scope is visible`);
+    const bounds = await firstObserve('bounds-public-dom', ()=>dom(`JSON.stringify((()=>{const bounds=${preview}.querySelector('[data-testid="preview-bounds"]');const scope=bounds?.parentElement;const hedge=scope?.querySelector('button[aria-label^="Sample only:"]');return {label:bounds?.textContent.trim(),hedge:hedge?.getAttribute('aria-label'),sameContainer:!!scope&&scope.contains(hedge),hedgeVisible:!!hedge?.getClientRects().length};})())`));
+    check(bounds.label === `${expected.rows} of ${expected.rows} rows sampled` && bounds.hedge === 'Sample only: This is not a full-dataset analysis.' && bounds.sameContainer && bounds.hedgeVisible, `${name}: bounded preview scope and its co-located hedge are visible`);
     const evidence = [];
     for (const view of views) {
       const missingCorrelation = view === 'Correlation' && expected.rows === 1;
@@ -574,7 +574,7 @@ print(json.dumps(results,allow_nan=False))
       await directoryCheckpoint(downloads, `after-export-tab-inventory:${name}:${view}`, [...knownDownloads], record);
       evidence.push({ view, figures, ...(statistics ? { statistics } : {}), exportTarget: target, download: png });
     }
-    formats.push({ name, header: info, expected, statistics: evidence.find(item=>item.view === 'Statistics').statistics, bounds, views: evidence });
+    formats.push({ name, header: info, expected, statistics: evidence.find(item=>item.view === 'Statistics').statistics, bounds: `${bounds.label} · ${bounds.hedge}`, views: evidence });
   }
   check(['samples.mat', 'samples.h5', 'samples.hdf5'].every(name=>JSON.stringify(expectations[name])===JSON.stringify(expectations['samples.npz'])), 'All genuine format fixtures contain numerically equal data and independently validated visible statistics');
   const csv = await dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('button')).filter(e=>e.getClientRects().length&&/CSV/i.test(e.textContent)).map(e=>e.textContent.trim()))`);

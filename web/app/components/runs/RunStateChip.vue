@@ -152,11 +152,17 @@ const tooltipNotes = computed(() => [
   flex-direction: column;
   align-items: flex-start;
   gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
 }
 .run-state-chip {
   min-height: 1.75rem;
   gap: 0.35rem;
   transition: opacity 160ms ease;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  flex-wrap: wrap;
 }
 .run-state-chip--dashed {
   border-style: dashed;

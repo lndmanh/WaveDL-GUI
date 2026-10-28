@@ -76,6 +76,7 @@ describe('adoption form ownership boundary', () => {
     await vi.waitFor(() => expect(wrapper.emitted('adoptedRunId')).toEqual([[runId]]));
     expect(calls).toHaveLength(0);
     expect(replacement.calls).toEqual(['/api/runs/adopt']);
+    expect(wrapper.get('[role="status"]').text()).toContain('Daemon ownership confirmed');
     expect(wrapper.get('section').attributes('aria-busy')).toBe('false');
     expect(
       wrapper.get('button[aria-label^="Ownership confirmed"]').attributes('aria-label'),

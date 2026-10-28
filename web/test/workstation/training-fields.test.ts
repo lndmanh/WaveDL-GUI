@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
-import { mountWithI18n as mount } from './mountWithI18n';
+import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, nextTick } from 'vue';
 import { useForm } from 'vee-validate';
 import TrainingFields from '../../app/components/project/TrainingFields.vue';
-import { Select } from '@/components/ui/select';
 import {
   trainingDefaults,
   trainingFieldMetadata,
@@ -15,6 +14,8 @@ import { z } from 'zod';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
 import { ConnectionSession } from './session-fixture';
 import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
+import { openSelect, pressSelectOption } from './select-interaction';
+import { trainingFieldMessageKeys } from '../../app/i18n/dynamic-keys';
 
 describe('training controls coverage', () => {
   it('selects an explicit custom model through verified raw session authority in mounted Vue', async () => {
@@ -48,12 +49,15 @@ describe('training controls coverage', () => {
         return () => h(TrainingFields, { disabled: false });
       },
     });
-    const wrapper = mount(host);
+    const i18n = createTestI18n('en');
+    const wrapper = mount(host, undefined, i18n);
     await flushPromises();
     for (const option of trainingFieldMetadata) {
       const id = wrapper.get(`[id$="-training-${option.name}"]`).attributes('id');
       expect(wrapper.findAll(`[id="${id}"]`)).toHaveLength(1);
-      expect(wrapper.get(`label[for="${id}"]`).text()).toBe(option.name.replaceAll('_', ' '));
+      expect(wrapper.get(`label[for="${id}"]`).text()).toBe(
+        i18n.global.t(trainingFieldMessageKeys[option.name].label),
+      );
       const control = wrapper.get(`[id="${id}"]`);
       if (option.multiple) expect(control.element.tagName).toBe('TEXTAREA');
       else if (option.choices.length) {
@@ -63,6 +67,14 @@ describe('training controls coverage', () => {
         expect(control.attributes('type')).toBe('number');
     }
     expect(wrapper.text()).toContain('never deletes previous run data');
+    i18n.global.locale.value = 'vi';
+    await nextTick();
+    for (const option of trainingFieldMetadata) {
+      const id = wrapper.get(`[id$="-training-${option.name}"]`).attributes('id');
+      expect(wrapper.get(`label[for="${id}"]`).text()).toBe(
+        i18n.global.t(trainingFieldMessageKeys[option.name].label),
+      );
+    }
     wrapper.unmount();
   });
   it('changes a choice through its public combobox role and keeps the schema value', async () => {
@@ -82,15 +94,9 @@ describe('training controls coverage', () => {
     const loss = wrapper.get('[id$="-training-loss"]');
     expect(loss.attributes('role')).toBe('combobox');
     expect(loss.attributes('data-value')).toBe('mse');
-    await loss.trigger('keydown', { key: 'ArrowDown' });
-    await flushPromises();
+    await openSelect(loss);
     expect(document.body.querySelector('[role="option"][data-value="mae"]')).not.toBeNull();
-    const select = wrapper
-      .findAllComponents(Select)
-      .find((component) => component.props('name') === 'config.loss');
-    expect(select).toBeDefined();
-    select?.vm.$emit('update:modelValue', 'mae');
-    await flushPromises();
+    await pressSelectOption('mae');
     expect(wrapper.get('[id$="-training-loss"]').attributes('data-value')).toBe('mae');
     expect(values?.config.loss).toBe('mae');
     wrapper.unmount();

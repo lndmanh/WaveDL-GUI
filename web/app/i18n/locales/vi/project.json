@@ -35,7 +35,6 @@
   "contextTopology": "Cấu trúc triển khai",
   "planScopeChip": "Phạm vi kế hoạch",
   "planManifestHelp": "Xem lại kế hoạch daemon trước khi phê duyệt.",
-  "exportDownloadDetails": "Chi tiết tải xuống",
   "planManifestDetailsFull": "Đây là cấu hình chuẩn hóa, manifest, đường dẫn, lệnh và cảnh báo bất biến của daemon — không phải dự đoán từ bản nháp. Hãy đọc trước khi bắt đầu. Khi gửi, chỉ ID chính xác của kế hoạch này được gửi đi.",
   "planContext": "Ngữ cảnh kế hoạch",
   "noPlanDifferences": "Kế hoạch khớp với mặc định huấn luyện.",

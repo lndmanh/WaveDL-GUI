@@ -132,12 +132,12 @@ describe('explicit storage mapping authoring', () => {
     const infoLabels = wrapper
       .findAll('button')
       .map((button) => button.attributes('aria-label') ?? '');
-    expect(infoLabels.some((label) => label.includes('does not upload files, mount storage'))).toBe(
-      true,
+    expect(infoLabels).toContain(
+      'Mapping details: Host roots belong to the daemon host; execution roots belong to the selected Python execution environment. Mapping only rewrites paths lexically: it does not upload files, mount storage, resolve symlinks or verify access. Configure storage and site policy outside this form.',
     );
-    expect(
-      infoLabels.some((label) => label.includes('interpreter path is an execution-realm')),
-    ).toBe(true);
+    expect(infoLabels).toContain(
+      'Interpreter path details: The interpreter path is an execution-realm path, not a host path to remap. Enter only mappings you explicitly configured; dataset and other draft paths are never changed by this editor.',
+    );
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Remove mapping 1')
@@ -164,7 +164,7 @@ describe('explicit storage mapping authoring', () => {
       .find((button) => button.text() === 'Remove mapping 1')
       ?.trigger('click');
     await flushPromises();
-    expect(getValues().storage_map).toBeUndefined();
+    expect(getValues().storage_map).toEqual([]);
     expect(wrapper.findAll('input')).toHaveLength(0);
     expect(await validateDraft()).toBe(true);
     wrapper.unmount();

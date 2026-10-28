@@ -1,4 +1,4 @@
-import { openPlanDisclosure } from './browser_actions.mjs';
+import { openPlanDisclosure, normalizeTrainingFieldLabel } from './browser_actions.mjs';
 // Real Chromium file-input coverage for the JSON training-preset authority gate.
 // The caller supplies the same public-DOM driver used by browser_authoring_parity.
 import { createHash } from 'node:crypto';
@@ -14,14 +14,14 @@ async function draftSnapshot(dom) {
   return dom(`JSON.stringify((() => {
     const form = Array.from(document.querySelectorAll('form')).find((node) =>
       Array.from(node.querySelectorAll('button')).some((button) => button.textContent.trim() === 'Preview persisted plan'));
-    const labels = ${JSON.stringify(DRAFT_LABELS)};
-    const fields = Object.fromEntries(labels.map((name) => {
-      const label = Array.from(form?.querySelectorAll('label') ?? []).find((node) => node.textContent.trim() === name);
+    const labels = ${JSON.stringify(DRAFT_LABELS.map(name => [name, normalizeTrainingFieldLabel(name)]))};
+    const fields = Object.fromEntries(labels.map(([name, text]) => {
+      const label = Array.from(form?.querySelectorAll('label') ?? []).find((node) => node.textContent.trim() === text);
       const control = label ? document.getElementById(label.htmlFor) : null;
       return [name, control ? { value: control.getAttribute('data-value') ?? control.value, checked: control.checked ?? null } : null];
     }));
     const text = Array.from(document.querySelectorAll('[data-testid="selected-dataset"],[data-testid="selected-model"]')).map((node) => node.textContent.trim());
-    const controls = Array.from(form?.querySelectorAll('input,select,textarea,[role="checkbox"]') ?? [])
+    const controls = Array.from(form?.querySelectorAll('input,select,textarea,[role="checkbox"],[role="combobox"]') ?? [])
       .map((node) => ({ id: node.id, name: node.getAttribute('name'), role: node.getAttribute('role'),
         value: node.getAttribute('data-value') ?? node.value ?? null, checked: node.checked ?? node.getAttribute('aria-checked') ?? null }));
     return { fields, selection: text, controls };

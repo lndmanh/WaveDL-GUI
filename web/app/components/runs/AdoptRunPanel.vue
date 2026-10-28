@@ -167,12 +167,9 @@ onBeforeUnmount(() => {
             : t('results.confirmAdoption')
       }}</Button>
     </form>
-    <InfoChip
-      v-if="message === 'results.adopted'"
-      :label="t('results.ownershipOnly')"
-      :text="t('results.adopted')"
-      uncertain
-    />
+    <div v-if="message === 'results.adopted'" role="status" aria-live="polite">
+      <InfoChip :label="t('results.ownershipOnly')" :text="t('results.adopted')" uncertain />
+    </div>
     <p v-else-if="message" :role="status === 'confirmed' ? 'status' : 'alert'" class="text-sm">
       {{
         typeof message === 'string' && message.startsWith('results.')

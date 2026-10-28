@@ -686,7 +686,7 @@ async function scenario(name) {
         await button('Request cancellation');
         record.terminalBackendSnapshot = await pollRegistry(root, (state) => state.executions.some((execution) => execution.observed_status === 'terminal'), 'Cancellation backend terminal state', 45000);
         await cli('wait', '--text', 'cancelled');
-        check(await dom(`JSON.stringify(document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'cancelled')`), 'Selected run displays fresh daemon-confirmed cancelled terminal state');
+        check(await dom(`JSON.stringify(document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'Cancelled')`), 'Selected run displays fresh daemon-confirmed cancelled terminal state');
         check((await registry(root)).control[0].cancellation_requested === 1, 'Cancellation intent and independently persisted terminal backend observation confirmed');
       } else {
         await pollRegistry(root, (state) => {

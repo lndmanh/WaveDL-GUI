@@ -70,57 +70,57 @@ describe('run presentation localization', () => {
       const states = [
         {
           state: 'planned',
-          en: 'planned',
-          vi: 'đã lập kế hoạch',
+          en: 'Planned',
+          vi: 'Đã lập kế hoạch',
           icon: 'file-text',
           tone: 'outline',
         },
-        { state: 'pending', en: 'pending', vi: 'đang chờ', icon: 'clock', tone: 'secondary' },
+        { state: 'pending', en: 'Pending', vi: 'Đang chờ', icon: 'clock', tone: 'secondary' },
         {
           state: 'submission_unknown',
-          en: 'submission unknown',
-          vi: 'chưa rõ việc gửi',
+          en: 'Submission unknown',
+          vi: 'Chưa rõ việc gửi',
           icon: 'circle-help',
           tone: 'warning',
         },
-        { state: 'submitted', en: 'submitted', vi: 'đã gửi', icon: 'send', tone: 'blue' },
-        { state: 'queued', en: 'queued', vi: 'trong hàng đợi', icon: 'list-ordered', tone: 'blue' },
-        { state: 'held', en: 'held', vi: 'tạm giữ', icon: 'pause-circle', tone: 'warning' },
-        { state: 'running', en: 'running', vi: 'đang chạy', icon: 'loader-2', tone: 'blue' },
+        { state: 'submitted', en: 'Submitted', vi: 'Đã gửi', icon: 'send', tone: 'blue' },
+        { state: 'queued', en: 'Queued', vi: 'Trong hàng đợi', icon: 'list-ordered', tone: 'blue' },
+        { state: 'held', en: 'Held', vi: 'Tạm giữ', icon: 'pause-circle', tone: 'warning' },
+        { state: 'running', en: 'Running', vi: 'Đang chạy', icon: 'loader-2', tone: 'blue' },
         {
           state: 'stopping',
-          en: 'stopping',
-          vi: 'đang dừng',
+          en: 'Stopping',
+          vi: 'Đang dừng',
           icon: 'circle-stop',
           tone: 'warning',
         },
         {
           state: 'completed',
-          en: 'completed',
-          vi: 'hoàn tất',
+          en: 'Completed',
+          vi: 'Hoàn tất',
           icon: 'circle-check',
           tone: 'success',
         },
-        { state: 'failed', en: 'failed', vi: 'thất bại', icon: 'circle-x', tone: 'destructive' },
-        { state: 'cancelled', en: 'cancelled', vi: 'đã hủy', icon: 'ban', tone: 'secondary' },
+        { state: 'failed', en: 'Failed', vi: 'Thất bại', icon: 'circle-x', tone: 'destructive' },
+        { state: 'cancelled', en: 'Cancelled', vi: 'Đã hủy', icon: 'ban', tone: 'secondary' },
         {
           state: 'terminal_unknown',
-          en: 'terminal unknown',
-          vi: 'chưa rõ trạng thái kết thúc',
+          en: 'Terminal unknown',
+          vi: 'Chưa rõ trạng thái kết thúc',
           icon: 'circle-help',
           tone: 'warning',
         },
         {
           state: 'observation_unavailable',
-          en: 'observation unavailable',
-          vi: 'không có quan sát',
+          en: 'Observation unavailable',
+          vi: 'Không có quan sát',
           icon: 'eye-off',
           tone: 'secondary',
         },
         {
           state: 'supervision_lost',
-          en: 'supervision lost',
-          vi: 'mất giám sát',
+          en: 'Supervision lost',
+          vi: 'Mất giám sát',
           icon: 'unplug',
           tone: 'warning',
         },
@@ -204,12 +204,20 @@ describe('run presentation localization', () => {
       expect(uncertainChip.attributes('data-effective-icon')).toBe('circle-help');
       expect(uncertainChip.classes()).toContain('run-state-chip--dashed');
       expect(uncertainChip.attributes('tabindex')).toBe('0');
+      const uncertainLabel = locale === 'en' ? ' · uncertain' : ' · chưa chắc chắn';
+      expect(uncertainChip.text()).toContain(uncertainLabel);
+      expect(
+        wrapper.findAll('[data-run-state]').filter((chip) => chip.text().includes(uncertainLabel)),
+      ).toHaveLength(1);
       await uncertainChip.trigger('keydown.enter');
       await nextTick();
-      expect(document.body.textContent).toContain(
+      const uncertainTooltipId = uncertainChip.attributes('aria-describedby');
+      expect(uncertainTooltipId).toBeTruthy();
+      const uncertainTooltip = document.getElementById(uncertainTooltipId ?? '');
+      expect(uncertainTooltip?.textContent).toContain(
         locale === 'en'
-          ? 'Lifecycle is not currently confirmed.'
-          : 'Vòng đời hiện chưa được xác nhận.',
+          ? 'Lifecycle is not currently confirmed. The state above is the last daemon observation, not proof that the run is still running or has finished.'
+          : 'Vòng đời hiện chưa được xác nhận. Trạng thái trên là quan sát gần nhất của daemon, không chứng minh lượt chạy vẫn đang chạy hoặc đã kết thúc.',
       );
       await uncertainChip.trigger('keydown.space');
       await nextTick();
@@ -228,10 +236,13 @@ describe('run presentation localization', () => {
       ).toEqual(['wifi-off', 'loader-2']);
       await staleChip.trigger('click');
       await nextTick();
-      expect(document.body.textContent).toContain(
+      const staleTooltipId = staleChip.attributes('aria-describedby');
+      expect(staleTooltipId).toBeTruthy();
+      const staleTooltip = document.getElementById(staleTooltipId ?? '');
+      expect(staleTooltip?.textContent).toContain(
         locale === 'en'
-          ? 'not proof that the run is still running or has finished.'
-          : 'không chứng minh lượt chạy vẫn đang chạy hoặc đã kết thúc.',
+          ? 'Lifecycle is not currently confirmed. The state above is the last daemon observation, not proof that the run is still running or has finished.'
+          : 'Vòng đời hiện chưa được xác nhận. Trạng thái trên là quan sát gần nhất của daemon, không chứng minh lượt chạy vẫn đang chạy hoặc đã kết thúc.',
       );
       wrapper.unmount();
     },
@@ -287,7 +298,7 @@ describe('run presentation localization', () => {
     expect(detail.text()).toContain('custom-backend');
     i18n.global.locale.value = 'en';
     await nextTick();
-    expect(wrapper.text()).toContain('train');
+    expect(wrapper.text()).toContain('Train');
     wrapper.unmount();
   });
   it('translates chrome, status and health while retaining raw logs, ids and parameter names', async () => {
@@ -344,7 +355,7 @@ describe('run presentation localization', () => {
       i18n,
     );
     expect(wrapper.text()).toContain('Lượt chạy');
-    expect(wrapper.text()).toContain('đang chạy');
+    expect(wrapper.text()).toContain('Đang chạy');
     expect(wrapper.text()).toContain('Quá khớp');
     expect(wrapper.text()).toContain('Chênh lệch: 100.0%');
     expect(wrapper.text()).toContain('Nghiêm trọng');

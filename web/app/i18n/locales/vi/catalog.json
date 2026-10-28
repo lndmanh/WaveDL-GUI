@@ -1,4 +1,5 @@
 {
+  "chooseModel": "Chọn mô hình",
   "modelDescriptions": "Mô tả mô hình",
   "dimensions": "số chiều theo mô tả: {dims}D",
   "filterBy": "Lọc theo",
@@ -33,7 +34,6 @@
   "bestFor": "Phù hợp nhất cho: {description}",
   "chooseModelName": "Chọn {name}",
   "modelCatalog": "Danh mục mô hình",
-  "chooseModel": "Chọn mô hình",
   "certification": "Mô tả, không phải chứng nhận khi chạy",
   "modelSafety": "Mô tả kiến trúc đi kèm chỉ mang tính hướng dẫn. Việc lập kế hoạch và thực thi trên daemon sẽ kiểm tra môi trường thực tế và khả năng tương thích dữ liệu.",
   "findModel": "Tìm mô hình",

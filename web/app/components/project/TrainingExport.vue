@@ -68,10 +68,6 @@ async function copy() {
         <Badge variant="outline">{{ t('project.exportNoSlurm') }}</Badge>
         <Badge variant="outline">{{ t('project.exportNoCredentials') }}</Badge>
         <Badge variant="outline">{{ t('project.exportOutputLocation') }}</Badge>
-        <InfoChip
-          :label="t('project.exportDownloadDetails')"
-          :text="t('project.yamlExportRequestedDetails')"
-        />
       </div>
       <div class="flex flex-wrap gap-3">
         <Button type="button" variant="outline" :disabled="disabled" @click="download">{{
@@ -81,12 +77,14 @@ async function copy() {
           t('project.copyStandaloneCliCommand')
         }}</Button>
       </div>
-      <InfoChip
-        v-if="message === 'project.yamlExportRequested'"
-        :label="t('project.yamlExportRequested')"
-        :text="t('project.yamlExportRequestedDetails')"
-      />
-      <p v-else-if="message" role="status">{{ displayMessage }}</p>
+      <div v-if="message" role="status" aria-live="polite">
+        <InfoChip
+          v-if="message === 'project.yamlExportRequested'"
+          :label="t('project.yamlExportRequested')"
+          :text="t('project.yamlExportRequestedDetails')"
+        />
+        <p v-else>{{ displayMessage }}</p>
+      </div>
       <div
         v-if="command"
         class="max-h-64 overflow-auto rounded-lg bg-muted p-4 font-mono text-xs whitespace-pre-wrap break-all"

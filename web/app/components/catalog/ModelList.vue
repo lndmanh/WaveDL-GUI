@@ -161,6 +161,26 @@ const presentations = computed(() =>
   height: 100%;
   gap: 1rem;
   padding: 1.25rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.model-grid > li {
+  min-width: 0;
+}
+.model-card :deep([data-slot='card-title']) {
+  overflow-wrap: anywhere;
+}
+.model-actions :deep(button) {
+  white-space: normal;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 2.25rem;
+}
+.model-card :deep([data-slot='badge']) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .model-card-header,
 .model-card-content {

@@ -31,7 +31,7 @@ export async function cvParity({
   assert.equal(options.filter((option) => option.value && !option.disabled).length, 2, "Exactly two fold publications are selectable");
   const summary = options.find((option) => /summary/i.test(option.label));
   assert(summary?.disabled, "CV summary publication must be explicitly unselectable");
-  const summaryRefusal = { summaryDisabled: summary.disabled, help: await observe('!!document.querySelector("button[aria-label*=\\"Cross-validation summaries cannot be used as model weights\\"]")') };
+  const summaryRefusal = { summaryDisabled: summary.disabled, help: await observe(`(()=>{const section=document.querySelector('section[aria-labelledby="inference-title"]');const help=Array.from(section?.querySelectorAll('button[aria-label]')??[]).find(button=>button.getAttribute('aria-label').includes('Cross-validation summaries cannot be used as model weights'));return !!help?.getClientRects().length;})()`) };
   assert(summaryRefusal.summaryDisabled && summaryRefusal.help, "Summary refusal must be visible in public UI");
   record.summaryRefusal = summaryRefusal;
   const fold = options.find((option) => !option.disabled && /fold 2$/.test(option.label));

@@ -229,8 +229,11 @@ describe('catalogue localization preserves daemon authority', () => {
         return json({
           root: 'remote-research',
           path: '',
-          entries: [{ name: 'wave 東京.npz', kind: 'file' }],
-          total: 1,
+          entries: Array.from({ length: 100 }, (_, index) => ({
+            name: index === 0 ? 'wave 東京.npz' : `other-${index}.npz`,
+            kind: 'file',
+          })),
+          total: 101,
           limit: 100,
           offset: 0,
         });
@@ -256,7 +259,7 @@ describe('catalogue localization preserves daemon authority', () => {
     locale.value = 'vi';
     await nextTick();
     expect(wrapper.get('section').attributes('aria-label')).toBe('Đường dẫn tập dữ liệu');
-    expect(wrapper.text()).toContain('remote-research');
+    expect(wrapper.text()).toContain('1–100 trên 101');
     expect(wrapper.text()).toContain('wave 東京.npz');
     expect(wrapper.get('[aria-label="Đường dẫn tập dữ liệu"]').text()).toContain('remote-research');
     expect(wrapper.get('button[aria-label="Chọn tệp wave 東京.npz"]').text()).toBe('Chọn tệp');

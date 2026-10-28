@@ -9,6 +9,7 @@ import ResultOperationForm from '../../app/components/results/ResultOperationFor
 import { Select } from '../../app/components/ui/select';
 import { ConnectionSession, type ConnectionState } from './session-fixture';
 import * as artifactClient from '../../app/lib/artifact-client';
+import { chooseSelectOption } from './select-interaction';
 
 const runId = '22222222-2222-4222-8222-222222222222';
 function deferred<T>() {
@@ -82,11 +83,8 @@ describe('results session replacement ownership', () => {
     await flushPromises();
     const oldCv = wrapper.getComponent(CvSummaryPanel);
     const oldForm = wrapper.getComponent(ResultOperationForm);
-    oldCv.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'gen-000001');
-    oldForm
-      .findAllComponents(Select)
-      .find((control) => control.find('#result-operation').exists())!
-      .vm.$emit('update:modelValue', 'plot');
+    await chooseSelectOption(oldCv.get('[role="combobox"]'), 'gen-000001');
+    await chooseSelectOption(oldForm.get('#result-operation'), 'plot');
     await flushPromises();
     const priorACalls = a.calls.length;
 

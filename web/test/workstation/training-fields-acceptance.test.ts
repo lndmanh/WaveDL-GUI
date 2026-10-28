@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import { z } from 'zod';
-import { Select } from '@/components/ui/select';
 import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import {
   trainingConfigSchema,
@@ -21,6 +20,7 @@ import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import type { Json } from '../../app/lib/daemon-api';
+import { chooseSelectOption } from './select-interaction';
 
 // An explicit inventory, not values generated from metadata: newly added fields
 // must acquire a deliberate authoring case before this acceptance test passes.
@@ -106,11 +106,7 @@ async function authorEveryControl() {
       await control.trigger('click');
       expect(control.attributes('aria-checked')).toBe('true');
     } else if (option.choices.length) {
-      const select = wrapper
-        .findAllComponents(Select)
-        .find((component) => component.props('name') === `config.${option.name}`);
-      if (!select) throw new Error(`Missing Select for ${option.name}`);
-      select.vm.$emit('update:modelValue', String(value));
+      await chooseSelectOption(control, String(value));
     } else {
       await control.setValue(Array.isArray(value) ? value.join('\n') : String(value));
     }

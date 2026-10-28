@@ -16,7 +16,10 @@ defineProps<{
 defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>();
 </script>
 <template>
-  <section :aria-label="t('results.publications')" class="flex flex-col gap-4">
+  <section
+    :aria-label="t('results.publications')"
+    class="artifact-grid flex min-w-0 max-w-full flex-col gap-4"
+  >
     <Skeleton v-if="busy && !artifacts.length" class="h-32 w-full" />
     <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-4">
       <Card
@@ -47,7 +50,7 @@ defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>()
               {{ t('results.bytes') }}</Badge
             >
           </div>
-          <div class="flex gap-2" role="group" :aria-label="t('results.actions')">
+          <div class="flex flex-wrap gap-2" role="group" :aria-label="t('results.actions')">
             <Button
               variant="outline"
               size="sm"
@@ -71,3 +74,15 @@ defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>()
     >
   </section>
 </template>
+
+<style scoped>
+.artifact-grid :deep([data-slot='card']) {
+  min-width: 0;
+  max-width: 100%;
+}
+.artifact-grid :deep([data-slot='badge']) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+</style>

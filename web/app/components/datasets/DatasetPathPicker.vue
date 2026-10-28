@@ -333,10 +333,10 @@ onBeforeUnmount(() => {
       <AlertDescription>{{ t(message) }}</AlertDescription>
     </Alert>
     <Skeleton v-if="busy && !page" class="h-24 w-full" />
-    <Empty v-else-if="!roots.length && !busy && !message">
+    <Empty v-else-if="!roots.length && !busy && !message" role="status">
       <EmptyDescription>{{ t('datasets.noRoots') }}</EmptyDescription>
     </Empty>
-    <Empty v-else-if="page && !page.entries.length && !busy">
+    <Empty v-else-if="page && !page.entries.length && !busy" role="status">
       <EmptyDescription>{{ t('datasets.emptyDirectory') }}</EmptyDescription>
     </Empty>
     <ul v-if="page?.entries.length" class="flex flex-col gap-2" :aria-label="t('datasets.entries')">

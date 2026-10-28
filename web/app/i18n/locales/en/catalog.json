@@ -1,4 +1,5 @@
 {
+  "chooseModel": "Choose a model",
   "modelDescriptions": "Model descriptions",
   "dimensions": "described dimensions: {dims}D",
   "filterBy": "Filter by",
@@ -33,7 +34,6 @@
   "bestFor": "Best for: {description}",
   "chooseModelName": "Choose {name}",
   "modelCatalog": "Model catalogue",
-  "chooseModel": "Choose a model",
   "certification": "Descriptions, not runtime certification",
   "modelSafety": "Bundled architecture descriptions provide guidance only. Planning and execution on your daemon validate the actual environment and data compatibility.",
   "findModel": "Find a model",

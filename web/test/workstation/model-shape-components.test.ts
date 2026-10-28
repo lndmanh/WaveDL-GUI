@@ -93,16 +93,34 @@ describe('model dataset guidance UI', () => {
     data.value = { ...inspection, inputShape: [32] };
     await nextTick();
     expect(wrapper.text()).toContain('Dimensions described');
+    expect(wrapper.get('[aria-label^="Dimensions described:"]').attributes('aria-label')).toBe(
+      'Dimensions described: Dataset sample: 32 (batch excluded). Training treats this as 1D spatial data and adds a channel. This dimensionality is described by this model; exact sizes, channels and runtime compatibility remain unverified.',
+    );
     locale.value = 'vi';
     await nextTick();
     expect(wrapper.text()).toContain('Có mô tả số chiều');
+    expect(wrapper.get('[aria-label^="Có mô tả số chiều:"]').attributes('aria-label')).toBe(
+      'Có mô tả số chiều: Mẫu dữ liệu: 32 (không gồm chiều lô). Huấn luyện xem đây là dữ liệu không gian 1D và thêm chiều kênh. Số chiều này có trong mô tả mô hình; kích thước cụ thể, kênh và khả năng tương thích khi chạy vẫn chưa được xác minh.',
+    );
     data.value = { ...inspection, inputShape: [3, 128, 128] };
     await nextTick();
     expect(wrapper.text()).toContain('Hình dạng chưa rõ');
+    expect(wrapper.get('[aria-label^="Hình dạng chưa rõ:"]').attributes('aria-label')).toBe(
+      'Hình dạng chưa rõ: Mẫu dữ liệu chưa rõ: 3 × 128 × 128 (không gồm chiều lô). Đây có thể là dữ liệu 2D có chiều kênh đầu tiên hoặc thể tích 3D nông. Huấn luyện yêu cầu xác nhận single_channel cho thể tích đơn kênh; không nên mặc định tương thích kênh. Khả năng tương thích khi chạy vẫn chưa được xác minh.',
+    );
     expect(wrapper.text()).not.toContain('Không khớp số chiều');
     data.value = null;
     await nextTick();
     expect(wrapper.text()).toContain('Chưa kiểm tra hình dạng');
+    expect(wrapper.get('[aria-label^="Chưa kiểm tra hình dạng:"]').attributes('aria-label')).toBe(
+      'Chưa kiểm tra hình dạng: Chưa có gợi ý hình dạng. Chọn và kiểm tra dữ liệu từ daemon hiện tại; bố cục mẫu không được hỗ trợ hoặc chưa rõ cần được kiểm tra khi chạy. Bạn vẫn có thể chọn mô hình.',
+    );
+    locale.value = 'en';
+    await nextTick();
+    expect(wrapper.text()).toContain('Shape not inspected');
+    expect(wrapper.get('[aria-label^="Shape not inspected:"]').attributes('aria-label')).toBe(
+      'Shape not inspected: Shape guidance unavailable. Select and inspect a dataset from the current daemon; unsupported or unknown sample layouts require runtime review. Model selection remains available.',
+    );
     wrapper.unmount();
   });
 

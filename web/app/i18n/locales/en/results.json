@@ -57,6 +57,7 @@
   "resultsHelp": "Choose a run in Experiments. Exports use exact generation, size and SHA-256 identity.",
   "working": "Working…",
   "refresh": "Refresh artifacts",
+  "openArtifacts": "Open artifacts",
   "artifactStatus": "Artifact status",
   "selectExperiment": "Select an experiment first.",
   "verifiedPlot": "Verified published diagnostic plot",

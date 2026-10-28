@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
 import { computed, onMounted, shallowRef } from 'vue';
+import { useShellLayout } from '../../composables/useShellLayout';
 import { Button } from '@/components/ui/button';
 import {
   canRequestCancellation,
@@ -21,6 +22,7 @@ import {
 } from '../../i18n/dynamic-keys';
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+const shellLayout = useShellLayout();
 function backendLabel(backend: string): string {
   const key = runBackendMessageKeys[backend as keyof typeof runBackendMessageKeys];
   return key === undefined ? backend : t(key);
@@ -74,7 +76,7 @@ const canCancel = computed(() =>
     </template>
     <p>{{ t('runs.eventConnection', { status: t(runStreamMessageKeys[snapshot.stream]) }) }}</p>
     <p v-if="snapshot.freshness !== 'fresh'" class="sr-only" role="status" aria-live="polite">
-      {{ t('runs.stale') }}
+      {{ t('runs.lifecycleNote') }}
     </p>
     <p v-if="snapshot.message" role="status">
       {{ clientMessage(snapshot.message) }}
@@ -87,7 +89,14 @@ const canCancel = computed(() =>
         {{
           snapshot.cancellation === 'sending' ? t('runs.requesting') : t('runs.requestCancel')
         }}</Button
-      ><Button variant="outline" @click="$emit('replay')">{{ t('runs.replay') }}</Button>
+      ><Button variant="outline" @click="$emit('replay')">{{ t('runs.replay') }}</Button
+      ><Button
+        v-if="logTarget"
+        variant="outline"
+        data-testid="run-open-logs"
+        @click="shellLayout.setActiveTab('logs')"
+        >{{ t('runs.logs') }}</Button
+      >
     </div>
     <MetricSummary
       :summary="metricSummary"
@@ -101,7 +110,7 @@ const canCancel = computed(() =>
       :freshness="snapshot.freshness"
     />
     <Teleport v-if="logTarget && snapshot.events.length" to="#shell-panel-tab-logs" defer>
-      <LogPanel :events="snapshot.events" :truncated="snapshot.truncated" />
+      <LogPanel :events="snapshot.events" :truncated="snapshot.truncated" panel />
     </Teleport>
     <LogPanel v-else-if="!logTarget" :events="snapshot.events" :truncated="snapshot.truncated" />
   </section>
@@ -112,6 +121,16 @@ const canCancel = computed(() =>
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.run-detail {
+  min-width: 0;
+  max-width: 100%;
+}
+.run-detail :deep([data-slot='card']) {
+  min-width: 0;
+  max-width: 100%;
 }
 .identity {
   overflow-wrap: anywhere;

@@ -126,7 +126,7 @@ function updateQuery(value: string | number) {
         </TabsTrigger>
         <TabsTrigger value="advanced" data-testid="training-tab-advanced">
           {{ t('project.advanced') }}
-          <Badge variant="secondary">
+          <Badge v-if="nonDefaultCount > 0" variant="secondary">
             {{ t('project.nonDefaultFields', { count: nonDefaultCount }) }}
           </Badge>
         </TabsTrigger>

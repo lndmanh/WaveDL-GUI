@@ -200,15 +200,12 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <section class="flex flex-col gap-4" :aria-label="t('catalog.modelCatalog')">
-    <h2>{{ t('catalog.chooseModel') }}</h2>
-    <Alert
-      ><AlertTitle
-        ><InfoChip
-          :label="t('catalog.certification')"
-          :text="t('catalog.modelSafety')"
-          uncertain /></AlertTitle
-    ></Alert>
+  <section
+    class="flex flex-col gap-4"
+    :aria-label="t('catalog.modelCatalog')"
+    :aria-description="t('catalog.chooseModel')"
+  >
+    <InfoChip :label="t('catalog.certification')" :text="t('catalog.modelSafety')" uncertain />
     <Field>
       <FieldLabel :for="searchId">{{ t('catalog.findModel') }}</FieldLabel>
       <Input :id="searchId" v-model="query" :disabled="busy" data-testid="model-search" />
@@ -299,7 +296,7 @@ onBeforeUnmount(() => {
       :single-channel="singleChannel"
       @select="select"
     />
-    <Empty v-if="!busy && !filtered.length && !message"
+    <Empty v-if="!busy && !filtered.length && !message" role="status"
       ><EmptyDescription>{{ t('catalog.noModels') }}</EmptyDescription></Empty
     >
     <div class="flex flex-wrap gap-3">
