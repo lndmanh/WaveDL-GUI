@@ -76,7 +76,7 @@ export function verifyStorageFaultBrowserReport(r, expectedMode) {
   assert.equal(r.browserObservations.length, 8);
   for (const phase of [0,1,2,3]) for(const repeat of [0,1]) {
     const observations = r.browserObservations.filter(o => o.phase === phase && o.repeat === repeat); assert.equal(observations.length, 1);
-    const o = observations[0]; assert.equal(o.fault, mode); assert.equal(o.runId, b.runId); assert.equal(o.badge, phase < 2 ? "terminal unknown · uncertain" : "completed"); assert.equal(o.uncertain, phase < 2); assert.equal(o.emptyMetrics, true);
+    const o = observations[0]; assert.equal(o.fault, mode); assert.equal(o.runId, b.runId); assert([phase < 2 ? "Terminal unknown · uncertain" : "Completed", phase < 2 ? "terminal unknown · uncertain" : "completed"].includes(o.badge)); assert.equal(o.uncertain, phase < 2); assert.equal(o.emptyMetrics, true);
   }
   assert.deepEqual(r.cleanup.errors, []); assert.equal(r.cleanup.browserSessionAbsent, true); assert.equal(r.cleanup.fixtureReaped, true);
   for(const key of ["servicesClosed","controlDrained","listenerClosed","rootRemoved","profileRemoved","tokenRemoved","workspaceRemoved"]) assert.equal(r.cleanup[key],true);

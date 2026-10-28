@@ -7,7 +7,7 @@ import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 import PlanApproval from '../../app/components/project/PlanApproval.vue';
 import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
@@ -70,7 +70,7 @@ async function setup(onSubmitted?: (session: ConnectionSession) => void) {
   expect(await session.connect('credential-a')).toBe(true);
   const wrapper = mount(ProjectContainer, {
     props: { session, onSubmitted: () => onSubmitted?.(session) },
-    global: { stubs: { BrowseContainer: true, ModelSelector: true, DatasetInfoPanel: true } },
+    global: { stubs: { DatasetPathPicker: true, ModelSelector: true, DatasetInfoPanel: true } },
   });
   cleanups.push(() => {
     wrapper.unmount();
@@ -81,7 +81,7 @@ async function setup(onSubmitted?: (session: ConnectionSession) => void) {
   const catalogue = new CatalogApi(session);
   const data = await catalogue.resolve('data', 'train.npz');
   const model = await catalogue.selectCustomModel('custom_model');
-  wrapper.getComponent(BrowseContainer).vm.$emit('select', data);
+  wrapper.getComponent(DatasetPathPicker).vm.$emit('select', data);
   wrapper.getComponent(CustomModelSelector).vm.$emit('select', model);
   await nextTick();
   await wrapper.get('input[name="runtime.python"]').setValue('/usr/bin/python3');
@@ -172,7 +172,7 @@ describe('project daemon scope retirement', () => {
     expect(wrapper.text()).toContain('Model: Not selected');
     expect(JSON.stringify(wrapper.getComponent(TrainingExport).props('draft'))).toBe(draft);
     await fixture.reconnect();
-    wrapper.getComponent(BrowseContainer).vm.$emit('select', fixture.data);
+    wrapper.getComponent(DatasetPathPicker).vm.$emit('select', fixture.data);
     wrapper.getComponent(CustomModelSelector).vm.$emit('select', fixture.model);
     await nextTick();
     expect(wrapper.text()).toContain('Dataset: Not selected');

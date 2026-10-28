@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Real-browser acceptance helper for cancelling a submitted inference run.
 // The caller owns the daemon/browser lifecycle and supplies the existing
 // acceptance helpers; this function never fakes an HTTP response or registry.
@@ -42,14 +43,14 @@ np.savez(r/'cancellation.npz',X=np.resize(d['X'],(n,32)),y=np.resize(d['y'],(n,1
 
   // Select the published checkpoint through the public form. The helper is
   // intentionally bounded: only a small CPU inference run is submitted.
-  await cli('wait', '--fn', 'Array.from(document.querySelector("#source-generation")?.options ?? []).some(option => option.value && !option.disabled)');
-  const options = await observe('Array.from(document.querySelector("#source-generation").options).filter(option => option.value && !option.disabled).map(option => ({value:option.value,label:option.textContent.trim()}))');
+  await cli('wait', '--fn', '!!document.getElementById("source-generation")');
+  const options = (await actions.options('Source checkpoint generation')).filter(option => option.value && !option.disabled);
   const best = options.find(option => option.label.endsWith("best"));
   assert(best, "A verified best checkpoint classification is required");
   const selectedGeneration = best.value;
   await actions.select('Source checkpoint generation', selectedGeneration);
-  const configuredRoot = await actions.readyControl('field', 'Configured root', false,
-    { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Configured root"]` });
+  const configuredRoot = await actions.readyControl('field', 'Search roots and paths', false,
+    { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Search roots and paths"]` });
   await cli('click', configuredRoot);
   await actions.option('datasets');
   record.inferenceCancellationStage = "select-dataset";
@@ -59,6 +60,7 @@ np.savez(r/'cancellation.npz',X=np.resize(d['X'],(n,32)),y=np.resize(d['y'],(n,1
   await actions.fill('Data loader workers', '0', { scope });
   record.inferenceCancellationStage = "preview-inference";
   await actions.button('Preview evaluation / plot plan', false, { scope });
+  await openPlanDisclosure({ cli, dom });
   await cli('wait', '--fn', `${planElement} !== null`);
   const plan = JSON.parse(await observe(`${planElement}.textContent`));
   assert.equal(plan.operation, 'test');
@@ -117,7 +119,7 @@ else: raise RuntimeError('Inference producer hello absent')`, root, identity.pla
   record.inferenceCancellation.requestId = identity.requestId;
   record.inferenceCancellation.before = beforeCancel;
   record.inferenceCancellation.approved = plan;
-  record.inferenceCancellation.cancelledUi = await observe(`document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'cancelled'`);
+  record.inferenceCancellation.cancelledUi = await observe(`document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'Cancelled'`);
   record.inferenceCancellation.runtime = JSON.parse(await command(python, ['-c', `import os,json,sqlite3,sys
 from pathlib import Path
 r=Path(sys.argv[1]); c=sqlite3.connect((r/'state/registry.db').resolve().as_uri()+'?mode=ro',uri=True)

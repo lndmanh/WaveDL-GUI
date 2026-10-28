@@ -20,6 +20,7 @@ import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import type { Json } from '../../app/lib/daemon-api';
+import { chooseSelectOption } from './select-interaction';
 
 // An explicit inventory, not values generated from metadata: newly added fields
 // must acquire a deliberate authoring case before this acceptance test passes.
@@ -104,6 +105,8 @@ async function authorEveryControl() {
     if (option.kind === 'boolean') {
       await control.trigger('click');
       expect(control.attributes('aria-checked')).toBe('true');
+    } else if (option.choices.length) {
+      await chooseSelectOption(control, String(value));
     } else {
       await control.setValue(Array.isArray(value) ? value.join('\n') : String(value));
     }
@@ -177,10 +180,19 @@ describe('exhaustive training field authoring acceptance', () => {
               {
                 id: 'resnet18',
                 display_name: 'ResNet18',
+                architecture_family: 'CNN',
+                author_institution: 'Example',
+                year_published: 2015,
+                params_m: 11.7,
+                size_mb: 45,
+                short_description: 'Residual convolutional baseline',
                 description: 'Network',
                 best_for: 'Waves',
+                pros: ['Stable'],
+                cons: ['Larger model'],
+                compute_tier: 'Medium',
+                tags: ['residual'],
                 supported_dims: [2],
-                category: 'cnn',
                 is_pretrained: false,
               },
             ],

@@ -4,7 +4,17 @@ import { useI18n } from 'vue-i18n';
 import { Field as VeeField } from 'vee-validate';
 import { useId } from 'vue';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Field, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field';
+import InfoChip from '../common/InfoChip.vue';
 import {
   runtimeValueMessageKeys,
   runtimeValues,
@@ -80,17 +90,29 @@ const counts = [
     <VeeField v-for="item in choices" :key="item.name" v-slot="{ field, errors }" :name="item.name"
       ><Field :data-invalid="!!errors.length"
         ><FieldLabel :for="controlId(item.name)">{{ t(item.label) }}</FieldLabel
-        ><select
-          :id="controlId(item.name)"
-          v-bind="field"
+        ><Select
+          :model-value="String(field.value)"
+          :name="field.name"
           :disabled="disabled"
-          :aria-invalid="!!errors.length"
-          class="runtime-select"
+          @update:model-value="field.onChange"
         >
-          <option v-for="value in item.values" :key="value" :value="value">
-            {{ runtimeValueLabel(value) }}
-          </option></select
-        ><FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
+          <SelectTrigger
+            :id="controlId(item.name)"
+            :data-value="String(field.value)"
+            :aria-invalid="!!errors.length"
+            @blur="field.onBlur"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem v-for="value in item.values" :key="value" :value="value">
+                {{ runtimeValueLabel(value) }}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
     <VeeField v-for="item in counts" :key="item.name" v-slot="{ field, errors }" :name="item.name"
       ><Field :data-invalid="!!errors.length"
@@ -108,8 +130,10 @@ const counts = [
           v-if="errors.length"
           :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
-    <p class="sm:col-span-2 text-sm text-muted-foreground">
-      {{ t('project.runtimeHelp') }}
-    </p>
+    <div class="sm:col-span-2 flex flex-wrap gap-2" :aria-label="t('project.runtimeHelp')">
+      <Badge variant="outline">{{ t('project.runtimeUnavailableModes') }}</Badge>
+      <Badge variant="outline">{{ t('project.slurmPolicy') }}</Badge>
+      <InfoChip :label="t('project.runtimeDetailsLabel')" :text="t('project.runtimeDetails')" />
+    </div>
   </fieldset>
 </template>

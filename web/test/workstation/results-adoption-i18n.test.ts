@@ -16,6 +16,7 @@ import { CatalogApi } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
 import { inferenceDefaults } from '../../shared/schemas/result-request';
 import type { AutomaticPlotState } from '../../app/lib/autoplot-controller';
+import { openSelect, pressSelectOption } from './select-interaction';
 
 function json(body: object) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
@@ -92,8 +93,12 @@ describe('results and adoption language presentation', () => {
     expect(wrapper.get<HTMLInputElement>('#inference-input_key').element.value).toBe(
       'raw_input_key',
     );
-    expect(wrapper.get<HTMLSelectElement>('#inference-format').element.value).toBe('auto');
-    expect(wrapper.get('#inference-format option').text()).toBe('Tự động');
+    expect(wrapper.getComponent({ name: 'Select' }).props('modelValue')).toBe('auto');
+    expect(wrapper.get('#inference-format').attributes('role')).toBe('combobox');
+    await openSelect(wrapper.get('#inference-format'));
+    const automatic = document.body.querySelector('[role="option"][data-value="auto"]');
+    expect(automatic?.textContent?.trim()).toBe('Tự động');
+    await pressSelectOption('auto');
     expect(wrapper.text()).toContain('Mô-đun đăng ký tùy chỉnh');
     expect(wrapper.get<HTMLInputElement>('#inference-import-modules').element.value).toBe(
       'custom_registration',

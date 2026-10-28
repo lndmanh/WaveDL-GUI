@@ -63,15 +63,21 @@ watch(
 <style scoped>
 .runs-workspace {
   display: grid;
-  grid-template-columns: minmax(15rem, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 2rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.runs-workspace > * {
+  min-width: 0;
+  max-width: 100%;
 }
 .runs-workspace > p {
   grid-column: 1 / -1;
 }
 @media (max-width: 800px) {
   .runs-workspace {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

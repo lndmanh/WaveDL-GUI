@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
-import { computed, onBeforeUnmount, shallowRef, watch, toRaw } from 'vue';
+import { computed, onBeforeUnmount, onMounted, shallowRef, watch, toRaw } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { ConnectionSession } from '../../lib/connection-session';
@@ -11,7 +11,10 @@ import CvSummaryPanel from './CvSummaryPanel.vue';
 import ResultOperationForm from './ResultOperationForm.vue';
 import EvaluationResultsPanel from './EvaluationResultsPanel.vue';
 import type { RunMonitorSnapshot } from '../../lib/run-monitor';
+import InfoChip from '../common/InfoChip.vue';
+import { useShellLayout } from '../../composables/useShellLayout';
 const { t } = useI18n({ useScope: 'global' });
+const shellLayout = useShellLayout();
 const props = defineProps<{
   session: ConnectionSession;
   runId: string | null;
@@ -26,11 +29,17 @@ const busy = shallowRef(false);
 const message = shallowRef('');
 const downloadStatus = shallowRef('');
 const imageUrl = shallowRef<string | null>(null);
+const previewPath = shallowRef<string | null>(null);
+const panelTarget = shallowRef<HTMLElement | null>(null);
+onMounted(() => {
+  panelTarget.value = document.getElementById('shell-panel-tab-artifacts');
+});
 let scope = new AbortController();
 let epoch = 0;
 function clearImage() {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
   imageUrl.value = null;
+  previewPath.value = null;
 }
 function reset() {
   scope.abort();
@@ -90,6 +99,7 @@ async function consume(artifact: Artifact, preview = false) {
       if (current !== epoch) return;
       clearImage();
       imageUrl.value = URL.createObjectURL(image);
+      previewPath.value = `${artifact.generation}/${artifact.path}`;
     } else {
       const name = await artifactDownloadName(artifact, artifacts.value);
       if (current !== epoch) return;
@@ -120,11 +130,22 @@ onBeforeUnmount(() => {
         <h2 id="results-title" class="text-xl font-semibold">
           {{ t('results.publishedResults') }}
         </h2>
-        <p class="text-sm text-muted-foreground">{{ t('results.resultsHelp') }}</p>
+        <InfoChip :label="t('results.exactIdentity')" :text="t('results.resultsHelp')" />
       </div>
-      <Button variant="outline" :disabled="!runId || busy || !session.api" @click="refresh">{{
-        busy ? t('results.working') : t('results.refresh')
-      }}</Button>
+      <div class="flex flex-wrap gap-2">
+        <Button
+          data-testid="results-refresh"
+          variant="outline"
+          :disabled="!runId || busy || !session.api"
+          @click="refresh"
+          >{{ busy ? t('results.working') : t('results.refresh') }}</Button
+        ><Button
+          v-if="artifacts.length"
+          variant="outline"
+          @click="shellLayout.setActiveTab('artifacts')"
+          >{{ t('results.openArtifacts') }}</Button
+        >
+      </div>
     </div>
     <Alert v-if="message"
       ><AlertTitle>{{ t('results.artifactStatus') }}</AlertTitle
@@ -143,9 +164,28 @@ onBeforeUnmount(() => {
     <ArtifactList
       :artifacts="artifacts"
       :busy="busy"
+      :image-url="imageUrl"
+      :preview-path="previewPath"
       @download="consume"
       @preview="consume($event, true)"
     />
+    <Teleport v-if="panelTarget && artifacts.length" :to="panelTarget" defer>
+      <ul class="flex flex-col gap-3" :aria-label="t('results.artifact')">
+        <li
+          v-for="artifact in artifacts"
+          :key="`${artifact.generation}/${artifact.path}`"
+          class="break-all rounded-lg border p-3 text-sm"
+        >
+          {{ artifact.path }}
+          <p class="text-xs text-muted-foreground">
+            {{ artifact.generation }} / {{ artifact.attempt }}
+          </p>
+          <Button variant="outline" size="sm" :disabled="busy" @click="consume(artifact)">{{
+            t('results.download')
+          }}</Button>
+        </li>
+      </ul>
+    </Teleport>
     <CvSummaryPanel
       v-if="connected"
       :key="scopeGeneration"
@@ -159,12 +199,8 @@ onBeforeUnmount(() => {
       :artifacts="artifacts"
       @run-selected="emit('runSelected', $event)"
     />
-    <figure v-if="imageUrl" class="flex flex-col gap-3">
-      <img :src="imageUrl" :alt="t('results.verifiedPlot')" class="max-w-full" /><Button
-        variant="outline"
-        @click="clearImage"
-        >{{ t('results.closePlot') }}</Button
-      >
-    </figure>
+    <div v-if="imageUrl" class="flex flex-col gap-3">
+      <Button variant="outline" @click="clearImage">{{ t('results.closePlot') }}</Button>
+    </div>
   </section>
 </template>

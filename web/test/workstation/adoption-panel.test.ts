@@ -76,8 +76,11 @@ describe('adoption form ownership boundary', () => {
     await vi.waitFor(() => expect(wrapper.emitted('adoptedRunId')).toEqual([[runId]]));
     expect(calls).toHaveLength(0);
     expect(replacement.calls).toEqual(['/api/runs/adopt']);
+    expect(wrapper.get('[role="status"]').text()).toContain('Daemon ownership confirmed');
     expect(wrapper.get('section').attributes('aria-busy')).toBe('false');
-    expect(wrapper.get('p[role=status]').text()).toContain('Daemon ownership confirmed');
+    expect(
+      wrapper.get('button[aria-label^="Ownership confirmed"]').attributes('aria-label'),
+    ).toContain('Daemon ownership confirmed');
     wrapper.unmount();
     session.detach();
     replacement.session.detach();
@@ -124,7 +127,9 @@ describe('adoption form ownership boundary', () => {
       finishCurrent?.(ack());
       await vi.waitFor(() => expect(wrapper.emitted('adoptedRunId')).toEqual([[runId]]));
       expect(wrapper.get('section').attributes('aria-busy')).toBe('false');
-      expect(wrapper.get('p[role=status]').text()).toContain('Daemon ownership confirmed');
+      expect(
+        wrapper.get('button[aria-label^="Ownership confirmed"]').attributes('aria-label'),
+      ).toContain('Daemon ownership confirmed');
       expect(calls).toEqual(['/api/runs/adopt']);
       expect(replacement.calls).toEqual(['/api/runs/adopt']);
       wrapper.unmount();
@@ -154,7 +159,9 @@ describe('adoption form ownership boundary', () => {
     expect(calls).toHaveLength(0);
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() => expect(wrapper.emitted('adoptedRunId')).toEqual([[runId]]));
-    expect(wrapper.text()).toContain('Daemon ownership confirmed');
+    expect(
+      wrapper.get('button[aria-label^="Ownership confirmed"]').attributes('aria-label'),
+    ).toContain('Daemon ownership confirmed');
     expect(wrapper.text()).toContain('does not establish live supervision');
     expect(calls).toEqual(['/api/runs/adopt']);
     wrapper.unmount();

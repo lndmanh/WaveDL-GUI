@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Actual installed CLI, not a checkout ASGI fixture. All mutations use the UI.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -200,7 +201,7 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   record.bootstrap = await dom(`JSON.stringify({removed:!location.href.includes('bootstrap'),credentialKey:${JSON.stringify(SESSION_CREDENTIAL_KEY)},storage:(${observeCursorStorage.toString()})(localStorage,sessionStorage,document.cookie,'','',{forbiddenToken:${JSON.stringify(masterBearer)},origin:location.origin})})`);
   record.stage = "native-ui-training-authoring";
   await actions.button("New training run", false, { locator: '[data-testid="nav-project"]' });
-  const rootControl = await actions.readyControl("field", "Configured root", false, { locator: 'xpath=//*[@role="combobox" and @aria-label="Configured root"]' });
+  const rootControl = await actions.readyControl("field", "Search roots and paths", false, { locator: 'xpath=//*[@role="combobox" and @aria-label="Search roots and paths"]' });
   await cli("click", rootControl);
   await actions.option("datasets");
   await button("Select file samples.npz");
@@ -217,6 +218,7 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   await actions.select("Device", "cpu");
   await button("Preview persisted plan");
   await cli("wait", "--text", "Persisted plan for approval");
+  await openPlanDisclosure({ cli, dom });
   record.trainingManifest = JSON.parse(await dom(`JSON.stringify(document.querySelector('[aria-label="Approved normalized manifest"]').textContent)`));
   record.previewRegistry = await registry();
   await button("Approve and start this plan");
@@ -232,7 +234,7 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   const publication = published.find(item => Object.hasOwn(item.complete.files, "predictions.csv"));
   assert(publication, "Actual evaluation must publish predictions.csv");
   const generation = publication.generation;
-  const scope = `//section[@aria-labelledby="results-title"]//tr[starts-with(normalize-space(td[1]),${xpathLiteral(generation)}) and normalize-space(td[2])='predictions.csv']`;
+  const scope = `//section[@aria-labelledby="results-title"]//*[@data-artifact-generation=${xpathLiteral(generation)} and @data-artifact-path='predictions.csv']`;
   const download = await actions.readyControl("button", "Download", false, { scope });
   const destination = join(downloads, "verified-predictions.csv");
   await cli("download", download, destination);

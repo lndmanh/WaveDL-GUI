@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import { Badge } from '@/components/ui/badge';
+import InfoChip from '../common/InfoChip.vue';
 import type { MetricHealth } from '../../lib/metric-history';
 import {
   metricHealthLabelMessageKeys,
@@ -26,9 +27,7 @@ function displayHealthValue(row: MetricHealth): string {
 <template>
   <section :aria-label="t('runs.health')" class="flex flex-col gap-2">
     <h4>{{ t('runs.health') }}</h4>
-    <p class="text-muted-foreground text-sm">
-      {{ t('runs.healthNote') }}
-    </p>
+    <InfoChip :label="t('runs.health')" :text="t('runs.healthNote')" uncertain />
     <dl class="flex flex-col gap-2">
       <div v-for="row in health" :key="row.label" class="flex flex-wrap items-center gap-2">
         <dt>{{ translated(metricHealthLabelMessageKeys, row.label) }}</dt>

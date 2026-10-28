@@ -5,8 +5,11 @@ import { Field as VeeField } from 'vee-validate';
 import { shallowRef } from 'vue';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Field, FieldLabel, FieldError } from '@/components/ui/field';
 import { reservedRuntimeVariable } from '../../../shared/schemas/training-request';
+import InfoChip from '../common/InfoChip.vue';
 
 const { clientMessage } = useClientMessages();
 const { t } = useI18n({ useScope: 'global' });
@@ -35,19 +38,28 @@ function remove(key: string) {
 }
 </script>
 <template>
-  <details>
-    <summary class="cursor-pointer font-medium">
+  <Collapsible :default-open="true">
+    <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
       {{ t('project.explicitRuntimeEnvironment') }}
-    </summary>
-    <div class="mt-4 flex flex-col gap-4">
-      <p>
-        {{ t('project.environmentHelp') }}
-      </p>
+    </CollapsibleTrigger>
+    <CollapsibleContent
+      :force-mount="true"
+      class="data-[state=closed]:hidden mt-4 flex flex-col gap-4"
+    >
+      <p>{{ t('project.environmentHelp') }}</p>
+      <div class="flex flex-wrap gap-2">
+        <Badge variant="outline">{{ t('project.environmentSecretsStayOnHost') }}</Badge>
+        <InfoChip
+          :label="t('project.environmentDetailsLabel')"
+          :text="t('project.environmentDetails')"
+        />
+      </div>
       <VeeField
         v-for="(_, key) in environment"
         :key="key"
         v-slot="{ field, errors }"
         :name="`runtime.environment.${key}`"
+        :keep-value="true"
         ><Field :data-invalid="!!errors.length"
           ><FieldLabel :for="`env-${key}`">{{ key }}</FieldLabel
           ><Input
@@ -72,6 +84,6 @@ function remove(key: string) {
           t('project.addVariable')
         }}</Button></Field
       >
-    </div>
-  </details>
+    </CollapsibleContent>
+  </Collapsible>
 </template>

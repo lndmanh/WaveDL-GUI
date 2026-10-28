@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { usePreviewExport } from '../../composables/usePreviewExport';
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
 import { Button } from '@/components/ui/button';
+import InfoChip from '../common/InfoChip.vue';
 
 const { t } = useI18n({ useScope: 'global' });
 
@@ -158,11 +159,16 @@ onBeforeUnmount(() => {
       @pointercancel="end"
       @lostpointercapture="end"
     />
-    <p class="text-muted-foreground text-xs">
-      {{ hovered || t('datasets.heatmapHelp') }}
-    </p>
+    <p v-if="hovered" class="text-muted-foreground text-xs">{{ hovered }}</p>
+    <InfoChip v-else :label="t('datasets.heatmapDetails')" :text="t('datasets.heatmapHelp')" />
     <p v-if="exportMessage" role="status" aria-live="polite">
-      {{ t(exportMessage) }}
+      <InfoChip
+        v-if="exportMessage === 'datasets.pngExportRequested'"
+        :label="t('datasets.pngRequested')"
+        :text="t(exportMessage)"
+        uncertain
+      />
+      <template v-else>{{ t(exportMessage) }}</template>
     </p>
     <div class="flex gap-2">
       <Button variant="ghost" size="sm" @click="reset">{{ t('datasets.resetView') }}</Button>

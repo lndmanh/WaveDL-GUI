@@ -120,7 +120,8 @@ describe('dataset language presentation', () => {
       i18n,
     );
     expect(wrapper.text()).toContain('Độ lệch chuẩn');
-    expect(wrapper.findAll('tbody tr').map((row) => row.text())).toEqual(['32.5Thiếu']);
+    expect(wrapper.get('[data-slot="badge"]').text()).toContain('3');
+    expect(wrapper.findAll('dd').map((row) => row.text())).toEqual(['2.5', 'Thiếu']);
     i18n.global.locale.value = 'en';
     await flushPromises();
     expect(wrapper.text()).toContain('Standard deviation');

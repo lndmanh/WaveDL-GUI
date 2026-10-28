@@ -5,7 +5,6 @@ import { mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
-import { Select } from '@/components/ui/select';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
 import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
@@ -37,9 +36,19 @@ async function connected(work: (url: string) => Response) {
 const cnn: ModelDescription = {
   id: 'cnn',
   displayName: 'CNN',
+  architectureFamily: 'CNN',
+  authorInstitution: 'Example',
+  yearPublished: 1989,
+  paramsM: 1.6,
+  sizeMb: 6,
+  shortDescription: 'Simple convolutional baseline',
   category: 'Classic CNNs',
   supportedDims: [1, 2, 3],
   pretrained: false,
+  pros: ['Fast'],
+  cons: ['Limited capacity'],
+  computeTier: 'Edge',
+  tags: ['baseline'],
   description:
     "A vanilla convolutional neural network stacking Conv-BN-ReLU blocks with max-pooling for spatial reduction. Originating from LeCun's foundational work on gradient-based learning (1989), this architecture serves as the simplest deep learning baseline. It lacks modern enhancements like skip connections or attention, trading representational power for minimal complexity and fast iteration.",
   bestFor: 'Quick baselines and prototyping across all data types',
@@ -151,8 +160,18 @@ describe('catalogue localization preserves daemon authority', () => {
         models: models.map((model) => ({
           id: model.id,
           display_name: model.displayName,
+          architecture_family: model.architectureFamily,
+          author_institution: model.authorInstitution,
+          year_published: model.yearPublished,
+          params_m: model.paramsM,
+          size_mb: model.sizeMb,
+          short_description: model.shortDescription,
           description: model.description,
           best_for: model.bestFor,
+          pros: model.pros,
+          cons: model.cons,
+          compute_tier: model.computeTier,
+          tags: model.tags,
           supported_dims: model.supportedDims,
           is_pretrained: model.pretrained,
         })),
@@ -167,18 +186,24 @@ describe('catalogue localization preserves daemon authority', () => {
     });
     const wrapper = mount(Provider);
     await flushPromises();
-    expect(wrapper.text()).toContain(cnn.description);
     expect(wrapper.text()).toContain('not runtime certification');
+    await wrapper.find('[data-testid="model-details"]').trigger('click');
+    await nextTick();
+    expect(document.body.textContent).toContain(cnn.description);
     await wrapper.get('input').setValue('cnn');
     locale.value = 'vi';
+    await nextTick();
+    await wrapper.find('[data-testid="model-details"]').trigger('click');
     await nextTick();
     expect(wrapper.get('input').element.value).toBe('cnn');
     expect(wrapper.text()).toContain('CNN cổ điển');
     expect(wrapper.text()).toContain('Mô tả, không phải chứng nhận khi chạy');
-    expect(wrapper.text()).toContain('Mạng nơ-ron tích chập cơ bản');
-    expect(wrapper.text()).toContain('<script>custom description</script>');
-    expect(wrapper.text()).toContain('Original daemon purpose');
-    expect(wrapper.text()).toContain('không có bản dịch đi kèm khớp nội dung');
+    expect(document.body.textContent).toContain('Mạng nơ-ron tích chập cơ bản');
+    await wrapper.findAll('[data-testid="model-details"]')[1]!.trigger('click');
+    await nextTick();
+    expect(document.body.textContent).toContain('<script>custom description</script>');
+    expect(document.body.textContent).toContain('Original daemon purpose');
+    expect(document.body.textContent).toContain('không có bản dịch đi kèm khớp nội dung');
     expect(wrapper.find('script').exists()).toBe(false);
     const choose = wrapper.findAll('button').find((button) => button.text() === 'Chọn CNN');
     expect(choose).toBeDefined();
@@ -188,8 +213,10 @@ describe('catalogue localization preserves daemon authority', () => {
     expect(() => new CatalogApi(session).assertSelection(selection)).not.toThrow();
     locale.value = 'en';
     await nextTick();
-    expect(wrapper.text()).toContain(cnn.description);
-    expect(wrapper.text()).not.toContain('no matching bundled translation');
+    await wrapper.findAll('[data-testid="model-details"]')[0]!.trigger('click');
+    await nextTick();
+    expect(document.body.textContent).toContain(cnn.description);
+    expect(document.body.textContent).not.toContain('no matching bundled translation');
     expect(catalogueReads).toBe(1);
     wrapper.unmount();
     session.detach();
@@ -202,8 +229,11 @@ describe('catalogue localization preserves daemon authority', () => {
         return json({
           root: 'remote-research',
           path: '',
-          entries: [{ name: 'wave 東京.npz', kind: 'file' }],
-          total: 1,
+          entries: Array.from({ length: 100 }, (_, index) => ({
+            name: index === 0 ? 'wave 東京.npz' : `other-${index}.npz`,
+            kind: 'file',
+          })),
+          total: 101,
           limit: 100,
           offset: 0,
         });
@@ -223,14 +253,15 @@ describe('catalogue localization preserves daemon authority', () => {
     });
     const wrapper = mount(Provider);
     await flushPromises();
-    wrapper.getComponent(Select).vm.$emit('update:modelValue', 'remote-research');
+    await wrapper.get('[data-testid="dataset-path-search"]').trigger('focus');
+    await wrapper.get('[role="option"][data-value="remote-research"]').trigger('click');
     await flushPromises();
     locale.value = 'vi';
     await nextTick();
-    expect(wrapper.get('section').attributes('aria-label')).toBe('Tệp trên daemon');
-    expect(wrapper.text()).toContain('remote-research');
+    expect(wrapper.get('section').attributes('aria-label')).toBe('Đường dẫn tập dữ liệu');
+    expect(wrapper.text()).toContain('1–100 trên 101');
     expect(wrapper.text()).toContain('wave 東京.npz');
-    expect(wrapper.text()).toContain('1–1 trên 1');
+    expect(wrapper.get('[aria-label="Đường dẫn tập dữ liệu"]').text()).toContain('remote-research');
     expect(wrapper.get('button[aria-label="Chọn tệp wave 東京.npz"]').text()).toBe('Chọn tệp');
     await wrapper.get('button[aria-label="Chọn tệp wave 東京.npz"]').trigger('click');
     await flushPromises();

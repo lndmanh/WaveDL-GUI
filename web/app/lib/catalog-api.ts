@@ -23,8 +23,18 @@ export interface DataSelection {
 export interface ModelDescription {
   readonly id: string;
   readonly displayName: string;
+  readonly architectureFamily: string;
+  readonly authorInstitution: string;
+  readonly yearPublished: number;
+  readonly paramsM: number;
+  readonly sizeMb: number;
+  readonly shortDescription: string;
   readonly description: string;
   readonly bestFor: string;
+  readonly pros: readonly string[];
+  readonly cons: readonly string[];
+  readonly computeTier: string;
+  readonly tags: readonly string[];
   readonly supportedDims: readonly number[];
   readonly category: string;
   readonly pretrained: boolean;
@@ -47,6 +57,9 @@ const fail = (): never => {
 function text(value: unknown, max = 8192): value is string {
   return typeof value === 'string' && value.length <= max && !value.includes('\0');
 }
+function nonEmptyText(value: unknown, max = 8192): value is string {
+  return text(value, max) && value.trim().length > 0;
+}
 function rootId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 }
@@ -64,6 +77,19 @@ export function relativePath(value: unknown): value is string {
 function integer(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max;
 }
+function finite(value: unknown, max: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max;
+}
+function textList(value: unknown, maxItems: number, maxLength: number): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= maxItems &&
+    value.every((item) => nonEmptyText(item, maxLength)) &&
+    new Set(value).size === value.length
+  );
+}
+const architectureFamilies = new Set(['CNN', 'Hybrid', 'Transformer', 'SSM', 'Encoder-Decoder']);
+const computeTiers = new Set(['Edge', 'Low', 'Medium', 'High']);
 function absolutePath(value: unknown): value is string {
   if (!text(value, 8192)) return false;
   let parts: string[];
@@ -237,11 +263,25 @@ export class CatalogApi {
         const models = body.models.map((item) => {
           if (
             !object(item) ||
+            Object.keys(item).length !== 16 ||
             typeof item.id !== 'string' ||
             !/^[a-z0-9_]{1,128}$/.test(item.id) ||
-            !text(item.display_name, 256) ||
-            !text(item.description) ||
-            !text(item.best_for) ||
+            !nonEmptyText(item.display_name, 256) ||
+            !nonEmptyText(item.architecture_family, 256) ||
+            !architectureFamilies.has(item.architecture_family) ||
+            !nonEmptyText(item.author_institution, 256) ||
+            !integer(item.year_published, 3000) ||
+            item.year_published < 1800 ||
+            !finite(item.params_m, 1_000_000) ||
+            !finite(item.size_mb, 1_000_000) ||
+            !nonEmptyText(item.short_description, 8192) ||
+            !nonEmptyText(item.description) ||
+            !nonEmptyText(item.best_for) ||
+            !textList(item.pros, 32, 2048) ||
+            !textList(item.cons, 32, 2048) ||
+            !nonEmptyText(item.compute_tier, 64) ||
+            !computeTiers.has(item.compute_tier) ||
+            !textList(item.tags, 32, 256) ||
             typeof item.is_pretrained !== 'boolean' ||
             !Array.isArray(item.supported_dims) ||
             item.supported_dims.length < 1 ||
@@ -254,8 +294,18 @@ export class CatalogApi {
           return Object.freeze({
             id: item.id,
             displayName: item.display_name,
+            architectureFamily: item.architecture_family,
+            authorInstitution: item.author_institution,
+            yearPublished: item.year_published,
+            paramsM: item.params_m,
+            sizeMb: item.size_mb,
+            shortDescription: item.short_description,
             description: item.description,
             bestFor: item.best_for,
+            pros: Object.freeze([...item.pros]),
+            cons: Object.freeze([...item.cons]),
+            computeTier: item.compute_tier,
+            tags: Object.freeze([...item.tags]),
             supportedDims: Object.freeze([...item.supported_dims]),
             category: categories.get(item.id) ?? '',
             pretrained: item.is_pretrained,

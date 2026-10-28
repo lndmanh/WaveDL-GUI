@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { useForm } from 'vee-validate';
 import RuntimeFields from '../../app/components/project/RuntimeFields.vue';
+import { Select } from '../../app/components/ui/select';
+import { openSelect, pressSelectOption } from './select-interaction';
 
 const expectedLabels = [
   'Python interpreter',
@@ -43,10 +45,10 @@ describe('runtime fields accessible identity', () => {
       await flushPromises();
       const allIds = wrapper.findAll('[id]').map((node) => node.attributes('id'));
       expect(new Set(allIds).size).toBe(allIds.length);
-      expect(wrapper.findAll('input, select')).toHaveLength(14);
+      expect(wrapper.findAll('input[id], [role="combobox"]')).toHaveLength(14);
       for (const form of wrapper.findAll('form')) {
         expect(form.get('fieldset > legend').text()).toBe('Execution environment');
-        const controls = form.findAll('input, select');
+        const controls = form.findAll('input[id], [role="combobox"]');
         expect(form.findAll('label').map((label) => label.text())).toEqual(expectedLabels);
         for (const [index, control] of controls.entries()) {
           const id = control.attributes('id');
@@ -62,7 +64,7 @@ describe('runtime fields accessible identity', () => {
         const interpreter = form.get('input[name="runtime.python"]');
         const description = interpreter.attributes('aria-describedby');
         expect(form.get(`[id="${description}"]`).text()).toContain(
-          'Absolute interpreter path selected for the execution host',
+          'Absolute interpreter path on the execution host',
         );
       }
     } finally {
@@ -78,12 +80,23 @@ describe('runtime fields accessible identity', () => {
         'value',
         '/usr/bin/python3',
       );
+      const backend = wrapper
+        .findAllComponents(Select)
+        .find((control) => control.props('name') === 'backend');
+      expect(backend?.props('modelValue')).toBe('local');
+      expect(backend?.props('name')).toBe('backend');
+      if (!backend) throw new Error('Missing backend Select');
+      const backendTrigger = backend.get('[role="combobox"]');
+      await openSelect(backendTrigger);
+      const listbox = document.body.querySelector('[role="listbox"]');
+      expect(listbox).not.toBeNull();
       expect(
-        wrapper
-          .get('select[name="backend"]')
-          .findAll('option')
-          .map((option) => option.attributes('value')),
+        Array.from(listbox?.querySelectorAll('[role="option"]') ?? []).map((option) =>
+          option.getAttribute('data-value'),
+        ),
       ).toEqual(['local', 'slurm']);
+      await pressSelectOption('slurm');
+      expect(backend?.props('modelValue')).toBe('slurm');
       expect(wrapper.findAll('input[type="number"]')).toHaveLength(3);
       const machines = wrapper.get('input[id$="topology-num_machines"]');
       expect(machines.attributes('min')).toBe('1');

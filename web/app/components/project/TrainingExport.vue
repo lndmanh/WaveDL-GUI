@@ -2,6 +2,9 @@
 import { useI18n } from 'vue-i18n';
 import { computed, shallowRef } from 'vue';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import InfoChip from '../common/InfoChip.vue';
 import type { TrainingRequest } from '../../../shared/schemas/training-request';
 import { trainingYaml, trainingCommand } from '../../lib/training-export';
 import { useClientMessages } from '../../composables/useClientMessages';
@@ -54,14 +57,18 @@ async function copy() {
 }
 </script>
 <template>
-  <details>
-    <summary class="cursor-pointer font-medium">
+  <Collapsible :default-open="true">
+    <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
       {{ t('project.standaloneConfigurationExport') }}
-    </summary>
-    <div class="mt-4 flex flex-col gap-4">
-      <p>
-        {{ t('project.exportHelp') }}
-      </p>
+    </CollapsibleTrigger>
+    <CollapsibleContent class="mt-4 flex flex-col gap-4">
+      <p>{{ t('project.exportHelp') }}</p>
+      <div class="flex flex-wrap gap-2">
+        <Badge variant="outline">{{ t('project.exportSamePaths') }}</Badge>
+        <Badge variant="outline">{{ t('project.exportNoSlurm') }}</Badge>
+        <Badge variant="outline">{{ t('project.exportNoCredentials') }}</Badge>
+        <Badge variant="outline">{{ t('project.exportOutputLocation') }}</Badge>
+      </div>
       <div class="flex flex-wrap gap-3">
         <Button type="button" variant="outline" :disabled="disabled" @click="download">{{
           t('project.downloadYaml')
@@ -70,10 +77,23 @@ async function copy() {
           t('project.copyStandaloneCliCommand')
         }}</Button>
       </div>
-      <p v-if="message" role="status">{{ displayMessage }}</p>
-      <pre v-if="command" class="overflow-auto rounded-lg bg-muted p-4 text-xs" tabindex="0">{{
-        command
-      }}</pre>
-    </div>
-  </details>
+      <div v-if="message" role="status" aria-live="polite">
+        <InfoChip
+          v-if="message === 'project.yamlExportRequested'"
+          :label="t('project.yamlExportRequested')"
+          :text="t('project.yamlExportRequestedDetails')"
+        />
+        <p v-else>{{ displayMessage }}</p>
+      </div>
+      <div
+        v-if="command"
+        class="max-h-64 overflow-auto rounded-lg bg-muted p-4 font-mono text-xs whitespace-pre-wrap break-all"
+        role="region"
+        :aria-label="t('project.copiedCommand')"
+        tabindex="0"
+      >
+        <code>{{ command }}</code>
+      </div>
+    </CollapsibleContent>
+  </Collapsible>
 </template>

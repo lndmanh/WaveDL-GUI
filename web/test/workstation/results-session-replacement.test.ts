@@ -6,8 +6,10 @@ import { toRaw } from 'vue';
 import ResultsContainer from '../../app/components/results/ResultsContainer.vue';
 import CvSummaryPanel from '../../app/components/results/CvSummaryPanel.vue';
 import ResultOperationForm from '../../app/components/results/ResultOperationForm.vue';
+import { Select } from '../../app/components/ui/select';
 import { ConnectionSession, type ConnectionState } from './session-fixture';
 import * as artifactClient from '../../app/lib/artifact-client';
+import { chooseSelectOption } from './select-interaction';
 
 const runId = '22222222-2222-4222-8222-222222222222';
 function deferred<T>() {
@@ -77,18 +79,19 @@ describe('results session replacement ownership', () => {
       return originalSubscribe(listener);
     });
     const wrapper = results(a.session);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     const oldCv = wrapper.getComponent(CvSummaryPanel);
     const oldForm = wrapper.getComponent(ResultOperationForm);
-    await oldCv.get('select').setValue('gen-000001');
-    await oldForm.get('#result-operation').setValue('plot');
+    await chooseSelectOption(oldCv.get('[role="combobox"]'), 'gen-000001');
+    await chooseSelectOption(oldForm.get('#result-operation'), 'plot');
+    await flushPromises();
     const priorACalls = a.calls.length;
 
     await wrapper.setProps({ session: b.session });
     expect(wrapper.text()).not.toContain('cv_summary.json');
     expect(wrapper.findComponent(ResultOperationForm).exists()).toBe(false);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     const cv = wrapper.getComponent(CvSummaryPanel);
     const form = wrapper.getComponent(ResultOperationForm);
@@ -96,8 +99,13 @@ describe('results session replacement ownership', () => {
     expect(form.vm).not.toBe(oldForm.vm);
     expect(toRaw(cv.props('session'))).toBe(b.session);
     expect(toRaw(form.props('session'))).toBe(b.session);
-    expect(cv.get('select').element.value).toBe('');
-    expect(form.get('#result-operation').element.value).toBe('test');
+    expect(cv.getComponent({ name: 'Select' }).props('modelValue')).toBe('');
+    expect(
+      form
+        .findAllComponents(Select)
+        .find((control) => control.find('#result-operation').exists())!
+        .props('modelValue'),
+    ).toBe('test');
     expect(b.calls).toContain('/api/browse');
     expect(a.calls).toHaveLength(priorACalls);
 
@@ -111,13 +119,13 @@ describe('results session replacement ownership', () => {
     });
     await flushPromises();
     expect(wrapper.text()).toContain('cv_summary.json');
-    expect(wrapper.get('button').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('[data-testid="results-refresh"]').attributes('disabled')).toBeUndefined();
     b.session.detach();
     await flushPromises();
     expect(a.session.snapshot().status).toBe('connected');
     expect(wrapper.text()).not.toContain('cv_summary.json');
     expect(wrapper.findComponent(CvSummaryPanel).exists()).toBe(false);
-    expect(wrapper.get('button').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[data-testid="results-refresh"]').attributes('disabled')).toBeDefined();
   });
 
   it('aborts an A inventory and rejects its late completion after B replacement', async () => {
@@ -125,10 +133,10 @@ describe('results session replacement ownership', () => {
     const a = await owner('A', () => pending.promise);
     const b = await owner('B', () => inventory('B.onnx'));
     const wrapper = results(a.session);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await wrapper.setProps({ session: b.session });
     expect(a.signals.at(-1)?.aborted).toBe(true);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     pending.resolve(inventory('A.onnx'));
     await flushPromises();
@@ -149,11 +157,11 @@ describe('results session replacement ownership', () => {
       return inventory('current.onnx');
     });
     const wrapper = results(a.session);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await vi.waitFor(() => expect(a.calls).toContain(`/api/runs/${runId}/artifacts`));
     await wrapper.setProps({ runId: '44444444-4444-4444-8444-444444444444' });
     expect(a.signals.at(-1)?.aborted).toBe(true);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     pending.resolve(inventory('retired.onnx'));
     await flushPromises();
@@ -172,7 +180,7 @@ describe('results session replacement ownership', () => {
     const b = await owner('B', () => inventory('B.onnx'));
     const create = vi.spyOn(URL, 'createObjectURL');
     const wrapper = results(a.session);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     const preview = wrapper.findAll('button').find((button) => button.text() === 'View PNG');
     if (!preview) throw new Error('Missing preview action');
@@ -183,7 +191,7 @@ describe('results session replacement ownership', () => {
     expect(create).not.toHaveBeenCalled();
     expect(wrapper.find('img').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('verification failed');
-    expect(wrapper.get('button').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('[data-testid="results-refresh"]').attributes('disabled')).toBeUndefined();
   });
 
   it('retires A decode and revokes B images when B detaches while A stays connected', async () => {
@@ -208,7 +216,7 @@ describe('results session replacement ownership', () => {
     const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:current-B');
     const revoke = vi.spyOn(URL, 'revokeObjectURL');
     const wrapper = results(a.session);
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     const previewA = wrapper.findAll('button').find((button) => button.text() === 'View PNG');
     if (!previewA) throw new Error('Missing A preview');
@@ -218,7 +226,7 @@ describe('results session replacement ownership', () => {
     pending.resolve(new Blob([bytes], { type: 'image/png' }));
     await flushPromises();
     expect(create).not.toHaveBeenCalled();
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await flushPromises();
     const previewB = wrapper.findAll('button').find((button) => button.text() === 'View PNG');
     if (!previewB) throw new Error('Missing B preview');
@@ -230,6 +238,6 @@ describe('results session replacement ownership', () => {
     expect(wrapper.find('img').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('B.png');
     expect(revoke).toHaveBeenCalledWith('blob:current-B');
-    expect(wrapper.get('button').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[data-testid="results-refresh"]').attributes('disabled')).toBeDefined();
   });
 });

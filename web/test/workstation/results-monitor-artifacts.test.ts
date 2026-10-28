@@ -107,7 +107,7 @@ describe('results monitor and published artifacts', () => {
     expect(await session.connect('token')).toBe(true);
     const wrapper = mount(ResultsContainer, { props: { session, runId: run.run_id } });
     try {
-      await wrapper.get('button').trigger('click');
+      await wrapper.get('[data-testid="results-refresh"]').trigger('click');
       await flushPromises();
       for (const download of wrapper
         .findAll('button')
@@ -128,7 +128,7 @@ describe('results monitor and published artifacts', () => {
         );
       generations = ['gen-000003'];
       paths = ['left/metrics.csv', 'right/metrics.csv', 'METRICS.csv'];
-      await wrapper.get('button').trigger('click');
+      await wrapper.get('[data-testid="results-refresh"]').trigger('click');
       await flushPromises();
       for (const download of wrapper
         .findAll('button')
@@ -144,7 +144,7 @@ describe('results monitor and published artifacts', () => {
       for (const path of paths)
         expect(calls).toContain(`/api/runs/${run.run_id}/artifacts/gen-000003/${path}`);
       generations = [`gen-${'9'.repeat(61)}`];
-      await wrapper.get('button').trigger('click');
+      await wrapper.get('[data-testid="results-refresh"]').trigger('click');
       await flushPromises();
       const unsupported = wrapper.findAll('button').find((button) => button.text() === 'Download');
       if (!unsupported) throw new Error('Missing artifact download action');
@@ -191,7 +191,7 @@ describe('results monitor and published artifacts', () => {
         monitor: monitor({ ...run, operation: 'train' }, 'fresh', [event]),
       },
     });
-    await wrapper.get('button').trigger('click');
+    await wrapper.get('[data-testid="results-refresh"]').trigger('click');
     await vi.waitFor(() => expect(wrapper.text()).toContain('model.onnx'));
     for (const snapshot of [
       monitor({ ...run, operation: 'train' }, 'fresh', [event]),

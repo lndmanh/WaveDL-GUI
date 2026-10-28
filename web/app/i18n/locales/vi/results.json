@@ -1,4 +1,9 @@
 {
+  "ownershipOnly": "Đã xác nhận quyền sở hữu, chưa xác minh giám sát",
+  "exactIdentity": "Định danh tệp chính xác",
+  "explicitSource": "Checkpoint rõ ràng, kế hoạch đã duyệt",
+  "trustedCode": "Chỉ chạy mã đáng tin cậy",
+  "verifiedPng": "Xem trước PNG đã xác minh",
   "publications": "Chỉ liệt kê các bản công bố đã hoàn tất và được xác minh. Tệp tải xuống được kiểm tra trước khi lưu.",
   "generationAttempt": "Thế hệ / lần chạy",
   "artifact": "Tệp kết quả",
@@ -52,6 +57,7 @@
   "resultsHelp": "Chọn một lần chạy trong Thí nghiệm. Tệp xuất sử dụng chính xác thế hệ, kích thước và định danh SHA-256.",
   "working": "Đang xử lý…",
   "refresh": "Làm mới tệp kết quả",
+  "openArtifacts": "Mở tệp",
   "artifactStatus": "Trạng thái tệp kết quả",
   "selectExperiment": "Trước tiên hãy chọn một thí nghiệm.",
   "verifiedPlot": "Biểu đồ chẩn đoán đã công bố và xác minh",

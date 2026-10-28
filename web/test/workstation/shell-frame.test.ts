@@ -123,6 +123,9 @@ describe('workstation shell frame', () => {
     expect(getComputedStyle(document.body).overflow).toBe('hidden');
     expect(getComputedStyle(shell.element).overflow).toBe('hidden');
     expect(getComputedStyle(scroll.element).overflowY).toBe('auto');
+    // Absolutely positioned descendants (sr-only text) must resolve against the
+    // scroller, or they extend the document past the viewport.
+    expect(scroll.classes()).toContain('relative');
   });
 
   it('uses compact, accessible header actions at 320px', async () => {

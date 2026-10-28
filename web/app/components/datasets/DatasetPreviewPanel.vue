@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { computed, onBeforeUnmount, shallowRef, toRaw, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import type { DataSelection } from '../../lib/catalog-api';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { DatasetPreviewApi, sampleMatrix, type DatasetPreview } from '../../lib/dataset-preview';
@@ -11,6 +12,7 @@ import { datasetPreviewMessageKeys, datasetPreviewTabMessageKeys } from '../../i
 import PreviewPlot from './PreviewPlot.vue';
 import PreviewHeatmap from './PreviewHeatmap.vue';
 import PreviewStatistics from './PreviewStatistics.vue';
+import InfoChip from '../common/InfoChip.vue';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
@@ -174,14 +176,25 @@ const matrices = computed(
         {{ data.format.toUpperCase() }} · {{ data.input_key }} {{ data.input_shape.join(' × ') }} →
         {{ data.output_key }} {{ data.output_shape.join(' × ') }}
       </p>
-      <p class="text-muted-foreground text-sm">
-        {{
-          t('datasets.previewBounds', {
-            count: data.sample_indices.length,
-            total: data.input_shape[0] ?? 0,
-          })
-        }}
-      </p>
+      <div class="flex flex-wrap gap-2" :aria-label="t('datasets.previewScope')">
+        <Badge variant="outline" data-testid="preview-bounds">
+          {{
+            t('datasets.previewBounds', {
+              count: data.sample_indices.length,
+              total: data.input_shape[0] ?? 0,
+            })
+          }}
+        </Badge>
+        <Badge variant="secondary">{{ t('datasets.previewFeatureCap') }}</Badge>
+        <Badge variant="secondary">{{ t('datasets.previewCorrelationCap') }}</Badge>
+        <Badge variant="secondary">{{ t('datasets.previewStatisticsCap') }}</Badge>
+        <Badge variant="secondary">{{ t('datasets.previewSampleCap') }}</Badge>
+        <InfoChip
+          :label="t('datasets.previewNotFullChip')"
+          :text="t('datasets.previewNotFull')"
+          uncertain
+        />
+      </div>
       <Tabs :model-value="activeTab" @update:model-value="selectTab">
         <TabsList class="flex h-auto flex-wrap" :aria-label="t('datasets.previewView')">
           <TabsTrigger v-for="[key, label] in tabs" :key="key" :value="key">{{
@@ -201,7 +214,7 @@ const matrices = computed(
           </div>
           <div v-else-if="activeTab === 'sample'" class="flex flex-col gap-5">
             <div v-for="{ sample, matrix, x, y } in matrices" :key="sample.sample_index">
-              <p class="text-muted-foreground text-xs">
+              <Badge variant="outline" class="self-start">
                 {{
                   t('datasets.sampleHelp', {
                     sample: sample.sample_index,
@@ -209,7 +222,7 @@ const matrices = computed(
                     preview: sample.shape.join(' × '),
                   })
                 }}
-              </p>
+              </Badge>
               <PreviewPlot
                 v-if="sample.shape.length === 1"
                 :x="x"

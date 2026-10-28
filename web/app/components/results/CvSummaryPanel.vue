@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, toRaw, useId, watch } from 'vue';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { Artifact } from '../../lib/artifact-client';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { loadCvSummary, type CvMetric, type CvSummary } from '../../lib/cv-summary';
 import { useI18n } from 'vue-i18n';
+import InfoChip from '../common/InfoChip.vue';
 const props = defineProps<{ session: ConnectionSession; artifacts: readonly Artifact[] }>();
 const { t, locale } = useI18n({ useScope: 'global' });
 const id = useId();
@@ -40,9 +49,7 @@ watch(
   },
   { immediate: true },
 );
-function choose(event: Event) {
-  if (!(event.target instanceof HTMLSelectElement)) return;
-  const generation = event.target.value;
+function choose(generation: unknown) {
   const artifact = publications.value.find((item) => item.generation === generation);
   scope.abort();
   scope = new AbortController();
@@ -89,23 +96,27 @@ onBeforeUnmount(() => {
 <template>
   <section v-if="publications.length" class="flex flex-col gap-4" :aria-labelledby="`${id}-title`">
     <h3 :id="`${id}-title`" class="text-lg font-semibold">{{ t('cv.title') }}</h3>
-    <p class="text-sm text-muted-foreground">{{ t('cv.help') }}</p>
+    <InfoChip :label="t('cv.publicationEvidence')" :text="t('cv.help')" uncertain />
     <label :for="`${id}-source`">{{ t('cv.publication') }}</label>
-    <select
-      :id="`${id}-source`"
-      :disabled="busy"
-      :value="selected?.generation ?? ''"
-      @change="choose"
-    >
-      <option value="">{{ t('cv.choose') }}</option>
-      <option
-        v-for="artifact in publications"
-        :key="artifact.generation"
-        :value="artifact.generation"
+    <Select :model-value="selected?.generation ?? ''" :disabled="busy" @update:model-value="choose">
+      <SelectTrigger
+        :id="`${id}-source`"
+        :aria-label="t('cv.publication')"
+        :data-value="selected?.generation ?? ''"
+        ><SelectValue :placeholder="t('cv.choose')"
+      /></SelectTrigger>
+      <SelectContent
+        ><SelectGroup>
+          <SelectItem
+            v-for="artifact in publications"
+            :key="artifact.generation"
+            :value="artifact.generation"
+          >
+            {{ t('cv.source', { generation: artifact.generation, attempt: artifact.attempt }) }}
+          </SelectItem>
+        </SelectGroup></SelectContent
       >
-        {{ t('cv.source', { generation: artifact.generation, attempt: artifact.attempt }) }}
-      </option>
-    </select>
+    </Select>
     <Button variant="outline" :disabled="!selected || busy" @click="load">{{
       busy ? t('cv.loading') : t('cv.load')
     }}</Button>
@@ -120,90 +131,62 @@ onBeforeUnmount(() => {
           })
         }}
       </p>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <caption>
-            {{
-              t('cv.overall')
-            }}
-          </caption>
-          <thead>
-            <tr>
-              <th>{{ t('cv.metric') }}</th>
-              <th>{{ t('cv.mean') }}</th>
-              <th>{{ t('cv.std') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in overall" :key="row.label">
-              <th>{{ row.label }}</th>
-              <td>{{ number(row.mean) }}</td>
-              <td>{{ number(row.std) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <caption>
-            {{
-              t('cv.folds')
-            }}
-          </caption>
-          <thead>
-            <tr>
-              <th>{{ t('cv.fold') }}</th>
-              <th>{{ t('cv.r2') }}</th>
-              <th>{{ t('cv.mae') }}</th>
-              <th>{{ t('cv.normalized') }}</th>
-              <th>{{ t('cv.loss') }}</th>
-              <th>{{ t('cv.bestEpoch') }}</th>
-              <th>{{ t('cv.epochs') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="fold in summary.fold_results" :key="fold.fold">
-              <th>{{ fold.fold }}</th>
-              <td>{{ number(fold.r2) }}</td>
-              <td>{{ number(fold.mae_physical) }}</td>
-              <td>{{ number(fold.mae_normalized) }}</td>
-              <td>{{ number(fold.best_val_loss) }}</td>
-              <td>{{ fold.best_epoch }}</td>
-              <td>{{ fold.epochs_trained }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-for="fold in summary.fold_results" :key="fold.fold" class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <caption>
-            {{
-              t('cv.targets')
-            }}
-            ·
-            {{
-              t('cv.fold')
-            }}
-            {{
-              fold.fold
-            }}
-          </caption>
-          <thead>
-            <tr>
-              <th>{{ t('cv.metric') }}</th>
-              <th>{{ t('cv.r2') }}</th>
-              <th>{{ t('cv.mae') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="target in fold.targets" :key="target.index">
-              <th>{{ t('cv.parameter', { index: target.index }) }}</th>
-              <td>{{ number(target.r2) }}</td>
-              <td>{{ number(target.mae) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <h4 class="font-semibold">{{ t('cv.overall') }}</h4>
+      <section :aria-label="t('cv.metric')" class="grid gap-4 sm:grid-cols-3">
+        <div v-for="row in overall" :key="row.label" class="rounded-xl border p-4">
+          <h4 class="text-sm text-muted-foreground">{{ row.label }}</h4>
+          <p class="mt-2 text-xl font-semibold tabular-nums" :aria-label="t('cv.mean')">
+            {{ number(row.mean) }}
+          </p>
+          <p class="text-xs text-muted-foreground">{{ t('cv.std') }} {{ number(row.std) }}</p>
+        </div>
+      </section>
+      <section :aria-label="t('cv.folds')" class="grid gap-4">
+        <article
+          v-for="fold in summary.fold_results"
+          :key="fold.fold"
+          class="rounded-xl border p-4"
+        >
+          <h4 class="font-semibold">{{ t('cv.fold') }} {{ fold.fold }}</h4>
+          <dl class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div>
+              <dt class="text-sm text-muted-foreground">{{ t('cv.r2') }}</dt>
+              <dd>{{ number(fold.r2) }}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">{{ t('cv.mae') }}</dt>
+              <dd>{{ number(fold.mae_physical) }}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">{{ t('cv.normalized') }}</dt>
+              <dd>{{ number(fold.mae_normalized) }}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">{{ t('cv.loss') }}</dt>
+              <dd>{{ number(fold.best_val_loss) }}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">{{ t('cv.bestEpoch') }}</dt>
+              <dd>{{ fold.best_epoch }}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">{{ t('cv.epochs') }}</dt>
+              <dd>{{ fold.epochs_trained }}</dd>
+            </div>
+          </dl>
+          <ul class="mt-4 flex flex-col gap-2" :aria-label="t('cv.targets')">
+            <li
+              v-for="target in fold.targets"
+              :key="target.index"
+              class="flex flex-wrap justify-between gap-3 rounded-md bg-muted p-2 text-sm"
+            >
+              <span>{{ t('cv.parameter', { index: target.index }) }}</span>
+              <span>{{ t('cv.r2') }} {{ number(target.r2) }}</span>
+              <span>{{ t('cv.mae') }} {{ number(target.mae) }}</span>
+            </li>
+          </ul>
+        </article>
+      </section>
     </template>
   </section>
 </template>

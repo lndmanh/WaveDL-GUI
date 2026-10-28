@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Real Chromium CV publication/evaluation parity gate. No API mocks or state injection.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -24,24 +25,20 @@ export async function cvParity({
   await cli("click", row);
   await actions.button("Results", false, { locator: '[data-testid="nav-results"]' });
   await button("Refresh artifacts");
-  await cli("wait", "--fn", `Array.from(document.querySelector("#source-generation")?.options ?? []).some(o=>o.value&&!o.disabled)`);
-  const options = await observe(
-    'Array.from(document.querySelector("#source-generation").options).map(o=>({value:o.value,label:o.textContent.trim(),disabled:o.disabled}))',
-  );
+  await cli("wait", "--fn", '!!document.getElementById("source-generation")');
+  const options = await actions.options('Source checkpoint generation');
   record.sourceGenerationClassifications = options;
   assert.equal(options.filter((option) => option.value && !option.disabled).length, 2, "Exactly two fold publications are selectable");
   const summary = options.find((option) => /summary/i.test(option.label));
   assert(summary?.disabled, "CV summary publication must be explicitly unselectable");
-  const summaryRefusal = await observe(
-    '({summaryDisabled:!!Array.from(document.querySelector("#source-generation").options).find(o=>/summary|cross validation/i.test(o.textContent)&&o.disabled),help:document.getElementById("inference-title").closest("section").innerText.includes("Cross-validation summaries cannot be used as model weights")})',
-  );
+  const summaryRefusal = { summaryDisabled: summary.disabled, help: await observe(`(()=>{const section=document.querySelector('section[aria-labelledby="inference-title"]');const help=Array.from(section?.querySelectorAll('button[aria-label]')??[]).find(button=>button.getAttribute('aria-label').includes('Cross-validation summaries cannot be used as model weights'));return !!help?.getClientRects().length;})()`) };
   assert(summaryRefusal.summaryDisabled && summaryRefusal.help, "Summary refusal must be visible in public UI");
   record.summaryRefusal = summaryRefusal;
   const fold = options.find((option) => !option.disabled && /fold 2$/.test(option.label));
   assert(fold, "A classified CV fold publication is required");
   await actions.select("Source checkpoint generation", fold.value);
   const scope = '//section[@aria-labelledby="inference-title"]';
-  const rootLocator = await actions.readyControl("field", "Configured root", false, { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Configured root"]` });
+  const rootLocator = await actions.readyControl("field", "Search roots and paths", false, { locator: `xpath=${scope}//*[@role="combobox" and @aria-label="Search roots and paths"]` });
   await cli("click", rootLocator); await actions.option("datasets");
   await actions.button("Select file samples.npz", false, { scope });
   await actions.fill("Python interpreter", record.pythonInterpreter, { scope });
@@ -50,6 +47,7 @@ export async function cvParity({
   await cli("click", await actions.readyControl("field", "Publish predictions CSV", false, { locator: "#inference-save_predictions" }));
   await actions.select("Operation", "test");
   await actions.button("Preview evaluation / plot plan", false, { scope });
+  await openPlanDisclosure({ cli, dom });
   await cli("wait", "--fn", `document.getElementById("inference-title").closest("section").querySelector('[aria-label="Approved normalized manifest"]')!==null`);
   const plan = await observe('JSON.parse(document.getElementById("inference-title").closest("section").querySelector("[aria-label=\\"Approved normalized manifest\\"]").textContent)');
   assert.equal(plan.operation, "test");
@@ -63,13 +61,13 @@ export async function cvParity({
   await actions.button("Approve and start this plan", false, { scope });
   await pollRegistry(root, (state) => state.runs.some((run) => run.run_id === plan.run_id && run.state === "completed"), "CV fold evaluation completed", 90000);
   await actions.button("Results", false, { locator: '[data-testid="nav-results"]' }); await button("Refresh artifacts");
-  await cli("wait", "--fn", `Array.from(document.querySelector("#results-title").closest("section").querySelectorAll("tbody tr")).some(r=>r.cells[1]?.textContent.trim().endsWith(".csv"))`);
-  const rows = await observe('Array.from(document.querySelector("#results-title").closest("section").querySelectorAll("tbody tr")).map(r=>Array.from(r.cells).slice(0,3).map(c=>c.textContent.trim()))');
+  await cli("wait", "--fn", `Array.from(document.querySelector("#results-title").closest("section").querySelectorAll("[data-artifact-path]")).some(r=>r.getAttribute('data-artifact-path').endsWith(".csv"))`);
+  const rows = await observe(`Array.from(document.querySelector("#results-title").closest("section").querySelectorAll("[data-artifact-path]")).map(r=>[r.dataset.artifactGeneration + ' / ' + r.dataset.artifactAttempt, r.dataset.artifactPath, r.dataset.artifactSize])`);
   const predictionRows = rows.filter((r) => r[1] === "predictions.csv");
   assert.equal(predictionRows.length, 1, "Exactly one predictions.csv publication row required");
   const prediction = predictionRows[0];
   assert(prediction, "Evaluation must publish a predictions CSV");
-  const artifactScope = `//section[@aria-labelledby="results-title"]//tbody/tr[normalize-space(td[1])=${xpathLiteral(prediction[0].replace(/\s+/g, " ").trim())} and normalize-space(td[2])=${xpathLiteral(prediction[1])}]`;
+  const artifactScope = `//section[@aria-labelledby="results-title"]//*[@data-artifact-generation=${xpathLiteral(prediction[0].split('/')[0].trim())} and @data-artifact-path=${xpathLiteral(prediction[1])}]`;
   const destination = join(downloads, "verified-cv-predictions.csv");
   await cli("download", await actions.readyControl("button", "Download", false, { scope: artifactScope }), destination);
   const bytes = await readFile(destination);

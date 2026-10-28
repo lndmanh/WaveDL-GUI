@@ -1,4 +1,9 @@
 {
+  "ownershipOnly": "Ownership confirmed, supervision unverified",
+  "exactIdentity": "Exact artifact identity",
+  "explicitSource": "Explicit checkpoint, approved plan",
+  "trustedCode": "Trusted runtime code only",
+  "verifiedPng": "Verified PNG previews",
   "publications": "Only verified, completed publications are listed. Downloads are checked before saving.",
   "generationAttempt": "Generation / attempt",
   "artifact": "Artifact",
@@ -52,6 +57,7 @@
   "resultsHelp": "Choose a run in Experiments. Exports use exact generation, size and SHA-256 identity.",
   "working": "Working…",
   "refresh": "Refresh artifacts",
+  "openArtifacts": "Open artifacts",
   "artifactStatus": "Artifact status",
   "selectExperiment": "Select an experiment first.",
   "verifiedPlot": "Verified published diagnostic plot",

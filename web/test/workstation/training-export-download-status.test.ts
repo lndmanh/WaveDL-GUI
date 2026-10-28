@@ -31,10 +31,16 @@ describe('training YAML export status', () => {
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => undefined);
     const wrapper = mount(TrainingExport, { props: { draft, disabled: false } });
+    expect(wrapper.text()).not.toContain('export requested');
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
 
-    await wrapper.get('button').trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Download YAML')!
+      .trigger('click');
 
     expect(click).toHaveBeenCalledOnce();
+    expect(wrapper.get('[role="status"]').text()).toContain('export requested');
     expect(wrapper.text()).toContain('export requested');
     expect(wrapper.text()).toContain('browser controls where it is saved');
     expect(wrapper.text()).not.toContain('downloaded');
@@ -53,9 +59,13 @@ describe('training YAML export status', () => {
     });
     const wrapper = mount(TrainingExport, { props: { draft, disabled: false } });
 
-    await wrapper.get('button').trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Download YAML')!
+      .trigger('click');
 
     expect(wrapper.text()).toContain('YAML export could not be requested');
+    expect(wrapper.get('[role="status"]').text()).toContain('YAML export could not be requested');
     expect(wrapper.text()).not.toContain('Validate all training');
     expect(wrapper.text()).not.toContain('private browser detail');
     vi.advanceTimersByTime(1000);

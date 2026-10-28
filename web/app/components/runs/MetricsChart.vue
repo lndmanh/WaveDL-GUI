@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MetricRecord } from '../../lib/metric-history';
 import { buildPlotSeries, type PlotChannel, type PlotSeries } from '../../lib/plot-series';
 import { plotMetricMessageKeys } from '../../i18n/dynamic-keys';
+import InfoChip from '../common/InfoChip.vue';
 
 const { t, locale } = useI18n({ useScope: 'global' });
 const props = defineProps<{ records: readonly MetricRecord[]; unavailable?: boolean }>();
@@ -167,7 +168,7 @@ onBeforeUnmount(() => {
       <TabsContent :value="channel" force-mount>
         <p v-if="message" role="status">{{ message }}</p>
         <p v-else-if="unavailable" role="status">
-          {{ t('runs.notLive') }}
+          <InfoChip :label="t('runs.lastKnownRuntime')" :text="t('runs.notLive')" uncertain />
         </p>
         <p v-else-if="!projection.series?.pointCount" role="status">
           {{
@@ -188,9 +189,7 @@ onBeforeUnmount(() => {
         />
       </TabsContent>
     </Tabs>
-    <p class="chart-note">
-      {{ t('runs.chartNote') }}
-    </p>
+    <InfoChip :label="t('runs.chartDetails')" :text="t('runs.chartNote')" />
   </section>
 </template>
 

@@ -312,9 +312,9 @@ export async function datasetParity(driver) {
   await snapshot();
   await checkpoint('after-configured-root-snapshot');
   stage('configured-root-snapshot');
-  let rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Configured root"]';
+  let rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Search roots and paths"]';
   stage('configured-root-scroll-before');
-  rootSelector = await actions.readyControl('field', 'Configured root', false, { locator: rootSelector });
+  rootSelector = await actions.readyControl('field', 'Search roots and paths', false, { locator: rootSelector });
   await checkpoint('after-configured-root-ready');
   stage('configured-root-scroll-complete');
   stage('configured-root-actionable');
@@ -382,7 +382,7 @@ print(json.dumps(results,allow_nan=False))
     stage('dataset-choice-clicked', { file: name });
     const format = name.split('.').at(-1).toUpperCase();
     const rows = expectations[name].rows;
-    await firstObserve('ready-wait', ()=>cli('wait', '--fn', `${header}?.querySelector('dd')?.textContent.trim()===${JSON.stringify(format)}&&Array.from(${header}?.querySelectorAll('dt')??[]).some(e=>e.textContent.trim()==='Samples'&&Number(e.nextElementSibling.textContent)===${rows})&&Array.from(${preview}?.querySelectorAll('p')??[]).some(e=>e.textContent.trim().startsWith(${JSON.stringify(format + ' ·')}))&&Array.from(${preview}?.querySelectorAll('p')??[]).some(e=>e.textContent.includes(${JSON.stringify(`Bounded preview: ${rows} of ${rows} rows.`)}))&&!Array.from(${preview}?.querySelectorAll('[role="status"]')??[]).some(e=>e.textContent.includes('Loading'))`));
+    await firstObserve('ready-wait', ()=>cli('wait', '--fn', `${header}?.querySelector('dd')?.textContent.trim()===${JSON.stringify(format)}&&Array.from(${header}?.querySelectorAll('dt')??[]).some(e=>e.textContent.trim()==='Samples'&&Number(e.nextElementSibling.textContent)===${rows})&&Array.from(${preview}?.querySelectorAll('p')??[]).some(e=>e.textContent.trim().startsWith(${JSON.stringify(format + ' ·')}))&&${preview}?.querySelector('[data-testid="preview-bounds"]')?.textContent.includes(${JSON.stringify(`${rows} of ${rows} rows sampled`)})&&!Array.from(${preview}?.querySelectorAll('[role="status"]')??[]).some(e=>e.textContent.includes('Loading'))`));
     stage('dataset-choice-ready', { file: name });
   };
   const selectView = async (name, missingCorrelation = false) => {
@@ -406,7 +406,7 @@ print(json.dumps(results,allow_nan=False))
     await firstObserve('view-wait', ()=>cli('wait', '--fn', `Array.from(${preview}.querySelectorAll('[role="tab"]')).some(e=>e.textContent.trim()===${JSON.stringify(name)}&&e.getAttribute('aria-selected')==='true')&&${missingCorrelation ? `${preview}.querySelector('[role="status"]')?.textContent.includes('Correlation requires at least two sampled rows.')` : `${preview}.querySelector('figure canvas')?.width>0`}`));
     stage('dataset-view-ready', { view: name });
   };
-  const tableRows = async () => dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('table.statistics tbody tr')).map(row=>Array.from(row.cells).map(cell=>cell.textContent.trim())))`);
+  const tableRows = async () => dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('[data-testid="preview-statistic"]')).map(row=>[row.getAttribute('data-feature-index'), ...Array.from(row.querySelectorAll('dd')).map(cell=>cell.textContent.trim())]))`);
   const renderedFigures = async () => dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('figure')).map(f=>({title:f.querySelector('figcaption')?.textContent.trim(),canvases:Array.from(f.querySelectorAll('canvas')).map(c=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let painted=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i])painted++;return {width:c.width,height:c.height,painted};})})))`);
   const verifyStatistics = (rows, expected, description) => {
     check(rows.length === expected.means.length && rows.length <= 40, `${description}: bounded input statistics row count`);
@@ -479,8 +479,8 @@ print(json.dumps(results,allow_nan=False))
     check(info.Format === name.split('.').at(-1).toUpperCase() && Number(info.Samples) === expected.rows && info['Input key'] === 'X' && info['Output key'] === 'y' && info['Input shape'] === expected.inputShape.join(' × ') && info['Output shape'] === expected.outputShape.join(' × ') && info['Input dtype'] === expected.inputDtype && info['Output dtype'] === expected.outputDtype && info['File size'] === 'Unknown', `${name}: genuine metadata header matches file shapes, keys and dtypes; unavailable size is honest`);
     const tabNames = await firstObserve('tabs-public-dom', ()=>dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('[role="tab"]')).map(e=>e.textContent.trim()))`));
     check(JSON.stringify(tabNames) === JSON.stringify(views), `${name}: all six dataset views exposed as tabs`);
-    const bounds = await firstObserve('bounds-public-dom', ()=>dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('p')).find(e=>e.textContent.includes('Bounded preview:'))?.textContent.trim())`));
-    check(bounds.includes(`Bounded preview: ${expected.rows} of ${expected.rows} rows.`) && bounds.includes('not a full-dataset analysis'), `${name}: bounded preview scope is visible`);
+    const bounds = await firstObserve('bounds-public-dom', ()=>dom(`JSON.stringify((()=>{const bounds=${preview}.querySelector('[data-testid="preview-bounds"]');const scope=bounds?.parentElement;const hedge=scope?.querySelector('button[aria-label^="Sample only:"]');return {label:bounds?.textContent.trim(),hedge:hedge?.getAttribute('aria-label'),sameContainer:!!scope&&scope.contains(hedge),hedgeVisible:!!hedge?.getClientRects().length};})())`));
+    check(bounds.label === `${expected.rows} of ${expected.rows} rows sampled` && bounds.hedge === 'Sample only: This is not a full-dataset analysis.' && bounds.sameContainer && bounds.hedgeVisible, `${name}: bounded preview scope and its co-located hedge are visible`);
     const evidence = [];
     for (const view of views) {
       const missingCorrelation = view === 'Correlation' && expected.rows === 1;
@@ -574,7 +574,7 @@ print(json.dumps(results,allow_nan=False))
       await directoryCheckpoint(downloads, `after-export-tab-inventory:${name}:${view}`, [...knownDownloads], record);
       evidence.push({ view, figures, ...(statistics ? { statistics } : {}), exportTarget: target, download: png });
     }
-    formats.push({ name, header: info, expected, statistics: evidence.find(item=>item.view === 'Statistics').statistics, bounds, views: evidence });
+    formats.push({ name, header: info, expected, statistics: evidence.find(item=>item.view === 'Statistics').statistics, bounds: `${bounds.label} · ${bounds.hedge}`, views: evidence });
   }
   check(['samples.mat', 'samples.h5', 'samples.hdf5'].every(name=>JSON.stringify(expectations[name])===JSON.stringify(expectations['samples.npz'])), 'All genuine format fixtures contain numerically equal data and independently validated visible statistics');
   const csv = await dom(`JSON.stringify(Array.from(${preview}.querySelectorAll('button')).filter(e=>e.getClientRects().length&&/CSV/i.test(e.textContent)).map(e=>e.textContent.trim()))`);

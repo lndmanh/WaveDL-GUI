@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { useClientMessages } from '../../composables/useClientMessages';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import InfoChip from '../common/InfoChip.vue';
 import type { AutomaticPlotState } from '../../lib/autoplot-controller';
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
@@ -15,9 +16,12 @@ defineEmits<{ retry: []; stop: []; monitor: [runId: string] }>();
     <AlertTitle>{{ t('results.diagnosticPlots') }}</AlertTitle>
     <AlertDescription>
       <p>{{ clientMessage(state.message) }}</p>
-      <p v-if="state.status === 'armed' || state.status === 'planning'">
-        {{ t('results.automaticHelp') }}
-      </p>
+      <InfoChip
+        v-if="state.status === 'armed' || state.status === 'planning'"
+        :label="t('results.diagnosticPlots')"
+        :text="t('results.automaticHelp')"
+        uncertain
+      />
       <div class="mt-3 flex flex-wrap gap-3">
         <Button
           v-if="state.status === 'error'"

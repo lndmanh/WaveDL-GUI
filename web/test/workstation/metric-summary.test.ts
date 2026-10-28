@@ -59,12 +59,12 @@ describe('current dashboard summary', () => {
     expect(wrapper.text()).toContain('6 s');
     expect(wrapper.get('[aria-label="Per-parameter MAE"]').text()).toContain('P2Unavailable');
     expect(wrapper.get('[aria-label="Convergence health"]').text()).toContain('Severe');
-    expect(wrapper.get('[aria-label="Epoch progress"]').attributes('value')).toBe('0.25');
+    expect(wrapper.get('[aria-label="Epoch progress"]').attributes('aria-valuenow')).toBe('25');
     await wrapper.setProps({ unconfirmed: true });
     expect(wrapper.text()).toContain('Last known runtime metrics');
     expect(wrapper.text()).toContain('do not confirm that the runtime is still active');
     expect(wrapper.text()).toContain('6 s');
-    expect(wrapper.get('[aria-label="Epoch progress"]').attributes('value')).toBe('0.25');
+    expect(wrapper.get('[aria-label="Epoch progress"]').attributes('aria-valuenow')).toBe('25');
     await wrapper.setProps({ unconfirmed: false });
     expect(wrapper.text()).toContain('Current runtime');
     expect(wrapper.text()).not.toContain('Last known runtime metrics');
@@ -96,7 +96,7 @@ describe('current dashboard summary', () => {
     await nextTick();
     expect(wrapper.get('[aria-label="Current runtime metrics"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Last known runtime metrics');
-    expect(wrapper.get('[aria-label="Epoch progress"]').attributes('value')).toBe('0.5');
+    expect(wrapper.get('[aria-label="Epoch progress"]').attributes('aria-valuenow')).toBe('50');
     expect(wrapper.getComponent(MetricSummary).props('summary')).toEqual(summary);
     wrapper.unmount();
   });

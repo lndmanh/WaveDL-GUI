@@ -1,3 +1,4 @@
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Real-browser negative authoring and runtime validation.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -10,11 +11,11 @@ export async function cvResumeRefusal(driver, receipts, observation) {
   const selector = join(root, "private-resume-checkpoint.pth");
   const beforeState = await registry(root);
   const beforeReceiptCount = (await receipts()).length;
-  await fill("cv", "2");
-  await fill("resume", selector);
+  await fill("Cross-validation folds", "2");
+  await fill("Resume checkpoint", selector);
   await button("Preview persisted plan");
   await cli("wait", "--text", "Review the validation errors before requesting a plan.");
-  const observed = await observation("resume");
+  const observed = await observation("Resume checkpoint");
   const error = "Cross-validation does not support nondefault --resume.";
   assert.equal(observed.value, selector);
   assert.equal(observed.invalid, "true");
@@ -25,9 +26,9 @@ export async function cvResumeRefusal(driver, receipts, observation) {
   const afterReceiptCount = (await receipts()).length;
   assert.deepEqual(afterState, beforeState);
   assert.equal(afterReceiptCount, beforeReceiptCount);
-  await fill("resume", "");
-  await cli("wait", "--fn", `(()=>{const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()==='resume');return labels.length===1&&document.getElementById(labels[0].htmlFor)?.getAttribute('aria-invalid')==='false';})()`);
-  const corrected = await observation("resume");
+  await fill("Resume checkpoint", "");
+  await cli("wait", "--fn", `(()=>{const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()==='Resume checkpoint');return labels.length===1&&document.getElementById(labels[0].htmlFor)?.getAttribute('aria-invalid')==='false';})()`);
+  const corrected = await observation("Resume checkpoint");
   assert.equal(corrected.value, "");
   assert.equal(corrected.invalid, "false");
   assert.equal(corrected.error, "");
@@ -43,12 +44,12 @@ export async function trainingValidation(driver) {
   record.trainingValidation = { schemaVersion: 2, invalid: [], unsupported: [], beforeState: before,
     beforeAssets: await packagedAssetHashes(repo) };
   const invalid = [
-    ["batch size", "0"], ["batch size", "1.5"], ["lr", "0"], ["lr", ""],
-    ["workers", "-2"], ["loss weights", "1,Infinity"], ["milestones", "2,3.5"],
-    ["cv", "1"], ["Python interpreter", "python"],
+    ["Batch size", "0"], ["Batch size", "1.5"], ["Learning rate", "0"], ["Learning rate", ""],
+    ["Data loader workers", "-2"], ["Loss weights", "1,Infinity"], ["Scheduler milestones", "2,3.5"],
+    ["Cross-validation folds", "1"], ["Python interpreter", "python"],
   ];
   for (const text of ["Optimizer, loss and scheduling", "Data, checkpoints and cross-validation"]) {
-    const open = await dom(`JSON.stringify(${controlExpression("summary", text)}[0]?.closest('details')?.open)`);
+    const open = await dom(`JSON.stringify(${controlExpression("summary", text)}[0]?.getAttribute('aria-expanded') === 'true')`);
     if (!open) await summary(text);
   }
   const receipts = async () => {
@@ -64,7 +65,7 @@ export async function trainingValidation(driver) {
   const observation = async (label) => dom(`JSON.stringify((()=>{
     const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()===${JSON.stringify(label)});
     const e=labels.length===1?document.getElementById(labels[0].htmlFor):null;
-    return {id:e?.id,value:e?.getAttribute('aria-checked')??e?.value??null,invalid:e?.getAttribute('aria-invalid'),error:e?.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]')?.textContent||''};
+    return {id:e?.id,value:e?.getAttribute('aria-checked')??e?.getAttribute('data-value')??e?.value??null,invalid:e?.getAttribute('aria-invalid'),error:e?.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]')?.textContent||''};
   })())`);
   for (const [name, value] of invalid) {
     const beforeCase = await state();
@@ -86,8 +87,8 @@ export async function trainingValidation(driver) {
       beforeReceiptCount: beforeReceipts.length, afterReceiptCount: (await receipts()).length,
     });
     assert.equal((await receipts()).length, beforeReceipts.length);
-    const corrections = { "batch size": "8", lr: "0.003", workers: "0",
-      "loss weights": "1,1", milestones: "2,3", cv: "0", "Python interpreter": interpreter };
+    const corrections = { "Batch size": "8", "Learning rate": "0.003", "Data loader workers": "0",
+      "Loss weights": "1,1", "Scheduler milestones": "2,3", "Cross-validation folds": "0", "Python interpreter": interpreter };
     await fill(name, corrections[name]);
     await cli("wait", "--fn", `(()=>{const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()===${JSON.stringify(name)});return labels.length===1&&document.getElementById(labels[0].htmlFor)?.getAttribute('aria-invalid')==='false';})()`);
     record.trainingValidation.invalid.at(-1).corrected = await observation(name);
@@ -145,17 +146,17 @@ export async function trainingValidation(driver) {
     environmentDownload: { filename: environmentDownload.filename, bytes: environmentDownload.bytes,
       config: environmentDownload.config },
   };
-  await fill("loss weights", "");
-  await fill("milestones", "");
-  await fill("cv", "2");
+  await fill("Loss weights", "");
+  await fill("Scheduler milestones", "");
+  await fill("Cross-validation folds", "2");
   for (const [name, field, prepare, correct] of [
-    ["cv-compile", "compile", () => checkbox("compile", true), () => checkbox("compile", false)],
-    ["cv-nesterov", "momentum", async () => {
-      await actions.select("optimizer", "sgd"); await checkbox("nesterov", true); await fill("momentum", "0");
-    }, async () => { await checkbox("nesterov", false); await fill("momentum", "0.9"); }],
-    ["cv-plateau", "scheduler factor", async () => {
-      await actions.select("scheduler", "plateau"); await fill("scheduler factor", "1");
-    }, async () => { await fill("scheduler factor", "0.5"); }],
+    ["cv-compile", "Compile model", () => checkbox("Compile model", true), () => checkbox("Compile model", false)],
+    ["cv-nesterov", "Momentum", async () => {
+      await actions.select("Optimizer", "sgd"); await checkbox("Nesterov momentum", true); await fill("Momentum", "0");
+    }, async () => { await checkbox("Nesterov momentum", false); await fill("Momentum", "0.9"); }],
+    ["cv-plateau", "Learning rate reduction factor", async () => {
+      await actions.select("Learning rate schedule", "plateau"); await fill("Learning rate reduction factor", "1");
+    }, async () => { await fill("Learning rate reduction factor", "0.5"); }],
   ]) {
     const beforeReceipts = (await receipts()).length;
     await prepare();
@@ -179,7 +180,7 @@ export async function trainingValidation(driver) {
     });
   }
   record.trainingValidation.cvResumeRefusal = await cvResumeRefusal(driver, receipts, observation);
-  await fill("cv", "0");
+  await fill("Cross-validation folds", "0");
   // Unsupported choices are sent to the real planner; no durable mutation is accepted.
   for (const [label, value] of [["Runtime mode", "bundled"], ["Runtime mode", "container"], ["Device", "mps"]]) {
     const beforeCase = await state();
@@ -201,11 +202,12 @@ export async function trainingValidation(driver) {
       label + " unsupported authoring has no durable mutation");
     await actions.select(label, label === "Device" ? "cpu" : "existing");
   }
-  await fill("batch size", "8");
-  await fill("lr", "0.003");
-  await fill("workers", "0");
+  await fill("Batch size", "8");
+  await fill("Learning rate", "0.003");
+  await fill("Data loader workers", "0");
   await button("Preview persisted plan");
   await cli("wait", "--text", "Persisted plan for approval");
+  await openPlanDisclosure({ cli, dom });
   const approved = JSON.parse(await dom('JSON.stringify(document.querySelector("[aria-label=\\"Approved normalized manifest\\"]")?.textContent)'));
   const rows = JSON.parse(await command(python, ["-c",
     'import json,sqlite3,sys;from pathlib import Path;c=sqlite3.connect((Path(sys.argv[1])/"state"/"registry.db").resolve().as_uri()+"?mode=ro",uri=True);print(json.dumps(list(c.execute("SELECT plan_id,request_payload_json,plan_json FROM plans"))))', root]));
@@ -226,9 +228,10 @@ export async function trainingValidation(driver) {
   const baselineReceiptCount = (await receipts()).length;
   // Add a genuine CV recovery preview without replacing the original cv=0
   // preview evidence. Previewing is not permission to submit or train.
-  await fill("cv", "2");
+  await fill("Cross-validation folds", "2");
   await button("Preview persisted plan");
   await cli("wait", "--text", "Persisted plan for approval");
+  await openPlanDisclosure({ cli, dom });
   const recoveredApproval = JSON.parse(await dom('JSON.stringify(document.querySelector("[aria-label=\\"Approved normalized manifest\\"]")?.textContent)'));
   const recoveredRows = JSON.parse(await command(python, ["-c",
     'import json,sqlite3,sys;from pathlib import Path;c=sqlite3.connect((Path(sys.argv[1])/"state"/"registry.db").resolve().as_uri()+"?mode=ro",uri=True);print(json.dumps(list(c.execute("SELECT plan_id,request_payload_json,plan_json FROM plans"))))', root]));

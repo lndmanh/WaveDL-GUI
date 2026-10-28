@@ -60,8 +60,16 @@ describe('explicit inference registration authority', () => {
       expect(wrapper.get('label[for="inference-import-modules"]').text()).toBe(
         'Custom registration modules (comma-separated)',
       );
-      expect(wrapper.text()).toContain('These execute code in the approved runtime');
-      expect(wrapper.text()).toContain('No modules are inferred from checkpoint metadata.');
+      const help = wrapper.get('button[aria-label^="Trusted runtime code only:"]');
+      expect(help.attributes('aria-label')).toContain('These execute code in the approved runtime');
+      expect(help.attributes('aria-label')).toContain(
+        'No modules are inferred from checkpoint metadata.',
+      );
+      await help.trigger('click');
+      await flushPromises();
+      expect(document.body.textContent).toContain(
+        'No modules are inferred from checkpoint metadata.',
+      );
       await input.setValue('custom_models.registration, custom_losses');
       await flushPromises();
       expect(imports()).toEqual(['custom_models.registration', 'custom_losses']);

@@ -1,3 +1,4 @@
+import { openPlanDisclosure, normalizeTrainingFieldLabel } from './browser_actions.mjs';
 // Full real-browser authoring slice. It deliberately stops at plan preview:
 // no training execution, remote host, or Windows path is exercised here.
 import assert from "node:assert/strict";
@@ -102,7 +103,7 @@ export async function fullTrainingFields(driver) {
   assert.deepEqual(before.executions, []);
   assert.equal(options.length, 46);
   const nativeActions = [];
-  const labelFor = (name) => name.replaceAll("_", " ");
+  const labelFor = (name) => normalizeTrainingFieldLabel(name);
   const details = {
     "Optimizer, loss and scheduling": [
       "weight_decay",
@@ -146,7 +147,7 @@ export async function fullTrainingFields(driver) {
   );
   for (const text of Object.keys(details)) {
     const open = await dom(
-      `JSON.stringify(${controlExpression("summary", text)}[0]?.closest('details')?.open)`,
+      `JSON.stringify(${controlExpression("summary", text)}[0]?.getAttribute('aria-expanded') === 'true')`,
     );
     if (!open) await actions.expandSummary(text);
   }
@@ -171,7 +172,7 @@ export async function fullTrainingFields(driver) {
     else if (option.multiple) await fill(labelFor(option.name), authored.join("\n"));
     else await fill(labelFor(option.name), String(authored));
     const observation = await dom(
-      `JSON.stringify(${controlExpression("field", labelFor(option.name))}.filter(e=>e.getClientRects().length).map(e=>({id:e.id,label:${JSON.stringify(labelFor(option.name))},tag:e.tagName,value:e.getAttribute('aria-checked')??e.value})))`,
+      `JSON.stringify(${controlExpression("field", labelFor(option.name))}.filter(e=>e.getClientRects().length).map(e=>({id:e.id,label:${JSON.stringify(labelFor(option.name))},tag:e.tagName,value:e.getAttribute('aria-checked')??e.getAttribute('data-value')??e.value})))`,
     );
     assert.equal(observation.length, 1);
     const expected =
@@ -209,10 +210,10 @@ export async function fullTrainingFields(driver) {
   await cli(
     "wait",
     "--fn",
-    `Array.from(document.querySelectorAll('pre')).some(e=>e.getClientRects().length&&e.textContent.includes('wavedl.launcher'))`,
+    `Array.from(document.querySelectorAll('[aria-label="Copied standalone command"]')).some(e=>e.getClientRects().length&&e.textContent.includes('wavedl.launcher'))`,
   );
   const text = await dom(
-    'JSON.stringify(Array.from(document.querySelectorAll("pre")).find(e=>e.getClientRects().length&&e.textContent.includes("wavedl.launcher"))?.textContent)',
+    'JSON.stringify(Array.from(document.querySelectorAll("[aria-label=\\\"Copied standalone command\\\"]")).find(e=>e.getClientRects().length&&e.textContent.includes("wavedl.launcher"))?.textContent)',
   );
   const argv = JSON.parse(
     await command(
@@ -231,6 +232,7 @@ export async function fullTrainingFields(driver) {
   );
   await button("Preview persisted plan");
   await cli("wait", "--text", "Persisted plan for approval");
+  await openPlanDisclosure({ cli, dom });
   const approved = JSON.parse(
     await dom(
       'JSON.stringify(document.querySelector("[aria-label=\\"Approved normalized manifest\\"]")?.textContent)',

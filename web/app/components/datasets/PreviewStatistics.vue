@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import { Badge } from '@/components/ui/badge';
 import type { DatasetPreview } from '../../lib/dataset-preview';
 import PreviewPlot from './PreviewPlot.vue';
 const { t } = useI18n({ useScope: 'global' });
@@ -20,46 +21,34 @@ defineProps<{ statistics: DatasetPreview['input_statistics'] }>();
       :y="statistics.stds"
     />
   </div>
-  <div class="overflow-auto">
-    <table class="statistics">
-      <caption>
-        {{
-          t('datasets.statsCaption')
-        }}
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">{{ t('datasets.feature') }}</th>
-          <th scope="col">{{ t('datasets.mean') }}</th>
-          <th scope="col">{{ t('datasets.std') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(feature, index) in statistics.feature_indices" :key="feature">
-          <th scope="row">{{ feature }}</th>
-          <td>{{ statistics.means[index] ?? t('datasets.missing') }}</td>
-          <td>{{ statistics.stds[index] ?? t('datasets.missing') }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <section class="flex flex-col gap-3" :aria-label="t('datasets.statsCaption')">
+    <h4 class="text-sm font-medium">{{ t('datasets.statsCaption') }}</h4>
+    <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <li
+        v-for="(feature, index) in statistics.feature_indices"
+        :key="feature"
+        data-testid="preview-statistic"
+        :data-feature-index="feature"
+        class="flex flex-col gap-3 rounded-xl border p-4"
+      >
+        <Badge variant="outline" class="self-start">
+          {{ t('datasets.feature') }} {{ feature }}
+        </Badge>
+        <dl class="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt class="text-muted-foreground">{{ t('datasets.mean') }}</dt>
+            <dd class="break-all font-medium tabular-nums">
+              {{ statistics.means[index] ?? t('datasets.missing') }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">{{ t('datasets.std') }}</dt>
+            <dd class="break-all font-medium tabular-nums">
+              {{ statistics.stds[index] ?? t('datasets.missing') }}
+            </dd>
+          </div>
+        </dl>
+      </li>
+    </ul>
+  </section>
 </template>
-
-<style scoped>
-.statistics-plots {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 1rem;
-}
-.statistics {
-  width: 100%;
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
-}
-.statistics th,
-.statistics td {
-  padding: 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-</style>

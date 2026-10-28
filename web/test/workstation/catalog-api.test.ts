@@ -11,8 +11,18 @@ const catalogue = {
     {
       id: 'cnn',
       display_name: 'CNN',
+      architecture_family: 'CNN',
+      author_institution: 'Example',
+      year_published: 1989,
+      params_m: 1.6,
+      size_mb: 6,
+      short_description: 'Simple convolutional baseline',
       description: 'Description',
       best_for: 'Baseline',
+      pros: ['Fast'],
+      cons: ['Limited capacity'],
+      compute_tier: 'Edge',
+      tags: ['baseline'],
       supported_dims: [1, 2, 3],
       is_pretrained: false,
     },
@@ -188,6 +198,26 @@ describe('scoped daemon catalogues', () => {
     expect(() => api.selectModel({ ...model }, models)).toThrow('Reload');
     await session.reconnect('token');
     expect(() => api.selectModel(model, models)).toThrow('Reload');
+  });
+  it('retains the daemon structured fields on the frozen catalogue object', async () => {
+    const { api } = await setup(catalogue);
+    const models = await api.models();
+    const model = models[0];
+    expect(model).toMatchObject({
+      architectureFamily: 'CNN',
+      authorInstitution: 'Example',
+      yearPublished: 1989,
+      paramsM: 1.6,
+      sizeMb: 6,
+      shortDescription: 'Simple convolutional baseline',
+      pros: ['Fast'],
+      cons: ['Limited capacity'],
+      computeTier: 'Edge',
+      tags: ['baseline'],
+    });
+    expect(Object.isFrozen(models)).toBe(true);
+    expect(Object.isFrozen(model?.pros)).toBe(true);
+    expect(Object.isFrozen(model?.tags)).toBe(true);
   });
   it.each([
     { ...catalogue, runtime_verified: true },

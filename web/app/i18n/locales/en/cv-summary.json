@@ -1,4 +1,5 @@
 {
+  "publicationEvidence": "Publication evidence, not completion",
   "title": "Cross-validation summary",
   "help": "Verified completed publication, not proof of successful run completion. This summary is not model weights. Select an exact generation and attempt; no latest-generation inference is used.",
   "publication": "Summary publication",

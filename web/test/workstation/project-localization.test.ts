@@ -14,7 +14,7 @@ import {
 } from '../../shared/schemas/training-request';
 import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
+import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
 import PlanApproval from '../../app/components/project/PlanApproval.vue';
 import TrainingExport from '../../app/components/project/TrainingExport.vue';
@@ -35,6 +35,55 @@ const vietnameseTrainingFields = viTrainingFields as Record<
   string,
   { label: string; description: string }
 >;
+
+const expectedHumanLabels: Record<string, string> = {
+  model: 'Model architecture',
+  import_modules: 'Registration modules',
+  pretrained: 'Pretrained weights',
+  batch_size: 'Batch size',
+  lr: 'Learning rate',
+  epochs: 'Epochs',
+  patience: 'Early stopping patience',
+  weight_decay: 'Weight decay',
+  grad_clip: 'Gradient clipping',
+  grad_accum_steps: 'Gradient accumulation steps',
+  loss: 'Loss function',
+  huber_delta: 'Huber delta',
+  loss_weights: 'Loss weights',
+  optimizer: 'Optimizer',
+  momentum: 'Momentum',
+  nesterov: 'Nesterov momentum',
+  betas: 'Beta coefficients',
+  scheduler: 'Learning rate schedule',
+  scheduler_patience: 'Learning rate patience',
+  min_lr: 'Minimum learning rate',
+  scheduler_factor: 'Learning rate reduction factor',
+  warmup_epochs: 'Warmup epochs',
+  step_size: 'Scheduler step interval',
+  milestones: 'Scheduler milestones',
+  data_path: 'Training dataset',
+  workers: 'Data loader workers',
+  seed: 'Random seed',
+  deterministic: 'Deterministic training',
+  cache_validate: 'Cache validation',
+  single_channel: 'Single-channel data',
+  cv: 'Cross-validation folds',
+  cv_stratify: 'Stratified cross-validation',
+  cv_bins: 'Stratification bins',
+  resume: 'Resume checkpoint',
+  save_every: 'Checkpoint interval',
+  fresh: 'Fresh training',
+  compile: 'Compile model',
+  precision: 'Mixed precision',
+  constraint: 'Constraint expressions',
+  constraint_file: 'Constraint file',
+  constraint_weight: 'Constraint weights',
+  constraint_reduction: 'Constraint reduction',
+  wandb: 'W&B logging',
+  wandb_watch: 'W&B gradient tracking',
+  project_name: 'W&B project name',
+  run_name: 'W&B run name',
+};
 
 describe('project presentation localization', () => {
   it('keeps coexisting hidden project and settings control IDs unique and checkbox names reactive', async () => {
@@ -79,7 +128,7 @@ describe('project presentation localization', () => {
     i18n.global.locale.value = 'en';
     await nextTick();
     for (const checkbox of wrapper.findAll('[role="checkbox"][id$="-training-deterministic"]'))
-      expect(checkbox.attributes('aria-label')).toBe('deterministic');
+      expect(checkbox.attributes('aria-label')).toBe('Deterministic training');
     wrapper.unmount();
     owner.detach();
   });
@@ -96,8 +145,10 @@ describe('project presentation localization', () => {
         label: `training.${name}.label`,
         description: `training.${name}.description`,
       });
-      expect(englishTrainingFields[name]?.label).toBe(name.replaceAll('_', ' '));
-      expect(englishTrainingFields[name]?.description).toBe(option?.description);
+      expect(englishTrainingFields[name]?.label).toBe(expectedHumanLabels[name]);
+      expect(englishTrainingFields[name]?.description).toBe(
+        option?.description.replace(/\.?\s*Available:\s*\(\)/, '').trim(),
+      );
       expect(vietnameseTrainingFields[name]?.label).not.toBe(englishTrainingFields[name]?.label);
       expect(vietnameseTrainingFields[name]?.description).not.toBe(
         englishTrainingFields[name]?.description,
@@ -138,7 +189,7 @@ describe('project presentation localization', () => {
     expect(wrapper.text()).toContain('không bao giờ xóa dữ liệu lần chạy trước');
     i18n.global.locale.value = 'en';
     await nextTick();
-    expect(wrapper.get('label[for$="-training-batch_size"]').text()).toBe('batch size');
+    expect(wrapper.get('label[for$="-training-batch_size"]').text()).toBe('Batch size');
     expect(snapshot()).toBe(draft);
     wrapper.unmount();
   });
@@ -205,11 +256,11 @@ describe('project presentation localization', () => {
     const wrapper = mount(
       host,
       {
-        global: { stubs: { BrowseContainer: true, ModelSelector: true, DatasetInfoPanel: true } },
+        global: { stubs: { DatasetPathPicker: true, ModelSelector: true, DatasetInfoPanel: true } },
       },
       i18n,
     );
-    wrapper.getComponent(BrowseContainer).vm.$emit('select', data);
+    wrapper.getComponent(DatasetPathPicker).vm.$emit('select', data);
     wrapper.getComponent(CustomModelSelector).vm.$emit('select', model);
     await nextTick();
     await wrapper.get('input[name="runtime.python"]').setValue('/usr/bin/python3');
@@ -231,11 +282,23 @@ describe('project presentation localization', () => {
     expect(calls).toHaveLength(requests);
     expect(wrapper.getComponent(PlanApproval).props('plan')).toBe(preview);
     expect(wrapper.text()).toContain('/data/English name.npz');
+    expect(wrapper.get('[data-testid="selected-dataset"]').text()).toBe('English name.npz');
+    expect(wrapper.get('[data-testid="selected-dataset"]').text()).not.toContain('daemon-one');
+    expect(
+      wrapper
+        .findAll('button[aria-label]')
+        .some(
+          (button) =>
+            button.attributes('aria-label')?.includes('/data/English name.npz') &&
+            button.attributes('aria-label')?.includes('daemon-one'),
+        ),
+    ).toBe(true);
+    await wrapper.get('[data-testid="plan-raw-disclosure"]').trigger('click');
     expect(wrapper.text()).toContain('Do not translate daemon evidence');
     expect(wrapper.text()).toContain('Kế hoạch đã lưu để phê duyệt');
     expect(trainingYaml(wrapper.getComponent(TrainingExport).props('draft'))).toBe(yaml);
     expect(trainingCommand(wrapper.getComponent(TrainingExport).props('draft'))).toBe(command);
-    await wrapper.getComponent(PlanApproval).get('button').trigger('click');
+    await wrapper.getComponent(PlanApproval).get('button[data-slot="button"]').trigger('click');
     await vi.waitFor(() =>
       expect(calls.filter((call) => call.path === '/api/runs')).toHaveLength(1),
     );
@@ -243,7 +306,7 @@ describe('project presentation localization', () => {
       JSON.stringify({ plan_id: ids.plan_id }),
     );
     await flushPromises();
-    expect(wrapper.text()).toContain(`${ids.run_id} · đã gửi`);
+    expect(wrapper.text()).toContain(`${ids.run_id} · Đã gửi`);
     wrapper.unmount();
     owner.detach();
     invalidate.mockRestore();
@@ -263,7 +326,10 @@ describe('project presentation localization', () => {
       setup: () => () => h(TrainingExport, { draft, disabled: false }),
     });
     const wrapper = mount(host, undefined, i18n);
-    await wrapper.findAll('button')[1]?.trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Copy standalone CLI command')
+      ?.trigger('click');
     expect(wrapper.get('[role="status"]').text()).toBe(
       'Choose explicit CPU or CUDA for a reproducible standalone command.',
     );

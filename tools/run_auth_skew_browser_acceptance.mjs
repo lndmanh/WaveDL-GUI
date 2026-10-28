@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { openPlanDisclosure } from './browser_actions.mjs';
 // Dedicated same-daemon authentication/skew acceptance.  This is additive to
 // run_web_acceptance.mjs and deliberately owns its browser profile and daemon.
 import assert from "node:assert/strict";
@@ -207,8 +208,8 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     // Establish genuine nonempty authority through the normal labelled editor,
     // persisted approval and CPU runtime before testing retirement.
     await actions.button("New training run", false, { locator: '[data-testid="nav-project"]' });
-    const rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Configured root"]';
-    const preparedRoot = await actions.readyControl("field", "Configured root", false, {
+    const rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Search roots and paths"]';
+    const preparedRoot = await actions.readyControl("field", "Search roots and paths", false, {
       locator: rootSelector,
     });
     await cli("click", preparedRoot);
@@ -218,7 +219,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     await cli(
       "wait",
       "--fn",
-      "Array.from(document.querySelectorAll('p')).some(e => e.textContent.trim().startsWith('Dataset: ') && e.textContent.includes('/samples.npz'))",
+      "Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Dataset: ') && e.textContent.includes('/samples.npz'))",
     );
     await button("Next step");
     await cli("wait", "--text", "Choose CNN");
@@ -226,7 +227,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     await cli(
       "wait",
       "--fn",
-      "Array.from(document.querySelectorAll('p')).some(e => e.textContent.trim().startsWith('Model: cnn'))",
+      "Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Model: cnn'))",
     );
     report.trainingEditorReadiness = await openTrainingEditor({ button, cli, dom });
     const interpreter = await command(python, ["-c", "import sys; print(sys.executable)"]);
@@ -281,6 +282,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     await actions.select("precision", "no");
     await button("Preview persisted plan");
     await cli("wait", "--text", "Persisted plan for approval");
+    await openPlanDisclosure({ cli, dom });
     const approved = await observe(
       "document.querySelector('[aria-label=\"Approved normalized manifest\"]')?.textContent",
     );
@@ -294,7 +296,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     report.stage = "nonempty-history";
     await cli("wait", "--text", "Run detail");
     await waitFor(
-      "(() => { const history=document.querySelector('[aria-label=\"Runtime metric history\"]'); const current=document.querySelector('[aria-label=\"Current runtime metrics\"]'); return /Active checkpoint lineage · [1-9][0-9]* steps/.test(history?.innerText ?? '') && !!history?.querySelector('canvas') && !!current?.querySelector('progress'); })()",
+      "(() => { const history=document.querySelector('[aria-label=\"Runtime metric history\"]'); const current=document.querySelector('[aria-label=\"Current runtime metrics\"]'); return /Active checkpoint lineage · [1-9][0-9]* steps/.test(history?.innerText ?? '') && !!history?.querySelector('canvas') && !!current?.querySelector('[role=\\\"progressbar\\\"]'); })()",
       "real nonempty runtime metric history",
       60000,
     );
