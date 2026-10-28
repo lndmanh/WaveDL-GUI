@@ -9,7 +9,7 @@ import { access, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { boundedCommand } from "./browser_process.mjs";
-import { createBrowserActions } from "./browser_actions.mjs";
+import { createBrowserActions, normalizeTrainingFieldLabel } from "./browser_actions.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { observeCursorStorage } from "./browser_cursor_storage.mjs";
 import {
@@ -219,7 +219,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     await cli(
       "wait",
       "--fn",
-      "Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Dataset: ') && e.textContent.includes('/samples.npz'))",
+      "Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim() === 'samples.npz') && Array.from(document.querySelectorAll('button[aria-label]')).some(e => e.getAttribute('aria-label').startsWith('Dataset: ') && e.getAttribute('aria-label').includes('/samples.npz'))",
     );
     await button("Next step");
     await cli("wait", "--text", "Choose CNN");
@@ -259,7 +259,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
         try {
           await actions.fill(label, value);
           const observed = await observe(
-            `(() => { const label = Array.from(document.querySelectorAll('label')).find(e => e.textContent.trim() === ${JSON.stringify(label)} && e.getClientRects().length); const field = label && document.getElementById(label.htmlFor); return { count: label ? 1 : 0, id: label?.htmlFor ?? null, value: field?.value ?? null, visible: !!field?.getClientRects().length }; })()`,
+            `(() => { const label = Array.from(document.querySelectorAll('label')).find(e => e.textContent.trim() === ${JSON.stringify(normalizeTrainingFieldLabel(label))} && e.getClientRects().length); const field = label && document.getElementById(label.htmlFor); return { count: label ? 1 : 0, id: label?.htmlFor ?? null, value: field?.value ?? null, visible: !!field?.getClientRects().length }; })()`,
           );
           if (observed.count === 1 && observed.visible && observed.value === String(value))
             return observed;
@@ -270,7 +270,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
         await delay(250);
       }
       report.trainingFieldFailure = await observe(
-        `(() => Array.from(document.querySelectorAll('label')).filter(e => e.textContent.trim() === ${JSON.stringify(label)}).map(e => ({for:e.htmlFor,visible:!!e.getClientRects().length,value:document.getElementById(e.htmlFor)?.value ?? null})))()`,
+        `(() => Array.from(document.querySelectorAll('label')).filter(e => e.textContent.trim() === ${JSON.stringify(normalizeTrainingFieldLabel(label))}).map(e => ({for:e.htmlFor,visible:!!e.getClientRects().length,value:document.getElementById(e.htmlFor)?.value ?? null})))()`,
       );
       throw lastError;
     };
@@ -355,7 +355,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
           stalePlan: !!document.querySelector('[aria-label="Approved normalized manifest"]'),
           staleHistory: !!document.querySelector('[aria-label="Runtime metric history"] canvas'),
           staleSelectedRun: !!document.querySelector('[aria-label="Selected run"]'),
-          mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Cancel run|Preview persisted plan/.test(e.textContent)).length,
+          mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Request cancellation|Preview persisted plan/.test(e.textContent)).length,
           storage: ${storageExpression},
         })`);
         report.revoked = revoked;
@@ -383,7 +383,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     const reauthed = await observe(`({
       connected: document.body.innerText.includes('Connected'),
       authMessage: document.body.innerText.includes('Your session ended. Sign in again.'),
-      mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Cancel run|Preview persisted plan/.test(e.textContent)).length,
+      mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Request cancellation|Preview persisted plan/.test(e.textContent)).length,
       storage: ${storageExpression},
     })`);
     report.reauthed = reauthed;

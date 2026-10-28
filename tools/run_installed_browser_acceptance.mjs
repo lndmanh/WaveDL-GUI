@@ -244,7 +244,7 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
   assert.deepEqual(record.predictions.actual, record.predictions.expected);
   record.stage = "installed-static-deep-link-api-separation";
   await cli("open", `${origin}/settings/storage`);
-  record.staticClient = await dom(`(async()=>{const response=await fetch('/api/unknown',{cache:'no-store',headers:{accept:'text/html'}});return JSON.stringify({path:location.pathname,shell:document.body.innerText.includes('WaveDL'),apiStatus:response.status,apiType:response.headers.get('content-type')})})()`);
+  record.staticClient = await dom(`(async()=>{const response=await fetch('/api/unknown',{cache:'no-store',headers:{accept:'text/html'}});return JSON.stringify({path:location.pathname,shell:document.title.includes('WaveDL')&&!!document.querySelector('[data-testid="workstation-nav"]'),apiStatus:response.status,apiType:response.headers.get('content-type')})})()`);
   record.finalRegistry = await registry();
   record.runtimePids = JSON.parse(await py(`import json,sqlite3,sys
 from pathlib import Path

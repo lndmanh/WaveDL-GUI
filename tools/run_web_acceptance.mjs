@@ -17,7 +17,7 @@ import { downloadNameProvenance } from './browser_download_names.mjs';
 import { observeCursorStorage } from './browser_cursor_storage.mjs';
 import { datasetParity } from './browser_dataset_parity.mjs';
 import { openTrainingEditor, editorFieldObservationExpression } from './browser_training_editor.mjs';
-import { createBrowserActions, controlExpression, actionableExpression, xpathLiteral, DRIVER_READINESS_MODE } from './browser_actions.mjs';
+import { createBrowserActions, controlExpression, actionableExpression, xpathLiteral, DRIVER_READINESS_MODE, normalizeTrainingFieldLabel } from './browser_actions.mjs';
 import { boundedCommand } from './browser_process.mjs';
 import { retainFailurePrefixes } from './browser_failure_evidence.mjs';
 import { browserLaunchArgs, browserTemporaryEnvironment } from './browser_launch_policy.mjs';
@@ -249,7 +249,7 @@ async function scenario(name) {
   };
   const summary = async (text) => {
     const before = await registry(root);
-    const authoredFields = ['Python interpreter', 'epochs', 'patience'];
+    const authoredFields = ['Python interpreter', 'epochs', 'patience'].map(normalizeTrainingFieldLabel);
     const fieldValuesExpression = `JSON.stringify(${JSON.stringify(authoredFields)}.map(name => {
       const label = Array.from(document.querySelectorAll('label')).find(e => e.getClientRects().length && e.textContent.trim() === name);
       return label ? document.getElementById(label.htmlFor)?.value : null;
@@ -258,7 +258,7 @@ async function scenario(name) {
     await actions.expandSummary(text);
     check(true, `Summary ${text} deliberately expanded through its native visible control`);
     check(await dom(`JSON.stringify(!Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && ['Waiting for daemon…', 'Stop waiting'].includes(e.textContent.trim())))`), 'Expanding training options did not trigger browser planning or request waiting');
-    check(JSON.stringify(await dom(fieldValuesExpression)) === JSON.stringify(valuesBefore), 'Expanding training options preserved authored interpreter, epochs and patience');
+    check(valuesBefore.every((value) => typeof value === 'string') && JSON.stringify(await dom(fieldValuesExpression)) === JSON.stringify(valuesBefore), 'Expanding training options preserved authored interpreter, epochs and patience');
     const after = await registry(root);
     record.authoringActionRegistry ??= [];
     record.authoringActionRegistry.push({ action: 'expand-summary', label: text, before, after });
@@ -353,7 +353,7 @@ async function scenario(name) {
     await actions.option('datasets');
     await cli('wait', '--text', 'samples.npz');
     await button('Select file samples.npz');
-    await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Dataset: ') && e.textContent.includes('/samples.npz'))`);
+    await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim() === 'samples.npz') && Array.from(document.querySelectorAll('button[aria-label]')).some(e => e.getAttribute('aria-label').startsWith('Dataset: ') && e.getAttribute('aria-label').includes('/samples.npz'))`);
     await button('Next step');
     await cli('wait', '--text', 'Choose CNN');
     if (name === 'wizard-progression') {
@@ -429,7 +429,7 @@ async function scenario(name) {
       await cli('wait', '--fn', `document.querySelector('[aria-current="step"]')?.textContent.trim().startsWith('5.')`);
       await button('Previous step');
       await button('Next step');
-      const reviewBefore = await dom(`JSON.stringify({step:document.querySelector('[aria-current="step"]')?.textContent.trim(),epochs:Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()==='epochs')?.htmlFor && document.getElementById(Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()==='epochs').htmlFor)?.value})`);
+      const reviewBefore = await dom(`JSON.stringify({step:document.querySelector('[aria-current="step"]')?.textContent.trim(),epochs:Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()===${JSON.stringify(normalizeTrainingFieldLabel('epochs'))})?.htmlFor && document.getElementById(Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()===${JSON.stringify(normalizeTrainingFieldLabel('epochs'))}).htmlFor)?.value})`);
       check(reviewBefore.step?.startsWith('5.'), 'Valid dataset/model and back-forward navigation preserve guided draft through review');
       record.wizardReview = reviewBefore;
       record.wizardAfterNavigation = await registry(root);
@@ -685,8 +685,8 @@ async function scenario(name) {
         await waitRunState(root, 'running');
         await button('Request cancellation');
         record.terminalBackendSnapshot = await pollRegistry(root, (state) => state.executions.some((execution) => execution.observed_status === 'terminal'), 'Cancellation backend terminal state', 45000);
-        await cli('wait', '--text', 'cancelled');
-        check(await dom(`JSON.stringify(document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'Cancelled')`), 'Selected run displays fresh daemon-confirmed cancelled terminal state');
+        await cli('wait', '--fn', `Array.from(document.querySelectorAll('[aria-label="Selected run"] [data-run-state="cancelled"]')).some(e => e.getClientRects().length)`);
+        check(await dom(`JSON.stringify(document.querySelector('[aria-label="Selected run"] [data-run-state]')?.textContent.trim() === 'Cancelled')`), 'Selected run displays fresh daemon-confirmed cancelled terminal state');
         check((await registry(root)).control[0].cancellation_requested === 1, 'Cancellation intent and independently persisted terminal backend observation confirmed');
       } else {
         await pollRegistry(root, (state) => {
@@ -707,7 +707,7 @@ async function scenario(name) {
           check(true, 'One completed training plan/run/execution and no cancellation after metadata integrity refusal');
           record.snapshot = await snapshot(); record.status = 'passed'; return;
         }
-        await cli('wait', '--text', 'completed');
+        await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-run-state="completed"]')).some(e => e.getClientRects().length && e.textContent.trim() === 'Completed')`);
         check(true, 'Real CPU training completed, confirmed in daemon registry and browser');
         if (partialBest) {
           if (partialBest === 'refusal') {

@@ -52,7 +52,7 @@ export const selectedObservationExpression = `(() => {
   const detail = details[0];
   const metrics = detail.querySelector('section[aria-label="Current runtime metrics"]');
   const history = detail.querySelector('section.metrics-chart');
-  const badge = detail.querySelector('[data-slot="badge"]')?.textContent.trim();
+  const badge = detail.querySelector('[data-run-state]')?.textContent.trim();
   return {runId: detail.querySelector('.identity')?.textContent.trim(), badge,
     emptyMetrics: !!metrics && !!history && !detail.querySelector('progress, [role="progressbar"], canvas, .uplot') &&
       !metrics.querySelector('dl, dd') && metrics.textContent.includes('Waiting for metrics from the current runtime.'),

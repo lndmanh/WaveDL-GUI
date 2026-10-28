@@ -64,15 +64,20 @@ export async function authoringParity(driver) {
   await button('Next step');
   await button('Previous step');
   await button('Show full editor');
-  record.guidedSelectionsPreserved = await dom(`JSON.stringify((()=>{const dataset=document.querySelector('[data-testid="selected-dataset"]');const details=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: Dataset: '));return dataset?.textContent.trim()==='samples.npz'&&details?.getAttribute('aria-label').includes('/samples.npz')&&Array.from(document.querySelectorAll('[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn'));})())`);
+  record.guidedSelectionsPreserved = await dom(`JSON.stringify((()=>{const dataset=document.querySelector('[data-testid="selected-dataset"]');const details=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: '));return dataset?.textContent.trim()==='samples.npz'&&details?.getAttribute('aria-label').includes('/samples.npz')&&Array.from(document.querySelectorAll('[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn'));})())`);
   check(record.guidedSelectionsPreserved, 'Guided backward/forward navigation preserved genuine daemon dataset and catalogue model');
 
   await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
   await cli('wait', '--text', 'Browser preferences, not daemon administration.');
-  record.downloadSettingsGuidance = await dom(`JSON.stringify(document.querySelector('#downloads-heading')?.closest('section')?.innerText)`);
+  // The full guidance sits behind the section's info control; open it as a user would.
+  const downloadsInfo = 'xpath=//section[@aria-labelledby="downloads-heading"]//button[@aria-label="Downloads"]';
+  await actions.button('Downloads', false, { locator: downloadsInfo });
+  await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-slot="popover-content"]')).some(e => e.getClientRects().length && e.textContent.includes('Your browser chooses where'))`);
+  record.downloadSettingsGuidance = await dom(`JSON.stringify([document.querySelector('#downloads-heading')?.closest('section')?.innerText, ...Array.from(document.querySelectorAll('[data-slot="popover-content"]')).filter(e => e.getClientRects().length).map(e => e.innerText)].join('\\n'))`);
+  await actions.button('Downloads', false, { locator: downloadsInfo });
   check(record.downloadSettingsGuidance.includes('Your browser chooses where'), 'Settings honestly exposes browser-owned download guidance, not an invented workstation folder preference');
   await expand('Training and optional W&B defaults');
-  await fill('Epochs', '19');
+  await fill('Epochs', '19', { scope: '//*[@role="dialog"]' });
   await button('Save training defaults');
   await cli('wait', '--text', 'Defaults saved for new drafts on this daemon.');
   await button('Close overlay');
@@ -102,14 +107,14 @@ export async function authoringParity(driver) {
   await button('Confirm reset');
   const resetValues = await values(['Epochs', 'Batch size', 'Python interpreter']);
   check(Number(resetValues[0]) === defaults.epochs && Number(resetValues[1]) === defaults.batch_size && resetValues[2] === interpreter, 'Confirmed project reset restored bundled defaults and preserved execution interpreter');
-  check(await dom(`JSON.stringify((()=>{const dataset=document.querySelector('[data-testid="selected-dataset"]');const details=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: Dataset: '));return dataset?.textContent.trim()==='samples.npz'&&details?.getAttribute('aria-label').includes('/samples.npz')&&Array.from(document.querySelectorAll('[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn'));})())`), 'Confirmed reset preserved the selected dataset filename, its full daemon path and catalogue model');
+  check(await dom(`JSON.stringify((()=>{const dataset=document.querySelector('[data-testid="selected-dataset"]');const details=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: '));return dataset?.textContent.trim()==='samples.npz'&&details?.getAttribute('aria-label').includes('/samples.npz')&&Array.from(document.querySelectorAll('[data-testid=selected-model]')).some(e=>e.textContent.trim().startsWith('Model: cnn'));})())`), 'Confirmed reset preserved the selected dataset filename, its full daemon path and catalogue model');
   record.resetContract = { restoredBundledDefaults: true, savedNewRunEpochs: 19, restoredEpochs: Number(resetValues[0]), interpreterPreserved: true };
   const afterResetDownload = await exportYaml('authoring-after-reset.yaml');
   check(afterResetDownload.config.data_path === beforeResetDownload.config.data_path && afterResetDownload.config.model === beforeResetDownload.config.model && afterResetDownload.config.epochs === defaults.epochs, 'Actual reset exports preserve dataset/model and restore bundled defaults in the unchanged browser download directory');
   await access(beforeResetDownload.path); await access(afterResetDownload.path);
   await actions.button('Settings', false, { locator: '[data-testid="nav-settings"]' });
   await expand('Training and optional W&B defaults');
-  check((await values(['Epochs']))[0] === '19', 'Project reset preserved separately saved browser new-run preference');
+  check(await dom(`JSON.stringify((() => { const label = Array.from(document.querySelectorAll('[role="dialog"] label')).find(e => e.getClientRects().length && e.textContent.trim() === 'Epochs'); return label ? document.getElementById(label.htmlFor)?.value : null; })())`) === '19', 'Project reset preserved separately saved browser new-run preference');
   await button('Close overlay');
   await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
   await author();

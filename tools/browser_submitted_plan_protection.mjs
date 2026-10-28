@@ -58,8 +58,8 @@ print(json.dumps([dict(row) for row in c.execute("SELECT * FROM execution_contro
     const field=name=>{const label=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e=>e.getClientRects().length&&e.textContent.trim()===name);const control=label&&document.getElementById(label.htmlFor);return control?.getAttribute('data-value') ?? control?.value ?? null};
     const paragraphs=Array.from(document.querySelectorAll('p,[data-testid="selected-model"]')).map(e=>e.textContent.trim());
     const dataset=document.querySelector('[data-testid="selected-dataset"]');
-    const datasetDetails=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: Dataset: '))?.getAttribute('aria-label')||'';
-    const dataPath=datasetDetails.match(/^Dataset: Dataset: (.*?) · daemon /)?.[1]||null;
+    const datasetDetails=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: '))?.getAttribute('aria-label')||'';
+    const dataPath=datasetDetails.match(/^Dataset: (.*?) · daemon /)?.[1]||null;
     const ack=document.querySelector('[aria-label="Acknowledged training run"]');
     return {epochs:field('Epochs'),batchSize:field('Batch size'),python:field('Python interpreter'),device:field('Device'),
       datasetFile:dataset?.textContent.trim()||null,dataPath,model:paragraphs.find(t=>t.startsWith('Model: '))?.split(' ')[1]?.replace(/\\.$/,''),

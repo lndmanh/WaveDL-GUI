@@ -231,10 +231,21 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
       await cli('click', locator);
     },
     async expandSummary(name) {
-      const locator = await prepare('summary', name);
       const expression = `(() => { const element = ${controlExpression('summary', name)}[0]; return element?.tagName === 'SUMMARY' ? element.closest('details')?.open : element?.getAttribute('aria-expanded') === 'true'; })()`;
-      assert(await dom(`JSON.stringify(${expression})`) === false, `Summary ${name} must begin closed`);
-      await cli('click', locator);
+      // A group inside an inactive tab panel is closed even when its own
+      // disclosure defaults open: its content starts hidden either way.
+      const hiddenTab = await dom(`JSON.stringify((() => {
+        const panel = ${controlExpression('summary', name)}[0]?.closest('[role="tabpanel"][data-state="inactive"]');
+        const trigger = panel && Array.from(document.querySelectorAll('[role="tab"][aria-controls]')).find(tab => tab.getAttribute('aria-controls') === panel.id);
+        return trigger ? '#' + CSS.escape(trigger.id) : null;
+      })())`);
+      assert(hiddenTab || await dom(`JSON.stringify(${expression})`) === false, `Summary ${name} must begin closed`);
+      if (hiddenTab) {
+        await cli('scrollintoview', hiddenTab);
+        await cli('click', hiddenTab);
+      }
+      const locator = await prepare('summary', name);
+      if (await dom(`JSON.stringify(${expression})`) !== true) await cli('click', locator);
       await cli('wait', '--fn', `${expression} === true`);
       assert(await dom(`JSON.stringify(${expression})`) === true, `Summary ${name} did not expand`);
     },

@@ -105,7 +105,7 @@ else: raise RuntimeError('Inference producer hello absent')`, root, identity.pla
   const inferencePlansBefore = beforeCancel.plans;
   record.inferenceCancellationStage = "request-cancellation";
   await button('Request cancellation');
-  await cli('wait', '--text', 'cancelled');
+  await cli('wait', '--fn', `Array.from(document.querySelectorAll('[aria-label="Selected run"] [data-run-state="cancelled"]')).some(e => e.getClientRects().length)`);
   await pollRegistry(root, state => state.runs.some(run => run.run_id === plan.run_id && run.state === 'cancelled')
     && state.control.some(control => control.plan_id === identity.planId && control.cancellation_requested === 1)
     && state.executions.some(execution => execution.plan_id === identity.planId && execution.cancel_delivered === 1 && execution.observed_status === 'terminal'),
@@ -119,7 +119,7 @@ else: raise RuntimeError('Inference producer hello absent')`, root, identity.pla
   record.inferenceCancellation.requestId = identity.requestId;
   record.inferenceCancellation.before = beforeCancel;
   record.inferenceCancellation.approved = plan;
-  record.inferenceCancellation.cancelledUi = await observe(`document.querySelector('[aria-label="Selected run"] [data-slot="badge"]')?.textContent.trim() === 'Cancelled'`);
+  record.inferenceCancellation.cancelledUi = await observe(`document.querySelector('[aria-label="Selected run"] [data-run-state]')?.textContent.trim() === 'Cancelled'`);
   record.inferenceCancellation.runtime = JSON.parse(await command(python, ['-c', `import os,json,sqlite3,sys
 from pathlib import Path
 r=Path(sys.argv[1]); c=sqlite3.connect((r/'state/registry.db').resolve().as_uri()+'?mode=ro',uri=True)

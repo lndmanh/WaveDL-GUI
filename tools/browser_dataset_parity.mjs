@@ -22,7 +22,7 @@ export function settledDatasetRefusalExpression() {
     return statuses.length === 1 && statuses[0].textContent.trim().length > 0
       && !statuses[0].textContent.includes('Loading')
       && refresh.length === 1 && !refresh[0].disabled
-      && !buttons.some(button=>button.textContent.trim() === 'Stop preview')
+      && !buttons.some(button=>button.textContent.trim() === 'Stop loading')
       && !panel.querySelector('figure') && !panel.querySelector('[role="tab"]');
   })()`;
 }

@@ -102,7 +102,7 @@ export async function browserPresetImport(driver) {
   const validDigest = await sha256(validPath);
   await snapshot();
   await cli('upload', '#training-preset-import', validPath);
-  await cli('wait', '--text', 'Validated preset applied to the draft.');
+  await cli('wait', '--text', 'Validated preset applied. Review it before planning.');
   const afterValid = await capture();
   const validMessage = await dom('JSON.stringify(Array.from(document.querySelectorAll(\'[role="status"]\')).find((node) => node.getClientRects().length)?.textContent ?? null)');
   const validInputCleared = await dom('JSON.stringify(document.querySelector(\'#training-preset-import\')?.value === "")');
