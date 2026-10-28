@@ -6,6 +6,9 @@ export const SESSION_CREDENTIAL_KEY = "wavedl.session.v1";
 
 export function observeCursorStorage(localStorage, sessionStorage, cookies, daemonId, runId, options = {}) {
   const sessionCredentialKey = "wavedl.session.v1";
+  // The app records the Keep-me-signed-in choice itself; its value must agree
+  // with the storage area that holds the credential.
+  const keepSignedInKey = "wavedl.keep-signed-in.v1";
   const envelopeKeys = ["daemonId", "expiresAt", "origin", "token", "version"];
   const expected = `wavedl:cursor:v1:${encodeURIComponent(daemonId)}:${encodeURIComponent(runId)}`;
   const credentialArea = options.credentialArea === "local" ? "local" : "session";
@@ -76,6 +79,10 @@ export function observeCursorStorage(localStorage, sessionStorage, cookies, daem
         if (!credentialObservation.valid) valid = false;
         continue;
       }
+      if (area === "local" && key === keepSignedInKey) {
+        if (raw !== (credentialArea === "local" ? "true" : "false")) valid = false;
+        continue;
+      }
       if (area !== "local" || key !== expected || typeof raw !== "string" || raw.length > 128) {
         valid = false;
         continue;
@@ -127,7 +134,8 @@ export function observeCursorStorage(localStorage, sessionStorage, cookies, daem
     credentialInUrl,
     bootstrapInUrl,
     valid: local.valid && session.valid &&
-      localStorage.length <= 1 + (credentialArea === "local" ? 1 : 0) &&
+      localStorage.length <=
+        1 + (credentialArea === "local" ? 1 : 0) + (localStorage.getItem(keepSignedInKey) === null ? 0 : 1) &&
       sessionStorage.length <= (credentialArea === "session" ? 1 : 0),
     cookies: cookies ? "present" : "",
   };

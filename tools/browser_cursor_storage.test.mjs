@@ -70,6 +70,7 @@ test("allows the explicit persistent envelope beside a scoped numeric cursor", (
     storage({
       [cursorKey]: JSON.stringify({ attempt: 1, seq: 7 }),
       [SESSION_CREDENTIAL_KEY]: envelope(),
+      "wavedl.keep-signed-in.v1": "true",
     }),
     storage(),
     "",
@@ -79,11 +80,39 @@ test("allows the explicit persistent envelope beside a scoped numeric cursor", (
   );
 
   assert.equal(result.valid, true);
-  assert.equal(result.local, 2);
+  assert.equal(result.local, 3);
   assert.equal(result.session, 0);
   assert.equal(result.entries.length, 1);
   assert.equal(result.credential.present, true);
   assert.equal(result.credential.masterTokenPresent, false);
+});
+
+test("accepts a declined keep-signed-in choice beside a session credential", () => {
+  const result = observeCursorStorage(
+    storage({ "wavedl.keep-signed-in.v1": "false" }),
+    storage({ [SESSION_CREDENTIAL_KEY]: envelope() }),
+    "",
+    daemonId,
+    runId,
+    { forbiddenToken: masterToken, origin },
+  );
+  assert.equal(result.valid, true);
+});
+
+test("rejects a keep-signed-in choice that disagrees with the credential area", () => {
+  const cases = [
+    observeCursorStorage(
+      storage({ "wavedl.keep-signed-in.v1": "true" }),
+      storage({ [SESSION_CREDENTIAL_KEY]: envelope() }),
+      "", daemonId, runId, { forbiddenToken: masterToken, origin },
+    ),
+    observeCursorStorage(
+      storage({ [SESSION_CREDENTIAL_KEY]: envelope(), "wavedl.keep-signed-in.v1": "false" }),
+      storage(),
+      "", daemonId, runId, { credentialArea: "local", forbiddenToken: masterToken, origin },
+    ),
+  ];
+  for (const result of cases) assert.equal(result.valid, false);
 });
 
 test("rejects unknown keys, wrong storage area, mismatched scope and master-token persistence", () => {

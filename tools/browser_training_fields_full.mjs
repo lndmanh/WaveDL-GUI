@@ -2,15 +2,20 @@ import { openPlanDisclosure, normalizeTrainingFieldLabel } from './browser_actio
 // Full real-browser authoring slice. It deliberately stops at plan preview:
 // no training execution, remote host, or Windows path is exercised here.
 import assert from "node:assert/strict";
-import { readFile, access, lstat } from "node:fs/promises";
+import { readFile, readdir, access, lstat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 
 export async function packagedAssetHashes(repo) {
   const base = join(repo, "src/wavedl_daemon/web_assets");
   const files = JSON.parse(await readFile(join(base, ".wavedl-assets.json"), "utf8"));
   const hashes = {};
-  assert.equal(Object.keys(files).length, 32);
+  // The manifest must name exactly the packaged files: no stale or unlisted asset.
+  const present = (await readdir(base, { recursive: true, withFileTypes: true }))
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => relative(base, join(entry.parentPath, entry.name)).split(sep).join("/"))
+    .filter((name) => name !== ".wavedl-assets.json");
+  assert.deepEqual(present.sort(), Object.keys(files).sort());
   for (const [name, expected] of Object.entries(files)) {
     assert(
       name &&
