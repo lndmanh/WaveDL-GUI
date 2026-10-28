@@ -456,9 +456,12 @@ export class ConnectionSession {
       if (error.code === 'identity')
         return error.daemonIdentityChanged
           ? ConnectionSessionError.fromKey('identity', 'daemonReplaced', { status: error.status })
-          : ConnectionSessionError.fromKey('identity', 'daemonIdentityUnverified', {
-              status: error.status,
-            });
+          : error.buildMismatch
+            ? // Same daemon, different build: updating the client fixes it, signing in does not.
+              ConnectionSessionError.fromKey('skew', 'daemonScopeChanged')
+            : ConnectionSessionError.fromKey('identity', 'daemonIdentityUnverified', {
+                status: error.status,
+              });
       if (error.code === 'protocol')
         return ConnectionSessionError.fromKey('skew', 'daemonScopeChanged');
       if (error.code === 'response')

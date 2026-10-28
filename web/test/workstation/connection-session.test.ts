@@ -206,6 +206,11 @@ describe('browser connection authority', () => {
     const buildMismatch = session(async () => json({ ...health, build_id: '2.0.0' }));
     expect(await buildMismatch.connect('credential')).toBe(false);
     expect(buildMismatch.snapshot()).toMatchObject({ status: 'skew', buildMismatch: true });
+    // A same-daemon build change is fixed by updating the client, not by signing in again.
+    expect(buildMismatch.snapshot().message).toMatchObject({
+      code: 'skew',
+      clientMessageKey: 'daemonScopeChanged',
+    });
 
     const protocolMismatch = session(async () =>
       json({ ...health, protocol_min: 2, protocol_max: 2 }),
