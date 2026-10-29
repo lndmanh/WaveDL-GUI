@@ -951,15 +951,15 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <MotionConfig reduced-motion="user">
-    <section
-      class="run-builder mx-auto flex w-full max-w-6xl flex-col gap-6"
-      aria-labelledby="project-title"
-      @dragenter="dragEnter"
-      @dragleave="dragLeave"
-      @dragover.prevent
-      @drop.prevent="drop"
-    >
+  <section
+    class="run-builder mx-auto flex w-full max-w-6xl flex-col gap-6"
+    aria-labelledby="project-title"
+    @dragenter="dragEnter"
+    @dragleave="dragLeave"
+    @dragover.prevent
+    @drop.prevent="drop"
+  >
+    <MotionConfig reduced-motion="user">
       <header class="flex flex-wrap items-end justify-between gap-4">
         <div class="min-w-0">
           <h1 id="project-title" class="text-[2rem] leading-tight font-semibold tracking-[-0.03em]">
@@ -1141,8 +1141,8 @@ onBeforeUnmount(() => {
           @go="active = $event"
         />
       </form>
-    </section>
-  </MotionConfig>
+    </MotionConfig>
+  </section>
 </template>
 <style>
 .draft-saved {

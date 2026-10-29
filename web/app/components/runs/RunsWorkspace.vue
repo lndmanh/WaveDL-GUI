@@ -72,8 +72,8 @@ watch(
 );
 </script>
 <template>
-  <MotionConfig reduced-motion="user">
-    <div ref="root" class="runs-workspace" :data-stacked="stacked ? 'true' : undefined">
+  <div ref="root" class="runs-workspace" :data-stacked="stacked ? 'true' : undefined">
+    <MotionConfig reduced-motion="user">
       <Alert v-if="message" variant="warning" role="status" class="runs-message">
         <CircleAlert aria-hidden="true" />
         <AlertDescription>{{ clientMessage(message) }}</AlertDescription>
@@ -105,8 +105,8 @@ watch(
         />
         <RunOverview v-else :runs="runs" :loading="loading" :now="now" @select="choose" />
       </div>
-    </div>
-  </MotionConfig>
+    </MotionConfig>
+  </div>
 </template>
 <style scoped>
 .runs-workspace {
