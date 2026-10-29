@@ -312,6 +312,10 @@ def create_app(
             from wavedl_daemon.http.preview import preview_routes
 
             routes.extend(preview_routes(services))
+        if hasattr(services, "host_profile"):
+            from wavedl_daemon.http.host import host_routes
+
+            routes.extend(host_routes(services))
         routes.extend(lifecycle_routes(services.run_service))
         if hasattr(services, "catalog"):
             routes.extend(catalog_routes(services.catalog))

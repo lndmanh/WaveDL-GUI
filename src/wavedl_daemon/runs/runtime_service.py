@@ -29,6 +29,7 @@ from wavedl_daemon.runs.adoption_service import VerifiedAdoptionService
 from wavedl_daemon.runs.artifacts import ArtifactStore
 from wavedl_daemon.runs.catalog import AsyncCatalogService, CatalogService
 from wavedl_daemon.runs.controller import SubmissionController
+from wavedl_daemon.runs.host_profile import HostProfiler
 from wavedl_daemon.runs.inspection import DatasetInspector
 from wavedl_daemon.runs.preview_service import DatasetPreviewService
 from wavedl_daemon.runs.service import RunService
@@ -222,6 +223,9 @@ class ServiceSession:
             )
             self.previewer = DatasetPreviewService(
                 sys.executable, Path.cwd(), self.pool, self.catalog
+            )
+            self.host_profiler = HostProfiler(
+                sys.executable, Path.cwd(), self.pool, self.backends, budget=self.budget
             )
             self.adoptions = VerifiedAdoptionService(
                 self.settings,
@@ -491,4 +495,9 @@ class HostedServices:
     async def preview(self, request):
         return await self.host.call(
             lambda session: session.previewer.preview(request), concurrent_async=True
+        )
+
+    async def host_profile(self):
+        return await self.host.call(
+            lambda session: session.host_profiler.profile(), concurrent_async=True
         )
