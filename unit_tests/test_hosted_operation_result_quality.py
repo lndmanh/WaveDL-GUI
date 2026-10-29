@@ -215,7 +215,10 @@ def test_public_http_evaluation_failure_preserves_training_publication(
             )
             operation_error = next(row for row in rows if row.type == "error")
             assert (
-                "nonempty input data" if failure_kind == "empty" else "nonfinite values"
+                # The loader validates inputs before the model runs.
+                "non-empty array"
+                if failure_kind == "empty"
+                else "only finite real values"
             ) in operation_error.payload["message"]
             assert not any(row.type == "artifact" for row in rows)
             assert not list(evaluation_root.rglob("COMPLETE.json"))

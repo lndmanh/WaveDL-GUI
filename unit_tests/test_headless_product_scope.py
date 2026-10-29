@@ -85,7 +85,7 @@ assert service._metadata_path.parent.name == "runs"
 catalog = service.models()
 assert catalog["source"] == "bundled_metadata"
 assert catalog["runtime_verified"] is False
-assert len(catalog["models"]) == 71
+assert len(catalog["models"]) == 72
 assert blocked.isdisjoint(sys.modules)
 """
     result = subprocess.run(

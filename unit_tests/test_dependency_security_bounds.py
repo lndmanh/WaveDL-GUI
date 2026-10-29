@@ -26,7 +26,8 @@ def requirements(items):
         ("build", "setuptools", ["76.0.0", "78.1.1", "82.0.1"], "83.0.0"),
         ("daemon", "starlette", ["0.52.1", "1.0.0", "1.2.0"], "1.3.0"),
         ("daemon", "h11", ["0.14.0", "0.15.0"], "0.16.0"),
-        ("core", "torch", ["2.0.0", "2.5.1"], "2.6.0"),
+        # Upstream's 1.9.0 security baseline pairs torch 2.13 with torchvision 0.28.
+        ("core", "torch", ["2.0.0", "2.5.1", "2.6.0"], "2.13.0"),
     ],
 )
 def test_reviewed_security_floors(group, package, affected, patched):
