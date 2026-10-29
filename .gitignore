@@ -69,6 +69,7 @@ coverage.xml
 .ipynb_checkpoints
 *.ipynb
 !notebooks/demo.ipynb
+!notebooks/gui_colab.ipynb
 
 # Environment
 .env
@@ -382,3 +383,7 @@ examples/ios_demo
 # Agent workspaces
 .worktrees/
 .serena/
+
+# Assistant and tool caches
+.playwright-mcp/
+.superpowers/
