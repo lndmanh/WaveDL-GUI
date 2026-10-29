@@ -304,7 +304,8 @@ async function scenario(name) {
       if (!tab.active || typeof tab.url !== 'string') return false;
       const observed = new URL(tab.url);
       const expected = new URL(url);
-      return observed.origin === expected.origin && observed.pathname === expected.pathname;
+      // The app routes / to /experiments; the fixture's unique port identifies the tab.
+      return observed.origin === expected.origin;
     });
     assert(tabInventory.success && ownedTab && /^t[1-9][0-9]*$/.test(ownedTab.tabId), 'Owned bootstrap tab must be discoverable before native activation');
     await cli('tab', ownedTab.tabId);

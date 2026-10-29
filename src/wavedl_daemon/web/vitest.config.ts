@@ -12,7 +12,11 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./app', import.meta.url)),
       '#shared': fileURLToPath(new URL('./shared', import.meta.url)),
-      '#app': fileURLToPath(new URL('./node_modules/nuxt/dist/app/index.js', import.meta.url)),
+      '#app': fileURLToPath(new URL('./test/nuxt-imports.ts', import.meta.url)),
+      '#imports': fileURLToPath(new URL('./test/nuxt-imports.ts', import.meta.url)),
+      'vue-router': fileURLToPath(
+        new URL('./node_modules/nuxt/node_modules/vue-router/dist/vue-router.js', import.meta.url),
+      ),
     },
   },
 });

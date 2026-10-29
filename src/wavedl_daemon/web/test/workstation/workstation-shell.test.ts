@@ -10,6 +10,8 @@ import {
   WORKSTATION_SHELL_TEST_IDS,
   workstationNavTestId,
 } from '../../app/lib/shell-test-ids';
+import { provideShellRouting } from '../../app/composables/useShellLayout';
+import { sectionForPath, sectionPath } from '../../app/shell/sections';
 
 describe('workstation navigation', () => {
   it('offers all implemented destinations without requiring daemon authentication', async () => {
@@ -81,5 +83,50 @@ describe('workstation navigation', () => {
       ).toBe(true);
       wrapper.unmount();
     }
+  });
+
+  it('routes primary navigation and keeps connection and settings as overlays', async () => {
+    const path = shallowRef('/experiments');
+    const overlay = shallowRef<'connection' | 'settings' | 'adopt' | null>(null);
+    const navigations: string[] = [];
+    const Host = defineComponent({
+      setup() {
+        provideShellRouting(
+          computed(() => path.value),
+          (nextPath) => {
+            navigations.push(nextPath);
+            path.value = nextPath;
+          },
+        );
+        return () =>
+          h(WorkstationShell, {
+            status: 'disconnected',
+            section: sectionForPath(path.value),
+            overlay: overlay.value,
+            'onUpdate:overlay': (value) => (overlay.value = value),
+          });
+      },
+    });
+    const wrapper = mount(Host);
+    const shell = wrapper.getComponent(WorkstationShell);
+
+    await wrapper.get(`[data-testid="${workstationNavTestId('datasets')}"]`).trigger('click');
+    expect(navigations).toEqual(['/datasets']);
+    expect(sectionPath('project')).toBe('/new');
+    expect(
+      wrapper
+        .get(`[data-testid="${workstationNavTestId('datasets')}"]`)
+        .attributes('aria-current'),
+    ).toBe('page');
+
+    await wrapper.get(`[data-testid="${workstationNavTestId('connection')}"]`).trigger('click');
+    expect(overlay.value).toBe('connection');
+    expect(navigations).toEqual(['/datasets']);
+
+    await wrapper.get(`[data-testid="${workstationNavTestId('settings')}"]`).trigger('click');
+    expect(overlay.value).toBe('settings');
+    expect(navigations).toEqual(['/datasets']);
+    expect(shell.emitted('navigate')).toBeUndefined();
+    wrapper.unmount();
   });
 });

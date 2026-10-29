@@ -25,7 +25,6 @@ async function settle(): Promise<void> {
 }
 
 function resetLayout(): void {
-  layout.setActiveSection('experiments');
   layout.setRailVisible(true);
   layout.setDockedLayout(true);
   layout.setPanelTabs(SHELL_PANEL_TABS);
@@ -50,8 +49,7 @@ describe('shell companion layout', () => {
 
     expect(sameLayout).toBe(layout);
     expect(layout.panelWidth.value).toBe(SHELL_PANEL_DEFAULT_WIDTH);
-    layout.setActiveSection('datasets');
-    expect(sameLayout.activeSection.value).toBe('datasets');
+    expect(sameLayout.activeSection.value).toBe('experiments');
 
     layout.setPanelWidth(SHELL_PANEL_MIN_WIDTH - 1);
     expect(layout.panelWidth.value).toBe(SHELL_PANEL_MIN_WIDTH);

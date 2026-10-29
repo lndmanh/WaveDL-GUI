@@ -2,7 +2,7 @@ import type { Component } from 'vue';
 
 /**
  * Section integration contract:
- * - The controller retains section instances; activeSection is the visible canvas.
+ * - The router selects the active work page; activeSection is derived from its path.
  * - Teleport run logs to #shell-panel-tab-logs and results to
  *   #shell-panel-tab-artifacts. Both targets stay mounted while the panel is closed.
  * - Use Teleport's `defer` (or wait for onMounted) because targets are siblings of
@@ -23,53 +23,82 @@ export type { PrimaryWorkstationSection, WorkstationSection };
 
 export type ShellCommand = 'adopt' | 'connection' | 'settings';
 
-export interface ShellNavigationDescriptor {
-  id: WorkstationSection;
+export interface ShellNavigationDescriptor<
+  Section extends WorkstationSection = WorkstationSection,
+> {
+  id: Section;
   labelKey: string;
   icon: Component;
+  path: string;
   command?: ShellCommand;
 }
 
-export const SHELL_PRIMARY_NAVIGATION: readonly ShellNavigationDescriptor[] = [
+export const SHELL_PRIMARY_NAVIGATION: readonly ShellNavigationDescriptor<
+  PrimaryWorkstationSection
+>[] = [
   {
     id: WORKSTATION_SECTIONS.experiments,
     labelKey: 'shell.experiments',
     icon: Layers,
+    path: '/experiments',
   },
   {
     id: WORKSTATION_SECTIONS.project,
     labelKey: 'shell.newTrainingRun',
     icon: Plus,
+    path: '/new',
   },
   {
     id: WORKSTATION_SECTIONS.datasets,
     labelKey: 'shell.datasets',
     icon: Database,
+    path: '/datasets',
   },
   {
     id: WORKSTATION_SECTIONS.results,
     labelKey: 'shell.results',
     icon: FileChartColumn,
+    path: '/results',
   },
-] as const;
+];
 
-export const SHELL_ACTION_NAVIGATION: readonly ShellNavigationDescriptor[] = [
+export const SHELL_ACTION_NAVIGATION: readonly ShellNavigationDescriptor<
+  Exclude<WorkstationSection, PrimaryWorkstationSection>
+>[] = [
   {
     id: WORKSTATION_SECTIONS.adopt,
     labelKey: 'shell.adoptStandaloneRun',
     icon: Import,
+    path: '/experiments',
     command: 'adopt',
   },
   {
     id: WORKSTATION_SECTIONS.connection,
     labelKey: 'shell.connection',
     icon: Cable,
+    path: '/login',
     command: 'connection',
   },
   {
     id: WORKSTATION_SECTIONS.settings,
     labelKey: 'shell.settings',
     icon: Settings2,
+    path: '/settings',
     command: 'settings',
   },
-] as const;
+];
+
+export function sectionPath(section: PrimaryWorkstationSection, runId?: string): string {
+  const navigation = SHELL_PRIMARY_NAVIGATION.find((item) => item.id === section);
+  const path = navigation?.path ?? '/experiments';
+  if (!runId || (section !== 'experiments' && section !== 'results')) return path;
+  return `${path}/${encodeURIComponent(runId)}`;
+}
+
+export function sectionForPath(path: string): PrimaryWorkstationSection {
+  return (
+    SHELL_PRIMARY_NAVIGATION.find(
+      (item) => path === item.path || path.startsWith(`${item.path}/`),
+    )?.id ?? WORKSTATION_SECTIONS.experiments
+  );
+}

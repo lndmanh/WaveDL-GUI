@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import WorkstationController from './components/WorkstationController.vue';
+import { NuxtLayout, NuxtPage } from '#components';
+import { workstationPageRetention } from './shell/page-retention';
 import './assets/css/shell.css';
 </script>
 
 <template>
-  <WorkstationController />
+  <NuxtLayout>
+    <NuxtPage :transition="false" :keepalive="workstationPageRetention" />
+  </NuxtLayout>
 </template>

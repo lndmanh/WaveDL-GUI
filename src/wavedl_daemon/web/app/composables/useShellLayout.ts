@@ -1,12 +1,16 @@
 import {
   computed,
+  hasInjectionContext,
+  inject,
   onActivated,
   onMounted,
+  provide,
   shallowRef,
   toValue,
   watch,
   type MaybeRefOrGetter,
   type ComputedRef,
+  type InjectionKey,
   type Ref,
 } from 'vue';
 import {
@@ -18,15 +22,19 @@ import {
   type ShellPanelTabId,
 } from '../shell/constants';
 import type { PrimaryWorkstationSection } from '../lib/shell-test-ids';
+import { sectionForPath } from '../shell/sections';
 
 export type { ShellPanelTabDefinition, ShellPanelTabId } from '../shell/constants';
+
+const shellRoutePathKey: InjectionKey<ComputedRef<string>> = Symbol('shell-route-path');
+const shellNavigateKey: InjectionKey<(path: string) => void> = Symbol('shell-navigate');
 
 function clampPanelWidth(value: number): number {
   return Math.max(SHELL_PANEL_MIN_WIDTH, Math.min(SHELL_PANEL_MAX_WIDTH, Math.round(value)));
 }
 
 export interface ShellLayoutState {
-  activeSection: Ref<PrimaryWorkstationSection>;
+  activeSection: ComputedRef<PrimaryWorkstationSection>;
   isRailVisible: Ref<boolean>;
   isPanelOpen: Ref<boolean>;
   isPanelVisible: ComputedRef<boolean>;
@@ -35,7 +43,6 @@ export interface ShellLayoutState {
   activeTab: Ref<ShellPanelTabId>;
   panelWidth: Ref<number>;
   commandPaletteOpen: Ref<boolean>;
-  setActiveSection(section: PrimaryWorkstationSection): void;
   setRailVisible(visible: boolean): void;
   setDockedLayout(docked: boolean): void;
   setPanelTabs(tabs: readonly ShellPanelTabDefinition[]): void;
@@ -46,8 +53,10 @@ export interface ShellLayoutState {
   togglePanel(): void;
 }
 
-export function createShellLayoutState(): ShellLayoutState {
-  const activeSection = shallowRef<PrimaryWorkstationSection>('experiments');
+export function createShellLayoutState(
+  routePath: MaybeRefOrGetter<string> = '/experiments',
+): ShellLayoutState {
+  const activeSection = computed(() => sectionForPath(toValue(routePath)));
   const isRailVisible = shallowRef(true);
   const isPanelOpen = shallowRef(true);
   const isDockedLayout = shallowRef(true);
@@ -56,10 +65,6 @@ export function createShellLayoutState(): ShellLayoutState {
   const panelWidth = shallowRef(SHELL_PANEL_DEFAULT_WIDTH);
   const commandPaletteOpen = shallowRef(false);
   const isPanelVisible = computed(() => isPanelOpen.value && panelTabs.value.length > 0);
-
-  function setActiveSection(section: PrimaryWorkstationSection): void {
-    activeSection.value = section;
-  }
 
   function setRailVisible(visible: boolean): void {
     isRailVisible.value = visible;
@@ -111,7 +116,6 @@ export function createShellLayoutState(): ShellLayoutState {
     activeTab,
     panelWidth,
     commandPaletteOpen,
-    setActiveSection,
     setRailVisible,
     setDockedLayout,
     setPanelTabs,
@@ -126,7 +130,24 @@ export function createShellLayoutState(): ShellLayoutState {
 const sharedShellLayout = createShellLayoutState();
 
 export function useShellLayout(): ShellLayoutState {
-  return sharedShellLayout;
+  const routePath = hasInjectionContext() ? inject(shellRoutePathKey, null) : null;
+  if (!routePath) return sharedShellLayout;
+  return {
+    ...sharedShellLayout,
+    activeSection: computed(() => sectionForPath(routePath.value)),
+  };
+}
+
+export function provideShellRouting(
+  routePath: ComputedRef<string>,
+  navigate: (path: string) => void,
+): void {
+  provide(shellRoutePathKey, routePath);
+  provide(shellNavigateKey, navigate);
+}
+
+export function useShellNavigation(): ((path: string) => void) | null {
+  return hasInjectionContext() ? inject(shellNavigateKey, null) : null;
 }
 
 /** Register the tabs contributed by the currently visible section. */

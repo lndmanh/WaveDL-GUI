@@ -10,8 +10,9 @@ import ShellHeader from './ShellHeader.vue';
 import ShellCompanion from './ShellCompanion.vue';
 import ShellDock from './ShellDock.vue';
 import ShellCommandPalette from './ShellCommandPalette.vue';
-import { useShellLayout } from '../../composables/useShellLayout';
+import { useShellLayout, useShellNavigation } from '../../composables/useShellLayout';
 import type { ConnectionStatus } from '../../lib/connection-session';
+import { sectionPath, SHELL_PRIMARY_NAVIGATION } from '../../shell/sections';
 import {
   workstationNavTestId,
   type PrimaryWorkstationSection,
@@ -29,6 +30,7 @@ const emit = defineEmits<{
 }>();
 const { t } = useI18n({ useScope: 'global' });
 const layout = useShellLayout();
+const navigateTo = useShellNavigation();
 const { isDockedLayout, isRailVisible, commandPaletteOpen: paletteOpen } = layout;
 const connectionAnnouncement = computed(() =>
   props.status === 'connected'
@@ -87,12 +89,14 @@ function focusOverlay(event: Event) {
 }
 function navigate(section: WorkstationSection) {
   paletteOpen.value = false;
-  if (section === 'connection' || section === 'settings' || section === 'adopt')
-    setOverlay(section);
-  else {
+  const destination = SHELL_PRIMARY_NAVIGATION.find((item) => item.id === section);
+  if (destination) {
     setOverlay(null);
-    emit('navigate', section);
+    if (navigateTo) navigateTo(sectionPath(destination.id));
+    else emit('navigate', destination.id);
+    return;
   }
+  if (section === 'connection' || section === 'settings' || section === 'adopt') setOverlay(section);
 }
 function shortcut(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {

@@ -1,5 +1,22 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import tailwindcss from '@tailwindcss/vite';
+import type { NuxtModule } from 'nuxt/schema';
+
+// i18n also installs Router v4; resolve the page tooling from Nuxt's own v5 dependency.
+const nuxtRequire = createRequire(import.meta.resolve('nuxt'));
+const nuxtRouterRouteBlockPlugin = nuxtRequire.resolve('vue-router/volar/sfc-route-blocks');
+const fixNuxtRouterVolarResolution: NuxtModule = (_options, nuxt) => {
+  nuxt.hook('modules:done', () => {
+    nuxt.hook('prepare:types', ({ tsConfig }) => {
+      const plugins = tsConfig.vueCompilerOptions?.plugins;
+      if (!plugins) return;
+      tsConfig.vueCompilerOptions.plugins = plugins.map((plugin) =>
+        plugin === 'vue-router/volar/sfc-route-blocks' ? nuxtRouterRouteBlockPlugin : plugin,
+      );
+    });
+  });
+};
 
 // The browser must identify the Python build it was shipped with. Updating the
 // package cannot silently retain a stale hard-coded client build identifier.
@@ -15,7 +32,7 @@ if (readFileSync(identityPath, 'utf8') !== identitySource)
 // no Nitro API or backend.
 export default defineNuxtConfig({
   ssr: false,
-  modules: ['@nuxtjs/i18n'],
+  modules: ['@nuxtjs/i18n', fixNuxtRouterVolarResolution],
   i18n: {
     strategy: 'no_prefix',
     detectBrowserLanguage: false,
