@@ -5,7 +5,7 @@ on:
     paths: &installed-paths
       - "src/wavedl/**"
       - "src/wavedl_daemon/**"
-      - "web/**"
+      - "src/wavedl_daemon/web/**"
       - "pyproject.toml"
       - "MANIFEST.in"
       - "tools/**"
@@ -47,7 +47,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: src/wavedl_daemon/web/package-lock.json
       - name: Install build and source-contract tools only
         run: |
           python -m pip install build pytest pyyaml 'ruff==0.14.10'
@@ -67,7 +67,7 @@ jobs:
           test "$(agent-browser --version)" = 'agent-browser 0.26.0'
           agent-browser install --with-deps
       - name: Generate locked browser assets
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: |
           npm ci
           npm run generate

@@ -60,14 +60,14 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: src/wavedl_daemon/web/package-lock.json
 
       - name: Install locked browser dependencies
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: npm ci
 
       - name: Generate the browser client from the locked source
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: npm run generate
 
       - name: Cache pip dependencies

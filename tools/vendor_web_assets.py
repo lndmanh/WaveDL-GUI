@@ -15,9 +15,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "web" / ".output" / "public"
+SOURCE = ROOT / "src" / "wavedl_daemon" / "web" / ".output" / "public"
 TARGET = ROOT / "src" / "wavedl_daemon" / "web_assets"
-WORK_AREA = ROOT / "web" / ".vendor-backups"
+WORK_AREA = ROOT / "src" / "wavedl_daemon" / "web" / ".vendor-backups"
 MANIFEST = ".wavedl-assets.json"
 LEGACY_IMMUTABLE = ".wavedl-immutable.json"
 MAX_FILE = 32 * 1024 * 1024

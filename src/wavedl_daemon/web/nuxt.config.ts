@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 // The browser must identify the Python build it was shipped with. Updating the
 // package cannot silently retain a stale hard-coded client build identifier.
-const versionSource = readFileSync(new URL('../src/wavedl/__init__.py', import.meta.url), 'utf8');
+const versionSource = readFileSync(new URL('../../wavedl/__init__.py', import.meta.url), 'utf8');
 const version = versionSource.match(/^__version__ = "([A-Za-z0-9.+_-]+)"$/m)?.[1];
 if (!version) throw new Error('Cannot determine the WaveDL package build identity');
 const identityPath = new URL('./app/lib/build-identity.ts', import.meta.url);

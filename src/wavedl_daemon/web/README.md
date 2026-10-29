@@ -57,7 +57,7 @@ wavedl-daemon serve --credential-file /absolute/path/to/daemon-token --browse-ro
 ```
 
 Use an owner-only token file for the recommended restart-stable master
-credential; see the root [README](../README.md) for the creation command. The
+credential; see the root [README](../../../README.md) for the creation command. The
 ephemeral default is still supported, but a daemon restart requires a new
 bootstrap link.
 
@@ -82,7 +82,7 @@ browser's location/permission settings, not the daemon's run directory.
 Node 24 is used in CI (Node 22.19+ is supported). Dependencies and lockfile are pinned.
 
 ```sh
-cd web
+cd src/wavedl_daemon/web
 npm ci
 npm run dev
 # Run Nuxt prepare/typecheck and generate sequentially, not concurrently.
@@ -91,14 +91,15 @@ npm run format:check
 npm run typecheck
 npm test
 npm run generate
-cd ..
+cd ../../../
 python tools/vendor_web_assets.py
 ```
 
 The vendor script validates the exact static output, rejects links/backend files,
 and checks existing packaged assets against their manifest before replacement.
-Previous generated output is retained in `web/.vendor-backups/` for recovery,
-outside the Python package source tree.
+Previous generated output is retained in
+`src/wavedl_daemon/web/.vendor-backups/` for recovery, outside the vendored asset
+directory.
 The Python wheel includes only the vendored assets, not Node or a Nuxt server.
 Do not manually copy build output into the package: stale chunks must not survive.
 

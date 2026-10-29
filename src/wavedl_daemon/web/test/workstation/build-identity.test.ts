@@ -5,7 +5,7 @@ import { CLIENT_BUILD_ID } from '../../app/lib/build-identity';
 describe('bundled daemon compatibility identity', () => {
   it('matches the Python package version rather than the frontend package version', () => {
     const source = readFileSync(
-      new URL('../../../src/wavedl/__init__.py', import.meta.url),
+      new URL('../../../../wavedl/__init__.py', import.meta.url),
       'utf8',
     );
     const expected = source.match(/^__version__ = "([A-Za-z0-9.+_-]+)"$/m)?.[1];

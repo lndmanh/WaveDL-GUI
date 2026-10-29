@@ -12,7 +12,9 @@ from wavedl.core.training_cli import build_training_parser, training_defaults
 def test_browser_metadata_covers_daemon_supported_training_options():
     """Every supported destination has the correct default, type and choices."""
     root = Path(__file__).resolve().parents[2]
-    metadata = json.loads((root / "web/shared/training-options.json").read_text())
+    metadata = json.loads(
+        (root / "src/wavedl_daemon/web/shared/training-options.json").read_text()
+    )
     fields = {field["name"]: field for field in metadata}
     defaults = training_defaults()
     actions = {

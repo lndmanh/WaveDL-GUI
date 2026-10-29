@@ -915,7 +915,7 @@ connected. Turning it off removes the localStorage credential copy. Explicitly
 disconnect to revoke the session. Closing the browser
 detaches monitoring and does not stop training. If you change web source,
 regenerate and vendor its assets before using the daemon's browser client
-(`npm run generate` in `web/`, followed by `python tools/vendor_web_assets.py`
+(`npm run generate` in `src/wavedl_daemon/web/`, followed by `python tools/vendor_web_assets.py`
 from the repository root).
 
 The browser workstation is online-only. Offline/PWA support, service-worker

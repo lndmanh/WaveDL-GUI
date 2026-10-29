@@ -29,9 +29,9 @@ eggs/
 .eggs/
 lib/
 # Keep browser app TypeScript utilities trackable under the Python lib ignore.
-!web/app/lib/
-web/app/lib/*
-!web/app/lib/*.ts
+!src/wavedl_daemon/web/app/lib/
+src/wavedl_daemon/web/app/lib/*
+!src/wavedl_daemon/web/app/lib/*.ts
 lib64/
 parts/
 sdist/

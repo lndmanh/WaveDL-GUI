@@ -25,9 +25,9 @@ source venv/bin/activate  # Linux/Mac
 pip install -e ".[dev,daemon]"
 
 # Browser dependencies (the Nuxt client is part of the daemon package)
-cd web
+cd src/wavedl_daemon/web
 npm ci
-cd ..
+cd ../../..
 
 # Install pre-commit hooks (required for contributors)
 pre-commit install
@@ -43,13 +43,13 @@ python -c "from wavedl import __version__; print(f'WaveDL v{__version__}')"
 PYTHONPATH=src pytest unit_tests -m "not slow and not gpu"
 
 # Validate the browser client and generated worker
-cd web
+cd src/wavedl_daemon/web
 npm run typecheck
 npm test
 npm run lint
 npm run format:check
 npm run generate
-cd ..
+cd ../../..
 python tools/vendor_web_assets.py
 
 # Run Python linting and formatting checks (checks do not modify files)

@@ -6,7 +6,7 @@ on:
     paths:
       - "src/wavedl/**"
       - "src/wavedl_daemon/**"
-      - "web/**"
+      - "src/wavedl_daemon/web/**"
       - "pyproject.toml"
       - "MANIFEST.in"
       - "tools/run_user_owned_pytest.py"
@@ -20,7 +20,7 @@ on:
     paths:
       - "src/wavedl/**"
       - "src/wavedl_daemon/**"
-      - "web/**"
+      - "src/wavedl_daemon/web/**"
       - "pyproject.toml"
       - "MANIFEST.in"
       - "tools/run_user_owned_pytest.py"
@@ -70,7 +70,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: src/wavedl_daemon/web/package-lock.json
       - name: Install official CPU PyTorch before project dependencies
         if: ${{ success() && !cancelled() }}
         run: python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
@@ -90,7 +90,7 @@ jobs:
         run: python -m pytest --noconftest unit_tests/daemon/test_installed_cli_native_helpers.py unit_tests/test_launcher_stdio.py -q
       - name: Generate locked browser assets
         if: ${{ success() && !cancelled() }}
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: |
           npm ci
           npm run generate

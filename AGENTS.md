@@ -6,7 +6,7 @@ WaveDL is a deep learning framework and new daemon/browser application for
 wave-based inverse problems:
 - `src/wavedl/` — Core ML framework (PyTorch training, models, utilities)
 - `src/wavedl_daemon/` — Headless per-user execution/API service
-- `web/` — Nuxt/Vue + TypeScript browser workstation; generated static assets are
+- `src/wavedl_daemon/web/` — Nuxt/Vue + TypeScript browser workstation; generated static assets are
   vendored into the daemon package
 
 The browser is the primary UI; `wavedl-train` also works without a daemon. The Qt
@@ -32,17 +32,17 @@ pip install -e ".[dev]"        # Core + dev tools (ruff, pytest)
 pip install -e ".[dev,daemon]" # Core + dev + daemon/browser runtime
 ```
 
-For browser development, use the existing `web/package.json` and lockfile:
+For browser development, use the existing `src/wavedl_daemon/web/package.json` and lockfile:
 
 ```bash
-cd web
+cd src/wavedl_daemon/web
 npm ci
 npm run typecheck
 npm test
 npm run lint
 npm run format:check
 npm run generate
-cd ..
+cd ../../..
 python tools/vendor_web_assets.py
 ```
 
@@ -105,7 +105,7 @@ Ruff handles import sorting (isort rules). Order: stdlib, third-party, local.
 - Multi-imports use `combine-as-imports = true`
 - `__init__.py` files may have unused imports (`F401` suppressed)
 
-Browser code follows the established `web/app/` imports and conventions.
+Browser code follows the established `src/wavedl_daemon/web/app/` imports and conventions.
 
 ### Naming Conventions
 - **Classes**: `PascalCase` — `TrainingProgress`, `ProcessState`, `SignalBus`
@@ -143,7 +143,7 @@ Browser code follows the established `web/app/` imports and conventions.
 - **State**: Journal/SQLite projection, attempt-aware replay and durable intents;
   preserve ownership and crash-recovery contracts
 - **Browser**: Nuxt static SPA, Vue Composition API + TypeScript; follow existing
-  `web/app/` components, composables and design conventions
+  `src/wavedl_daemon/web/app/` components, composables and design conventions
 - **Offline/PWA**: Retired capability; offline behavior is not a product requirement
 - **Execution**: Daemon owns runtime supervision; closing a browser detaches,
   cancellation is an explicit durable request
@@ -159,8 +159,8 @@ Browser code follows the established `web/app/` imports and conventions.
 |---|---|
 | `src/wavedl_daemon/` | Daemon CLI, HTTP API, storage and execution backends |
 | `src/wavedl/core/` | Shared protocol and lifecycle contracts |
-| `web/app/` | Browser application source |
-| `web/package.json` | Frontend build, tests and validation commands |
+| `src/wavedl_daemon/web/app/` | Browser application source |
+| `src/wavedl_daemon/web/package.json` | Frontend build, tests and validation commands |
 | `tools/vendor_web_assets.py` | Vendor generated static browser output |
 | `src/wavedl/train.py` | CLI training entry point |
 | `src/wavedl/models/` | 18+ model architectures |

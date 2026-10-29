@@ -36,7 +36,7 @@ def test_release_waits_for_reusable_acceptance_and_exact_package():
 
 def test_release_static_client_gate_requires_complete_quality_checks():
     static = workflow("web-client.yml")["jobs"]["static-client"]
-    assert static["defaults"]["run"]["working-directory"] == "web"
+    assert static["defaults"]["run"]["working-directory"] == "src/wavedl_daemon/web"
     commands = [step["run"] for step in static["steps"] if "run" in step]
     required = [
         "npm ci",
@@ -45,7 +45,7 @@ def test_release_static_client_gate_requires_complete_quality_checks():
         "npm run typecheck",
         "npm test",
         "npm run generate",
-        "python ../tools/vendor_web_assets.py",
+        "python ../../../tools/vendor_web_assets.py",
         "npm run test:generated",
     ]
     assert all(command in commands for command in required)
@@ -53,6 +53,17 @@ def test_release_static_client_gate_requires_complete_quality_checks():
         commands.index(command) for command in required
     )
     assert all("if" not in step for step in static["steps"])
+
+
+def test_release_rejects_web_source_in_distributions():
+    steps = workflow("release.yml")["jobs"]["package"]["steps"]
+    release = next(
+        step["run"]
+        for step in steps
+        if step.get("name") == "Verify version and wheel/sdist web asset identity"
+    )
+    assert 'not any(name.startswith("wavedl_daemon/web/")' in release
+    assert 'not any("/src/wavedl_daemon/web/" in name' in release
 
 
 def test_release_is_headless_without_reducing_shipped_test_gates():
@@ -85,7 +96,7 @@ def test_retired_desktop_workflow_and_paths_are_not_active():
         assert "src/wavedl_daemon/**" in paths
         assert "unit_tests/core/**" in paths
         assert "unit_tests/daemon/**" in paths
-        assert "web/**" in paths
+        assert "src/wavedl_daemon/web/**" in paths
     jobs = foundations["jobs"]
     assert set(jobs) == {"storage-enospc", "foundations"}
     assert jobs["foundations"]["strategy"]["matrix"] == {
@@ -248,7 +259,9 @@ def test_push_test_matrix_generates_and_vendors_browser_before_wheel_acceptance(
     npm_steps = [
         step for step in steps if step.get("run") in {"npm ci", "npm run generate"}
     ]
-    assert all(step["working-directory"] == "web" for step in npm_steps)
+    assert all(
+        step["working-directory"] == "src/wavedl_daemon/web" for step in npm_steps
+    )
 
 
 @pytest.fixture

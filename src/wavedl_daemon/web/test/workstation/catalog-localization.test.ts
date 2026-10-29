@@ -87,7 +87,7 @@ function translateModel(key: ModelMessageKey): string {
 describe('catalogue localization preserves daemon authority', () => {
   it('covers all complete bundled translations and exact daemon source signatures', () => {
     const source = readFileSync(
-      resolve(process.cwd(), '../src/wavedl_daemon/runs/model_metadata.json'),
+      resolve(process.cwd(), '../runs/model_metadata.json'),
       'utf8',
     );
     const { models } = JSON.parse(source) as {

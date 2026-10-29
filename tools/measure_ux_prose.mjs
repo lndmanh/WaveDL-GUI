@@ -4,12 +4,12 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const require = createRequire(new URL('../web/package.json', import.meta.url));
+const require = createRequire(new URL('../src/wavedl_daemon/web/package.json', import.meta.url));
 const ts = require('typescript');
 const baseline = process.argv.includes('--baseline');
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
-const tracked = git('ls-files', 'web/app').trim().split('\n');
-const added = baseline ? [] : git('ls-files', '--others', '--exclude-standard', 'web/app').trim().split('\n');
+const tracked = git('ls-files', 'src/wavedl_daemon/web/app').trim().split('\n');
+const added = baseline ? [] : git('ls-files', '--others', '--exclude-standard', 'src/wavedl_daemon/web/app').trim().split('\n');
 const rows = [];
 
 for (const file of new Set([...tracked, ...added])) {

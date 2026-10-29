@@ -5,7 +5,7 @@ on:
     paths: &integration-paths
       - "src/wavedl/**"
       - "src/wavedl_daemon/**"
-      - "web/**"
+      - "src/wavedl_daemon/web/**"
       - "tools/**"
       - "unit_tests/**"
       - "pyproject.toml"
@@ -63,7 +63,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: src/wavedl_daemon/web/package-lock.json
       - name: Install CPU PyTorch before project dependencies
         run: python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Install real daemon and ML dependencies
@@ -73,15 +73,15 @@ jobs:
           python -m pip check
           python -c 'import torch, torchvision, numpy, scipy, h5py, starlette, uvicorn; assert torch.version.cuda is None, "CPU PyTorch required"'
       - name: Install locked web dependencies
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: npm ci
       - name: Require exhaustive field and effective Python export round trips
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         env:
           WAVEDL_TRAINING_EXPORT_PYTHON: python
         run: npm test -- test/workstation/training-fields-acceptance.test.ts
       - name: Generate the static app used by the daemon
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: npm run generate
       - name: Vendor verified generated assets into the daemon
         run: python tools/vendor_web_assets.py

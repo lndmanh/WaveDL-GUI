@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const configuration = await readFile(new URL('../../nuxt.config.ts', import.meta.url), 'utf8');
-const packaged = new URL('../../../src/wavedl_daemon/web_assets/', import.meta.url);
+const packaged = new URL('../../../../wavedl_daemon/web_assets/', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('.wavedl-assets.json', packaged), 'utf8'));
 
 test('workstation explicitly disables framework reload paths outside build-skew prompt', () => {

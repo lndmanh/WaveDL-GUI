@@ -12,7 +12,7 @@ export const EXPOSURE_OBSERVATION_TIMEOUT_MS = 15000;
 // reveal opens one container, outermost first.
 export const MAX_REVEALS = 3;
 
-const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'web/app');
+const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'src/wavedl_daemon/web/app');
 const trainingFields = JSON.parse(readFileSync(join(appRoot, 'i18n/locales/en/training-fields.json'), 'utf8'));
 const builderMessages = JSON.parse(readFileSync(join(appRoot, 'i18n/locales/en/builder.json'), 'utf8'));
 const trainingFieldLabels = Object.fromEntries(
@@ -31,7 +31,7 @@ const trainingFieldNames = Object.fromEntries(
 // segmented control is driven by the exact visible text of the wanted value.
 function choiceTable(source, name) {
   const body = source.match(new RegExp(`const ${name}[^=]*= \\{([\\s\\S]*?)\\n\\};`))?.[1];
-  assert(body, `${name} is missing from web/app/i18n/dynamic-keys.ts`);
+  assert(body, `${name} is missing from src/wavedl_daemon/web/app/i18n/dynamic-keys.ts`);
   return Object.fromEntries(Array.from(body.matchAll(/^\s*'?([\w.]+)'?: '([^']*)',$/gm), (match) => [match[1], match[2]]));
 }
 const dynamicKeys = readFileSync(join(appRoot, 'i18n/dynamic-keys.ts'), 'utf8');

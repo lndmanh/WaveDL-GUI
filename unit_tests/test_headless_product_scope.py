@@ -43,7 +43,7 @@ def test_supported_runtime_has_no_desktop_imports():
 
 def test_browser_class_utility_is_present_and_not_ignored(tmp_path):
     """A clean checkout must include the shared shadcn class utility."""
-    utility = "web/app/lib/utils.ts"
+    utility = "src/wavedl_daemon/web/app/lib/utils.ts"
     assert (ROOT / utility).is_file()
     (tmp_path / ".gitignore").write_text((ROOT / ".gitignore").read_text())
     subprocess.run(
@@ -51,7 +51,7 @@ def test_browser_class_utility_is_present_and_not_ignored(tmp_path):
         capture_output=True,
         check=True,
     )
-    ignored = ["lib/package.py", "web/app/lib/package.py"]
+    ignored = ["lib/package.py", "src/wavedl_daemon/web/app/lib/package.py"]
     result = subprocess.run(
         ["git", "check-ignore", "--no-index", "--stdin"],
         cwd=tmp_path,

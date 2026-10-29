@@ -12,7 +12,7 @@
     "typecheck": "nuxt prepare && vue-tsc --noEmit -p tsconfig.app.json",
     "test": "nuxt prepare && vitest run",
     "test:generated": "node --test test/generated/*.test.mjs",
-    "test:browser": "node ../tools/run_web_acceptance.mjs",
+    "test:browser": "node ../../../tools/run_web_acceptance.mjs",
     "lint": "oxlint app nuxt.config.ts vitest.config.ts test/workstation test/generated",
     "format": "oxfmt app nuxt.config.ts vitest.config.ts tsconfig.app.json test/workstation test/generated",
     "format:check": "oxfmt --check app nuxt.config.ts vitest.config.ts tsconfig.app.json test/workstation test/generated"

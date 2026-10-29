@@ -340,7 +340,7 @@ describe('catalogue UI isolation', () => {
 
   it('lists the full structured catalogue as merged entries with composable search and tier filters', async () => {
     const parsed: unknown = JSON.parse(
-      readFileSync(resolve(process.cwd(), '../src/wavedl_daemon/runs/model_metadata.json'), 'utf8'),
+      readFileSync(resolve(process.cwd(), '../runs/model_metadata.json'), 'utf8'),
     );
     if (!object(parsed) || !Array.isArray(parsed.models)) throw new Error('Invalid metadata');
     const ids = parsed.models.flatMap((model) =>

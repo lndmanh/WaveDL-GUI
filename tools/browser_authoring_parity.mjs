@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 export async function authoringParity(driver) {
   const { cli, dom, snapshot, button, fill, actions, controlExpression, registry,
     root, downloads, check, record, interpreter, python, command, repo } = driver;
-  const inventory = JSON.parse(await readFile(join(repo, 'web/shared/training-options.json'), 'utf8'));
+  const inventory = JSON.parse(await readFile(join(repo, 'src/wavedl_daemon/web/shared/training-options.json'), 'utf8'));
   const defaults = Object.fromEntries(inventory.map((option) => [option.name, option.default]));
   const values = async (labels) => {
     const observed = [];

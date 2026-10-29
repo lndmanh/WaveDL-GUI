@@ -4,7 +4,7 @@ import {
   createBrowserActions,
   normalizeTrainingFieldLabel,
   trainingChoiceLabel,
-} from '../../../tools/browser_actions.mjs';
+} from '../../../../../tools/browser_actions.mjs';
 
 const rect = { x: 10, y: 10, width: 40, height: 20 };
 

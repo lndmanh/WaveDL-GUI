@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 describe('model source hash', () => {
   it('guards the short description and each displayed pro for all 71 daemon models', () => {
     const { models } = JSON.parse(
-      readFileSync('../src/wavedl_daemon/runs/model_metadata.json', 'utf8'),
+      readFileSync('../runs/model_metadata.json', 'utf8'),
     ) as { models: { id: string; short_description: string; pros: string[] }[] };
     expect(models).toHaveLength(71);
     for (const model of models) {

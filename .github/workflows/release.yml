@@ -85,7 +85,7 @@ jobs:
           python -m pip check
 
       - name: Generate the locked web client for this test matrix cell
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: |
           npm ci
           npm run generate
@@ -126,9 +126,9 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: src/wavedl_daemon/web/package-lock.json
       - name: Generate the locked release web client
-        working-directory: web
+        working-directory: src/wavedl_daemon/web
         run: |
           npm ci
           npm run generate
@@ -162,6 +162,7 @@ jobs:
           }
           assert {"index.html", ".wavedl-assets.json"} <= expected.keys()
           with zipfile.ZipFile(wheel) as archive:
+              assert not any(name.startswith("wavedl_daemon/web/") for name in archive.namelist()), "Wheel contains workstation source"
               metadata, = (name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
               assert Version(BytesParser().parsebytes(archive.read(metadata))["Version"]) == Version(tag)
               prefix = "wavedl_daemon/web_assets/"
@@ -169,6 +170,7 @@ jobs:
               assert actual == expected, "Wheel differs from verified generated web inventory"
           with tarfile.open(sdist) as archive:
               members = archive.getmembers()
+              assert not any("/src/wavedl_daemon/web/" in name for name in archive.getnames()), "Sdist contains workstation source"
               metadata, = (member for member in members if member.name.count("/") == 1 and member.name.endswith("/PKG-INFO"))
               assert Version(BytesParser().parsebytes(archive.extractfile(metadata).read())["Version"]) == Version(tag)
               prefix = sdist.name.removesuffix(".tar.gz") + "/src/wavedl_daemon/web_assets/"

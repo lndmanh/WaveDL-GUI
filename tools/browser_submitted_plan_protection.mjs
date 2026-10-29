@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 export async function submittedPlanProtection({ cli, dom, button, actions, fill, registry, root, record, python, command, repo, approvedManifest, check }) {
-  const options = await readFile(join(repo, 'web/shared/training-options.json'));
+  const options = await readFile(join(repo, 'src/wavedl_daemon/web/shared/training-options.json'));
   const defaults = Object.fromEntries(JSON.parse(options).map(o => [o.name, o.default]));
   const hash = value => createHash('sha256').update(value).digest('hex');
   record.trainingOptionsSha256 = hash(options);

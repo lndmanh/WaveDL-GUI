@@ -492,7 +492,7 @@ export async function verifySummary(summaryPath, manifestPath) {
   assert(Array.isArray(summary.cases), 'Summary cases missing');
   assert.deepEqual(summary.cases.map((record) => record.name).sort(), [...requiredCases].sort(),
     'Exactly the required cases must appear once each');
-  const inventory = JSON.parse((await boundedFile(join(repo, 'web/shared/training-options.json'))).toString('utf8'));
+  const inventory = JSON.parse((await boundedFile(join(repo, 'src/wavedl_daemon/web/shared/training-options.json'))).toString('utf8'));
   for (const record of summary.cases) {
     checkRecord(record, hash, summary.browser, directory);
     if (record.name === 'authoring-parity') checkAuthoringParity(record, inventory);

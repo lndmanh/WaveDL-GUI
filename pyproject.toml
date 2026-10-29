@@ -12,6 +12,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["wavedl", "wavedl.*", "wavedl_daemon", "wavedl_daemon.*"]
+# Namespace discovery would package the workstation source and node_modules;
+# only the vendored web_assets build ships.
+exclude = ["wavedl_daemon.web", "wavedl_daemon.web.*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "wavedl.__version__"}

@@ -316,7 +316,7 @@ describe('exhaustive training field authoring acceptance', () => {
       const request = requestFor(await authorEveryControl());
       const interpreter = process.env.WAVEDL_TRAINING_EXPORT_PYTHON;
       if (!interpreter) throw new Error('Missing integration interpreter');
-      const script = resolve(process.cwd(), '../tools/verify_training_exports.py');
+      const script = resolve(process.cwd(), '../../../tools/verify_training_exports.py');
       const result = JSON.parse(
         execFileSync(interpreter, [script], {
           input: JSON.stringify({

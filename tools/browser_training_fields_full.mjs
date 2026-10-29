@@ -50,7 +50,7 @@ export async function fullTrainingFields(driver) {
     repo,
   } = driver;
   const options = JSON.parse(
-    await readFile(join(repo, "web/shared/training-options.json"), "utf8"),
+    await readFile(join(repo, "src/wavedl_daemon/web/shared/training-options.json"), "utf8"),
   );
   const beforeAssets = await packagedAssetHashes(repo);
   const value = {
