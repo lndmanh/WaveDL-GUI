@@ -17,7 +17,7 @@ import { downloadNameProvenance } from './browser_download_names.mjs';
 import { observeCursorStorage } from './browser_cursor_storage.mjs';
 import { datasetParity } from './browser_dataset_parity.mjs';
 import { openTrainingEditor, editorFieldObservationExpression } from './browser_training_editor.mjs';
-import { createBrowserActions, controlExpression, actionableExpression, xpathLiteral, DRIVER_READINESS_MODE, normalizeTrainingFieldLabel } from './browser_actions.mjs';
+import { createBrowserActions, controlExpression, actionableExpression, xpathLiteral, DRIVER_READINESS_MODE, normalizeTrainingFieldLabel, datasetSelectedExpression, modelChosenExpression, planReadinessExpression, PLAN_SUBMIT } from './browser_actions.mjs';
 import { boundedCommand } from './browser_process.mjs';
 import { retainFailurePrefixes } from './browser_failure_evidence.mjs';
 import { browserLaunchArgs, browserTemporaryEnvironment } from './browser_launch_policy.mjs';
@@ -332,20 +332,32 @@ async function scenario(name) {
       record.status = 'passed';
       return;
     }
-    await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
+    await actions.openProject('fresh');
+    // The builder never gates its blocks: an incomplete draft is held at the
+    // Plan block, whose readiness names what is missing and whose own submit
+    // stays disabled. Nothing reaches the daemon.
+    const blockedReview = async (block, missing) => {
+      const before = await registry(root);
+      await actions.reviewPlan();
+      await cli('wait', '--fn', `(() => { const state = ${planReadinessExpression()}; return state.step === 'guide-step-4' && state.createPlan?.disabled === true && state.items.some(item => item.label === ${JSON.stringify(block)} && !item.done); })()`);
+      const state = await dom(`JSON.stringify(${planReadinessExpression()})`);
+      const item = state.items.find((entry) => entry.label === block);
+      const observed = { step: state.step, message: !!item && !item.done && item.detail.includes(missing) && item.action === 'Fix', createPlanDisabled: state.createPlan?.disabled === true, readiness: state.items, plans: before.plans, control: JSON.stringify(before.control) };
+      const after = await registry(root);
+      assert.deepEqual(after, before);
+      return { observed, after };
+    };
     if (name === 'wizard-progression') {
-      const beforeInvalid = await registry(root);
-      await button('Next step');
-      await cli('wait', '--fn', `document.body.innerText.includes('Choose a dataset from the current daemon.')`);
-      const invalidDataset = await dom(`JSON.stringify({step:document.querySelector('[aria-current="step"]')?.textContent.trim(),message:document.body.innerText.includes('Choose a dataset from the current daemon.'),plans:${beforeInvalid.plans},control:JSON.stringify(${JSON.stringify(beforeInvalid.control)})})`);
-      check(invalidDataset.step?.startsWith('1.'), 'Missing dataset blocks guided progression at dataset step');
-      check(invalidDataset.message === true && invalidDataset.plans === beforeInvalid.plans, 'Missing dataset creates visible validation and no durable plan');
-      check(invalidDataset.control === JSON.stringify(beforeInvalid.control), 'Missing dataset creates no submission intent');
+      const { observed: invalidDataset, after } = await blockedReview('Dataset', 'Choose a dataset');
+      check(invalidDataset.step === 'guide-step-4' && invalidDataset.createPlanDisabled, 'Missing dataset holds the draft at the Plan block with planning disabled');
+      check(invalidDataset.message === true && after.plans === invalidDataset.plans, 'Missing dataset creates visible readiness guidance and no durable plan');
+      check(JSON.stringify(after.control) === invalidDataset.control, 'Missing dataset creates no submission intent');
       record.wizardInvalidDataset = invalidDataset;
-      record.wizardAfterInvalidDataset = await registry(root);
-      assert.deepEqual(record.wizardAfterInvalidDataset, beforeInvalid);
+      record.wizardAfterInvalidDataset = after;
     }
-    // Guided authoring leaves the dataset details open; selecting from the real catalogue resolves daemon paths.
+    // Selecting from the real catalogue resolves daemon paths; a held review leaves
+    // the Plan block showing, so return to the Dataset block first.
+    await actions.showBlock('dataset');
     const rootSnapshot = await snapshot();
     assert(rootSnapshot.includes('combobox "Search roots and paths"'), 'Search roots and paths combobox missing');
     const rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Search roots and paths"]';
@@ -354,22 +366,16 @@ async function scenario(name) {
     await actions.option('datasets');
     await cli('wait', '--text', 'samples.npz');
     await button('Select file samples.npz');
-    await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim() === 'samples.npz') && Array.from(document.querySelectorAll('button[aria-label]')).some(e => e.getAttribute('aria-label').startsWith('Dataset: ') && e.getAttribute('aria-label').includes('/samples.npz'))`);
-    await button('Next step');
-    await cli('wait', '--text', 'Choose CNN');
+    await cli('wait', '--fn', datasetSelectedExpression('samples.npz'));
     if (name === 'wizard-progression') {
-      const beforeInvalidModel = await registry(root);
-      await button('Next step');
-      await cli('wait', '--fn', `document.body.innerText.includes('Choose a catalogue model or explicit custom identifier.')`);
-      const invalidModel = await dom(`JSON.stringify({step:document.querySelector('[aria-current="step"]')?.textContent.trim(),message:document.body.innerText.includes('Choose a catalogue model or explicit custom identifier.'),plans:${beforeInvalidModel.plans},control:JSON.stringify(${JSON.stringify(beforeInvalidModel.control)})})`);
-      check(invalidModel.step?.startsWith('2.'), 'Missing model blocks guided progression at model step');
-      check(invalidModel.message === true && invalidModel.plans === beforeInvalidModel.plans, 'Missing model creates visible validation and no durable plan');
+      const { observed: invalidModel, after } = await blockedReview('Model', 'Choose a model');
+      check(invalidModel.step === 'guide-step-4' && invalidModel.createPlanDisabled, 'Missing model holds the draft at the Plan block with planning disabled');
+      check(invalidModel.message === true && after.plans === invalidModel.plans, 'Missing model creates visible readiness guidance and no durable plan');
       record.wizardInvalidModel = invalidModel;
-      record.wizardAfterInvalidModel = await registry(root);
-      assert.deepEqual(record.wizardAfterInvalidModel, beforeInvalidModel);
+      record.wizardAfterInvalidModel = after;
     }
-    await button('Choose CNN');
-    await cli('wait', '--fn', `Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Model: cnn'))`);
+    await actions.chooseModel('cnn');
+    await cli('wait', '--fn', `${modelChosenExpression('cnn')} && ${datasetSelectedExpression('samples.npz')}`);
     try {
       record.trainingEditorReadiness = await openTrainingEditor({ button, cli, dom });
     } catch (error) {
@@ -391,14 +397,16 @@ async function scenario(name) {
       } catch { record.trainingEditorFailure = { observationUnavailable: true }; }
       throw error;
     }
-    record.authoringNavigation = 'Guided dataset and model steps, then explicit Show full editor for ordinary labelled-field authoring and immutable approval';
+    record.authoringNavigation = 'Dataset and model blocks, then the Runs on and Training blocks of the run pipeline for ordinary labelled-field authoring and immutable approval';
     const interpreterLocator = await dom(`JSON.stringify('#'+CSS.escape(${JSON.stringify(record.trainingEditorReadiness.id)}))`);
     await actions.fill('Python interpreter', interpreter, { locator: interpreterLocator });
     check(true, 'UI field Python interpreter retains authored value');
+    // Manual setup starts from the detected device (best available); these runs train on CPU.
+    await actions.device('cpu');
     const shortTraining = ['baseline', 'autoplot-metadata-integrity', 'partial-best-fallback', 'partial-best-refusal', 'wizard-progression', 'artifact-tamper', 'download-names', 'submitted-plan-authoring-protection', 'result-operations', 'onnx-export', 'inference-cancellation', 'cv-parity'].includes(name);
     await fill('epochs', shortTraining ? '3' : '10000');
     await fill('patience', shortTraining ? '3' : '10000');
-    await summary('Data, checkpoints and cross-validation');
+    await summary('Data loading and speed');
     await fill('workers', '0');
     await fill('batch size', '16');
     if (name === 'cv-parity') {
@@ -406,32 +414,31 @@ async function scenario(name) {
       const locator = await actions.readyControl('field', 'deterministic');
       const checked = `(${controlExpression('field', 'deterministic', { locator })})[0]?.getAttribute('aria-checked')`;
       const initialChecked = await dom(`JSON.stringify(${checked})`);
-      check(['true', 'false'].includes(initialChecked), 'Deterministic checkbox exposes its rendered ARIA state');
+      check(['true', 'false'].includes(initialChecked), 'Deterministic switch exposes its rendered ARIA state');
       if (initialChecked !== 'true') await cli('click', locator);
       await cli('wait', '--fn', `${checked} === 'true'`);
       record.deterministicCheckboxChecked = await dom(`JSON.stringify(${checked} === 'true')`);
-      check(record.deterministicCheckboxChecked === true, 'Rendered deterministic checkbox retains authored true value');
+      check(record.deterministicCheckboxChecked === true, 'Rendered deterministic switch retains authored true value');
     }
     if (name === 'download-names') await fill('save every', '1');
     await actions.select('precision', 'no');
     if (name === 'wizard-progression') {
       record.wizardBeforeNavigation = await registry(root);
-      await button('Use guided steps');
-      await button('Next step');
-      await button('Next step');
       await fill('epochs', '0');
-      await button('Next step');
-      await cli('wait', '--text', 'Review training and runtime validation errors before approval.');
-      record.wizardInvalidTraining = await dom(`JSON.stringify({step:document.querySelector('[aria-current="step"]')?.textContent.trim(),message:document.body.innerText.includes('Review training and runtime validation errors before approval.')})`);
-      record.wizardAfterInvalidTraining = await registry(root);
+      const { observed: invalidTraining, after } = await blockedReview('Training', 'to fix');
+      check(invalidTraining.message === true && invalidTraining.createPlanDisabled, 'Invalid training value holds the draft at the Plan block with planning disabled');
+      record.wizardInvalidTraining = invalidTraining;
+      record.wizardAfterInvalidTraining = after;
       await fill('epochs', '3');
-      const locator = await actions.readyControl('button', 'Next step');
+      // A double activation of the Plan block's own submit persists one plan.
+      await actions.showBlock('plan');
+      const locator = await actions.readyControl('button', 'Create plan', false, { locator: PLAN_SUBMIT });
       await cli('dblclick', locator);
-      await cli('wait', '--fn', `document.querySelector('[aria-current="step"]')?.textContent.trim().startsWith('5.')`);
-      await button('Previous step');
-      await button('Next step');
-      const reviewBefore = await dom(`JSON.stringify({step:document.querySelector('[aria-current="step"]')?.textContent.trim(),epochs:Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()===${JSON.stringify(normalizeTrainingFieldLabel('epochs'))})?.htmlFor && document.getElementById(Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()===${JSON.stringify(normalizeTrainingFieldLabel('epochs'))}).htmlFor)?.value})`);
-      check(reviewBefore.step?.startsWith('5.'), 'Valid dataset/model and back-forward navigation preserve guided draft through review');
+      await cli('wait', '--text', 'Persisted plan for approval');
+      await actions.showBlock('training');
+      await actions.showBlock('plan');
+      const reviewBefore = await dom(`JSON.stringify({step:document.querySelector('[role="tab"][aria-current="step"]')?.getAttribute('data-testid'),approval:!!document.querySelector('#approved-plan-title')?.getClientRects().length,epochs:Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()===${JSON.stringify(normalizeTrainingFieldLabel('epochs'))})?.htmlFor && document.getElementById(Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()===${JSON.stringify(normalizeTrainingFieldLabel('epochs'))}).htmlFor)?.value})`);
+      check(reviewBefore.step === 'guide-step-4' && reviewBefore.approval && reviewBefore.epochs === '3', 'Valid dataset/model and block navigation preserve the draft and its plan through review');
       record.wizardReview = reviewBefore;
       record.wizardAfterNavigation = await registry(root);
     }
@@ -468,7 +475,7 @@ async function scenario(name) {
       record.status = 'passed';
       return;
     }
-    await button('Preview persisted plan');
+    if (name !== 'wizard-progression') await actions.createPlan();
     await cli('wait', '--text', 'Persisted plan for approval');
     await openPlanDisclosure({ cli, dom });
     const planned = await registry(root);
@@ -564,7 +571,7 @@ async function scenario(name) {
       record.replacementBeforeStaleSubmit = await registry(replacementRoot);
       check(record.replacementBeforeStaleSubmit.plans === 0, 'Replacement daemon starts with no plans');
       if (liveReplacement) {
-        const skewAlreadyVisible = await dom(`JSON.stringify(document.body.innerText.includes('Connection identity changed'))`);
+        const skewAlreadyVisible = await dom(`JSON.stringify(document.body.innerText.includes('WaveDL has changed'))`);
         if (!skewAlreadyVisible) {
           const retiredNow = await dom(`JSON.stringify(!document.querySelector('[aria-label="Selected run"]') && !!document.querySelector('#daemon-bearer'))`);
           if (retiredNow) {
@@ -573,9 +580,9 @@ async function scenario(name) {
             check(record.transportRetirementBeforeReplacement.historyAbsent && record.transportRetirementBeforeReplacement.credentialFieldEmpty && record.transportRetirementBeforeReplacement.noEnabledCancel, 'Retired transport scope remains cleared before explicit reauthentication');
             // Only this generated fixture credential, supplied dynamically in
             // memory; never a user credential or a literal in source/tool logs.
-            await fill('Daemon master credential', sharedToken);
+            await fill('Access key', sharedToken);
             record.explicitReauthAttempted = true;
-            await button('Connect securely');
+            await button('Connect');
           } else {
           const replayVisible = await dom(`JSON.stringify(Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && !e.disabled && e.textContent.trim() === 'Replay / reconnect'))`);
           if (replayVisible) await button('Replay / reconnect');
@@ -584,14 +591,14 @@ async function scenario(name) {
           }
         }
       } else await button('Approve and start this plan');
-      await cli('wait', '--fn', `document.body.innerText.includes('Connection identity changed') && document.body.innerText.includes('A different WaveDL daemon is now serving this address. Sign in again.')`);
-      check(await dom(`JSON.stringify(document.querySelector('#daemon-bearer')?.value === '' && Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.textContent.trim() === 'Disconnect and clear scope'))`), 'Identity skew requires explicit scope clearing and fresh credential; no automatic reconnection');
-      check(await dom(`JSON.stringify(!document.querySelector('[aria-label="Approved normalized manifest"]') && !Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && !e.disabled && ['Approve and start this plan', 'Preview persisted plan', 'Request cancellation'].includes(e.textContent.trim())))`), 'Old immutable approval and mutation authority revoked after daemon replacement');
-      check(await dom(`JSON.stringify(Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Dataset: Not selected')) && !document.querySelector('[aria-label="Selected run"]') && !document.querySelector('[aria-label="Runtime metric history"]'))`), 'Old dataset selection, selected-run monitor and cursor-bearing history revoked');
+      await cli('wait', '--fn', `document.body.innerText.includes('WaveDL has changed') && document.body.innerText.includes('WaveDL was restarted or replaced. Sign in again.')`);
+      check(await dom(`JSON.stringify(document.querySelector('#daemon-bearer')?.value === '' && Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.textContent.trim() === 'Disconnect and start fresh'))`), 'Identity skew requires explicit scope clearing and fresh credential; no automatic reconnection');
+      check(await dom(`JSON.stringify(!document.querySelector('[aria-label="Approved normalized manifest"]') && !Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && !e.disabled && ['Approve and start this plan', 'Create plan', 'Request cancellation'].includes(e.textContent.trim())))`), 'Old immutable approval and mutation authority revoked after daemon replacement');
+      check(await dom(`JSON.stringify(document.querySelector('[data-testid="guide-step-0"]')?.getAttribute('data-state') === 'pending' && Array.from(document.querySelectorAll('[data-testid="selected-dataset"]')).every(e => e.textContent.includes('No dataset yet')) && !document.querySelector('[aria-label="Selected run"]') && !document.querySelector('[aria-label="Runtime metric history"]'))`), 'Old dataset selection, selected-run monitor and cursor-bearing history revoked');
       record.replacementAfterStaleSubmit = await registry(replacementRoot);
       check(record.replacementAfterStaleSubmit.plans === 0 && record.replacementAfterStaleSubmit.control.length === 0 && record.replacementAfterStaleSubmit.executions.length === 0 && record.replacementAfterStaleSubmit.runs.length === 0, 'Stale browser submission creates zero replacement plans, submission intent, executions or runs');
       if (liveReplacement) {
-        record.liveIdentityFence = await dom(`JSON.stringify({identityMessage:document.body.innerText.includes('Connection identity changed'),selectedRunAbsent:!document.querySelector('[aria-label="Selected run"]'),metricHistoryAbsent:!document.querySelector('[aria-label="Runtime metric history"]'),diagnosticsAbsent:!document.querySelector('[aria-label="Runtime diagnostics"]'),noEnabledCancel:!Array.from(document.querySelectorAll('button')).some(e=>e.getClientRects().length&&!e.disabled&&e.textContent.trim()==='Request cancellation'),previewAbsent:!document.querySelector('[aria-label="Approved normalized manifest"]')})`);
+        record.liveIdentityFence = await dom(`JSON.stringify({identityMessage:document.body.innerText.includes('WaveDL has changed'),selectedRunAbsent:!document.querySelector('[aria-label="Selected run"]'),metricHistoryAbsent:!document.querySelector('[aria-label="Runtime metric history"]'),diagnosticsAbsent:!document.querySelector('[aria-label="Runtime diagnostics"]'),noEnabledCancel:!Array.from(document.querySelectorAll('button')).some(e=>e.getClientRects().length&&!e.disabled&&e.textContent.trim()==='Request cancellation'),previewAbsent:!document.querySelector('[aria-label="Approved normalized manifest"]')})`);
         check(Object.values(record.liveIdentityFence).every((value) => value === true), 'Identity fence revokes actual nonempty monitor history, diagnostics, selected run, preview and cancellation authority');
         await captureReplacementMetadata();
         check(true, 'Replacement rejected old-scope identity and accepted no foreign old-run read/cursor replay or mutating browser request');
@@ -626,8 +633,11 @@ async function scenario(name) {
         state => lostAckBindingReady(state, record.lostAckRecovery.identity),
         'Original writer submission verified runtime binding', 45000);
       check(true, 'Status recovery follows the original approved plan without duplicate execution');
-      await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
-      record.lostAckRecovery.acknowledgedUi = await dom(`JSON.stringify({disabled:Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.disabled && e.textContent.trim() === 'Submission acknowledged'),runId:document.querySelector('[aria-label="Acknowledged training run"]')?.textContent.includes(${JSON.stringify(approvedManifest.run_id)})?${JSON.stringify(approvedManifest.run_id)}:null})`);
+      await actions.openProject('continue');
+      await actions.showBlock('plan');
+      // The acknowledged plan replaces its approval with the acknowledged run:
+      // no enabled approval control remains anywhere on the builder.
+      record.lostAckRecovery.acknowledgedUi = await dom(`JSON.stringify({disabled:!!document.querySelector('[aria-label="Acknowledged training run"]')?.getClientRects().length && !Array.from(document.querySelectorAll('button')).some(e => !e.disabled && ['Approve and start this plan', 'Create plan'].includes(e.textContent.trim())),runId:document.querySelector('[aria-label="Acknowledged training run"]')?.textContent.includes(${JSON.stringify(approvedManifest.run_id)})?${JSON.stringify(approvedManifest.run_id)}:null})`);
       record.lostAckRecovery.acknowledged = await registry(root);
       verifyLostAckEvidence(record);
       check(true, 'Recovered acknowledgment disables duplicate approval of the existing plan');
@@ -658,25 +668,18 @@ async function scenario(name) {
       await cli('wait', '--text', 'Run detail');
       if (name === 'wizard-progression') {
         record.wizardSubmitted = await pollRegistry(root, state=>state.plans===1 && state.executions.length===1, 'Single explicitly approved execution', 45000);
-        await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
-        await button('Show full editor');
-        const acknowledgement = `Array.from(document.querySelectorAll('button')).find(e=>e.getClientRects().length&&e.textContent.trim()==='Submission acknowledged')`;
-        await cli('scrollintoview', 'xpath=//button[normalize-space(.)="Submission acknowledged"]');
-        record.wizardAckScrolled = true;
-        record.wizardAcknowledged = await dom(`JSON.stringify({disabled:(${acknowledgement})?.disabled,runId:document.querySelector('[aria-label="Acknowledged training run"]')?.textContent.includes(${JSON.stringify(approvedManifest.run_id)})?${JSON.stringify(approvedManifest.run_id)}:null})`);
-        const point = await dom(`JSON.stringify((()=>{const r=(${acknowledgement}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})())`);
-        await cli('mouse', 'move', String(Math.round(point.x)), String(Math.round(point.y)));
-        record.wizardAckMoved = true;
-        for (let click = 0; click < 2; click++) { await cli('mouse', 'down'); await cli('mouse', 'up'); }
-        record.wizardAckClicked = true;
-        await button('Open acknowledged run');
+        await actions.openProject('continue');
+        await actions.showBlock('plan');
+        record.wizardAcknowledged = await dom(`JSON.stringify({disabled:!Array.from(document.querySelectorAll('button')).some(e=>!e.disabled&&['Approve and start this plan','Create plan'].includes(e.textContent.trim())),runId:document.querySelector('[aria-label="Acknowledged training run"]')?.textContent.includes(${JSON.stringify(approvedManifest.run_id)})?${JSON.stringify(approvedManifest.run_id)}:null})`);
+        check(record.wizardAcknowledged.disabled && record.wizardAcknowledged.runId === approvedManifest.run_id, 'Acknowledged plan offers no second approval and names its run');
+        await actions.button('Open acknowledged run', false, { locator: 'xpath=//section[@aria-label="Acknowledged training run"]//button[normalize-space(.)="Open acknowledged run"]' });
       }
       check((await registry(root)).control[0].submission_requested === 1, 'Explicit approval records real daemon submission intent');
       if (name === 'detach') {
         record.runningBeforeDetach = await waitRunState(root, 'running');
         await actions.button('Connection', false, { locator: '[data-testid="nav-connection"]' });
         await button('Disconnect');
-        await cli('wait', '--text', 'Connect securely');
+        await cli('wait', '--text', 'Connect to WaveDL');
         record.snapshot = await snapshot();
         await closeOwnedBrowser();
         const after = await registry(root);

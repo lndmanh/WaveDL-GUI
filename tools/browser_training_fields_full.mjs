@@ -1,4 +1,4 @@
-import { openPlanDisclosure, normalizeTrainingFieldLabel } from './browser_actions.mjs';
+import { openPlanDisclosure, normalizeTrainingFieldLabel, trainingChoiceLabel, CONTROL_VALUE_SOURCE } from './browser_actions.mjs';
 // Full real-browser authoring slice. It deliberately stops at plan preview:
 // no training execution, remote host, or Windows path is exercised here.
 import assert from "node:assert/strict";
@@ -37,7 +37,6 @@ export async function fullTrainingFields(driver) {
   const {
     cli,
     dom,
-    button,
     fill,
     actions,
     controlExpression,
@@ -56,7 +55,6 @@ export async function fullTrainingFields(driver) {
   const beforeAssets = await packagedAssetHashes(repo);
   const value = {
     import_modules: [`${root}/fixture_modules.py`],
-    pretrained: true,
     batch_size: 17,
     lr: 0.000123456789,
     epochs: 23,
@@ -108,54 +106,50 @@ export async function fullTrainingFields(driver) {
   assert.deepEqual(before.executions, []);
   assert.equal(options.length, 46);
   const nativeActions = [];
+  const enablingActions = [];
   const labelFor = (name) => normalizeTrainingFieldLabel(name);
-  const details = {
-    "Optimizer, loss and scheduling": [
-      "weight_decay",
-      "grad_clip",
-      "grad_accum_steps",
-      "huber_delta",
-      "loss_weights",
-      "momentum",
-      "nesterov",
-      "betas",
-      "scheduler_patience",
-      "min_lr",
-      "scheduler_factor",
-      "warmup_epochs",
-      "step_size",
-      "milestones",
-    ],
-    "Data, checkpoints and cross-validation": [
-      "workers",
-      "cache_validate",
-      "single_channel",
-      "cv_bins",
-      "resume",
-      "save_every",
-      "fresh",
-    ],
-    "Custom models and physical constraints": [
-      "import_modules",
-      "pretrained",
-      "constraint",
-      "constraint_file",
-      "constraint_weight",
-      "constraint_reduction",
-    ],
-    "Optional experiment logging": ["wandb", "wandb_watch", "project_name", "run_name"],
-  };
+  // `pretrained` belongs to the Model block, where it is the ImageNet-weights
+  // switch of a model with a weighted variant. The selected CNN has none, so
+  // the builder offers no control for it and it keeps its default.
+  const modelOwned = ["pretrained"];
   assert.equal(
     Object.keys(value).length,
-    44,
-    "Authored inventory must have exactly 44 editable values",
+    43,
+    "Authored inventory must have exactly 43 Training-block values",
   );
-  for (const text of Object.keys(details)) {
-    const open = await dom(
-      `JSON.stringify(${controlExpression("summary", text)}[0]?.getAttribute('aria-expanded') === 'true')`,
-    );
-    if (!open) await actions.expandSummary(text);
-  }
+  check(
+    await dom(`JSON.stringify(!document.querySelector('[data-testid="model-weights-cnn"]') && !Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).some(e => e.textContent.trim() === ${JSON.stringify(labelFor("pretrained"))}))`),
+    "The selected CNN offers no pretrained-weights control and Training has no pretrained setting",
+  );
+  // The builder renders a setting only while the current choices read it (or it
+  // differs from its default), so dependent settings are authored after the
+  // choice that exposes them; later choices then move on to their final values.
+  const enabling = {
+    huber_delta: ["loss", "huber"],
+    loss_weights: ["loss", "weighted_mse"],
+    momentum: ["optimizer", "sgd"],
+    nesterov: ["optimizer", "sgd"],
+    warmup_epochs: ["scheduler", "linear_warmup"],
+    step_size: ["scheduler", "step"],
+    milestones: ["scheduler", "multistep"],
+    cv_stratify: ["cv", 2],
+    cv_bins: ["cv", 2],
+  };
+  const order = [
+    "import_modules", "batch_size", "lr", "epochs", "patience", "weight_decay", "grad_clip",
+    "grad_accum_steps", "betas", "scheduler_patience", "min_lr", "scheduler_factor",
+    "huber_delta", "loss_weights", "loss", "momentum", "nesterov", "optimizer",
+    "warmup_epochs", "step_size", "milestones", "scheduler",
+    "workers", "seed", "deterministic", "cache_validate", "single_channel",
+    "cv_stratify", "cv_bins", "cv", "resume", "save_every", "fresh", "compile", "precision",
+    "constraint", "constraint_file", "constraint_weight", "constraint_reduction",
+    "wandb", "wandb_watch", "project_name", "run_name",
+  ];
+  const optionFor = (name) => options.find((item) => item.name === name);
+  assert.deepEqual(
+    [...order].sort(),
+    options.map((item) => item.name).filter((name) => !["model", "data_path", ...modelOwned].includes(name)).sort(),
+  );
   const checkBox = async (name) => {
     const locator = await actions.readyControl("field", labelFor(name));
     const expression = `(${controlExpression("field", labelFor(name), { locator })})[0]?.getAttribute('aria-checked')`;
@@ -164,34 +158,51 @@ export async function fullTrainingFields(driver) {
     if (checked !== "true") await cli("click", locator);
     await cli("wait", "--fn", `${expression} === 'true'`);
   };
-  for (const option of options.filter((item) => !["model", "data_path"].includes(item.name))) {
-    const authored = value[option.name];
-    assert.notEqual(authored, undefined, `Missing authoring case ${option.name}`);
-    if (option.name !== "cv") {
-      assert.notDeepEqual(authored, option.default, `${option.name} must be authored nondefault`);
-    } else {
-      assert.equal(authored, 0, "Complete regular-training authoring keeps CV disabled");
-    }
+  const author = async (option, authored) => {
     if (option.kind === "boolean") await checkBox(option.name);
     else if (option.choices.length) await actions.select(labelFor(option.name), String(authored));
     else if (option.multiple) await fill(labelFor(option.name), authored.join("\n"));
     else await fill(labelFor(option.name), String(authored));
     const observation = await dom(
-      `JSON.stringify(${controlExpression("field", labelFor(option.name))}.filter(e=>e.getClientRects().length).map(e=>({id:e.id,label:${JSON.stringify(labelFor(option.name))},tag:e.tagName,value:e.getAttribute('aria-checked')??e.getAttribute('data-value')??e.value})))`,
+      `JSON.stringify(${controlExpression("field", labelFor(option.name))}.filter(e=>e.getClientRects().length).map(e=>({id:e.id,label:${JSON.stringify(labelFor(option.name))},tag:e.tagName,value:${CONTROL_VALUE_SOURCE}(e)})))`,
     );
     assert.equal(observation.length, 1);
+    // Few-choice settings are segmented controls that show the choice's label.
+    const segmented = option.choices.length > 0 && option.choices.length <= 3;
     const expected =
-      option.kind === "boolean" ? "true" : option.multiple ? authored.join("\n") : String(authored);
+      option.kind === "boolean"
+        ? "true"
+        : option.multiple
+          ? authored.join("\n")
+          : segmented
+            ? trainingChoiceLabel(option.name, String(authored))
+            : String(authored);
     assert.equal(observation[0].value, expected);
+    return observation[0];
+  };
+  for (const name of order) {
+    const option = optionFor(name);
+    const authored = value[name];
+    assert.notEqual(authored, undefined, `Missing authoring case ${name}`);
+    if (name !== "cv") {
+      assert.notDeepEqual(authored, option.default, `${name} must be authored nondefault`);
+    } else {
+      assert.equal(authored, 0, "Complete regular-training authoring keeps CV disabled");
+    }
+    const enabler = enabling[name];
+    if (enabler) {
+      const [controlling, setting] = enabler;
+      enablingActions.push({ name, enabling: controlling, value: setting,
+        observation: await author(optionFor(controlling), setting) });
+    }
     nativeActions.push({
-      name: option.name,
+      name,
       action: option.kind === "boolean" ? "click" : option.choices.length ? "select" : "fill",
-      observation: observation[0],
+      observation: await author(option, authored),
     });
   }
-  await actions.expandSummary("Standalone configuration export");
   const yamlPath = join(downloads, "full-training-fields.yaml");
-  await cli("download", await actions.readyControl("button", "Download YAML"), yamlPath);
+  await cli("download", await actions.configMenuItem("Download YAML"), yamlPath);
   await access(yamlPath);
   const yamlText = await readFile(yamlPath, "utf8");
   const yaml = JSON.parse(
@@ -208,18 +219,12 @@ export async function fullTrainingFields(driver) {
   check(
     Object.entries(value).every(
       ([name, authored]) => JSON.stringify(yaml[name]) === JSON.stringify(authored),
-    ),
-    "Full browser YAML preserves each authored nondefault field",
+    ) && yaml.pretrained === optionFor("pretrained").default,
+    "Full browser YAML preserves each authored nondefault field and the model-owned pretrained default",
   );
-  await button("Copy standalone CLI command");
-  await cli(
-    "wait",
-    "--fn",
-    `Array.from(document.querySelectorAll('[aria-label="Copied standalone command"]')).some(e=>e.getClientRects().length&&e.textContent.includes('wavedl.launcher'))`,
-  );
-  const text = await dom(
-    'JSON.stringify(Array.from(document.querySelectorAll("[aria-label=\\\"Copied standalone command\\\"]")).find(e=>e.getClientRects().length&&e.textContent.includes("wavedl.launcher"))?.textContent)',
-  );
+  await actions.copyStandaloneCommand();
+  const text = await actions.copiedCommand();
+  check(text.includes("wavedl.launcher"), "Copied standalone command was handed to the browser clipboard");
   const argv = JSON.parse(
     await command(
       python,
@@ -233,9 +238,9 @@ export async function fullTrainingFields(driver) {
   );
   check(
     (await registry(root)).plans === 0,
-    "All 44 field edits and exports create no durable plan",
+    "All 43 field edits and exports create no durable plan",
   );
-  await button("Preview persisted plan");
+  await actions.createPlan();
   await cli("wait", "--text", "Persisted plan for approval");
   await openPlanDisclosure({ cli, dom });
   const approved = JSON.parse(
@@ -301,14 +306,16 @@ export async function fullTrainingFields(driver) {
       JSON.stringify(
         options
           .map((item) => item.name)
-          .filter((name) => !["model", "data_path"].includes(name))
+          .filter((name) => !["model", "data_path", ...modelOwned].includes(name))
           .sort(),
       ),
     ),
     inventoryCount: options.length,
-    controlCount: 44,
+    controlCount: 43,
+    modelOwned,
     inventory: options,
     nativeActions,
+    enablingActions,
     authored: value,
     yamlText,
     yamlSha256: hash(yamlText),

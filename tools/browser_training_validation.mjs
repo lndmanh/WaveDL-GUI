@@ -1,4 +1,4 @@
-import { openPlanDisclosure } from './browser_actions.mjs';
+import { openPlanDisclosure, planReadinessExpression, CONTROL_VALUE_SOURCE } from './browser_actions.mjs';
 // Real-browser negative authoring and runtime validation.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -6,15 +6,26 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { packagedAssetHashes } from "./browser_training_fields_full.mjs";
 
+// Draft fields are read wherever their builder block is: every block stays mounted.
+const projectControl = (label) => `(()=>{const labels=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).filter(e=>e.textContent.trim()===${JSON.stringify(label)});return labels.length===1?document.getElementById(labels[0].htmlFor):null;})()`;
+const fieldValid = (label) => `${projectControl(label)}?.getAttribute('aria-invalid') !== 'true'`;
+
+// The strip's review action on an invalid draft: the builder opens the Plan
+// block, keeps its own "Create plan" disabled and marks the field invalid.
+// Nothing is sent to the daemon.
+export async function requestInvalidPlan({ actions, cli }, label) {
+  await actions.reviewPlan();
+  await cli("wait", "--fn", `(()=>{const state=${planReadinessExpression()};return state.step==='guide-step-4'&&state.createPlan?.disabled===true&&${projectControl(label)}?.getAttribute('aria-invalid')==='true';})()`);
+}
+
 export async function cvResumeRefusal(driver, receipts, observation) {
-  const { fill, button, registry, root, cli, dom } = driver;
+  const { fill, registry, root, cli, dom } = driver;
   const selector = join(root, "private-resume-checkpoint.pth");
   const beforeState = await registry(root);
   const beforeReceiptCount = (await receipts()).length;
   await fill("Cross-validation folds", "2");
   await fill("Resume checkpoint", selector);
-  await button("Preview persisted plan");
-  await cli("wait", "--text", "Review the validation errors before requesting a plan.");
+  await requestInvalidPlan(driver, "Resume checkpoint");
   const observed = await observation("Resume checkpoint");
   const error = "Cross-validation does not support nondefault --resume.";
   assert.equal(observed.value, selector);
@@ -27,7 +38,7 @@ export async function cvResumeRefusal(driver, receipts, observation) {
   assert.deepEqual(afterState, beforeState);
   assert.equal(afterReceiptCount, beforeReceiptCount);
   await fill("Resume checkpoint", "");
-  await cli("wait", "--fn", `(()=>{const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()==='Resume checkpoint');return labels.length===1&&document.getElementById(labels[0].htmlFor)?.getAttribute('aria-invalid')==='false';})()`);
+  await cli("wait", "--fn", fieldValid("Resume checkpoint"));
   const corrected = await observation("Resume checkpoint");
   assert.equal(corrected.value, "");
   assert.equal(corrected.invalid, "false");
@@ -48,7 +59,7 @@ export async function trainingValidation(driver) {
     ["Data loader workers", "-2"], ["Loss weights", "1,Infinity"], ["Scheduler milestones", "2,3.5"],
     ["Cross-validation folds", "1"], ["Python interpreter", "python"],
   ];
-  for (const text of ["Optimizer, loss and scheduling", "Data, checkpoints and cross-validation"]) {
+  for (const text of ["Data loading and speed", "Cross-validation"]) {
     const open = await dom(`JSON.stringify(${controlExpression("summary", text)}[0]?.getAttribute('aria-expanded') === 'true')`);
     if (!open) await summary(text);
   }
@@ -62,17 +73,20 @@ export async function trainingValidation(driver) {
       throw error;
     }
   };
+  // A valid builder number field omits aria-invalid; it reads as "false".
   const observation = async (label) => dom(`JSON.stringify((()=>{
-    const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()===${JSON.stringify(label)});
-    const e=labels.length===1?document.getElementById(labels[0].htmlFor):null;
-    return {id:e?.id,value:e?.getAttribute('aria-checked')??e?.getAttribute('data-value')??e?.value??null,invalid:e?.getAttribute('aria-invalid'),error:e?.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]')?.textContent||''};
+    const e=${projectControl(label)};
+    return {id:e?.id,value:${CONTROL_VALUE_SOURCE}(e),invalid:e?(e.getAttribute('aria-invalid')==='true'?'true':'false'):null,error:e?.closest('[data-field],.runtime-row,[data-slot="field"]')?.querySelector('[data-slot="field-error"]')?.textContent||''};
   })())`);
+  // Loss weights and milestones are shown only for the loss/schedule that reads them.
+  const enable = { "Loss weights": () => actions.select("Loss function", "weighted_mse"),
+    "Scheduler milestones": () => actions.select("Learning rate schedule", "multistep") };
   for (const [name, value] of invalid) {
     const beforeCase = await state();
     const beforeReceipts = await receipts();
+    await enable[name]?.();
     await fill(name, value);
-    await button("Preview persisted plan");
-    await cli("wait", "--text", "Review the validation errors before requesting a plan.");
+    await requestInvalidPlan(driver, name);
     const observed = await observation(name);
     assert.equal(observed.invalid, "true");
     const after = await state();
@@ -90,7 +104,7 @@ export async function trainingValidation(driver) {
     const corrections = { "Batch size": "8", "Learning rate": "0.003", "Data loader workers": "0",
       "Loss weights": "1,1", "Scheduler milestones": "2,3", "Cross-validation folds": "0", "Python interpreter": interpreter };
     await fill(name, corrections[name]);
-    await cli("wait", "--fn", `(()=>{const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()===${JSON.stringify(name)});return labels.length===1&&document.getElementById(labels[0].htmlFor)?.getAttribute('aria-invalid')==='false';})()`);
+    await cli("wait", "--fn", fieldValid(name));
     record.trainingValidation.invalid.at(-1).corrected = await observation(name);
   }
   const checkbox = async (name, wanted) => {
@@ -102,11 +116,11 @@ export async function trainingValidation(driver) {
     await cli("wait", "--fn", `${expression} === '${wanted}'`);
   };
 
-  // Standalone export safety is exercised through the public editor controls.
+  // Standalone export safety is exercised through the public Import / Export menu.
   // YAML is configuration-only; the command exporter must refuse secrets and
   // topologies it cannot reproduce on a standalone host.
   const exportYaml = async (filename) => {
-    const selector = await actions.readyControl("button", "Download YAML");
+    const selector = await actions.configMenuItem("Download YAML");
     assert(selector, "YAML download control missing");
     const path = join(downloads, filename);
     await cli("download", selector, path);
@@ -116,7 +130,6 @@ export async function trainingValidation(driver) {
   };
   const exportBeforeState = await state();
   const exportBeforeReceipts = (await receipts()).length;
-  await summary("Standalone configuration export");
   await summary("Explicit runtime environment");
   await fill("New environment variable", "EXPORT_PROBE");
   await button("Add variable");
@@ -125,13 +138,13 @@ export async function trainingValidation(driver) {
   const environmentBytes = await readFile(join(downloads, environmentDownload.filename), "utf8");
   assert(!environmentBytes.includes("browser-secret-probe"));
   assert(!("environment" in environmentDownload.config));
-  await button("Copy standalone CLI command");
+  await actions.copyStandaloneCommand();
   await cli("wait", "--text", "Explicit environment values are not exported");
   const environmentRefusal = await dom(`JSON.stringify(Array.from(document.querySelectorAll('[role="status"]')).some(e=>e.getClientRects().length&&e.textContent.includes('Explicit environment values are not exported')))`);
   assert.equal(environmentRefusal, true);
   await button("Remove EXPORT_PROBE");
   await fill("Machines", "2");
-  await button("Copy standalone CLI command");
+  await actions.copyStandaloneCommand();
   await cli("wait", "--text", "Multi-node standalone commands require explicit rendezvous");
   const topologyRefusal = await dom(`JSON.stringify(Array.from(document.querySelectorAll('[role="status"]')).some(e=>e.getClientRects().length&&e.textContent.includes('Multi-node standalone commands require explicit rendezvous')))`);
   assert.equal(topologyRefusal, true);
@@ -148,6 +161,8 @@ export async function trainingValidation(driver) {
   };
   await fill("Loss weights", "");
   await fill("Scheduler milestones", "");
+  await actions.select("Loss function", "mse");
+  await actions.select("Learning rate schedule", "plateau");
   await fill("Cross-validation folds", "2");
   for (const [name, field, prepare, correct] of [
     ["cv-compile", "Compile model", () => checkbox("Compile model", true), () => checkbox("Compile model", false)],
@@ -160,8 +175,7 @@ export async function trainingValidation(driver) {
   ]) {
     const beforeReceipts = (await receipts()).length;
     await prepare();
-    await button("Preview persisted plan");
-    await cli("wait", "--text", "Review the validation errors before requesting a plan.");
+    await requestInvalidPlan(driver, field);
     const observed = await observation(field);
     assert.equal(observed.invalid, "true");
     const after = await state();
@@ -170,7 +184,7 @@ export async function trainingValidation(driver) {
     assert.deepEqual(after.executions, []);
     assert.equal((await receipts()).length, beforeReceipts);
     await correct();
-    await cli("wait", "--fn", `(()=>{const labels=Array.from(document.querySelectorAll('label')).filter(e=>e.getClientRects().length&&e.textContent.trim()===${JSON.stringify(field)});return labels.length===1&&document.getElementById(labels[0].htmlFor)?.getAttribute('aria-invalid')==='false';})()`);
+    await cli("wait", "--fn", fieldValid(field));
     const corrected = await observation(field);
     record.trainingValidation.invalid.push({
       name, value: observed.value, observed, ariaInvalid: observed.invalid, error: observed.error,
@@ -185,8 +199,9 @@ export async function trainingValidation(driver) {
   for (const [label, value] of [["Runtime mode", "bundled"], ["Runtime mode", "container"], ["Device", "mps"]]) {
     const beforeCase = await state();
     const beforeReceipts = (await receipts()).length;
-    await actions.select(label, value);
-    await button("Preview persisted plan");
+    if (label === "Device") await actions.device(value);
+    else await actions.select(label, value);
+    await actions.createPlan();
     await cli("wait", "--text", "The daemon refused this plan. Correct the settings and preview again.");
     const after = await state();
     assert.deepEqual(after, beforeCase);
@@ -200,12 +215,13 @@ export async function trainingValidation(driver) {
     assert.equal((await receipts()).length, beforeReceipts + 1);
     check(after.plans === beforeCase.plans && after.executions.length === 0,
       label + " unsupported authoring has no durable mutation");
-    await actions.select(label, label === "Device" ? "cpu" : "existing");
+    if (label === "Device") await actions.device("cpu");
+    else await actions.select(label, "existing");
   }
   await fill("Batch size", "8");
   await fill("Learning rate", "0.003");
   await fill("Data loader workers", "0");
-  await button("Preview persisted plan");
+  await actions.createPlan();
   await cli("wait", "--text", "Persisted plan for approval");
   await openPlanDisclosure({ cli, dom });
   const approved = JSON.parse(await dom('JSON.stringify(document.querySelector("[aria-label=\\"Approved normalized manifest\\"]")?.textContent)'));
@@ -229,7 +245,7 @@ export async function trainingValidation(driver) {
   // Add a genuine CV recovery preview without replacing the original cv=0
   // preview evidence. Previewing is not permission to submit or train.
   await fill("Cross-validation folds", "2");
-  await button("Preview persisted plan");
+  await actions.createPlan();
   await cli("wait", "--text", "Persisted plan for approval");
   await openPlanDisclosure({ cli, dom });
   const recoveredApproval = JSON.parse(await dom('JSON.stringify(document.querySelector("[aria-label=\\"Approved normalized manifest\\"]")?.textContent)'));

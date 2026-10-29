@@ -8,13 +8,13 @@ import { fileURLToPath } from 'node:url';
 
 export const MAX_EXPOSURE_OBSERVATIONS = 8;
 export const EXPOSURE_OBSERVATION_TIMEOUT_MS = 15000;
+// A control can sit in a closed section of an inactive builder block: each
+// reveal opens one container, outermost first.
+export const MAX_REVEALS = 3;
 
-const trainingFields = JSON.parse(
-  readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), '..', 'web/app/i18n/locales/en/training-fields.json'),
-    'utf8',
-  ),
-);
+const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'web/app');
+const trainingFields = JSON.parse(readFileSync(join(appRoot, 'i18n/locales/en/training-fields.json'), 'utf8'));
+const builderMessages = JSON.parse(readFileSync(join(appRoot, 'i18n/locales/en/builder.json'), 'utf8'));
 const trainingFieldLabels = Object.fromEntries(
   Object.entries(trainingFields).flatMap(([name, value]) => {
     if (!value || typeof value !== 'object' || !('label' in value) || typeof value.label !== 'string')
@@ -22,11 +22,97 @@ const trainingFieldLabels = Object.fromEntries(
     return [[name, value.label], [value.label.toLowerCase().replaceAll(' ', '_'), value.label]];
   }),
 );
+const trainingFieldNames = Object.fromEntries(
+  Object.entries(trainingFields).flatMap(([name, value]) =>
+    value && typeof value === 'object' && typeof value.label === 'string' ? [[value.label, name]] : []),
+);
+
+// Choice labels come from the same tables the app renders with, so a
+// segmented control is driven by the exact visible text of the wanted value.
+function choiceTable(source, name) {
+  const body = source.match(new RegExp(`const ${name}[^=]*= \\{([\\s\\S]*?)\\n\\};`))?.[1];
+  assert(body, `${name} is missing from web/app/i18n/dynamic-keys.ts`);
+  return Object.fromEntries(Array.from(body.matchAll(/^\s*'?([\w.]+)'?: '([^']*)',$/gm), (match) => [match[1], match[2]]));
+}
+const dynamicKeys = readFileSync(join(appRoot, 'i18n/dynamic-keys.ts'), 'utf8');
+const choiceMessageKeys = choiceTable(dynamicKeys, 'trainingChoiceMessageKeys');
+const technicalChoiceLabels = choiceTable(dynamicKeys, 'technicalChoiceLabels');
+
+export function builderMessage(key) {
+  const message = builderMessages[key];
+  assert(typeof message === 'string', `Unknown builder message ${key}`);
+  return message;
+}
 
 export function normalizeTrainingFieldLabel(name) {
   const key = name.trim().toLowerCase().replaceAll(' ', '_');
   return trainingFieldLabels[key] ?? name;
 }
+
+export function trainingFieldName(label) {
+  return trainingFieldNames[normalizeTrainingFieldLabel(label)] ?? null;
+}
+
+export function trainingChoiceLabel(field, choice) {
+  const key = choiceMessageKeys[`${field}.${choice}`];
+  if (key) return builderMessage(key.replace(/^builder\./, ''));
+  return technicalChoiceLabels[choice] ?? choice;
+}
+
+// Builder hooks. Blocks are pipeline tabs; every inspector stays mounted and
+// only the active one is shown.
+export const PIPELINE_REVIEW = 'xpath=//*[@data-testid="project-stepper"]//button[not(@role="tab")]';
+export const PLAN_SUBMIT = `xpath=//form[@role="tabpanel"]//button[@type="submit" and normalize-space(.)=${xpathLiteral(builderMessages.createPlan)}]`;
+export const BLOCKS = Object.freeze({ dataset: 0, model: 1, training: 2, runtime: 3, plan: 4 });
+
+export function datasetSelectedExpression(name) {
+  return `(() => {
+    const cards = Array.from(document.querySelectorAll('[data-testid="selected-dataset"]'));
+    const block = document.querySelector('[data-testid="guide-step-0"]');
+    return cards.length === 1 && cards[0].textContent.trim() === ${JSON.stringify(name)}
+      && (cards[0].nextElementSibling?.textContent ?? '').trim().endsWith('/ ' + ${JSON.stringify(name)})
+      && block?.getAttribute('data-state') === 'complete' && block.textContent.includes(${JSON.stringify(name)});
+  })()`;
+}
+
+export function modelChosenExpression(key) {
+  return `(() => {
+    const rows = Array.from(document.querySelectorAll(${JSON.stringify(`[data-testid="model-card"][data-model-entry="${key}"]`)}));
+    const chosen = rows.length > 0 && rows.every(row => Array.from(row.querySelectorAll('[aria-label]')).some(e => e.getAttribute('aria-label') === ${JSON.stringify(builderMessages.modelInUse)}));
+    const block = document.querySelector('[data-testid="guide-step-1"]');
+    return chosen && !!block && block.getAttribute('data-state') !== 'pending';
+  })()`;
+}
+
+// The Plan block before a plan exists: its readiness checklist and whether its
+// own "Create plan" submit is enabled.
+export function planReadinessExpression() {
+  return `(() => {
+    const list = document.querySelector(${JSON.stringify(`ul[aria-label="${builderMessages.readiness}"]`)});
+    const submit = ${controlExpression('button', builderMessages.createPlan, { locator: PLAN_SUBMIT })}[0];
+    const step = document.querySelector('[role="tab"][aria-current="step"]');
+    return {
+      step: step?.getAttribute('data-testid') ?? null,
+      createPlan: submit ? { visible: !!submit.getClientRects().length, disabled: !!submit.disabled } : null,
+      items: Array.from(list?.querySelectorAll('li') ?? []).map(item => {
+        const [label, detail] = Array.from(item.children[1]?.children ?? []).map(e => e.textContent.trim());
+        return { label, detail, done: item.querySelector('[data-done]')?.getAttribute('data-done') === 'true',
+          action: item.querySelector('button')?.textContent.trim() ?? null };
+      }),
+    };
+  })()`;
+}
+
+// Reads what a control shows: switches and checkboxes by ARIA state, a
+// segmented control by its pressed item's text, everything else by value.
+export const CONTROL_VALUE_SOURCE = `(element => {
+  if (!element) return null;
+  const role = element.getAttribute('role');
+  if (role === 'switch' || role === 'checkbox' || role === 'radio') return element.getAttribute('aria-checked');
+  if (role === 'group' && element.querySelector('[data-slot="toggle-group-item"]'))
+    return element.querySelector('[data-slot="toggle-group-item"][data-state="on"]')?.textContent.trim() ?? '';
+  return element.getAttribute('data-value') ?? element.value ?? null;
+})`;
 
 export function xpathLiteral(value) {
   if (!value.includes("'")) return `'${value}'`;
@@ -38,7 +124,8 @@ export function controlLocator(kind, name, { scope } = {}) {
   const literal = xpathLiteral(kind === 'field' ? normalizeTrainingFieldLabel(name) : name);
   const base = scope ? `(${scope})` : '';
   if (kind === 'button') return `xpath=${base}//button[@aria-label=${literal} or normalize-space(.)=${literal}]`;
-  if (kind === 'summary') return `xpath=${base}//*[self::summary or (self::button and @aria-expanded)][normalize-space(.)=${literal}]`;
+  // Section triggers carry an icon and a change count beside their title; match the title leaf.
+  if (kind === 'summary') return `xpath=${base}//*[self::summary or (self::button and @aria-expanded)][normalize-space(.)=${literal} or .//*[not(*) and normalize-space(.)=${literal}]]`;
   if (kind === 'option') return `xpath=${base}//*[@role="option" and (@data-value=${literal} or normalize-space(.)=${literal})]`;
   if (kind === 'field') return `xpath=//*[@id=${base}//label[normalize-space(.)=${literal}]/@for]`;
   throw new Error(`Unsupported browser control kind: ${kind}`);
@@ -52,6 +139,38 @@ export function controlExpression(kind, name, options = {}) {
   return `Array.from((() => {
     const nodes = document.evaluate(${selector}, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
     return Array.from({length: nodes.snapshotLength}, (_, index) => nodes.snapshotItem(index));
+  })())`;
+}
+
+// The container to open next so a hidden control becomes visible: the
+// outermost of an inactive builder block (its pipeline tab) and a closed
+// collapsible section (its trigger). Null when nothing known hides it.
+export function revealExpression(kind, name, options = {}) {
+  return `JSON.stringify((() => {
+    const controls = ${controlExpression(kind, name, options)};
+    const element = controls.find(e => e.getClientRects().length)
+      ?? controls.find(e => e.closest('section[aria-labelledby="project-title"]')) ?? controls[0];
+    if (!element || element.getClientRects().length) return null;
+    let reveal = null;
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      if (parent.matches('[data-slot="collapsible-content"][data-state="closed"]')) {
+        // A trigger rendered before its content can carry an empty aria-controls;
+        // then it is found as the trigger of the content's own collapsible.
+        const controlled = '[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]';
+        const sibling = '[data-slot="collapsible"]:has(> #' + CSS.escape(parent.id) + ') > [data-slot="collapsible-trigger"]';
+        reveal = !parent.id ? null : document.querySelector(controlled) ? controlled
+          : document.querySelectorAll(sibling).length === 1 ? sibling : null;
+      }
+      // A v-show region naming its own opener (Runs on's Manual editor) is opened by it.
+      const opener = parent.getAttribute('data-reveal-target');
+      if (opener && parent.style.display === 'none') reveal = document.querySelector(opener) ? opener : null;
+      const panel = parent.parentElement;
+      if (panel?.matches('form[role="tabpanel"]') && parent.style.display === 'none') {
+        const tab = '[data-testid="guide-step-' + Array.from(panel.children).indexOf(parent) + '"]';
+        reveal = document.querySelector(tab)?.getAttribute('aria-controls') === panel.id ? tab : null;
+      }
+    }
+    return reveal;
   })())`;
 }
 
@@ -92,43 +211,37 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
   const describe = async (kind, name, options = {}) => dom(`JSON.stringify(${controlExpression(kind, name, options)}.map(element => ({
     tag: element.tagName, text: element.getAttribute('aria-label') || element.textContent.trim(),
     visible: !!element.getClientRects().length, disabled: !!element.disabled,
-    leaf: element.children.length === 0, value: element.getAttribute('data-value') ?? element.value,
+    leaf: element.children.length === 0, value: ${CONTROL_VALUE_SOURCE}(element),
+    toggleGroup: element.getAttribute('role') === 'group' && !!element.querySelector('[data-slot="toggle-group-item"]'),
     id: element.id, locator: element.id ? '#' + CSS.escape(element.id) : null,
     labels: Array.from(element.labels ?? []).map(label => label.textContent.trim())
   })))`);
+  // Opens the containers hiding a control, outermost first. Returns whether
+  // anything was opened; never opens anything when a match is already visible.
+  const reveal = async (kind, name, options = {}) => {
+    let opened = false;
+    let previous = null;
+    for (let attempt = 0; attempt < MAX_REVEALS; attempt++) {
+      const target = await dom(revealExpression(kind, name, options));
+      // A container that stays closed after its own control is used is not
+      // retried: the control is then reported as not exposed.
+      if (!target || target === previous) break;
+      previous = target;
+      opened = true;
+      await cli('scrollintoview', target);
+      await cli('click', target);
+    }
+    return opened;
+  };
   const prepare = async (kind, name, optional = false, options = {}) => {
     await snapshot();
     let controls = await describe(kind, name, options);
     if (optional && controls.length === 0) return false;
     let attemptedReveal = false;
-    if (!controls.some(control => control.visible)) {
-      const reveal = await dom(`JSON.stringify((() => {
-        const element = ${controlExpression(kind, name, options)}[0];
-        for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
-          if (parent.matches('[role="tabpanel"][data-state="inactive"]')) {
-            const panelId = parent.id;
-            const trigger = Array.from(document.querySelectorAll('[role="tab"][aria-controls]'))
-              .find(candidate => candidate.getAttribute('aria-controls') === panelId);
-            if (trigger?.getAttribute('data-testid') === 'training-tab-essentials') return null;
-            if (trigger) return '#'+CSS.escape(trigger.id);
-            return null;
-          }
-          if (parent.matches('[data-slot="collapsible-content"][data-state="closed"]')) {
-            const trigger = document.querySelector('[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]');
-            if (trigger) return '[data-slot="collapsible-trigger"][aria-controls="' + CSS.escape(parent.id) + '"]';
-            return null;
-          }
-        }
-        return null;
-      })())`);
-      if (reveal) {
-        attemptedReveal = true;
-        await cli('scrollintoview', reveal);
-        await cli('click', reveal);
-        controls = await describe(kind, name, options);
-        const exposed = controls.filter(control => control.visible);
-        assert(exposed.length > 0, `${name} is not exposed in the DOM`);
-      }
+    if (!controls.some(control => control.visible) && await reveal(kind, name, options)) {
+      attemptedReveal = true;
+      controls = await describe(kind, name, options);
+      assert(controls.some(control => control.visible), `${name} is not exposed in the DOM`);
     }
     // Render readiness must precede semantic discovery; a snapshot alone is not
     // a readiness barrier. Duplicates fail closed, including hidden duplicates
@@ -172,16 +285,9 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
   return {
     describe,
     readyControl: prepare,
+    reveal,
     async showTrainingField(label, options = {}) {
-      const matchingTab = await dom(`JSON.stringify((() => {
-        const controls = ${controlExpression('field', label, options)};
-        const field = controls.find(element => element.getClientRects().length) ?? controls.find(element => element.closest('section[aria-labelledby="project-title"]')?.getClientRects().length) ?? controls[0];
-        const panel = field?.closest('[role="tabpanel"][data-state="inactive"]');
-        if (!panel) return null;
-        const trigger = Array.from(document.querySelectorAll('[role="tab"][aria-controls]')).find(element => element.getAttribute('aria-controls') === panel.id);
-        return trigger?.matches('[data-testid="training-tab-essentials"],[data-testid="training-tab-advanced"]') ? { locator: '#' + CSS.escape(trigger.id), name: trigger.textContent.trim() } : null;
-      })())`);
-      if (matchingTab) await this.button(matchingTab.name, false, { locator: matchingTab.locator });
+      await reveal('field', label, options);
     },
     async button(name, optional = false, options = {}) {
       const locator = await prepare('button', name, optional, options);
@@ -202,6 +308,18 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
       await this.showTrainingField(label);
       const locator = await prepare('field', label);
       const control = (await describe('field', label, { locator }))[0];
+      if (control?.toggleGroup) {
+        // Few-choice settings are segmented controls: press the item showing the value.
+        const field = trainingFieldName(label);
+        const text = field ? trainingChoiceLabel(field, String(value)) : String(value);
+        if (control.value !== text) {
+          await this.button(text, false, { locator: `xpath=//*[@id=${xpathLiteral(control.id)}]//button[normalize-space(.)=${xpathLiteral(text)}]` });
+        }
+        await cli('wait', '--fn', `${CONTROL_VALUE_SOURCE}(document.getElementById(${JSON.stringify(control.id)})) === ${JSON.stringify(text)}`);
+        const controls = await describe('field', label, { locator });
+        assert(controls.length === 1 && controls[0].value === text, `UI segmented control ${label} did not retain authored value`);
+        return;
+      }
       if (control?.tag === 'SELECT') await cli('select', locator, String(value));
       else {
         await cli('click', locator);
@@ -209,6 +327,12 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
       }
       const controls = await describe('field', label, { locator });
       assert(controls.length === 1 && (controls[0].value === String(value) || controls[0].value === String(value || 'none')), `UI select ${label} did not retain authored value`);
+    },
+    // Runtime device is a radio card group without a field label.
+    async device(value) {
+      const locator = `[data-testid="device-${value}"]`;
+      await this.button(`Device ${value}`, false, { locator });
+      await cli('wait', '--fn', `document.querySelector(${JSON.stringify(locator)})?.getAttribute('aria-checked') === 'true'`);
     },
     async options(label) {
       const locator = await prepare('field', label);
@@ -232,22 +356,85 @@ export function createBrowserActions({ cli, dom, snapshot, now = () => performan
     },
     async expandSummary(name) {
       const expression = `(() => { const element = ${controlExpression('summary', name)}[0]; return element?.tagName === 'SUMMARY' ? element.closest('details')?.open : element?.getAttribute('aria-expanded') === 'true'; })()`;
-      // A group inside an inactive tab panel is closed even when its own
-      // disclosure defaults open: its content starts hidden either way.
-      const hiddenTab = await dom(`JSON.stringify((() => {
-        const panel = ${controlExpression('summary', name)}[0]?.closest('[role="tabpanel"][data-state="inactive"]');
-        const trigger = panel && Array.from(document.querySelectorAll('[role="tab"][aria-controls]')).find(tab => tab.getAttribute('aria-controls') === panel.id);
-        return trigger ? '#' + CSS.escape(trigger.id) : null;
-      })())`);
-      assert(hiddenTab || await dom(`JSON.stringify(${expression})`) === false, `Summary ${name} must begin closed`);
-      if (hiddenTab) {
-        await cli('scrollintoview', hiddenTab);
-        await cli('click', hiddenTab);
-      }
+      // A section in an inactive builder block is first brought into view;
+      // its own disclosure must still begin closed.
+      await reveal('summary', name);
+      assert(await dom(`JSON.stringify(${expression})`) === false, `Summary ${name} must begin closed`);
       const locator = await prepare('summary', name);
       if (await dom(`JSON.stringify(${expression})`) !== true) await cli('click', locator);
       await cli('wait', '--fn', `${expression} === true`);
       assert(await dom(`JSON.stringify(${expression})`) === true, `Summary ${name} did not expand`);
+    },
+    // ---- New training run builder ------------------------------------------------
+    async settleStartPanel(choice = 'fresh') {
+      await cli('wait', '--fn', '!!document.querySelector(\'[data-testid="project-stepper"]\')');
+      const offered = await dom('JSON.stringify(Array.from(document.querySelectorAll(\'[data-testid="start-fresh"],[data-testid="continue-draft"]\')).some(e => e.getClientRects().length))');
+      if (!offered) return false;
+      const testId = choice === 'continue' ? 'continue-draft' : 'start-fresh';
+      await this.button(builderMessage(choice === 'continue' ? 'continueDraft' : 'startFresh'), false, { locator: `[data-testid="${testId}"]` });
+      await cli('wait', '--fn', '!document.querySelector(\'[data-testid="start-fresh"]\')');
+      return true;
+    },
+    async openProject(choice = 'fresh') {
+      await this.button('New training run', false, { locator: '[data-testid="nav-project"]' });
+      return this.settleStartPanel(choice);
+    },
+    async showBlock(block) {
+      const index = typeof block === 'number' ? block : BLOCKS[block];
+      assert(Number.isInteger(index), `Unknown builder block ${block}`);
+      const tab = `[data-testid="guide-step-${index}"]`;
+      await this.button(`Builder block ${block}`, false, { locator: tab });
+      await cli('wait', '--fn', `document.querySelector(${JSON.stringify(tab)})?.getAttribute('aria-selected') === 'true'`);
+    },
+    async chooseModel(key) {
+      const rows = `[data-testid="model-card"][data-model-entry="${key}"]`;
+      await cli('wait', '--fn', `!!document.querySelector(${JSON.stringify(rows)})`);
+      if (await dom(`JSON.stringify(${modelChosenExpression(key)})`) === true) return;
+      await this.button(`Model ${key}`, false, { locator: `xpath=(//*[@data-testid="model-card" and @data-model-entry=${xpathLiteral(key)}])[1]` });
+      await this.button(builderMessages.useThisModel, false, { locator: '[data-testid="model-select"]' });
+      await cli('wait', '--fn', modelChosenExpression(key));
+    },
+    // The Plan block's own submit: an explicit, enabled request for a persisted plan.
+    async createPlan() {
+      await this.showBlock('plan');
+      await this.button(builderMessages.createPlan, false, { locator: PLAN_SUBMIT });
+    },
+    // The strip's primary action. Unlike the Plan block submit it stays enabled
+    // for an invalid draft, which it opens on the Plan block and validates.
+    async reviewPlan() {
+      await this.button('Pipeline review', false, { locator: PIPELINE_REVIEW });
+    },
+    // The standalone command goes to the system clipboard, which headless
+    // Chromium will not read back (readText is permission-denied). The page's
+    // own writeText is observed instead: the exact text the app hands to the
+    // Clipboard API is recorded and then passed through to the real write, so
+    // the app's "copied" notice still reports the real clipboard outcome.
+    async copyStandaloneCommand() {
+      const locator = await this.configMenuItem('Copy standalone CLI command');
+      await dom(`JSON.stringify((() => {
+        const clipboard = navigator.clipboard;
+        if (!Object.hasOwn(clipboard, 'writeText')) {
+          const write = clipboard.writeText.bind(clipboard);
+          Object.defineProperty(clipboard, 'writeText', { configurable: true, value: (text) => {
+            window.__wavedlCopiedText = String(text);
+            return write(text);
+          } });
+        }
+        window.__wavedlCopiedText = null;
+        return true;
+      })())`);
+      await cli('click', locator);
+    },
+    async copiedCommand() {
+      await cli('wait', '--text', 'Standalone POSIX command copied.');
+      const text = await dom('JSON.stringify(window.__wavedlCopiedText ?? null)');
+      assert(typeof text === 'string' && text, 'The copied standalone command was not handed to the clipboard');
+      return text;
+    },
+    async configMenuItem(label) {
+      await this.button(builderMessages.importExport, false, { locator: '[data-testid="config-menu"]' });
+      const item = `xpath=//*[@role="menuitem"][.//*[not(*) and normalize-space(.)=${xpathLiteral(label)}]]`;
+      return prepare('button', label, false, { locator: item });
     },
   };
 }

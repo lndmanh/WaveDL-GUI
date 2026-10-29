@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { CONTROL_VALUE_SOURCE } from './browser_actions.mjs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -55,25 +56,26 @@ print(json.dumps([dict(row) for row in c.execute("SELECT * FROM execution_contro
   const ui = async () => {
     await actions.showTrainingField('Epochs');
     return dom(`JSON.stringify((()=>{
-    const field=name=>{const label=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e=>e.getClientRects().length&&e.textContent.trim()===name);const control=label&&document.getElementById(label.htmlFor);return control?.getAttribute('data-value') ?? control?.value ?? null};
-    const paragraphs=Array.from(document.querySelectorAll('p,[data-testid="selected-model"]')).map(e=>e.textContent.trim());
+    // Every builder block stays mounted, so draft fields are read wherever they are.
+    const field=name=>{const label=Array.from(document.querySelectorAll('section[aria-labelledby="project-title"] label')).find(e=>e.textContent.trim()===name);const control=label&&document.getElementById(label.htmlFor);return control?${CONTROL_VALUE_SOURCE}(control):null};
     const dataset=document.querySelector('[data-testid="selected-dataset"]');
-    const datasetDetails=Array.from(document.querySelectorAll('button[aria-label]')).find(e=>e.getAttribute('aria-label').startsWith('Dataset: '))?.getAttribute('aria-label')||'';
-    const dataPath=datasetDetails.match(/^Dataset: (.*?) · daemon /)?.[1]||null;
+    const datasetLocation=(dataset?.nextElementSibling?.textContent??'').trim()||null;
+    const model=Array.from(document.querySelectorAll('[data-testid="model-card"]')).find(row=>Array.from(row.querySelectorAll('[aria-label]')).some(e=>e.getAttribute('aria-label')==='In use'))?.getAttribute('data-model-entry')??null;
+    const device=document.querySelector('[data-testid^="device-"][aria-checked="true"]')?.getAttribute('data-testid')?.slice(7)??null;
     const ack=document.querySelector('[aria-label="Acknowledged training run"]');
-    return {epochs:field('Epochs'),batchSize:field('Batch size'),python:field('Python interpreter'),device:field('Device'),
-      datasetFile:dataset?.textContent.trim()||null,dataPath,model:paragraphs.find(t=>t.startsWith('Model: '))?.split(' ')[1]?.replace(/\\.$/,''),
+    return {epochs:field('Epochs'),batchSize:field('Batch size'),python:field('Python interpreter'),device,
+      datasetFile:dataset?.textContent.trim()||null,datasetLocation,model,
       approvalVisible:!!document.querySelector('[aria-label="Approved normalized manifest"]'),
       approveEnabled:Array.from(document.querySelectorAll('button')).some(e=>e.getClientRects().length&&!e.disabled&&e.textContent.trim()==='Approve and start this plan'),
       acknowledgedRun:ack?.textContent.includes(${JSON.stringify(approvedManifest.run_id)})?${JSON.stringify(approvedManifest.run_id)}:null,
-      openAcknowledgedEnabled:Array.from(ack?.querySelectorAll('button')??[]).some(e=>e.getClientRects().length&&!e.disabled&&e.textContent.trim()==='Open acknowledged run'),
+      openAcknowledgedEnabled:Array.from(document.querySelectorAll('button')).some(e=>!e.disabled&&e.textContent.trim()==='Open acknowledged run'),
       resetConfirmationVisible:!!document.querySelector('[aria-label="Confirm reset"]')};})())`);
   };
   record.runId = approvedManifest.run_id;
   record.accepted = await capture(); record.planId = record.accepted.planId;
   record.accepted.manifest = { config: { epochs: approvedManifest.resolved_config.epochs, model: approvedManifest.resolved_config.model, data_path: approvedManifest.resolved_config.data_path }, device: approvedManifest.runtime.device, python: approvedManifest.runtime.python };
   record.authored = { epochs: '3', model: 'cnn', workers: '0', precision: 'no', device: 'cpu', dataPath: approvedManifest.resolved_config.data_path, python: approvedManifest.runtime.python };
-  await actions.button('New training run', false, { locator: '[data-testid="nav-project"]' });
+  await actions.openProject('continue');
   await fill('Epochs', '4');
   record.editedUi = await ui(); record.afterEdit = await capture();
   await button('Reset training defaults');

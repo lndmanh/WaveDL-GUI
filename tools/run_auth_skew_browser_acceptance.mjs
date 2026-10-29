@@ -9,7 +9,7 @@ import { access, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { boundedCommand } from "./browser_process.mjs";
-import { createBrowserActions, normalizeTrainingFieldLabel } from "./browser_actions.mjs";
+import { createBrowserActions, normalizeTrainingFieldLabel, datasetSelectedExpression, modelChosenExpression } from "./browser_actions.mjs";
 import { browserLaunchArgs } from "./browser_launch_policy.mjs";
 import { observeCursorStorage } from "./browser_cursor_storage.mjs";
 import {
@@ -207,7 +207,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
 
     // Establish genuine nonempty authority through the normal labelled editor,
     // persisted approval and CPU runtime before testing retirement.
-    await actions.button("New training run", false, { locator: '[data-testid="nav-project"]' });
+    await actions.openProject("fresh");
     const rootSelector = 'xpath=//*[@role="combobox" and @aria-label="Search roots and paths"]';
     const preparedRoot = await actions.readyControl("field", "Search roots and paths", false, {
       locator: rootSelector,
@@ -216,20 +216,10 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     await actions.option("datasets");
     await cli("wait", "--text", "samples.npz");
     await button("Select file samples.npz");
-    await cli(
-      "wait",
-      "--fn",
-      "Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim() === 'samples.npz') && Array.from(document.querySelectorAll('button[aria-label]')).some(e => e.getAttribute('aria-label').startsWith('Dataset: ') && e.getAttribute('aria-label').includes('/samples.npz'))",
-    );
-    await button("Next step");
-    await cli("wait", "--text", "Choose CNN");
-    await button("Choose CNN");
-    await cli(
-      "wait",
-      "--fn",
-      "Array.from(document.querySelectorAll('[data-testid=selected-dataset],[data-testid=selected-model]')).some(e => e.textContent.trim().startsWith('Model: cnn'))",
-    );
-    report.trainingEditorReadiness = await openTrainingEditor({ button, cli, dom });
+    await cli("wait", "--fn", datasetSelectedExpression("samples.npz"));
+    await actions.chooseModel("cnn");
+    await cli("wait", "--fn", modelChosenExpression("cnn"));
+    report.trainingEditorReadiness = await openTrainingEditor({ cli, dom });
     const interpreter = await command(python, ["-c", "import sys; print(sys.executable)"]);
     report.pythonInterpreter = interpreter;
     await cli("wait", "--fn", editorFieldReadyExpression());
@@ -276,11 +266,11 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     };
     await fillStable("epochs", "3");
     await fillStable("patience", "3");
-    await actions.expandSummary("Data, checkpoints and cross-validation");
+    await actions.expandSummary("Data loading and speed");
     await fillStable("workers", "0");
     await fillStable("batch size", "16");
     await actions.select("precision", "no");
-    await button("Preview persisted plan");
+    await actions.createPlan();
     await cli("wait", "--text", "Persisted plan for approval");
     await openPlanDisclosure({ cli, dom });
     const approved = await observe(
@@ -325,17 +315,17 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
       panelPresent: !!document.querySelector('section[aria-labelledby="connection-title"]'),
       overlayOpen: !!document.querySelector('[role="dialog"] section[aria-labelledby="connection-title"]'),
       authenticationNotice: document.body.innerText.includes('Your session ended. Sign in again.'),
-      identityNotice: document.body.innerText.includes('Connection identity changed'),
+      identityNotice: document.body.innerText.includes('WaveDL has changed'),
     })`);
     await waitFor(
       "!!document.querySelector('section[aria-labelledby=\"connection-title\"]')",
       "connection panel",
     );
     await waitFor(
-      "Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.textContent.trim() === 'Verify connection')",
+      "Array.from(document.querySelectorAll('button')).some(e => e.getClientRects().length && e.textContent.trim() === 'Check again')",
       "connection verification action",
     );
-    const verifyLocator = await actions.readyControl("button", "Verify connection", false, {
+    const verifyLocator = await actions.readyControl("button", "Check again", false, {
       scope: '//section[@aria-labelledby="connection-title"]',
     });
     await writeFile(join(root, ".auth-skew-control"), "401", { flag: "wx", mode: 0o600 });
@@ -351,11 +341,11 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
         const storageExpression = `(${observeCursorStorage.toString()})(localStorage, sessionStorage, document.cookie, ${JSON.stringify(faults[0]?.daemonId)}, ${JSON.stringify(manifest.run_id)}, { forbiddenToken: ${JSON.stringify(token)}, origin: ${JSON.stringify(origin)} })`;
         const revoked = await observe(`({
           authMessage: document.body.innerText.includes('Your session ended. Sign in again.'),
-          reconnectPrompt: document.body.innerText.includes('Daemon master credential'),
+          reconnectPrompt: document.body.innerText.includes('Access key'),
           stalePlan: !!document.querySelector('[aria-label="Approved normalized manifest"]'),
           staleHistory: !!document.querySelector('[aria-label="Runtime metric history"] canvas'),
           staleSelectedRun: !!document.querySelector('[aria-label="Selected run"]'),
-          mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Request cancellation|Preview persisted plan/.test(e.textContent)).length,
+          mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Request cancellation|Create plan/.test(e.textContent)).length,
           storage: ${storageExpression},
         })`);
         report.revoked = revoked;
@@ -374,8 +364,8 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     report.historyPlanPrecondition =
       "normal UI persisted approval and submitted CPU runtime with nonempty rendered metric history";
 
-    await actions.fill("Daemon master credential", token);
-    await button("Connect securely");
+    await actions.fill("Access key", token);
+    await button("Connect");
     await waitFor(
       "document.body.innerText.includes('Connected')",
       "same-daemon explicit reauthentication",
@@ -383,7 +373,7 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     const reauthed = await observe(`({
       connected: document.body.innerText.includes('Connected'),
       authMessage: document.body.innerText.includes('Your session ended. Sign in again.'),
-      mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Request cancellation|Preview persisted plan/.test(e.textContent)).length,
+      mutationControls: Array.from(document.querySelectorAll('button')).filter(e => e.getClientRects().length && !e.disabled && /Approve and start|Request cancellation|Create plan/.test(e.textContent)).length,
       storage: ${storageExpression},
     })`);
     report.reauthed = reauthed;
@@ -406,9 +396,9 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
     for (const mode of ["build", "protocol"]) {
       report.stage = `${mode}-skew`;
       await writeFile(join(root, ".auth-skew-control"), mode, { flag: "wx", mode: 0o600 });
-      await button("Verify connection");
+      await button("Check again");
       await waitFor(
-        "document.body.innerText.includes('Connection identity changed')",
+        "document.body.innerText.includes('WaveDL has changed')",
         `${mode} skew notice`,
       );
       await waitFor(
@@ -418,12 +408,12 @@ print(json.dumps({'plans':len(rows), 'control':rows, 'manifests':manifests}))`,
       report.skewObservations ??= [];
       report.skewObservations.push({
         mode,
-        refused: await observe("document.body.innerText.includes('Connection identity changed')"),
+        refused: await observe("document.body.innerText.includes('WaveDL has changed')"),
         recovery: false,
       });
-      await button("Disconnect and clear scope");
-      await actions.fill("Daemon master credential", token);
-      await button("Connect securely");
+      await button("Disconnect and start fresh");
+      await actions.fill("Access key", token);
+      await button("Connect");
       await waitFor(
         "document.body.innerText.includes('Connected to ')",
         `${mode} explicit recovery`,
