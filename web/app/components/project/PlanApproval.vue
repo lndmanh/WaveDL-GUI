@@ -1,96 +1,20 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue';
+import { useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Empty, EmptyDescription } from '@/components/ui/empty';
-import { validateJson, type Json, type JsonObject, type PlanView } from '../../lib/daemon-api';
-import { trainingDefaults } from '../../../shared/schemas/training-request';
-import { inferenceDefaults } from '../../../shared/schemas/result-request';
-import { trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
+import type { PlanView } from '../../lib/daemon-api';
+import { usePlanSummary } from '../../composables/usePlanSummary';
 import InfoChip from '../common/InfoChip.vue';
 
 const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ plan: PlanView; busy: boolean; acknowledged?: boolean }>();
 const rawDisclosureId = useId();
 defineEmits<{ submit: []; status: [] }>();
-
-function object(value: unknown): value is JsonObject {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-const manifest = computed<JsonObject | null>(() => {
-  const raw = props.plan.preview.manifest_json;
-  if (typeof raw !== 'string') return null;
-  try {
-    const value: Json = JSON.parse(raw);
-    validateJson(value);
-    return object(value) ? value : null;
-  } catch {
-    return null;
-  }
-});
-
-const config = computed(() => {
-  const value = manifest.value?.resolved_config;
-  return object(value) ? value : {};
-});
-
-function equal(left: Json, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function display(value: Json | undefined): string {
-  if (value === undefined || value === null) return t('project.none');
-  if (Array.isArray(value))
-    return value.length ? value.map((item) => display(item)).join(', ') : t('project.none');
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-const differences = computed(() =>
-  Object.entries(config.value)
-    .filter(([name, value]) => {
-      const defaults = manifest.value?.operation === 'train' ? trainingDefaults : inferenceDefaults;
-      if (!Object.hasOwn(defaults, name)) return false;
-      return !equal(value, Object.entries(defaults).find(([key]) => key === name)?.[1]);
-    })
-    .map(([name, value]) => ({
-      name,
-      label: trainingFieldMessageKeys[name] ? t(trainingFieldMessageKeys[name].label) : name,
-      value: display(value),
-      defaultValue: display(
-        Object.entries(
-          manifest.value?.operation === 'train' ? trainingDefaults : inferenceDefaults,
-        ).find(([key]) => key === name)?.[1] as Json,
-      ),
-    })),
-);
-
-function text(value: Json | undefined): string {
-  return typeof value === 'string' ? value : t('project.notAvailable');
-}
-
-const runtime = computed(() => {
-  const value = manifest.value?.runtime;
-  return object(value) ? value : {};
-});
-const topology = computed(() => {
-  const value = props.plan.preview.topology;
-  return object(value) ? value : {};
-});
-const context = computed(() => [
-  { label: t('project.contextBackend'), value: text(props.plan.preview.target) },
-  { label: t('project.contextOperation'), value: text(manifest.value?.operation) },
-  { label: t('project.contextDevice'), value: text(runtime.value.device) },
-  {
-    label: t('project.contextTopology'),
-    value: `${display(topology.value.num_machines)} × ${display(topology.value.processes_per_machine)}`,
-  },
-]);
-const rawPlan = computed(() => JSON.stringify(props.plan.preview, null, 2));
+const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.plan);
 </script>
 
 <template>
