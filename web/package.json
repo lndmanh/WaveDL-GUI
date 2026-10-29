@@ -31,6 +31,7 @@
     "uplot": "1.6.32",
     "vee-validate": "5.0.0-beta.0",
     "vue": "3.5.43",
+    "yaml": "2.9.1",
     "zod": "4.6.5"
   },
   "devDependencies": {
