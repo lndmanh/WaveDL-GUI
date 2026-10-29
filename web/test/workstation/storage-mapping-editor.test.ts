@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 import StorageMappingFields from '../../app/components/project/StorageMappingFields.vue';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
 import ResultOperationForm from '../../app/components/results/ResultOperationForm.vue';
-import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
 import { storageMapSchema } from '../../shared/schemas/storage-mapping';
 import {
   trainingDefaults,
@@ -206,8 +205,14 @@ describe('explicit storage mapping authoring', () => {
     }
     const ids = wrapper.findAll('input[id*="-storage-"]').map((input) => input.attributes('id'));
     expect(new Set(ids).size).toBe(4);
-    wrapper.getComponent(TrainingPresets).vm.$emit('apply', { epochs: 100 });
+    const fast = wrapper
+      .get('[data-testid="training-preset"]')
+      .findAll('button')
+      .find((button) => button.text() === 'Fast iteration');
+    if (!fast) throw new Error('Missing training recipe');
+    await fast.trigger('click');
     await nextTick();
+    expect(wrapper.get('[id$="-training-epochs"]').element).toHaveProperty('value', '100');
     expect(editors[0]?.props('mappings')).toEqual(mappings);
     const reset = wrapper
       .findAll('button')

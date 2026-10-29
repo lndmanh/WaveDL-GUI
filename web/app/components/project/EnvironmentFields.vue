@@ -38,14 +38,12 @@ function remove(key: string) {
 }
 </script>
 <template>
-  <Collapsible>
+  <Collapsible :unmount-on-hide="false">
     <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
       {{ t('project.explicitRuntimeEnvironment') }}
     </CollapsibleTrigger>
-    <CollapsibleContent
-      :force-mount="true"
-      class="data-[state=closed]:hidden mt-4 flex flex-col gap-4"
-    >
+    <CollapsibleContent class="collapsible-motion">
+      <div class="mt-4 flex flex-col gap-4">
       <p>{{ t('project.environmentHelp') }}</p>
       <div class="flex flex-wrap gap-2">
         <Badge variant="outline">{{ t('project.environmentSecretsStayOnHost') }}</Badge>
@@ -84,6 +82,7 @@ function remove(key: string) {
           t('project.addVariable')
         }}</Button></Field
       >
+      </div>
     </CollapsibleContent>
   </Collapsible>
 </template>

@@ -68,11 +68,11 @@ function remove(index: number) {
 </script>
 
 <template>
-  <Collapsible :default-open="mappings.length > 0">
+  <Collapsible :default-open="mappings.length > 0" :unmount-on-hide="false">
     <CollapsibleTrigger class="flex w-full items-center justify-between text-left font-medium">
       {{ t('storage.title') }}
     </CollapsibleTrigger>
-    <CollapsibleContent :force-mount="true" class="data-[state=closed]:hidden">
+    <CollapsibleContent class="collapsible-motion">
       <FieldGroup class="mt-4">
         <FieldDescription :id="`${id}-storage-help`">{{ t('storage.guidance') }}</FieldDescription>
         <FieldDescription>{{ t('storage.interpreter') }}</FieldDescription>
