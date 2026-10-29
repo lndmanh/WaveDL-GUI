@@ -331,11 +331,16 @@ def build_installed(tmp_path_factory, *, wheelhouse=None):
     else:
         staging = outside / "source"
         staging.mkdir()
-        shutil.copytree(
-            root / "src",
-            staging / "src",
-            ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "AppData"),
-        )
+        generated = shutil.ignore_patterns("__pycache__", "*.egg-info", "AppData")
+
+        def ignore(directory, names):
+            # Mirror the sdist: the workstation source and node_modules never ship.
+            ignored = generated(directory, names)
+            if Path(directory) == root / "src" / "wavedl_daemon":
+                ignored.add("web")
+            return ignored
+
+        shutil.copytree(root / "src", staging / "src", ignore=ignore)
         for name in ("pyproject.toml", "MANIFEST.in", "README.md", "LICENSE"):
             source = root / name
             if source.exists():
