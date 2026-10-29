@@ -108,7 +108,8 @@
       "models": [
         "resnet3d_18",
         "mc3_18",
-        "unet_regression"
+        "unet_regression",
+        "unet_field"
       ]
     }
   },
@@ -2631,6 +2632,41 @@
         "dense-prediction",
         "multi-scale",
         "segmentation"
+      ]
+    },
+    {
+      "id": "unet_field",
+      "display_name": "U-Net Field",
+      "architecture_family": "Encoder-Decoder",
+      "author_institution": "University of Freiburg (Olaf Ronneberger et al.)",
+      "year_published": 2015,
+      "params_m": 31.0,
+      "size_mb": 118.4,
+      "supported_dims": [
+        2
+      ],
+      "is_pretrained": false,
+      "short_description": "U-shaped encoder-decoder for dense 2D field regression",
+      "description": "U-Net Field keeps the decoder's spatial tensor and projects it to the target channels with a 1x1 convolution, predicting a full property map rather than a vector. Skip connections at every resolution level combine deep context with fine spatial detail, and the prediction is interpolated when the target grid differs from the input grid. WaveDL routes dense (N,H,W) or (N,C,H,W) targets to this model, making it suited to field reconstruction tasks such as seismic imaging and elastography.",
+      "best_for": "Reconstructing dense 2D property fields from wave data",
+      "pros": [
+        "Predicts complete spatial fields, not summary values",
+        "Skip connections preserve fine spatial detail",
+        "Output grid may differ from the input grid",
+        "Multi-channel fields share one decoder"
+      ],
+      "cons": [
+        "Requires dense field targets; not usable for vector regression",
+        "Memory-intensive: encoder features are stored for skip connections",
+        "Training CLI currently supports 2D field targets only"
+      ],
+      "compute_tier": "Medium",
+      "tags": [
+        "encoder-decoder",
+        "skip-connections",
+        "dense-prediction",
+        "field-regression",
+        "multi-scale"
       ]
     }
   ]
