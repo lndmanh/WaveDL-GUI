@@ -32,6 +32,8 @@ EXPECTED_DEFAULTS = {
     "loss": "mse",
     "huber_delta": 1.0,
     "loss_weights": None,
+    "selection_metric": "loss",
+    "allow_pickle": False,
     "optimizer": "adamw",
     "momentum": 0.9,
     "nesterov": False,

@@ -101,6 +101,18 @@ def build_training_parser(
         help="Comma-separated weights for weighted_mse (e.g., '1.0,2.0,1.0')",
     )
 
+    parser.add_argument(
+        "--selection_metric",
+        choices=["loss", "mse"],
+        default="loss",
+        help="Validation metric for checkpoint selection and early stopping. HPO uses mse to compare different training losses.",
+    )
+    parser.add_argument(
+        "--allow_pickle",
+        action="store_true",
+        help="Allow trusted legacy NPZ object arrays. Pickled data can execute arbitrary code.",
+    )
+
     # Optimizer
     parser.add_argument(
         "--optimizer",
@@ -334,6 +346,7 @@ CV_UNSUPPORTED_OPTIONS = (
     "wandb_watch",
     "project_name",
     "run_name",
+    "selection_metric",
 )
 
 
@@ -346,7 +359,8 @@ def validate_cv_options(options: argparse.Namespace | Mapping[str, object]) -> N
     pretrained, deterministic, physical-constraint and stratification options. It publishes each
     completed fold, not periodic checkpoints, so only the default ``save_every``
     placeholder is accepted. Resume/fresh, compilation and
-    WandB options likewise require their defaults until implemented for CV.
+    WandB options likewise require their defaults until implemented for CV, as
+    does ``selection_metric``: folds always select using the configured loss.
 
     ``cache_validate`` is deliberately inapplicable, not unsupported: CV reads
     the source dataset directly, without the ordinary training cache. All cache

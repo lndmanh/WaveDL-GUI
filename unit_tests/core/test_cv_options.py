@@ -81,6 +81,7 @@ def test_every_parser_option_has_an_explicit_cv_compatibility_classification():
         "step_size",
         "milestones",
         "data_path",
+        "allow_pickle",
         "workers",
         "seed",
         "deterministic",
