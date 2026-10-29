@@ -1,4 +1,5 @@
 import type { Component } from 'vue';
+import { isUuid } from '../lib/daemon-api-schemas';
 
 /**
  * Section integration contract:
@@ -101,4 +102,17 @@ export function sectionForPath(path: string): PrimaryWorkstationSection {
       (item) => path === item.path || path.startsWith(`${item.path}/`),
     )?.id ?? WORKSTATION_SECTIONS.experiments
   );
+}
+
+/** The run named by an Experiments or Results URL, if it is a canonical run id. */
+export function runIdForPath(path: string): string | null {
+  const [, section, runId, ...rest] = path.split('/');
+  if (rest.length || (section !== 'experiments' && section !== 'results')) return null;
+  return isUuid(runId) ? runId : null;
+}
+
+/** Experiments and Results share the current run, as the single-canvas shell did. */
+export function navigationPath(path: string, currentRun: string | null): string {
+  if (!currentRun || (path !== '/experiments' && path !== '/results')) return path;
+  return `${path}/${currentRun}`;
 }

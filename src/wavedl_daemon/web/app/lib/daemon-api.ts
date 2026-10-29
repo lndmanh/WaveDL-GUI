@@ -11,6 +11,7 @@ import {
   runViewSchema,
   runtimeSchema,
   sessionGrantSchema,
+  isUuid,
 } from './daemon-api-schemas';
 import { clientError, type ClientErrorKey, type ClientErrorParams } from '../i18n/client-messages';
 
@@ -108,12 +109,7 @@ export class DaemonApiError extends Error {
 export function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-export function isUuid(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
-  );
-}
+export { isUuid } from './daemon-api-schemas';
 function jsonObject(value: Json | undefined): value is JsonObject {
   return object(value);
 }

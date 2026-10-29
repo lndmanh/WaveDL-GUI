@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHead, renderDOMHead } from '@unhead/vue/client';
 import { mountWithI18n as mount } from './mountWithI18n';
 import WorkstationLayout from '../../app/layouts/default.vue';
+import { useShellNavigation } from '../../app/composables/useShellLayout';
 import { useWorkstation, type WorkstationContext } from '../../app/composables/useWorkstation';
 import { defaultAppearance, saveAppearance } from '../../app/lib/preferences';
 
@@ -53,7 +54,7 @@ vi.mock('../../app/composables/useAutomaticPlots', () => ({
 const Probe = defineComponent({
   setup() {
     captured = useWorkstation();
-    return () => h('output', { 'data-context': '' }, captured?.submittedRun.value ?? '');
+    return () => h('output', { 'data-context': '' }, captured?.revision.value ?? '');
   },
 });
 const Settings = defineComponent({
@@ -131,27 +132,19 @@ describe('workstation layout ownership and retained locale', () => {
         expect(calls.plots).toHaveBeenCalledTimes(reopen + 1);
         if (!captured) throw new Error('Layout did not provide its context');
         await captured.connection.connect('token');
-        captured.submitted({
-          plan_id: 'plan', run_id: 'training-run', request_id: 'request',
-          backend: 'local', operation: 'train', attempt: 1, state: 'queued',
-          uncertainty: false, submission_requested: true, cancellation_requested: false,
-          evidence: null,
-        });
+        await captured.monitorRun('training-run');
         await flushPromises();
-        expect(router.currentRoute.value.path).toBe('/experiments');
-        expect(captured.submittedRun.value).toBe('training-run');
+        expect(router.currentRoute.value.path).toBe('/experiments/training-run');
         await router.push('/results');
         await captured.monitorRun('submitted-run');
         await flushPromises();
-        expect(router.currentRoute.value.path).toBe('/experiments');
-        expect(captured.submittedRun.value).toBe('submitted-run');
+        expect(router.currentRoute.value.path).toBe('/experiments/submitted-run');
         await router.push('/results');
         expect(calls.connect).toHaveBeenCalledTimes(reopen + 1);
         const revision = captured.revision.value;
         captured.connection.detach();
         await flushPromises();
         expect(captured.revision.value).toBeGreaterThan(revision);
-        expect(captured.submittedRun.value).toBeNull();
         await wrapper.get('[data-settings]').trigger('click');
         await flushPromises();
         await wrapper.get('[data-language]').trigger('click');
@@ -162,6 +155,52 @@ describe('workstation layout ownership and retained locale', () => {
         fallback.dispose();
       }
       expect(calls.dispose).toHaveBeenCalledTimes(reopen + 1);
+    }
+  });
+
+  it('carries the current run between Experiments and Results navigation', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/:path(.*)*', component: Probe }],
+    });
+    await router.push('/experiments/11111111-1111-4111-8111-111111111111');
+    let navigate: ((path: string) => void) | null = null;
+    const Navigator = defineComponent({
+      setup() {
+        navigate = useShellNavigation();
+        return () => h('span');
+      },
+    });
+    const wrapper = mount(WorkstationLayout, {
+      slots: { default: () => [h(Probe), h(Navigator)] },
+      global: {
+        plugins: [router, createHead({ document })],
+        stubs: {
+          WorkstationShell: Shell, SettingsWorkspace: Settings,
+          ConnectionPanel: true, BuildSkewPrompt: true, AutomaticPlotStatus: true,
+        },
+      },
+    });
+    try {
+      await flushPromises();
+      if (!navigate || !captured) throw new Error('Layout did not provide navigation');
+      const go = async (path: string) => { navigate?.(path); await flushPromises(); };
+      await go('/results');
+      expect(router.currentRoute.value.path).toBe('/results/11111111-1111-4111-8111-111111111111');
+      await go('/datasets');
+      expect(router.currentRoute.value.path).toBe('/datasets');
+      await go('/experiments');
+      expect(router.currentRoute.value.path).toBe('/experiments/11111111-1111-4111-8111-111111111111');
+      await router.push('/results/22222222-2222-4222-8222-222222222222');
+      await go('/experiments');
+      expect(router.currentRoute.value.path).toBe('/experiments/22222222-2222-4222-8222-222222222222');
+      await captured.connection.connect('token');
+      captured.connection.detach();
+      await flushPromises();
+      await go('/results');
+      expect(router.currentRoute.value.path).toBe('/results');
+    } finally {
+      wrapper.unmount();
     }
   });
 

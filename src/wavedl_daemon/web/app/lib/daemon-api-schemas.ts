@@ -23,6 +23,9 @@ export const RUN_STATES = [
   'supervision_lost',
 ] as const;
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+export function isUuid(value: unknown): value is string {
+  return uuid.safeParse(value).success;
+}
 const integer = z.number().refine(Number.isSafeInteger);
 const positive = integer.refine((value) => value > 0);
 const printable = z.string().regex(/^[\x21-\x7e]{1,256}$/);

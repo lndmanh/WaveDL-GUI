@@ -6,14 +6,14 @@ import { useDaemonConnection } from '../composables/useDaemonConnection';
 import { provideWorkstation, type WorkstationOverlay } from '../composables/useWorkstation';
 import { provideWorkstationLocale } from '../composables/useWorkstationI18n';
 import { CLIENT_BUILD_ID } from '../lib/build-identity';
-import type { DaemonApiError, RunView } from '../lib/daemon-api';
+import type { DaemonApiError } from '../lib/daemon-api';
 import { applyAppearance, loadAppearance, type AppearancePreferences } from '../lib/preferences';
 import WorkstationShell from '../components/shell/WorkstationShell.vue';
 import ConnectionPanel from '../components/ConnectionPanel.vue';
 import BuildSkewPrompt from '../components/BuildSkewPrompt.vue';
 import AutomaticPlotStatus from '../components/results/AutomaticPlotStatus.vue';
 import { provideShellRouting } from '../composables/useShellLayout';
-import { sectionForPath, sectionPath } from '../shell/sections';
+import { navigationPath, runIdForPath, sectionForPath, sectionPath } from '../shell/sections';
 
 const AdoptRunPanel = defineAsyncComponent(() => import('../components/runs/AdoptRunPanel.vue'));
 const SettingsWorkspace = defineAsyncComponent(
@@ -21,10 +21,19 @@ const SettingsWorkspace = defineAsyncComponent(
 );
 const router = useRouter();
 const route = useRoute();
+// Last run opened in Experiments or Results; nav between them keeps it, a reconnect drops it.
+const currentRun = shallowRef<string | null>(null);
+watch(
+  () => runIdForPath(route.path),
+  (runId) => {
+    if (runId) currentRun.value = runId;
+  },
+  { immediate: true },
+);
 provideShellRouting(
   computed(() => route.path),
   (path) => {
-    void router.push(path);
+    void router.push(navigationPath(path, currentRun.value));
   },
 );
 
@@ -36,7 +45,6 @@ const { state, api, keepSignedIn } = connection;
 const automaticPlots = useAutomaticPlots(connection.session);
 const automaticPlotState = automaticPlots.state;
 const overlay = shallowRef<WorkstationOverlay>(null);
-const submittedRun = shallowRef<string | null>(null);
 const appearance = shallowRef(loadAppearance());
 const section = computed(() => sectionForPath(route.path));
 provideWorkstationLocale(computed(() => appearance.value.language));
@@ -57,28 +65,23 @@ const reportFailure = computed(() => {
 });
 const revision = computed(() => state.value.revision);
 
-watch(overlay, (value) => {
-  if (value === 'adopt') adoptionOpened.value = true;
-});
 watch(
   () => state.value.revision,
   () => {
-    submittedRun.value = null;
+    currentRun.value = null;
   },
 );
+watch(overlay, (value) => {
+  if (value === 'adopt') adoptionOpened.value = true;
+});
 
 function appearanceChanged(value: AppearancePreferences): void {
   appearance.value = value;
   refreshAppearance();
 }
-function submitted(run: RunView): void {
-  submittedRun.value = run.run_id;
-  void router.push(sectionPath('experiments'));
-}
 async function monitorRun(runId: string): Promise<void> {
-  submittedRun.value = runId;
   overlay.value = null;
-  await router.push(sectionPath('experiments'));
+  await router.push(sectionPath('experiments', runId));
 }
 const context = {
   connection,
@@ -89,8 +92,6 @@ const context = {
   reportFailure,
   revision,
   overlay,
-  submittedRun,
-  submitted,
   monitorRun,
 };
 provideWorkstation(context);

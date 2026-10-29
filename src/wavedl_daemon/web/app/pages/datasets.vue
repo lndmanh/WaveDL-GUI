@@ -10,7 +10,7 @@ const { state, api, session } = useWorkstation();
   <div data-work-page="datasets">
     <DatasetsWorkspace
       v-if="!!api"
-      :key="`datasets:${state.revision}`"
+      :key="`${state.health?.daemon_id}:${state.revision}`"
       :session="session"
     />
   </div>

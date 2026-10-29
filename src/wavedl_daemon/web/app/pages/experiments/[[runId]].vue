@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import { definePageMeta } from '#imports';
 import RunsWorkspace from '../../components/runs/RunsWorkspace.vue';
 import { useWorkstation } from '../../composables/useWorkstation';
+import { useRunRoute } from '../../composables/useRunRoute';
 
 defineOptions({ name: 'WorkstationExperimentsPage' });
-const { state, api, submittedRun, reportFailure } = useWorkstation();
+definePageMeta({ key: 'experiments' });
+const { state, api, reportFailure } = useWorkstation();
+const { runId, select, unknown } = useRunRoute('experiments');
 </script>
 
 <template>
@@ -12,9 +16,10 @@ const { state, api, submittedRun, reportFailure } = useWorkstation();
       v-if="!!api"
       :key="`${state.health?.daemon_id}:${state.revision}`"
       :api="api"
-      :initial-run-id="submittedRun"
+      :run-id="runId"
       @connection-error="reportFailure"
-      @run-selected="submittedRun = $event"
+      @select="select"
+      @unknown-run="unknown"
     />
   </div>
 </template>

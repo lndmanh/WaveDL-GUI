@@ -1,0 +1,46 @@
+{
+    "MainWindow": {
+        "AccentColor": "Auto",
+        "DpiScale": "Auto",
+        "Language": "Auto",
+        "MicaEnabled": false,
+        "ShowWizardOnStartup": false
+    },
+    "Training": {
+        "BatchSize": 256,
+        "CacheValidate": "sha256",
+        "Compile": true,
+        "CV": 0,
+        "CVStratify": false,
+        "Deterministic": false,
+        "Epochs": 100,
+        "GradAccumSteps": 1,
+        "GradClip": 1.0,
+        "LearningRate": 0.003,
+        "Loss": "mse",
+        "Model": "mobilenet_v3_small",
+        "NoCache": false,
+        "Optimizer": "adamw",
+        "OutputFolder": "/Users/myt/Documents",
+        "Patience": 10,
+        "Precision": "bf16",
+        "Pretrained": true,
+        "Scheduler": "cosine",
+        "Seed": 42,
+        "Wandb": false,
+        "WeightDecay": 0.0001,
+        "Workers": -1
+    },
+    "Update": {
+        "CheckUpdateAtStartUp": false
+    },
+    "QFluentWidgets": {
+        "FontFamilies": [
+            "Segoe UI",
+            "Microsoft YaHei",
+            "PingFang SC"
+        ],
+        "ThemeColor": "#ff007aff",
+        "ThemeMode": "Light"
+    }
+}

@@ -12,10 +12,11 @@ import RunList from './RunList.vue';
 import RunDetail from './RunDetail.vue';
 import RunOverview from './RunOverview.vue';
 const { clientMessage } = useClientMessages();
-const props = defineProps<{ api: DaemonApi; initialRunId?: string | null }>();
+const props = defineProps<{ api: DaemonApi; runId: string | null }>();
 const emit = defineEmits<{
   connectionError: [error: DaemonApiError];
-  runSelected: [runId: string];
+  select: [runId: string | null];
+  unknownRun: [runId: string];
 }>();
 const {
   runs,
@@ -47,27 +48,34 @@ function open(runId: string) {
 }
 /** Stacked layouts move the reader to the detail they asked for. */
 async function choose(runId: string) {
-  open(runId);
+  emit('select', runId);
   if (!stacked.value) return;
   await nextTick();
   const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   stage.value?.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
 }
 function dismiss() {
-  activeRunId.value = null;
-  close();
+  emit('select', null);
 }
 watch(
-  () => props.initialRunId,
+  () => props.runId,
   (runId) => {
     if (runId) open(runId);
+    else {
+      activeRunId.value = null;
+      close();
+    }
   },
   { immediate: true },
 );
 watch(
-  () => selected.value?.run?.run_id,
-  (runId) => {
-    if (runId) emit('runSelected', runId);
+  () => selected.value?.message,
+  (error) => {
+    if (error instanceof DaemonApiError && error.code === 'http' && error.status === 404) {
+      const id = activeRunId.value;
+      close();
+      if (id) emit('unknownRun', id);
+    }
   },
 );
 </script>

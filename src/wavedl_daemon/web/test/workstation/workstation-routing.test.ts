@@ -6,10 +6,10 @@ import { computed, defineComponent, h, KeepAlive, nextTick, shallowRef, type VNo
 import { flushPromises } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mountWithI18n as mount } from './mountWithI18n';
-import ExperimentsPage from '../../app/pages/experiments/index.vue';
+import ExperimentsPage from '../../app/pages/experiments/[[runId]].vue';
 import NewPage from '../../app/pages/new.vue';
 import DatasetsPage from '../../app/pages/datasets.vue';
-import ResultsPage from '../../app/pages/results/index.vue';
+import ResultsPage from '../../app/pages/results/[[runId]].vue';
 import WorkstationShell from '../../app/components/shell/WorkstationShell.vue';
 import { sectionForPath, sectionPath } from '../../app/shell/sections';
 import { workstationPageRetention } from '../../app/shell/page-retention';
@@ -22,10 +22,9 @@ const state = shallowRef<ConnectionState>({
 });
 const api = shallowRef(new DaemonApi(window.location.origin));
 const session = new ConnectionSession({ origin: window.location.origin, buildId: 'routing-test' });
-const submittedRun = shallowRef<string | null>(null);
 const context = {
-  state, api, session, submittedRun,
-  reportFailure: vi.fn(), submitted: vi.fn(), monitorRun: vi.fn(),
+  state, api, session,
+  reportFailure: vi.fn(), monitorRun: vi.fn(),
   automaticPlots: { capture: vi.fn() },
 };
 vi.mock('../../app/composables/useWorkstation', () => ({
@@ -72,7 +71,6 @@ function createWorkstationRouter() {
 const wrappers: Array<{ unmount(): void }> = [];
 beforeEach(() => {
   state.value = { ...state.value, revision: 1 };
-  submittedRun.value = null;
 });
 afterEach(() => {
   for (const wrapper of wrappers.splice(0)) wrapper.unmount();

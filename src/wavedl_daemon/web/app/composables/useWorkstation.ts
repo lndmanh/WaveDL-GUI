@@ -1,5 +1,5 @@
 import { inject, provide, type ComputedRef, type InjectionKey, type ShallowRef } from 'vue';
-import type { DaemonApiError, RunView } from '../lib/daemon-api';
+import type { DaemonApiError } from '../lib/daemon-api';
 import type { ConnectionSession } from '../lib/connection-session';
 import type { useAutomaticPlots } from './useAutomaticPlots';
 import type { useDaemonConnection } from './useDaemonConnection';
@@ -18,9 +18,6 @@ export interface WorkstationContext {
   reportFailure: ComputedRef<(error: DaemonApiError) => void>;
   revision: ComputedRef<number>;
   overlay: ShallowRef<WorkstationOverlay>;
-  // Preserve the existing hand-off until run selection is represented in route params.
-  submittedRun: ShallowRef<string | null>;
-  submitted(run: RunView): void;
   monitorRun(runId: string): Promise<void>;
 }
 
