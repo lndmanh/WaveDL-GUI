@@ -226,10 +226,10 @@ def test_daemon_owned_catalog_preserves_complete_descriptive_payload():
     result = CatalogService({}).models()
     # Frozen complete public payload, including descriptions, categories, and order.
     # This is independent of the retained, unshipped Qt source tree.
-    assert len(result["models"]) == 71
+    assert len(result["models"]) == 72
     encoded = json.dumps(result, allow_nan=False, sort_keys=True).encode()
     assert hashlib.sha256(encoded).hexdigest() == (
-        "3ff4a13ed0c2c898a9539d296282310861b86316270ebcd56c5b3c6da95a4b35"
+        "0698198e25d6dcacac2b3779280daf94fea3612650a2e732387f182fddc9527b"
     )
 
 
@@ -237,7 +237,7 @@ def test_model_metadata_ids_match_registered_model_ids():
     from wavedl.models import list_models
 
     metadata_ids = {model["id"] for model in CatalogService({}).models()["models"]}
-    assert len(metadata_ids) == 71
+    assert len(metadata_ids) == 72
     assert metadata_ids == set(list_models())
 
 

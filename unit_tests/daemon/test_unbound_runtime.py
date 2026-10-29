@@ -150,13 +150,19 @@ def test_public_unbound_view_and_attempt_page_do_not_query_runtime_stores():
         cancellation_requested=False,
         cancel_delivered=False,
     )
-    plan = SimpleNamespace(run_id=RUN_ID, target="slurm", operation=OperationKind.TRAIN)
+    plan = SimpleNamespace(
+        run_id=RUN_ID,
+        target="slurm",
+        operation=OperationKind.TRAIN,
+        manifest=SimpleNamespace(resolved_config={}, checkpoint_source=None),
+    )
     record = SimpleNamespace(
         plan_id="plan",
         request_id=RUN_ID,
         plan=plan,
         submission_requested=True,
         cancellation_requested=False,
+        created_at="2026-10-29T00:00:00+00:00",
     )
     store, controller, registry, provenance, collections = [Mock() for _ in range(5)]
     store.get.return_value = execution

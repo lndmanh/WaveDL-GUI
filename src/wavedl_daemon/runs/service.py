@@ -88,9 +88,35 @@ class RunResponse:
     submission_requested: bool
     cancellation_requested: bool
     evidence: dict | None = None
+    created_at: str | None = None
+    summary: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _run_summary(plan: Plan) -> dict:
+    """Identify a run for people: the approved inputs, never live state."""
+    manifest = plan.manifest
+    config = manifest.resolved_config
+
+    def text(name: str) -> str | None:
+        value = config.get(name)
+        return value if type(value) is str and value else None
+
+    def count(name: str, minimum: int) -> int | None:
+        value = config.get(name)
+        return value if type(value) is int and value >= minimum else None
+
+    source = manifest.checkpoint_source
+    return {
+        "name": text("run_name"),
+        "model": text("model"),
+        "data_path": text("data_path"),
+        "epochs": count("epochs", 1),
+        "cv": count("cv", 2),
+        "source_run_id": source["run_id"] if source is not None else None,
+    }
 
 
 def _object(value: object, *, allowed: set[str], required: set[str] = frozenset()):
@@ -124,12 +150,27 @@ def _training_config(config: dict) -> dict:
     actions = {
         action.dest: action
         for action in parser._actions
-        if action.dest not in {"help", "list_models", "config", "output_dir"}
+        if action.dest
+        not in {
+            "help",
+            "list_models",
+            "config",
+            "output_dir",
+            "allow_pickle",
+            "selection_metric",
+        }
     }
     if set(config) - set(actions):
         raise ValueError("Unknown or daemon-owned config option")
     result = training_defaults()
-    for name in ("list_models", "config", "output_dir"):
+    # Pickle loading executes dataset code; selection_metric is HPO-only.
+    for name in (
+        "list_models",
+        "config",
+        "output_dir",
+        "allow_pickle",
+        "selection_metric",
+    ):
         result.pop(name, None)
     for name, value in config.items():
         action = actions[name]
@@ -602,6 +643,8 @@ class RunService:
             record.submission_requested,
             record.cancellation_requested,
             evidence,
+            record.created_at,
+            _run_summary(plan),
         )
 
     def list(

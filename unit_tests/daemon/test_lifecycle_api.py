@@ -671,3 +671,22 @@ def test_duplicate_key_header_is_refused(environment):
             )
 
     assert asyncio.run(run()).status_code == 400
+
+
+def test_runs_carry_creation_time_and_approved_inputs(environment):
+    app, *_ = environment
+    planned = request(app, "POST", "/api/runs/plan", body=payload(), key="named").json()
+    run = request(app, "GET", f"/api/runs/{planned['run_id']}").json()
+    listed = request(app, "GET", "/api/runs").json()["runs"]
+    assert run["created_at"].endswith("+00:00")
+    assert run["summary"]["epochs"] == 2
+    assert run["summary"]["source_run_id"] is None
+    assert set(run["summary"]) == {
+        "name",
+        "model",
+        "data_path",
+        "epochs",
+        "cv",
+        "source_run_id",
+    }
+    assert [item["summary"] for item in listed] == [run["summary"]]
