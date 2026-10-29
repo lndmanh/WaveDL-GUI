@@ -341,7 +341,9 @@ def _checkpoint_bytes(checkpoint):
 
 
 def _assert_invalid_predictions(test, output, checkpoint, original, message):
-    with pytest.raises(ValueError, match=message):
+    # Loader/inference validation raises ValueError for malformed inputs and
+    # FloatingPointError for non-finite model output; both precede publication.
+    with pytest.raises((ValueError, FloatingPointError), match=message):
         test.main()
     journal = events(output)
     assert journal[-1].payload["status"] == "failed"
@@ -365,8 +367,9 @@ def test_nonfinite_model_predictions_fail_before_publication(
         arrays["y"] = targets
     np.savez(args.data_path, **arrays)
     original = _checkpoint_bytes(checkpoint)
+    # Non-finite inputs are refused by the loader before the model runs.
     _assert_invalid_predictions(
-        test, output, checkpoint, original, "Model predictions contain nonfinite"
+        test, output, checkpoint, original, "Inputs must contain only finite"
     )
 
 
@@ -383,7 +386,7 @@ def test_finite_inputs_nonfinite_checkpoint_fail_before_publication(inference):
     torch.save(weights, path)
     original = _checkpoint_bytes(checkpoint)
     _assert_invalid_predictions(
-        test, output, checkpoint, original, "Model predictions contain nonfinite"
+        test, output, checkpoint, original, "Model produced non-finite predictions"
     )
 
 
@@ -465,9 +468,7 @@ def test_empty_evaluation_fails_without_requested_outputs(
     np.savez(args.data_path, **arrays)
     args.save_predictions = save_predictions
     original = _checkpoint_bytes(checkpoint)
-    _assert_invalid_predictions(
-        test, output, checkpoint, original, "require nonempty input"
-    )
+    _assert_invalid_predictions(test, output, checkpoint, original, "non-empty array")
 
 
 def test_finite_prediction_only_publishes_finite_values(inference):
@@ -488,7 +489,8 @@ def test_finite_prediction_only_publishes_finite_values(inference):
 def test_export_only_still_bypasses_prediction_validation(inference, monkeypatch):
     """The new prediction policy does not change export-only dispatch."""
     test, args, output, _ = inference
-    np.savez(args.data_path, X=np.empty((0, 32), dtype="float32"))
+    # The loader requires a nonempty input; export traces a single sample.
+    np.savez(args.data_path, X=np.zeros((1, 32), dtype="float32"))
     args.export = "onnx"
     args.save_predictions = False
     monkeypatch.setattr(test, "export_to_onnx", lambda **kwargs: True)

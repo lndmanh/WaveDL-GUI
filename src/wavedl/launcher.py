@@ -743,14 +743,9 @@ def main() -> int:
     observer = None
     try:
         owns_group = os.name == "posix" and os.environ.get(_SUPERVISED_ENV) != "1"
-        try:
-            proc = subprocess.Popen(
-                cmd, start_new_session=owns_group, env=child_environment
-            )
-        except OSError as error:
-            # Nothing was spawned, so there is no group to clean up.
-            print(f"Error: Could not launch training: {error}", file=sys.stderr)
-            return 1
+        proc = subprocess.Popen(
+            cmd, start_new_session=owns_group, env=child_environment
+        )
         forwarder.process_group = proc.pid if owns_group else None
         forwarder.process = proc
         if owns_group:

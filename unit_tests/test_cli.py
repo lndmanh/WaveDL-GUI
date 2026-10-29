@@ -765,10 +765,13 @@ class TestHPCDetectGPUs:
         mock_result = MagicMock()
         mock_result.stdout = "GPU 0: A100\nGPU 1: A100\nGPU 2: A100\n"
 
+        # An exported CUDA_VISIBLE_DEVICES (CI sets "") takes precedence.
         with (
+            patch.dict(os.environ),
             patch("shutil.which", return_value="/usr/bin/nvidia-smi"),
             patch("subprocess.run", return_value=mock_result),
         ):
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
             assert detect_gpus() == 3
 
     def test_nvidia_smi_failure(self):

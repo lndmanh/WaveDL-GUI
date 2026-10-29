@@ -45,8 +45,9 @@ def prepare_runtime(
     durable rendezvous is never overwritten or reused for a new execution.
     """
     forwarded = list(train_args)
+    # The launcher consumes both spellings of its precision option.
     mixed_explicit = any(
-        value == "--mixed_precision" or value.startswith("--mixed_precision=")
+        value.split("=", 1)[0] in {"--mixed_precision", "--precision"}
         for value in launcher_args.original_argv
     )
     precision_explicit = any(
