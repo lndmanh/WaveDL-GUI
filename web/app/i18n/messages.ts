@@ -1,3 +1,4 @@
+import builderEN from './locales/en/builder.json';
 import catalogEN from './locales/en/catalog.json';
 import cvEN from './locales/en/cv-summary.json';
 import datasetsEN from './locales/en/datasets.json';
@@ -7,6 +8,7 @@ import runsEN from './locales/en/runs.json';
 import shellEN from './locales/en/shell-settings.json';
 import storageEN from './locales/en/storage-mapping.json';
 import trainingEN from './locales/en/training-fields.json';
+import builderVI from './locales/vi/builder.json';
 import catalogVI from './locales/vi/catalog.json';
 import cvVI from './locales/vi/cv-summary.json';
 import datasetsVI from './locales/vi/datasets.json';
@@ -22,6 +24,7 @@ import clientErrorsVI from './locales/vi/client-errors.json';
 
 export const messages = {
   en: {
+    builder: builderEN,
     clientErrors: clientErrorsEN,
     catalog: catalogEN,
     cv: cvEN,
@@ -34,6 +37,7 @@ export const messages = {
     training: trainingEN,
   },
   vi: {
+    builder: builderVI,
     clientErrors: clientErrorsVI,
     catalog: catalogVI,
     cv: cvVI,

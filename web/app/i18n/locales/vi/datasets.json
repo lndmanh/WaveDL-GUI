@@ -4,7 +4,7 @@
   "workspaceHelp": "Chọn tệp từ các vị trí đã cấu hình. Tệp trong trình duyệt không được tải lên.",
   "pathPickerTitle": "Đường dẫn tập dữ liệu",
   "searchRootsAndPaths": "Tìm thư mục gốc và đường dẫn",
-  "searchRootsPlaceholder": "Nhập thư mục gốc hoặc đường dẫn…",
+  "searchRootsPlaceholder": "Tìm, hoặc nhập đường dẫn như data/train.npz",
   "searchResults": "Thư mục gốc và đường dẫn phù hợp",
   "configuredRoot": "Thư mục gốc đã cấu hình",
   "folder": "thư mục",
@@ -22,7 +22,7 @@
   "selectDirectory": "Chọn thư mục này",
   "stopBrowsing": "Dừng duyệt",
   "reloadRoots": "Tải lại thư mục gốc đã cấu hình",
-  "browseSafety": "Chỉ duyệt các thư mục gốc daemon đã cấu hình.",
+  "browseSafety": "Chỉ hiển thị các thư mục daemon được phép đọc.",
   "browseUnavailable": "Không thể truy cập đường dẫn tập dữ liệu.",
   "chooseFile": "Hãy chọn tệp, không phải thư mục.",
   "headerTitle": "Tóm tắt thông tin tập dữ liệu",
@@ -100,5 +100,8 @@
   "statsCaption": "Thống kê đầu vào trên các hàng mẫu có giới hạn",
   "feature": "Đặc trưng",
   "mean": "Trung bình",
-  "std": "Độ lệch chuẩn"
+  "std": "Độ lệch chuẩn",
+  "locations": "Vị trí",
+  "upOneFolder": "Lên một thư mục",
+  "use": "Dùng"
 }

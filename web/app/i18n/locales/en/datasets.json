@@ -4,7 +4,7 @@
   "workspaceHelp": "Select a file from configured locations. Browser files are not uploaded.",
   "pathPickerTitle": "Dataset path",
   "searchRootsAndPaths": "Search roots and paths",
-  "searchRootsPlaceholder": "Type a root or path…",
+  "searchRootsPlaceholder": "Search, or type a path like data/train.npz",
   "searchResults": "Matching roots and paths",
   "configuredRoot": "Configured root",
   "folder": "folder",
@@ -22,7 +22,7 @@
   "selectDirectory": "Select this directory",
   "stopBrowsing": "Stop browsing",
   "reloadRoots": "Reload configured roots",
-  "browseSafety": "Browse only configured daemon roots.",
+  "browseSafety": "Only folders the daemon is allowed to read are shown.",
   "browseUnavailable": "Dataset paths are unavailable.",
   "chooseFile": "Choose a file, not a directory.",
   "headerTitle": "Dataset header summary",
@@ -100,5 +100,8 @@
   "statsCaption": "Input statistics over bounded sampled rows",
   "feature": "Feature",
   "mean": "Mean",
-  "std": "Standard deviation"
+  "std": "Standard deviation",
+  "locations": "Locations",
+  "upOneFolder": "Up one folder",
+  "use": "Use"
 }

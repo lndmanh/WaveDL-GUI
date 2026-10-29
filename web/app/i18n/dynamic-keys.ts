@@ -21,21 +21,73 @@ export const datasetPreviewTabMessageKeys = {
   scatter: 'datasets.scatter',
 } as const;
 
-export const projectTrainingGroupMessageKeys = [
-  'project.optimizerLossAndScheduling',
-  'project.dataGroup',
-  'project.customModelsGroup',
-  'project.optionalExperimentLogging',
-] as const;
+export const projectBlockMessageKeys = {
+  dataset: 'builder.blockDataset',
+  model: 'builder.blockModel',
+  training: 'builder.blockTraining',
+  runtime: 'builder.blockRuntime',
+  plan: 'builder.blockPlan',
+} as const;
 
-export const projectGuideMessageKeys = [
-  'project.dataset',
-  'project.model',
-  'project.preset',
-  'project.trainingRuntime',
-  'project.reviewApproval',
-  'project.acknowledged',
-] as const;
+export const trainingSectionMessageKeys = {
+  optimizer: 'builder.sectionOptimizer',
+  schedule: 'builder.sectionSchedule',
+  loss: 'builder.sectionLoss',
+  data: 'builder.sectionData',
+  checkpoints: 'builder.sectionCheckpoints',
+  validation: 'builder.sectionValidation',
+  constraints: 'builder.sectionConstraints',
+  code: 'builder.sectionCode',
+  logging: 'builder.sectionLogging',
+} as const;
+
+/** Translatable choice names, keyed `field.value`; technical names stay as written. */
+export const trainingChoiceMessageKeys: Readonly<Record<string, string>> = {
+  'loss.weighted_mse': 'builder.choiceWeightedMse',
+  'scheduler.plateau': 'builder.choicePlateau',
+  'scheduler.cosine': 'builder.choiceCosine',
+  'scheduler.cosine_restarts': 'builder.choiceCosineRestarts',
+  'scheduler.onecycle': 'builder.choiceOneCycle',
+  'scheduler.step': 'builder.choiceStep',
+  'scheduler.multistep': 'builder.choiceMultiStep',
+  'scheduler.exponential': 'builder.choiceExponential',
+  'scheduler.linear_warmup': 'builder.choiceLinearWarmup',
+  'precision.no': 'builder.choiceFullPrecision',
+  'cache_validate.fast': 'builder.choiceFast',
+  'cache_validate.size': 'builder.choiceSizeOnly',
+};
+
+const technicalChoiceLabels: Readonly<Record<string, string>> = {
+  mse: 'MSE',
+  mae: 'MAE',
+  huber: 'Huber',
+  smooth_l1: 'Smooth L1',
+  log_cosh: 'Log-cosh',
+  adamw: 'AdamW',
+  adam: 'Adam',
+  sgd: 'SGD',
+  nadam: 'NAdam',
+  radam: 'RAdam',
+  rmsprop: 'RMSprop',
+  bf16: 'bf16',
+  fp16: 'fp16',
+  sha256: 'SHA-256',
+};
+
+export function trainingChoiceLabel(
+  field: string,
+  choice: string,
+  t: (key: string) => string,
+): string {
+  const key = `${field}.${choice}`;
+  if (Object.hasOwn(trainingChoiceMessageKeys, key)) {
+    const messageKey = trainingChoiceMessageKeys[key];
+    if (messageKey) return t(messageKey);
+  }
+  return Object.hasOwn(technicalChoiceLabels, choice)
+    ? (technicalChoiceLabels[choice] ?? choice)
+    : choice;
+}
 
 export const runtimeFieldMessageKeys = {
   pythonInterpreter: 'project.pythonInterpreter',
@@ -90,6 +142,10 @@ export const datasetExportMessageKeys = {
 } as const;
 
 export const trainingPresetMessageKeys = {
+  defaults: {
+    label: 'builder.recipeDefaults',
+    description: 'builder.recipeDefaultsHelp',
+  },
   fast: {
     label: 'project.fastIteration',
     description: 'project.fastPresetHelp',
@@ -263,8 +319,9 @@ export const plotMetricMessageKeys = {
 export const dynamicMessageKeys: readonly string[] = [
   ...Object.values(workstationNavigationMessageKeys),
   ...Object.values(datasetPreviewTabMessageKeys),
-  ...projectTrainingGroupMessageKeys,
-  ...projectGuideMessageKeys,
+  ...Object.values(projectBlockMessageKeys),
+  ...Object.values(trainingSectionMessageKeys),
+  ...Object.values(trainingChoiceMessageKeys),
   ...Object.values(runtimeFieldMessageKeys),
   ...Object.values(inferenceFieldMessageKeys),
   ...Object.values(appearanceControlMessageKeys),
