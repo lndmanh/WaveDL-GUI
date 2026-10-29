@@ -48,6 +48,13 @@ def test_public_shell_and_deep_link_head_have_security_headers(tmp_path, assets)
     deep = request(app, "/runs/run123", headers={"Accept": "text/html"})
     assert shell.status_code == deep.status_code == 200
     assert shell.content == deep.content
+    for path in (
+        "/experiments/00000000-0000-4000-8000-000000000001",
+        "/results/00000000-0000-4000-8000-000000000001",
+    ):
+        routed = request(app, path, headers={"Accept": "text/html"})
+        assert routed.status_code == 200
+        assert routed.content == shell.content
     assert (
         request(app, "/runs/", headers={"Accept": "text/html"}).content == shell.content
     )

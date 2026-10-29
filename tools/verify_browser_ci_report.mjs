@@ -11,7 +11,7 @@ import { checkArtifactTamperEvidence } from './browser_artifact_tamper_evidence.
 
 export const requiredCases = Object.freeze([
   'baseline', 'detach', 'reload', 'cancel', 'lost-ack',
-  'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity',
+  'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity', 'routing',
 ]);
 // Bounds parsing only. The rebuilt dataset preview exports more views, so the
 // summary's download-directory checkpoints exceed 1 MiB on a passing run.

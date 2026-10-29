@@ -51,7 +51,8 @@ function fixture() {
       refusal: { before: {}, after: {}, invalid: "true" }, durable: { plans, runs: [{ runId: training.run_id, state: "completed", publications: [{ generation: "gen-000001" }] }, evaluation] } },
     predictions: { generation: "gen-000001", runId: approved.run_id, expected: file, actual: file }, finalRegistry: state,
     cleanupRegistry: structuredClone(state), daemonExit: { code: 130, signal: null },
-    staticClient: { path: "/settings/storage", shell: true, apiStatus: 401, apiType: "application/json" }, runtimePids: [1, 2, 3],
+    staticClient: { path: "/datasets", shell: true, apiStatus: 401, apiType: "application/json" },
+    unknownPath: { path: "/experiments", shell: true }, runtimePids: [1, 2, 3],
     cleanup: { errors: [], browserAbsent: true, daemonReaped: true, applicationShutdownComplete: true, listenerAbsent: true, daemonPidAbsent: true, runtimePidsAndGroupsAbsent: true, storageClosed: true, ownedRootsRemoved: true, credentialFileRemoved: true },
   };
 }
@@ -102,6 +103,10 @@ for (const [name, mutate] of [
   ["no evaluation metric", record => record.resultOperations.durable.runs[1].events.pop()],
   ["download mismatch", record => record.predictions.actual = { size: 99, sha256: "b".repeat(64) }],
   ["API route returned shell", record => record.staticClient.apiType = "text/html"],
+  ["wrong deep link", record => record.staticClient.path = "/settings/storage"],
+  ["missing unknown-path proof", record => delete record.unknownPath],
+  ["unknown path not redirected", record => record.unknownPath.path = "/nope/deep"],
+  ["unknown path missing shell", record => record.unknownPath.shell = false],
   ["orphan process", record => record.cleanup.runtimePidsAndGroupsAbsent = false],
   ["cleanup failure", record => record.cleanup.errors.push("failure")],
 ]) test(`rejects ${name}`, () => {

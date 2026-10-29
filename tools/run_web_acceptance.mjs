@@ -25,7 +25,7 @@ import { acceptanceDiagnostic } from './browser_acceptance_diagnostic.mjs';
 import { lostAckBindingReady, verifyLostAckEvidence } from './browser_lost_ack_evidence.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const cases = ['baseline', 'detach', 'reload', 'cancel', 'lost-ack', 'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity'];
+const cases = ['baseline', 'detach', 'reload', 'cancel', 'lost-ack', 'artifact-tamper', 'port-reuse', 'live-port-reuse', 'authoring-parity', 'download-names', 'dataset-parity', 'routing'];
 const selected = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? 'all';
 if (selected !== 'all' && ![...cases, 'autoplot-metadata-integrity', 'partial-best-fallback', 'partial-best-refusal', 'preset-import', 'wizard-progression', 'submitted-plan-authoring-protection', 'result-operations', 'onnx-export', 'inference-cancellation', 'cv-parity', 'training-fields-full', 'training-validation'].includes(selected)) throw new Error(`Choose: ${cases.join(', ')}, autoplot-metadata-integrity, partial-best-fallback, partial-best-refusal, preset-import, wizard-progression, submitted-plan-authoring-protection, result-operations, onnx-export, inference-cancellation, cv-parity, training-fields-full, training-validation, all`);
 const python = process.env.WAVEDL_PYTHON ?? 'python';
@@ -194,7 +194,7 @@ async function scenario(name) {
   const browserProfile = join(workspace, `${name}-browser-profile`);
   const replacingDaemon = name === 'port-reuse' || liveReplacement;
   const replacementRoot = replacingDaemon ? join(workspace, `${name}-replacement`) : null;
-  const tokenFile = replacingDaemon || name === 'reload' ? join(workspace, `${name}-private-bearer`) : null;
+  const tokenFile = replacingDaemon || ['reload', 'routing'].includes(name) ? join(workspace, `${name}-private-bearer`) : null;
   let sharedToken = tokenFile ? randomBytes(32).toString('base64url') : null;
   if (sharedToken) privateSecrets.add(sharedToken);
   if (tokenFile) await writeFile(tokenFile, sharedToken, { flag: 'wx', mode: 0o600 });
@@ -297,7 +297,8 @@ async function scenario(name) {
     stdout = ''; // Do not persist single-use bootstrap credentials.
     browserOpened = true;
     diagnosticStage = 'browser-open';
-    await cli('open', url);
+    // Routing starts without bootstrap or stored credentials in its own empty profile.
+    await cli('open', name === 'routing' ? `${new URL(url).origin}/results` : url);
     diagnosticStage = 'browser-readiness';
     const tabInventory = JSON.parse(await cli('--json', 'tab', 'list'));
     const ownedTab = tabInventory.data?.tabs?.find((tab) => {
@@ -316,6 +317,16 @@ async function scenario(name) {
     record.browserRuntime.headed = browserHeaded;
     check(record.browserViewport.width === 1280 && record.browserViewport.height === 900, 'Explicit isolated browser viewport is 1280 by 900');
     check((await command(browser, ['session', 'list'])).includes(session), 'CLI confirms owned isolated browser session');
+    if (name === 'routing') {
+      await cli('wait', '--fn', `location.pathname === '/login' && location.search === '?next=%2Fresults' && !!document.querySelector('#daemon-bearer')`);
+      record.routingLogin = await dom(`JSON.stringify({path:location.pathname,search:location.search,local:localStorage.length,session:sessionStorage.length,cookies:document.cookie})`);
+      check(record.routingLogin.path === '/login' && record.routingLogin.search === '?next=%2Fresults', 'Fresh credential-less /results redirects to /login?next=%2Fresults');
+      check(record.routingLogin.local === 0 && record.routingLogin.session === 0 && record.routingLogin.cookies === '', 'Login redirect uses an empty owned profile without clearing another session');
+      await actions.fill('Access key', sharedToken);
+      await button('Connect');
+      await cli('wait', '--fn', `location.pathname === '/results' && document.body.innerText.includes('Connected')`);
+      check(await dom(`JSON.stringify(location.pathname === '/results' && location.search === '')`), 'Connecting from login returns to /results without the next query');
+    }
     await cli('wait', '--text', 'Connected');
     check(!(await cli('get', 'url')).includes('bootstrap'), 'Bootstrap removed from address bar');
     const storage = await dom(`JSON.stringify(${storageExpression(sharedToken)})`);
@@ -404,7 +415,7 @@ async function scenario(name) {
     check(true, 'UI field Python interpreter retains authored value');
     // Manual setup starts from the detected device (best available); these runs train on CPU.
     await actions.device('cpu');
-    const shortTraining = ['baseline', 'autoplot-metadata-integrity', 'partial-best-fallback', 'partial-best-refusal', 'wizard-progression', 'artifact-tamper', 'download-names', 'submitted-plan-authoring-protection', 'result-operations', 'onnx-export', 'inference-cancellation', 'cv-parity'].includes(name);
+    const shortTraining = ['baseline', 'routing', 'autoplot-metadata-integrity', 'partial-best-fallback', 'partial-best-refusal', 'wizard-progression', 'artifact-tamper', 'download-names', 'submitted-plan-authoring-protection', 'result-operations', 'onnx-export', 'inference-cancellation', 'cv-parity'].includes(name);
     await fill('epochs', shortTraining ? '3' : '10000');
     await fill('patience', shortTraining ? '3' : '10000');
     await summary('Data loading and speed');
@@ -493,6 +504,54 @@ async function scenario(name) {
     check(['model', 'epochs', 'patience', 'batch_size', 'workers', 'precision'].every((key) => approvedManifest.resolved_config[key] === record.authoredConfiguration[key]), 'Immutable approval manifest exactly matches authored model and training values');
     if (name === 'cv-parity') check(approvedManifest.resolved_config.deterministic === record.authoredConfiguration.deterministic, 'Immutable CV approval manifest retains authored deterministic true value');
     check(approvedManifest.runtime.python === interpreter && approvedManifest.runtime.device === 'cpu' && approvedManifest.resolved_config.data_path.endsWith('/samples.npz'), 'Immutable approval manifest matches authored daemon interpreter, CPU device and selected dataset');
+
+    if (name === 'routing') {
+      const runId = approvedManifest.run_id;
+      const runPath = `/experiments/${runId}`;
+      const selectedRun = `document.querySelector('[aria-label="Selected run"] .identity')?.textContent.trim() === ${JSON.stringify(runId)}`;
+      const waitPath = async (path, extra = 'true') => {
+        await cli('wait', '--fn', `location.pathname === ${JSON.stringify(path)} && (${extra})`);
+        check(await dom(`JSON.stringify(location.pathname === ${JSON.stringify(path)} && (${extra}))`), `Routing reaches ${path}${extra === 'true' ? '' : ' with the expected page state'}`);
+      };
+      await button('Approve and start this plan');
+      await waitPath(runPath, selectedRun);
+      // Automatic plotting is an independent writer: settle it before comparing
+      // registry snapshots so navigation cannot hide a duplicate side effect.
+      record.routingBefore = await pollRegistry(root, state => state.plans === 2 && state.runs.length === 2 && state.executions.length === 2 && state.runs.every(run => run.state === 'completed') && state.executions.every(execution => execution.observed_status === 'terminal'), 'Routing training and automatic plots completed', 90000);
+      check(record.routingBefore.control.every(control => control.submission_requested === 1 && control.cancellation_requested === 0), 'Routing fixture completes training and automatic plots with only explicit submission intent and no cancellation');
+      // Experiments and Results carry the current run, as the single-canvas shell did.
+      for (const [section, path] of [['project', '/new'], ['datasets', '/datasets'], ['results', `/results/${runId}`], ['connection', '/login'], ['settings', '/settings'], ['experiments', runPath]]) {
+        await actions.button(`Routing navigation ${section}`, false, { locator: `[data-testid="nav-${section}"]` });
+        await waitPath(path);
+      }
+      await actions.button('Routing close run detail', false, { locator: '.run-hero-close' });
+      await waitPath('/experiments', `!document.querySelector('[aria-label="Selected run"]')`);
+      const runLocator = `xpath=//button[contains(concat(' ',normalize-space(@class),' '),' run-row ')][.//small[normalize-space(.)=${xpathLiteral(runId)}]]`;
+      await cli('fill', '.run-search-input', runId);
+      await actions.button('Routing completed filter', false, { locator: '.run-filter [data-value="completed"]' });
+      const retainedFilters = `document.querySelector('.run-search-input')?.value === ${JSON.stringify(runId)} && !!document.querySelector('.run-filter [data-value="completed"][data-state="on"]')`;
+      await actions.button('Routing run selection', false, { locator: runLocator });
+      await waitPath(runPath, `${selectedRun} && ${retainedFilters}`);
+      await cli('back');
+      await waitPath('/experiments', `!document.querySelector('[aria-label="Selected run"]') && ${retainedFilters}`);
+      await cli('forward');
+      await waitPath(runPath, `${selectedRun} && ${retainedFilters}`);
+      await cli('reload');
+      await waitPath(runPath, `${selectedRun} && document.body.innerText.includes('Connected')`);
+      await actions.button('Datasets', false, { locator: '[data-testid="nav-datasets"]' });
+      await waitPath('/datasets');
+      await cli('reload');
+      await waitPath('/datasets', `document.body.innerText.includes('Connected') && !!document.querySelector('[data-work-page="datasets"]')`);
+      await cli('open', `${expectedBrowserOrigin}/nope/deep`);
+      await waitPath('/experiments', `document.body.innerText.includes('Connected') && !!document.querySelector('[data-work-page="experiments"]')`);
+      await cli('open', `${expectedBrowserOrigin}/`);
+      await waitPath('/experiments', `document.body.innerText.includes('Connected') && !!document.querySelector('[data-work-page="experiments"]')`);
+      record.finalRegistry = await registry(root);
+      check(JSON.stringify(record.finalRegistry) === JSON.stringify(record.routingBefore), 'Routing, reload, back and forward create no duplicate plans, submissions, executions or cancellation intents');
+      record.snapshot = await snapshot();
+      record.status = 'passed';
+      return;
+    }
 
     if (replacingDaemon) {
       const origin = new URL(url).origin;

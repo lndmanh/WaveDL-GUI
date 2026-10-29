@@ -144,7 +144,8 @@ export function verifyInstalledBrowserRecord(record, expectedWheelSha256) {
     assert(record.finalRegistry.runs.some(run => run.run_id === source.run_id));
   }
   assert.deepEqual(record.cleanupRegistry, record.finalRegistry);
-  assert.deepEqual(record.staticClient, { path: "/settings/storage", shell: true, apiStatus: 401, apiType: "application/json" });
+  assert.deepEqual(record.staticClient, { path: "/datasets", shell: true, apiStatus: 401, apiType: "application/json" });
+  assert.deepEqual(record.unknownPath, { path: "/experiments", shell: true });
   assert(Array.isArray(record.runtimePids) && record.runtimePids.length === 3 && new Set(record.runtimePids).size === 3 && record.runtimePids.every(pid => Number.isSafeInteger(pid) && pid > 0));
   sameSet(record.runtimePids, record.finalRegistry.submissions.map(row => row.pid));
   assert.deepEqual(record.cleanup, { errors: [], browserAbsent: true, daemonReaped: true, listenerAbsent: true,
