@@ -937,3 +937,25 @@ def test_run_wire_contract_has_no_placeholder_defaults():
         assert "default" not in plan["properties"][field]
     run = RunResponse.model_json_schema()
     assert set(run["required"]) == set(run["properties"])
+
+
+def test_response_models_preserve_populated_evidence_bodies(environment):
+    app, service, controller, _, executions, _ = environment
+    preview = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="evidence-bodies"
+    ).json()
+    submitted = request(app, "POST", "/api/runs", body={"plan_id": preview["plan_id"]})
+    assert submitted.status_code == 202
+    tick_until(
+        controller,
+        lambda: executions.get(preview["plan_id"]).submission_handle is not None,
+    )
+    run_id = preview["run_id"]
+    got = request(app, "GET", f"/api/runs/{run_id}")
+    attempts = request(app, "GET", f"/api/runs/{run_id}/attempts")
+    # The Starlette routes serialized service dicts with JSONResponse (json.dumps).
+    expected_run = json.loads(json.dumps(service.get(run_id).to_dict()))
+    assert expected_run["evidence"] is not None
+    assert got.json() == expected_run
+    assert attempts.json() == json.loads(json.dumps(service.attempts(run_id)))
+    assert attempts.json()["attempts"]

@@ -29,6 +29,8 @@ def test_supported_runtime_has_no_desktop_imports():
     forbidden = {"wavedl_gui", "PySide6", "qfluentwidgets", "pyqtgraph"}
     for package in ("wavedl", "wavedl_daemon"):
         for path in (ROOT / "src" / package).rglob("*.py"):
+            if ROOT / "src" / "wavedl_daemon" / "web" in path.parents:
+                continue  # Workstation source and node_modules are not Python.
             for node in ast.walk(ast.parse(path.read_text())):
                 if isinstance(node, ast.Import):
                     names = [alias.name for alias in node.names]
