@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.requests import ClientDisconnect, Request
@@ -130,13 +131,29 @@ def _invalid_constant(value):
     raise ValueError("Non-finite JSON number")
 
 
-async def read_json(
+def _decode_json_bytes(body: bytes) -> dict:
+    """Decode one strict JSON object without exposing parser diagnostics."""
+    try:
+        result = json.loads(
+            body.decode("utf-8"),
+            object_pairs_hook=_pairs,
+            parse_float=_finite_float,
+            parse_constant=_invalid_constant,
+        )
+        if not isinstance(result, dict):
+            raise ValueError("Expected object")
+    except (ValueError, RecursionError):
+        raise HTTPException(400, "Invalid JSON") from None
+    return result
+
+
+async def read_json_bytes(
     request: Request,
     *,
-    max_bytes: int = MAX_JSON_BODY,
+    max_bytes: int,
     timeout_seconds: float = JSON_BODY_TIMEOUT_SECONDS,
-) -> dict:
-    """Read bounded strict JSON; never return decoder details or submitted secrets."""
+) -> bytes:
+    """Read a bounded request body without decoding or exposing submitted data."""
     if type(max_bytes) is not int or max_bytes < 1:
         raise ValueError("JSON byte limit must be positive")
     if (
@@ -164,18 +181,53 @@ async def read_json(
         # receive a detailed parse error.  Keep the boundary deterministic and
         # avoid leaking Starlette's transport exception as a 500.
         raise HTTPException(408, "Request body disconnected") from None
-    try:
-        result = json.loads(
-            body.decode("utf-8"),
-            object_pairs_hook=_pairs,
-            parse_float=_finite_float,
-            parse_constant=_invalid_constant,
+    return bytes(body)
+
+
+async def read_json(
+    request: Request,
+    *,
+    max_bytes: int = MAX_JSON_BODY,
+    timeout_seconds: float = JSON_BODY_TIMEOUT_SECONDS,
+) -> dict:
+    """Read bounded strict JSON; never return decoder details or submitted secrets."""
+    return _decode_json_bytes(
+        await read_json_bytes(
+            request, max_bytes=max_bytes, timeout_seconds=timeout_seconds
         )
-        if not isinstance(result, dict):
-            raise ValueError("Expected object")
-    except (ValueError, RecursionError):
-        raise HTTPException(400, "Invalid JSON") from None
-    return result
+    )
+
+
+def strict_json_route(max_bytes: int) -> type[APIRoute]:
+    """Create an APIRoute that enforces the daemon's strict JSON boundary."""
+
+    class StrictJSONRoute(APIRoute):
+        # FastAPI accepts duplicate keys and NaN, with no byte or time bound.
+        def get_route_handler(self):
+            original_handler = super().get_route_handler()
+
+            async def strict_handler(request: Request):
+                body = await read_json_bytes(request, max_bytes=max_bytes)
+                _decode_json_bytes(body)
+                replayed = False
+                original_receive = request.receive
+
+                async def replay_receive():
+                    nonlocal replayed
+                    if not replayed:
+                        replayed = True
+                        return {
+                            "type": "http.request",
+                            "body": body,
+                            "more_body": False,
+                        }
+                    return await original_receive()
+
+                return await original_handler(Request(request.scope, replay_receive))
+
+            return strict_handler
+
+    return StrictJSONRoute
 
 
 async def _http_error(request, exc):
