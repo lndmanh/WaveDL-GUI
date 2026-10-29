@@ -8,7 +8,8 @@ import logging
 import math
 from contextlib import asynccontextmanager
 
-from starlette.applications import Starlette
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.requests import ClientDisconnect, Request
@@ -201,6 +202,10 @@ async def _server_error(request, exc):
     return JSONResponse({"error": "Internal server error"}, 500)
 
 
+async def _validation_error(request, exc) -> JSONResponse:
+    return JSONResponse({"error": "Bad request"}, 400)
+
+
 def create_app(
     settings,
     *,
@@ -211,7 +216,7 @@ def create_app(
     allowed_hosts: tuple[str, ...] = DEFAULT_ALLOWED_HOSTS,
     bootstrap_credentials=None,
     web_assets=None,
-) -> Starlette:
+) -> FastAPI:
     """No disk access, credentials generation, background work, or listener binding."""
     credential = credential_bytes(token)
     bootstrap_enabled = bootstrap_credentials is not None
@@ -371,7 +376,10 @@ def create_app(
                 for logger, redactor in filters:
                     logger.removeFilter(redactor)
 
-    app = Starlette(
+    app = FastAPI(
+        openapi_url=None,
+        docs_url=None,
+        redoc_url=None,
         routes=routes,
         lifespan=lifespan,
         middleware=[
@@ -383,7 +391,11 @@ def create_app(
                 bootstrap_credentials=credential_pool,
             )
         ],
-        exception_handlers={HTTPException: _http_error, Exception: _server_error},
+        exception_handlers={
+            HTTPException: _http_error,
+            Exception: _server_error,
+            RequestValidationError: _validation_error,
+        },
     )
     app.state.settings, app.state.services = settings, services
     app.state.auth_token = credential

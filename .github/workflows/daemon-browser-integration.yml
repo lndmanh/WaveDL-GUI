@@ -71,7 +71,7 @@ jobs:
       - name: Verify installed dependency and CPU data contracts
         run: |
           python -m pip check
-          python -c 'import torch, torchvision, numpy, scipy, h5py, starlette, uvicorn; assert torch.version.cuda is None, "CPU PyTorch required"'
+          python -c 'import torch, torchvision, numpy, scipy, h5py, starlette, uvicorn, fastapi, pydantic; assert torch.version.cuda is None, "CPU PyTorch required"'
       - name: Install locked web dependencies
         working-directory: src/wavedl_daemon/web
         run: npm ci
