@@ -305,16 +305,21 @@ def _validate_resume_metadata(
         )
 
 
-def _validate_emergency_resume(checkpoint_dir: str, scheduler_name: str) -> bool:
+def _validate_emergency_resume(
+    checkpoint_dir: str, scheduler_name: str, epochs: int | None = None
+) -> bool:
     """Reject batch schedules that cannot safely replay a partial epoch.
 
     Emergency checkpoints lack a resumable data-loader position and partial
     gradients. Their optimizer state can be reused for approximate recovery,
-    but replaying batches would overrun OneCycle's fixed update budget.
+    but replaying batches would overrun OneCycle's fixed update budget. An
+    interruption exactly at an epoch boundary replays nothing: its schedule
+    position equals the completed epochs' update count, so it resumes in place.
     """
     if not os.path.isfile(os.path.join(checkpoint_dir, "model_weights.pth")):
         return False
 
+    state = None
     scheduler_path = os.path.join(checkpoint_dir, "scheduler.pt")
     saved_batch_schedule = False
     if os.path.isfile(scheduler_path):
@@ -323,6 +328,12 @@ def _validate_emergency_resume(checkpoint_dir: str, scheduler_name: str) -> bool
         # --scheduler; loading that state into an epoch scheduler is unsafe too.
         saved_batch_schedule = isinstance(state, dict) and "total_steps" in state
 
+    if (
+        not is_epoch_based(scheduler_name)
+        and saved_batch_schedule
+        and _emergency_at_epoch_boundary(checkpoint_dir, state, epochs)
+    ):
+        return True
     if not is_epoch_based(scheduler_name) or saved_batch_schedule:
         raise ValueError(
             f"Cannot safely resume the emergency checkpoint '{checkpoint_dir}' "
@@ -333,6 +344,21 @@ def _validate_emergency_resume(checkpoint_dir: str, scheduler_name: str) -> bool
             "The emergency checkpoint has been preserved."
         )
     return True
+
+
+def _emergency_at_epoch_boundary(
+    checkpoint_dir: str, state: dict, epochs: int | None
+) -> bool:
+    """Whether a batch schedule was saved after exactly the completed epochs."""
+    meta_path = os.path.join(checkpoint_dir, "training_meta.pkl")
+    if not epochs or not os.path.isfile(meta_path):
+        return False
+    with open(meta_path, "rb") as f:
+        completed = pickle.load(f).get("epoch")
+    total = state.get("total_steps")
+    if type(completed) is not int or type(total) is not int or total % epochs:
+        return False
+    return state.get("last_epoch") == completed * (total // epochs)
 
 
 def _require_finite_loss(loss, phase, accelerator=None):
@@ -970,11 +996,6 @@ def _run_training(args, accelerator, journal):
         validate_cv_options(args)
         if accelerator.num_processes != 1:
             raise ValueError("Cross-validation does not support distributed execution")
-        if args.selection_metric != "loss":
-            raise ValueError(
-                "Cross-validation does not support --selection_metric mse; "
-                "it selects using the configured loss."
-            )
         print(f"🔄 Cross-Validation Mode: {args.cv} folds")
         from wavedl.utils.cross_validation import run_cross_validation
 
@@ -1326,7 +1347,7 @@ def _run_training(args, accelerator, journal):
     if args.resume:
         if not os.path.isdir(args.resume):
             raise FileNotFoundError(f"Checkpoint not found: {args.resume}")
-        if _validate_emergency_resume(args.resume, args.scheduler):
+        if _validate_emergency_resume(args.resume, args.scheduler, args.epochs):
             logger.warning(
                 "Resuming an emergency checkpoint replays the interrupted epoch "
                 "from mid-epoch model/optimizer state. This recovery is not exact; "
