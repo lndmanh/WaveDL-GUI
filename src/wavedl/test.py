@@ -649,6 +649,7 @@ def export_to_onnx(
             )
         # Export with comprehensive settings
         destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
         with (
             TemporaryDirectory(
                 prefix=".onnx-export-", dir=destination.parent
@@ -680,7 +681,6 @@ def export_to_onnx(
                 **options,
             )
             validate_self_contained_onnx(staged, expected_opset=opset_version)
-            _stamp_onnx_metadata(staged, model_name, include_denorm, sample_input)
             if validate and not _validate_onnx_export(model, sample_input, str(staged)):
                 return False
             with staged.open("rb") as file:
@@ -696,23 +696,6 @@ def export_to_onnx(
     except Exception as e:
         logging.error(f"   ✘ ONNX export failed: {e}")
         return False
-
-
-def _stamp_onnx_metadata(path, model_name, include_denorm, sample_input):
-    """Record model identity and output units in the staged ONNX file."""
-    import onnx
-
-    onnx_model = onnx.load(path, load_external_data=False)
-    onnx.helper.set_model_props(
-        onnx_model,
-        {
-            "model_name": model_name,
-            "output_units": "physical" if include_denorm else "normalized",
-            "input_shape": str(tuple(sample_input.shape[1:])),
-        },
-    )
-    onnx.checker.check_model(onnx_model)
-    onnx.save_model(onnx_model, path, save_as_external_data=False)
 
 
 def _validate_onnx_export(

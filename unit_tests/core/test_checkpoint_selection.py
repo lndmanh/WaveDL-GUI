@@ -401,6 +401,7 @@ def test_real_inference_loader_uses_published_best_and_local_scaler(run, monkeyp
     torch.save(model.state_dict(), source / "model.bin")
     publish(run, step=2, kind="periodic")
     (layout.checkpoints / "scaler.pkl").write_bytes(pickle.dumps("stale scaler"))
+    monkeypatch.setattr(inference, "get_model", lambda name: TinyModel)
     monkeypatch.setattr(inference, "build_model", lambda *a, **k: TinyModel(1, 1))
     loaded, scaler = inference.load_checkpoint(str(layout.run_dir), (1,), 1)
     expected = torch.load(best.path / "model.bin", weights_only=True)
@@ -416,6 +417,7 @@ def test_real_inference_loader_refuses_missing_generation_scaler(run, monkeypatc
     torch.save(torch.nn.Linear(1, 1).state_dict(), source / "model.bin")
     generation = publish(run, kind="best")
     (generation.path.parent / "scaler.pkl").write_bytes(pickle.dumps("stale"))
+    monkeypatch.setattr(inference, "get_model", lambda name: torch.nn.Linear)
     monkeypatch.setattr(inference, "build_model", lambda *a, **k: torch.nn.Linear(1, 1))
     with pytest.raises(FileNotFoundError, match="Scaler not found"):
         inference.load_checkpoint(str(generation.path), (1,), 1, model_name="tiny")
@@ -464,15 +466,15 @@ def test_main_root_infers_shape_and_output_size_from_same_generation(
     )
     calls = []
 
-    def stop_at_load(path, shape, size, name):
-        calls.append((path, shape, size, name))
+    def stop_at_load(path, shape, size, name, *, out_shape=None):
+        calls.append((path, shape, size, name, out_shape))
         raise RuntimeError("stop before inference writes")
 
     monkeypatch.setattr(inference, "load_checkpoint", stop_at_load)
     if include_scaler:
         with pytest.raises(RuntimeError, match="stop before inference writes"):
             inference.main()
-        assert calls == [(str(best.path), (4,), 2, None)]
+        assert calls == [(str(best.path), (4,), 2, None, (2,))]
     else:
         with pytest.raises(ValueError, match="Cannot determine output size"):
             inference.main()
