@@ -3535,7 +3535,7 @@ requires-dist = [
     { name = "packaging", marker = "extra == 'dev'", specifier = ">=24.0" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
-    { name = "pydantic", marker = "extra == 'daemon'", specifier = ">=2.9,<3" },
+    { name = "pydantic", marker = "extra == 'daemon'", specifier = ">=2.14,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },

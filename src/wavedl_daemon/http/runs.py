@@ -4,15 +4,27 @@ from __future__ import annotations
 
 import inspect
 import sqlite3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
+from fastapi import APIRouter, Depends, Query
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+from starlette.requests import Request  # noqa: TC002 - FastAPI resolves it at runtime
+from starlette.responses import Response  # noqa: TC002 - FastAPI resolves it at runtime
 
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
-from wavedl_daemon.http.app import read_json
+from wavedl_daemon.http.app import strict_json_route
+from wavedl_daemon.http.schemas.common import NO_STORE, exact_query
+from wavedl_daemon.http.schemas.runs import (
+    AttemptPage,
+    PlanRequest,
+    PlanView,
+    RunList,
+    RunResponse,
+    RunStateFilter,
+    SubmitRequest,
+)
 from wavedl_daemon.storage.ownership import DispatchRequired
 from wavedl_daemon.storage.plans import IdempotencyConflict, PlanRecoveryRequired
 from wavedl_daemon.storage.settings import UnsupportedStorage
@@ -50,72 +62,95 @@ async def _call(callback: Callable, *args, **kwargs):
         raise HTTPException(400, "Invalid lifecycle request") from None
 
 
-def lifecycle_routes(service: RunService | AsyncRunService) -> list[Route]:
+def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
     """SecurityBoundary in the enclosing app authenticates every API route."""
 
-    async def plan(request):
-        body = await read_json(request, max_bytes=65536)
+    async def plan(body: PlanRequest, request: Request, response: Response):
         if len(request.headers.getlist("idempotency-key")) != 1:
             raise HTTPException(400, "One idempotency key is required")
         key = request.headers.get("idempotency-key")
-        result = await _call(service.plan, body, key)
-        return JSONResponse(result.to_dict(), headers={"Cache-Control": "no-store"})
-
-    async def submit(request):
-        body = await read_json(request, max_bytes=4096)
-        if set(body) != {"plan_id"} or type(body["plan_id"]) is not str:
-            raise HTTPException(400, "Invalid submit request")
-        result = await _call(service.submit, body["plan_id"])
-        return JSONResponse(
-            result.to_dict(), 202, headers={"Cache-Control": "no-store"}
-        )
-
-    async def cancel(request):
-        result = await _call(service.cancel, request.path_params["run_id"])
-        return JSONResponse(
-            result.to_dict(), 202, headers={"Cache-Control": "no-store"}
-        )
-
-    async def get(request):
-        result = await _call(service.get, request.path_params["run_id"])
-        return JSONResponse(result.to_dict(), headers={"Cache-Control": "no-store"})
-
-    async def attempts(request):
-        query = request.query_params
-        if set(query) - {"limit", "offset"} or any(
-            len(query.getlist(key)) != 1 for key in query
-        ):
-            raise HTTPException(400, "Invalid attempts query")
-        try:
-            limit, offset = int(query.get("limit", "50")), int(query.get("offset", "0"))
-        except ValueError:
-            raise HTTPException(400, "Invalid pagination") from None
         result = await _call(
-            service.attempts, request.path_params["run_id"], limit=limit, offset=offset
+            service.plan, body.model_dump(mode="json", exclude_unset=True), key
         )
-        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+        response.headers.update(NO_STORE)
+        return result.to_dict()
 
-    async def list_runs(request):
-        query = request.query_params
-        if set(query) - {"limit", "offset", "state"} or any(
-            len(query.getlist(key)) != 1 for key in query
-        ):
-            raise HTTPException(400, "Invalid list query")
-        try:
-            limit, offset = int(query.get("limit", "50")), int(query.get("offset", "0"))
-        except ValueError:
-            raise HTTPException(400, "Invalid pagination") from None
-        result = await _call(service.list, limit, offset, query.get("state"))
-        return JSONResponse(
-            {"runs": [item.to_dict() for item in result]},
-            headers={"Cache-Control": "no-store"},
-        )
+    async def submit(body: SubmitRequest, response: Response):
+        result = await _call(service.submit, body.plan_id)
+        response.headers.update(NO_STORE)
+        return result.to_dict()
 
-    return [
-        Route("/api/runs/plan", plan, methods=["POST"]),
-        Route("/api/runs", submit, methods=["POST"]),
-        Route("/api/runs", list_runs, methods=["GET"]),
-        Route("/api/runs/{run_id}/cancel", cancel, methods=["POST"]),
-        Route("/api/runs/{run_id}/attempts", attempts, methods=["GET"]),
-        Route("/api/runs/{run_id}", get, methods=["GET"]),
-    ]
+    async def cancel(run_id: str, response: Response):
+        result = await _call(service.cancel, run_id)
+        response.headers.update(NO_STORE)
+        return result.to_dict()
+
+    async def get(run_id: str, response: Response):
+        result = await _call(service.get, run_id)
+        response.headers.update(NO_STORE)
+        return result.to_dict()
+
+    async def attempts(
+        run_id: str,
+        response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        offset: Annotated[int, Query(ge=0, le=10000)] = 0,
+    ):
+        result = await _call(service.attempts, run_id, limit=limit, offset=offset)
+        response.headers.update(NO_STORE)
+        return result
+
+    async def list_runs(
+        response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        offset: Annotated[int, Query(ge=0, le=10000)] = 0,
+        state: RunStateFilter | None = None,
+    ):
+        result = await _call(service.list, limit, offset, state)
+        response.headers.update(NO_STORE)
+        return {"runs": [item.to_dict() for item in result]}
+
+    router = APIRouter()
+    router.add_api_route(
+        "/api/runs/plan",
+        plan,
+        methods=["POST"],
+        response_model=PlanView,
+        route_class_override=strict_json_route(65536),
+    )
+    router.add_api_route(
+        "/api/runs",
+        submit,
+        methods=["POST"],
+        response_model=RunResponse,
+        status_code=202,
+        route_class_override=strict_json_route(4096),
+    )
+    router.add_api_route(
+        "/api/runs",
+        list_runs,
+        methods=["GET", "HEAD"],
+        response_model=RunList,
+        dependencies=[Depends(exact_query("limit", "offset", "state"))],
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}/cancel",
+        cancel,
+        methods=["POST"],
+        response_model=RunResponse,
+        status_code=202,
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}/attempts",
+        attempts,
+        methods=["GET", "HEAD"],
+        response_model=AttemptPage,
+        dependencies=[Depends(exact_query("limit", "offset"))],
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}",
+        get,
+        methods=["GET", "HEAD"],
+        response_model=RunResponse,
+    )
+    return [route for route in router.routes if isinstance(route, APIRoute)]

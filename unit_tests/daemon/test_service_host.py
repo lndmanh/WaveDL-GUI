@@ -251,9 +251,25 @@ def test_close_caller_cancellation_does_not_interrupt_resource_cleanup():
 def test_http_async_adapter_awaits_typed_result_and_maps_deadline_503(tmp_path):
     gate = threading.Event()
 
+    reply = {
+        "plan_id": "plan-one",
+        "run_id": "one",
+        "request_id": "request-one",
+        "backend": "local",
+        "operation": "train",
+        "attempt": None,
+        "state": "planned",
+        "uncertainty": True,
+        "submission_requested": False,
+        "cancellation_requested": False,
+        "evidence": None,
+        "created_at": None,
+        "summary": None,
+    }
+
     class Reply:
         def to_dict(self):
-            return {"run_id": "one"}
+            return reply
 
     class Service:
         def get(self, run_id):
@@ -284,7 +300,7 @@ def test_http_async_adapter_awaits_typed_result_and_maps_deadline_503(tmp_path):
             ) as client:
                 response = await client.get("/api/runs/one")
                 assert response.status_code == 200
-                assert response.json() == {"run_id": "one"}
+                assert response.json() == reply
                 response = await client.post("/api/runs", json={"plan_id": "one"})
                 assert response.status_code == 503
                 assert host.outstanding == 1

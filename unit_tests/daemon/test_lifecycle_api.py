@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from fastapi.routing import APIRoute
 
 from wavedl_daemon.backends.contracts import (
     ObservationStatus,
@@ -29,7 +30,7 @@ from wavedl_daemon.runs.controller import SubmissionController
 from wavedl_daemon.runs.service import RunService
 from wavedl_daemon.storage.executions import ExecutionState, ExecutionStore
 from wavedl_daemon.storage.ownership import acquire_dispatch_lock
-from wavedl_daemon.storage.plans import PlanStore
+from wavedl_daemon.storage.plans import PlanStore, _canonical_request
 from wavedl_daemon.storage.registry import Registry
 from wavedl_daemon.storage.settings import Settings
 
@@ -690,3 +691,249 @@ def test_runs_carry_creation_time_and_approved_inputs(environment):
         "source_run_id",
     }
     assert [item["summary"] for item in listed] == [run["summary"]]
+
+
+def test_plan_replay_survives_model_round_trip(environment):
+    app, _, _, plans, _, _ = environment
+    body = payload()
+    body["config"] = {
+        "epochs": 2,
+        "lr": 0.001,
+        "weight_decay": 1.0,
+        "pretrained": True,
+    }
+    body["runtime"]["environment"] = {"B": "2", "A": "1"}
+
+    first = request(app, "POST", "/api/runs/plan", body=body, key="model-round-trip")
+    replay = request(app, "POST", "/api/runs/plan", body=body, key="model-round-trip")
+
+    assert first.status_code == replay.status_code == 200
+    assert replay.json()["plan_id"] == first.json()["plan_id"]
+    assert plans.get_by_key("model-round-trip").request_payload_json == (
+        _canonical_request(body)
+    )
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["storage_map", "submission_cwd", "checkpoint_source"],
+)
+def test_plan_optional_fields_reject_explicit_null(environment, field):
+    app, _, _, plans, _, _ = environment
+    body = payload()
+    body[field] = None
+
+    response = request(app, "POST", "/api/runs/plan", body=body, key="null")
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Bad request"}
+    assert plans.get_by_key("null") is None
+
+
+def test_plan_rejects_lax_json(environment):
+    app, *_ = environment
+
+    async def post_raw(content):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://localhost:8420",
+        ) as client:
+            return await client.post(
+                "/api/runs/plan",
+                content=content,
+                headers=AUTH | {"Content-Type": "application/json"},
+            )
+
+    body = json.dumps(payload(), separators=(",", ":"))
+    duplicate_backend = body.replace(
+        '{"backend":"slurm",', '{"backend":"slurm","backend":"slurm",', 1
+    )
+    non_finite = body.replace('"epochs":2', '"epochs":NaN', 1)
+    oversized_body = payload()
+    oversized_body["config"]["padding"] = "x" * 65537
+    oversized = json.dumps(oversized_body, separators=(",", ":"))
+
+    duplicate_response, non_finite_response, oversized_response = asyncio.run(
+        _gather_raw(
+            post_raw(duplicate_backend),
+            post_raw(non_finite),
+            post_raw(oversized),
+        )
+    )
+
+    assert duplicate_response.status_code == 400
+    assert non_finite_response.status_code == 400
+    assert oversized_response.status_code == 413
+
+
+async def _gather_raw(*requests_to_run):
+    return await asyncio.gather(*requests_to_run)
+
+
+def test_runs_queries_reject_unknown_and_repeated_keys(environment):
+    app, *_ = environment
+    planned = request(app, "POST", "/api/runs/plan", body=payload(), key="queries")
+    run_id = planned.json()["run_id"]
+
+    responses = [
+        request(app, "GET", "/api/runs?limit=1&limit=2"),
+        request(app, "GET", "/api/runs?page=1"),
+        request(app, "GET", f"/api/runs/{run_id}/attempts?offset=0&offset=1"),
+        request(app, "GET", "/api/runs?state=bogus"),
+    ]
+
+    assert [response.status_code for response in responses] == [400] * 4
+    assert all(response.json() == {"error": "Bad request"} for response in responses)
+
+
+def test_runs_responses_are_no_store(environment):
+    app, *_ = environment
+    planned = request(app, "POST", "/api/runs/plan", body=payload(), key="no-store")
+    assert planned.status_code == 200
+    assert planned.headers["cache-control"] == "no-store"
+    plan = planned.json()
+
+    submitted = request(app, "POST", "/api/runs", body={"plan_id": plan["plan_id"]})
+    got = request(app, "GET", f"/api/runs/{plan['run_id']}")
+    listed = request(app, "GET", "/api/runs")
+    cancelled = request(app, "POST", f"/api/runs/{plan['run_id']}/cancel")
+    attempts = request(app, "GET", f"/api/runs/{plan['run_id']}/attempts")
+
+    assert submitted.status_code == 202
+    assert cancelled.status_code == 202
+    assert [
+        response.headers.get("cache-control")
+        for response in (submitted, got, listed, cancelled, attempts)
+    ] == ["no-store"] * 5
+
+
+def test_lifecycle_routes_are_api_routes(environment):
+    _, service, *_ = environment
+
+    assert all(isinstance(route, APIRoute) for route in lifecycle_routes(service))
+
+
+def test_lifecycle_get_routes_support_head(environment):
+    app, *_ = environment
+    planned = request(app, "POST", "/api/runs/plan", body=payload(), key="head")
+    run_id = planned.json()["run_id"]
+
+    list_response = request(app, "HEAD", "/api/runs")
+    run_response = request(app, "HEAD", f"/api/runs/{run_id}")
+
+    assert list_response.status_code == 200
+    assert list_response.content == b""
+    assert run_response.status_code == 200
+    assert run_response.content == b""
+
+
+def test_plan_request_round_trip_preserves_json_values_and_omissions():
+    from pydantic import ValidationError
+
+    from wavedl_daemon.http.schemas.runs import PlanRequest
+
+    body = payload()
+    body["config"] = {
+        "epochs": 2,
+        "lr": 0.001,
+        "weight_decay": 1.0,
+        "pretrained": True,
+        "nullable": None,
+        "nested": {
+            "enabled": False,
+            "count": 1,
+            "ratio": 1.0,
+            "items": [None, True, 1, 0.001],
+        },
+    }
+    body["runtime"]["environment"] = {"B": "2", "A": "1"}
+    body["topology"] = {}
+    body["storage_map"] = [{"host_root": "/host", "execution_root": "/exec"}]
+    body["submission_cwd"] = "/work"
+    body["checkpoint_source"] = {
+        "run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "generation": "gen-123456",
+    }
+
+    def reverse_object_keys(value):
+        if isinstance(value, dict):
+            return {
+                key: reverse_object_keys(item)
+                for key, item in reversed(list(value.items()))
+            }
+        if isinstance(value, list):
+            return [reverse_object_keys(item) for item in value]
+        return value
+
+    reversed_body = reverse_object_keys(body)
+    model = PlanRequest.model_validate(reversed_body)
+    dumped = model.model_dump(mode="json", exclude_unset=True)
+
+    assert _canonical_request(dumped) == _canonical_request(reversed_body)
+    assert dumped["topology"] == {}
+    assert "storage_map" in dumped
+    assert "submission_cwd" in dumped
+    assert dumped["checkpoint_source"]["generation"] == "gen-123456"
+    assert type(dumped["checkpoint_source"]["run_id"]) is str
+    assert type(model.config["epochs"]) is int
+    assert type(model.config["lr"]) is float
+    assert type(model.config["weight_decay"]) is float
+    assert model.config["pretrained"] is True
+    assert model.config["nullable"] is None
+    assert model.config["nested"]["enabled"] is False
+    assert type(model.config["nested"]["count"]) is int
+    assert type(model.config["nested"]["ratio"]) is float
+
+    bad_topology = deepcopy(body)
+    bad_topology["topology"] = {"num_machines": True}
+    with pytest.raises(ValidationError):
+        PlanRequest.model_validate(bad_topology)
+
+
+def test_uppercase_run_uuid_is_bad_request(environment):
+    app, *_ = environment
+    planned = request(app, "POST", "/api/runs/plan", body=payload(), key="uppercase")
+    run_id = planned.json()["run_id"].upper()
+
+    response = request(app, "GET", f"/api/runs/{run_id}")
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Bad request"}
+
+
+def test_lifecycle_response_models_preserve_service_bodies(environment):
+    app, service, _, _, _, _ = environment
+    body = payload()
+
+    planned = request(app, "POST", "/api/runs/plan", body=body, key="body-equality")
+    run_id = planned.json()["run_id"]
+    plan_service_body = service.plan(body, "body-equality").to_dict()
+    run_service_body = service.get(run_id).to_dict()
+    list_service_body = {"runs": [item.to_dict() for item in service.list()]}
+    attempts_service_body = service.attempts(run_id)
+
+    got = request(app, "GET", f"/api/runs/{run_id}")
+    listed = request(app, "GET", "/api/runs")
+    attempts = request(app, "GET", f"/api/runs/{run_id}/attempts")
+
+    assert planned.json() == plan_service_body
+    assert got.json() == run_service_body
+    assert listed.json() == list_service_body
+    assert attempts.json() == attempts_service_body
+
+
+def test_run_wire_contract_has_no_placeholder_defaults():
+    from wavedl_daemon.http.schemas.runs import PlanRequest, RunResponse
+
+    plan = PlanRequest.model_json_schema()
+    assert set(plan["required"]) == {
+        "backend",
+        "operation",
+        "config",
+        "runtime",
+        "topology",
+    }
+    for field in ("storage_map", "submission_cwd", "checkpoint_source"):
+        assert "default" not in plan["properties"][field]
+    run = RunResponse.model_json_schema()
+    assert set(run["required"]) == set(run["properties"])
