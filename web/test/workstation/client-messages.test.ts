@@ -71,7 +71,7 @@ describe('client-owned coded diagnostics', () => {
     expect(builtInEnglish).toBe('Too small: expected string to have >=2 characters');
     const credentialEnglish = daemonCredentialSchema.safeParse({ token: '' }).error?.issues[0]
       ?.message;
-    expect(credentialEnglish).toBe('Enter the daemon bearer credential.');
+    expect(credentialEnglish).toBe('Paste your access key.');
     const cvEnglish = trainingConfigSchema.safeParse({ ...trainingDefaults, cv: 1 }).error
       ?.issues[0]?.message;
     expect(cvEnglish).toBe('Cross-validation requires at least two folds.');
@@ -81,7 +81,7 @@ describe('client-owned coded diagnostics', () => {
     expect(builtInVietnamese).toBe('Quá nhỏ: mong đợi string có >=2 ký tự');
     const credentialVietnamese = daemonCredentialSchema.safeParse({ token: '' }).error?.issues[0]
       ?.message;
-    expect(credentialVietnamese).toBe('Nhập thông tin xác thực bearer của daemon.');
+    expect(credentialVietnamese).toBe('Dán khóa truy cập của bạn.');
     const cvVietnamese = trainingConfigSchema.safeParse({ ...trainingDefaults, cv: 1 }).error
       ?.issues[0]?.message;
     expect(cvVietnamese).toBe('Kiểm định chéo cần ít nhất hai fold.');
@@ -103,11 +103,11 @@ describe('client-owned coded diagnostics', () => {
       },
     });
     const wrapper = mount(Provider);
-    expect(wrapper.text()).toBe('Enter the daemon bearer credential.');
+    expect(wrapper.text()).toBe('Paste your access key.');
     locale.value = 'vi';
     await nextTick();
-    expect(wrapper.text()).toBe('Nhập thông tin xác thực bearer của daemon.');
-    expect(diagnostic.value.message).toBe('Enter the daemon bearer credential.');
+    expect(wrapper.text()).toBe('Dán khóa truy cập của bạn.');
+    expect(diagnostic.value.message).toBe('Paste your access key.');
     locale.value = 'en';
     await nextTick();
     expect(wrapper.text()).toBe(diagnostic.value.message);

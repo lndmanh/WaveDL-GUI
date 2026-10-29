@@ -47,6 +47,17 @@ export interface RunView {
   submission_requested: boolean;
   cancellation_requested: boolean;
   evidence: JsonObject | null;
+  created_at?: string | null;
+  summary?: RunSummary | null;
+}
+/** The approved inputs that name a run; never live state. */
+export interface RunSummary {
+  name: string | null;
+  model: string | null;
+  data_path: string | null;
+  epochs: number | null;
+  cv: number | null;
+  source_run_id: string | null;
 }
 export interface PlanView {
   plan_id: string;

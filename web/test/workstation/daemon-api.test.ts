@@ -597,7 +597,7 @@ describe('daemon transport', () => {
     const message = owner.snapshot().message;
     if (message === null) throw new Error('Expected a coded connection notice');
     expect(translateClientDiagnostic('en', message)).toBe(
-      'A different WaveDL daemon is now serving this address. Sign in again.',
+      'WaveDL was restarted or replaced. Sign in again.',
     );
     expect(owner.api).toBeNull();
     owner.dispose();

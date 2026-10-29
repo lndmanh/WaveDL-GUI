@@ -1,5 +1,6 @@
 import { ConnectionSession, ConnectionSessionError } from './connection-session';
 import { DaemonApiError, object } from './daemon-api';
+import { hostProfileSchema, type HostProfile } from '../../shared/schemas/host-profile';
 
 export interface BrowseEntry {
   readonly name: string;
@@ -123,6 +124,27 @@ export class CatalogApi {
     Object.freeze(selection);
     return selection;
   }
+  /**
+   * Advisory: an older daemon, a slow probe or a malformed reply yields null and
+   * never retires the connection, so request failures stay inside the work.
+   */
+  async host(signal?: AbortSignal): Promise<HostProfile | null> {
+    const body = await this.session.perform(
+      async (api, requestSignal) => {
+        try {
+          return await api.read(
+            '/api/host',
+            AbortSignal.any([requestSignal, AbortSignal.timeout(45_000)]),
+          );
+        } catch {
+          return null;
+        }
+      },
+      { signal, timeoutMs: 60_000 },
+    );
+    const parsed = hostProfileSchema.safeParse(body);
+    return parsed.success ? Object.freeze(parsed.data) : null;
+  }
   roots(signal?: AbortSignal): Promise<readonly string[]> {
     return this.session.perform(
       async (api, requestSignal) => {
@@ -227,6 +249,34 @@ export class CatalogApi {
       },
       { signal },
     );
+  }
+  /**
+   * Maps an absolute host path (from an imported config) onto a configured browse
+   * root. Null when no root contains it; the daemon still verifies the final path.
+   */
+  async locate(path: string, signal?: AbortSignal): Promise<DataSelection | null> {
+    if (!absolutePath(path)) return null;
+    const target = path.replaceAll('\\', '/');
+    for (const root of await this.roots(signal)) {
+      let base: DataSelection;
+      try {
+        base = await this.resolve(root, '', signal);
+      } catch (error) {
+        // One unreadable root must not hide a match under another.
+        if (signal?.aborted) throw error;
+        continue;
+      }
+      const prefix = base.path.replaceAll('\\', '/').replace(/\/?$/, '/');
+      const relative = target.startsWith(prefix) ? target.slice(prefix.length) : '';
+      if (!relative || !relativePath(relative)) continue;
+      try {
+        return await this.resolve(root, relative, signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        return null;
+      }
+    }
+    return null;
   }
   models(signal?: AbortSignal): Promise<readonly ModelDescription[]> {
     return this.session.perform(

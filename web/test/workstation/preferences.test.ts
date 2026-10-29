@@ -85,6 +85,23 @@ describe('bounded browser preferences', () => {
     expect(stored.preferences).not.toHaveProperty('keepSignedIn');
   });
 
+  it('keeps appearance saved before the project guide was retired', () => {
+    window.localStorage.setItem(
+      'wavedl.appearance.v1',
+      JSON.stringify({
+        version: 1,
+        preferences: {
+          theme: 'dark',
+          accent: 'violet',
+          zoom: 110,
+          language: 'vi',
+          showProjectGuide: false,
+        },
+      }),
+    );
+    expect(loadAppearance()).toEqual({ theme: 'dark', accent: 'violet', zoom: 110, language: 'vi' });
+  });
+
   it('keeps opt-out independent of a stale appearance save', () => {
     const staleAppearance = loadAppearance();
     expect(saveKeepSignedIn(true)).toBe(true);

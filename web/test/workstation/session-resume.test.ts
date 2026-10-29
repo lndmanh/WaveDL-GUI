@@ -215,7 +215,7 @@ describe('resumable browser session', () => {
     const message = owner.snapshot().message;
     if (message === null) throw new Error('Expected a coded identity notice');
     expect(translateClientDiagnostic('en', message)).toBe(
-      'A different WaveDL daemon is now serving this address. Sign in again.',
+      'WaveDL was restarted or replaced. Sign in again.',
     );
     expect(window.localStorage.getItem(SESSION_CREDENTIAL_KEY)).toBeNull();
   });

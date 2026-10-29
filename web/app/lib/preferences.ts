@@ -13,7 +13,6 @@ export const appearanceSchema = z.strictObject({
   accent: z.enum(['neutral', 'blue', 'violet', 'green']),
   zoom: z.union([z.literal(90), z.literal(100), z.literal(110), z.literal(125)]),
   language: z.enum(['en', 'vi']),
-  showProjectGuide: z.boolean(),
 });
 export type AppearancePreferences = z.infer<typeof appearanceSchema>;
 export const defaultAppearance: AppearancePreferences = {
@@ -21,7 +20,6 @@ export const defaultAppearance: AppearancePreferences = {
   accent: 'neutral',
   zoom: 100,
   language: 'en',
-  showProjectGuide: true,
 };
 /** No paths, executable code, credentials, model selection or submitted authority. */
 // Preferences are editable draft values, not a submission. Preserve existing
@@ -50,7 +48,7 @@ export interface PreferenceStorage {
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
 }
-function browserStorage(): PreferenceStorage | null {
+export function browserStorage(): PreferenceStorage | null {
   try {
     return typeof window === 'undefined' ? null : window.localStorage;
   } catch {
@@ -58,6 +56,11 @@ function browserStorage(): PreferenceStorage | null {
   }
 }
 const appearanceEnvelope = z.strictObject({ version: z.literal(1), preferences: appearanceSchema });
+// Saved before the guided project wizard was retired; the flag is read and dropped.
+const legacyAppearanceEnvelope = z.strictObject({
+  version: z.literal(1),
+  preferences: appearanceSchema.extend({ showProjectGuide: z.boolean() }),
+});
 const trainingEnvelope = z.strictObject({
   version: z.literal(1),
   daemonId: z.string().min(1).max(256),
@@ -71,7 +74,7 @@ function trainingKey(daemonId: string): string {
     throw clientError('invalidDaemonIdentity', {});
   return `wavedl.training-defaults.v1.${encodeURIComponent(daemonId)}`;
 }
-function boundedText(value: string): string {
+export function boundedText(value: string): string {
   if (new TextEncoder().encode(value).byteLength > PREFERENCES_LIMIT)
     throw clientError('preferencesExceedThe64KibLimit', {});
   return value;
@@ -79,9 +82,12 @@ function boundedText(value: string): string {
 export function loadAppearance(storage = browserStorage()): AppearancePreferences {
   try {
     const raw = storage?.getItem(appearanceKey);
-    return raw
-      ? appearanceEnvelope.parse(parseJson(boundedText(raw))).preferences
-      : { ...defaultAppearance };
+    if (!raw) return { ...defaultAppearance };
+    const value = parseJson(boundedText(raw));
+    const current = appearanceEnvelope.safeParse(value);
+    if (current.success) return current.data.preferences;
+    // z.object strips the retired key that the strict schema would reject.
+    return z.object(appearanceSchema.shape).parse(legacyAppearanceEnvelope.parse(value).preferences);
   } catch {
     return { ...defaultAppearance };
   }

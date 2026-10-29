@@ -310,7 +310,7 @@ export class ConnectionSession {
   ): Promise<boolean> {
     this.#revoke();
     if (!this.#online) {
-      this.#publish('offline', 'Offline: live status and actions are unavailable.');
+      this.#publish('offline', clientError('connectionOffline'));
       return false;
     }
     const revision = this.#state.revision;
@@ -361,7 +361,7 @@ export class ConnectionSession {
       if (!result) {
         candidate.clearToken();
         this.#scope = null;
-        this.#publish('authentication', 'Enter the daemon bearer credential.');
+        this.#publish('authentication', clientError('credentialRequired'));
         return false;
       }
       this.#assertGrantIdentity(result.grant, result.health);

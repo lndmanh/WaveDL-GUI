@@ -53,7 +53,7 @@ describe('browser connection authority', () => {
     expect(failure).toBeInstanceOf(ConnectionSessionError);
     expect(failure).toMatchObject({
       code: 'identity',
-      message: 'A different WaveDL daemon is now serving this address. Sign in again.',
+      message: 'WaveDL was restarted or replaced. Sign in again.',
       status: 409,
       clientMessageKey: 'daemonReplaced',
     });

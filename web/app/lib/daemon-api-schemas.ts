@@ -102,6 +102,19 @@ export const runViewSchema = z.object({
   submission_requested: z.boolean(),
   cancellation_requested: z.boolean(),
   evidence: jsonObjectSchema.nullable(),
+  // Older daemons omit these; a run is still valid without a human identity.
+  created_at: z.iso.datetime({ offset: true }).nullable().optional(),
+  summary: z
+    .object({
+      name: z.string().nullable(),
+      model: z.string().nullable(),
+      data_path: z.string().nullable(),
+      epochs: positive.nullable(),
+      cv: positive.nullable(),
+      source_run_id: uuid.nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export const healthSchema = z.object({
   daemon_id: printable,
