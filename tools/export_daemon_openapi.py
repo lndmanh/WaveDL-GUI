@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import sys
 from pathlib import Path
 
 from fastapi.openapi.utils import get_openapi
@@ -74,7 +75,8 @@ def main() -> None:
     args = parser.parse_args()
     rendered = json.dumps(build_openapi(), indent=2, sort_keys=True) + "\n"
     if args.output is None:
-        print(rendered, end="")
+        # Text-mode stdout would write CRLF on Windows; keep the bytes identical.
+        sys.stdout.buffer.write(rendered.encode("utf-8"))
     else:
         args.output.write_text(rendered, encoding="utf-8", newline="\n")
 
