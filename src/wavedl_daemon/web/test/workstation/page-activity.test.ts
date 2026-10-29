@@ -113,6 +113,47 @@ async function open(path: string, live = false, plots = false, controls = false)
   return { router, wrapper };
 }
 describe('kept-alive work page activity', () => {
+  it('keeps content that remounts on reconnect while its page is hidden paused until shown', async () => {
+    const { router } = await open(`/experiments/${id}`);
+    const panel = () => document.getElementById('shell-panel-tab-logs')?.textContent ?? '';
+    expect(panel()).toContain('retained log');
+    await router.push('/datasets'); await flushPromises();
+    expect(panel()).not.toContain('retained log');
+    context.state.value = { ...context.state.value, revision: 2 };
+    try {
+      await flushPromises();
+      expect(panel()).not.toContain('retained log');
+      await router.push(`/experiments/${id}`); await flushPromises();
+      expect(panel()).toContain('retained log');
+    } finally {
+      context.state.value = { ...context.state.value, revision: 1 };
+    }
+  });
+
+  it('does not fetch or stream for a run workspace remounted on reconnect while hidden', async () => {
+    vi.spyOn(api.value, 'listRuns').mockResolvedValue([run]);
+    const streams = vi.spyOn(api.value, 'openEvents').mockImplementation(async (_id, _cursor, signal) =>
+      new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        signal.addEventListener('abort', () => controller.close(), { once: true });
+      } })),
+    );
+    const { router } = await open(`/experiments/${id}`, true);
+    await router.push('/datasets'); await flushPromises();
+    const lists = vi.mocked(api.value.listRuns).mock.calls.length;
+    const opened = streams.mock.calls.length;
+    context.state.value = { ...context.state.value, revision: 2 };
+    try {
+      await flushPromises();
+      expect(api.value.listRuns).toHaveBeenCalledTimes(lists);
+      expect(streams).toHaveBeenCalledTimes(opened);
+      await router.push(`/experiments/${id}`); await flushPromises();
+      expect(vi.mocked(api.value.listRuns).mock.calls.length).toBeGreaterThan(lists);
+      expect(streams.mock.calls.length).toBeGreaterThan(opened);
+    } finally {
+      context.state.value = { ...context.state.value, revision: 1 };
+    }
+  });
+
   it('pauses Enter while New run is inactive and resumes exactly once without remounting', async () => {
     const { router, wrapper } = await open('/new');
     const instance = wrapper.getComponent(StartPanel).element;

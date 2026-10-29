@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePageActive } from '../../composables/usePageActive';
 import { watch } from 'vue';
 import { definePageMeta } from '#imports';
 import ResultsContainer from '../../components/results/ResultsContainer.vue';
@@ -7,6 +8,8 @@ import { useRunRoute } from '../../composables/useRunRoute';
 import { DaemonApiError } from '../../lib/daemon-api';
 
 defineOptions({ name: 'WorkstationResultsPage' });
+// The kept-alive root: descendants that mount while hidden inherit its state.
+usePageActive();
 definePageMeta({ key: 'results' });
 const { state, api, session, reportFailure, monitorRun } = useWorkstation();
 const { runId, unknown } = useRunRoute('results');

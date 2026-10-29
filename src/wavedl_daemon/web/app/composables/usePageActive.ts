@@ -1,28 +1,54 @@
-import { onActivated, onBeforeUnmount, onDeactivated, onMounted, shallowRef } from 'vue';
+import {
+  computed,
+  inject,
+  onActivated,
+  onBeforeUnmount,
+  onDeactivated,
+  onMounted,
+  provide,
+  shallowRef,
+  watch,
+  type ComputedRef,
+  type InjectionKey,
+} from 'vue';
+
+const pageActiveKey: InjectionKey<ComputedRef<boolean>> = Symbol('page-active');
 
 /**
- * Tracks whether the enclosing kept-alive page is shown. Outside KeepAlive it
- * stays active. `resume`/`pause` run once per mount or activation transition.
+ * Tracks whether the enclosing kept-alive page is shown; outside KeepAlive it
+ * stays active. Activity is inherited: KeepAlive never deactivates a child that
+ * first mounts inside an already-hidden page (e.g. a reconnect remount), so the
+ * child must start from its ancestors' state. `resume`/`pause` run once per
+ * transition while mounted.
  */
 export function usePageActive(resume?: () => void, pause?: () => void) {
-  // Start active so content (e.g. popover portals) renders on first paint.
-  const isActive = shallowRef(true);
+  const parent = inject(pageActiveKey, null);
+  const shown = shallowRef(true);
+  const mounted = shallowRef(false);
+  const isActive = computed(() => shown.value && (parent?.value ?? true));
+  provide(pageActiveKey, isActive);
   let running = false;
-  function activate() {
-    isActive.value = true;
-    if (running) return;
-    running = true;
-    resume?.();
-  }
-  function deactivate() {
-    isActive.value = false;
-    if (!running) return;
-    running = false;
-    pause?.();
-  }
-  onMounted(activate);
-  onActivated(activate);
-  onDeactivated(deactivate);
-  onBeforeUnmount(deactivate);
+  watch(
+    () => mounted.value && isActive.value,
+    (active) => {
+      if (active === running) return;
+      running = active;
+      if (active) resume?.();
+      else pause?.();
+    },
+    { flush: 'sync' },
+  );
+  onMounted(() => {
+    mounted.value = true;
+  });
+  onActivated(() => {
+    shown.value = true;
+  });
+  onDeactivated(() => {
+    shown.value = false;
+  });
+  onBeforeUnmount(() => {
+    mounted.value = false;
+  });
   return { isActive };
 }
