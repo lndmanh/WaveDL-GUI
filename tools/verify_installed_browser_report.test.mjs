@@ -57,6 +57,12 @@ function fixture() {
   };
 }
 test("accepts exact installed-runtime and native-browser evidence boundary", () => verifyInstalledBrowserRecord(fixture(), expectedWheelSha256));
+test("accepts a session-less tab whose deep links route through login back to the page", () => {
+  const record = fixture();
+  record.staticClient.path = "/login?next=%2Fdatasets";
+  record.unknownPath.path = "/login?next=%2Fexperiments";
+  verifyInstalledBrowserRecord(record, expectedWheelSha256);
+});
 for (const [name, mutate] of [
   ["wrong wheel", record => record.wheelSha256 = "0".repeat(64)],
   ["failure", record => record.status = "failed"],
@@ -106,6 +112,8 @@ for (const [name, mutate] of [
   ["wrong deep link", record => record.staticClient.path = "/settings/storage"],
   ["missing unknown-path proof", record => delete record.unknownPath],
   ["unknown path not redirected", record => record.unknownPath.path = "/nope/deep"],
+  ["deep link login returns elsewhere", record => record.staticClient.path = "/login?next=%2Fexperiments"],
+  ["unknown path login returns elsewhere", record => record.unknownPath.path = "/login?next=%2Fdatasets"],
   ["unknown path missing shell", record => record.unknownPath.shell = false],
   ["orphan process", record => record.cleanup.runtimePidsAndGroupsAbsent = false],
   ["cleanup failure", record => record.cleanup.errors.push("failure")],

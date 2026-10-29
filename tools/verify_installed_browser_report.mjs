@@ -144,8 +144,12 @@ export function verifyInstalledBrowserRecord(record, expectedWheelSha256) {
     assert(record.finalRegistry.runs.some(run => run.run_id === source.run_id));
   }
   assert.deepEqual(record.cleanupRegistry, record.finalRegistry);
-  assert.deepEqual(record.staticClient, { path: "/datasets", shell: true, apiStatus: 401, apiType: "application/json" });
-  assert.deepEqual(record.unknownPath, { path: "/experiments", shell: true });
+  // Without a session in the tab, routing lands on login returning to the page.
+  const routedTo = (path) => [path, `/login?next=${encodeURIComponent(path)}`];
+  assert(routedTo("/datasets").includes(record.staticClient?.path));
+  assert.deepEqual(record.staticClient, { path: record.staticClient.path, shell: true, apiStatus: 401, apiType: "application/json" });
+  assert(routedTo("/experiments").includes(record.unknownPath?.path));
+  assert.deepEqual(record.unknownPath, { path: record.unknownPath.path, shell: true });
   assert(Array.isArray(record.runtimePids) && record.runtimePids.length === 3 && new Set(record.runtimePids).size === 3 && record.runtimePids.every(pid => Number.isSafeInteger(pid) && pid > 0));
   sameSet(record.runtimePids, record.finalRegistry.submissions.map(row => row.pid));
   assert.deepEqual(record.cleanup, { errors: [], browserAbsent: true, daemonReaped: true, listenerAbsent: true,

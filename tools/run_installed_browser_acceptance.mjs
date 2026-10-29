@@ -243,13 +243,16 @@ np.savez(Path(sys.argv[1])/'samples.npz',X=x,y=y)`, [root]);
     actual: { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } };
   assert.deepEqual(record.predictions.actual, record.predictions.expected);
   record.stage = "installed-static-deep-link-api-separation";
+  // A deep link must reach the routed page, or login returning to it when this
+  // tab holds no session (session credentials are per tab); both prove routing.
+  const routed = (path) => `!!document.querySelector('[data-testid="workstation-nav"]') && (location.pathname === '${path}' && !!document.querySelector('[data-work-page]') || location.pathname + location.search === '/login?next=${encodeURIComponent(path)}')`;
   await cli("open", `${origin}/datasets`);
-  await cli("wait", "--fn", `location.pathname === '/datasets' && document.body.innerText.includes('Connected') && !!document.querySelector('[data-work-page="datasets"]')`);
-  record.staticClient = await dom(`(async()=>{const response=await fetch('/api/unknown',{cache:'no-store',headers:{accept:'text/html'}});return JSON.stringify({path:location.pathname,shell:document.title.includes('WaveDL')&&!!document.querySelector('[data-testid="workstation-nav"]'),apiStatus:response.status,apiType:response.headers.get('content-type')})})()`);
+  await cli("wait", "--fn", routed("/datasets"));
+  record.staticClient = await dom(`(async()=>{const response=await fetch('/api/unknown',{cache:'no-store',headers:{accept:'text/html'}});return JSON.stringify({path:location.pathname+location.search,shell:document.title.includes('WaveDL')&&!!document.querySelector('[data-testid="workstation-nav"]'),apiStatus:response.status,apiType:response.headers.get('content-type')})})()`);
   record.stage = "installed-unknown-path-redirect";
   await cli("open", `${origin}/nope/deep`);
-  await cli("wait", "--fn", `location.pathname === '/experiments' && document.body.innerText.includes('Connected') && !!document.querySelector('[data-work-page="experiments"]')`);
-  record.unknownPath = await dom(`JSON.stringify({path:location.pathname,shell:document.title.includes('WaveDL')&&!!document.querySelector('[data-testid="workstation-nav"]')})`);
+  await cli("wait", "--fn", routed("/experiments"));
+  record.unknownPath = await dom(`JSON.stringify({path:location.pathname+location.search,shell:document.title.includes('WaveDL')&&!!document.querySelector('[data-testid="workstation-nav"]')})`);
   record.finalRegistry = await registry();
   record.runtimePids = JSON.parse(await py(`import json,sqlite3,sys
 from pathlib import Path
