@@ -4,6 +4,7 @@ import { flushPromises } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import ConnectionPanel from '../../app/components/ConnectionPanel.vue';
+import { createRouter, createWebHistory } from 'vue-router';
 import { useDaemonConnection } from '../../app/composables/useDaemonConnection';
 import type { ConnectionState } from '../../app/lib/connection-session';
 
@@ -212,13 +213,17 @@ describe('connection UI ownership', () => {
         return () => h('p', connection.state.value.status);
       },
     });
-    const wrapper = mount(Host);
+    const history = createWebHistory();
+    const router = createRouter({ history, routes: [{ path: '/:path(.*)*', component: Host }] });
+    await router.push('/?bootstrap=private#secret');
+    const wrapper = mount(Host, { global: { plugins: [router] } });
     await flushPromises();
     expect(wrapper.text()).toBe('connected');
     expect(localSet).not.toHaveBeenCalled();
     expect(sessionSet).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(sessionSet.mock.calls)).not.toContain('private');
     wrapper.unmount();
+    history.destroy();
     expect(remove.mock.calls.some(([event]) => event === 'online')).toBe(true);
     expect(remove.mock.calls.some(([event]) => event === 'offline')).toBe(true);
     expect(fetcher).toHaveBeenCalledTimes(2);

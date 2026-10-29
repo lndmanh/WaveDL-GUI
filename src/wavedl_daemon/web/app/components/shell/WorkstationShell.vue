@@ -12,20 +12,24 @@ import ShellDock from './ShellDock.vue';
 import ShellCommandPalette from './ShellCommandPalette.vue';
 import { useShellLayout, useShellNavigation } from '../../composables/useShellLayout';
 import type { ConnectionStatus } from '../../lib/connection-session';
-import { sectionPath, SHELL_PRIMARY_NAVIGATION } from '../../shell/sections';
+import {
+  sectionForPath,
+  sectionPath,
+  SHELL_ACTION_NAVIGATION,
+  SHELL_PRIMARY_NAVIGATION,
+} from '../../shell/sections';
 import {
   workstationNavTestId,
-  type PrimaryWorkstationSection,
   type WorkstationSection,
 } from '../../lib/shell-test-ids';
-type Overlay = 'connection' | 'settings' | 'adopt';
+type Overlay = 'adopt';
 const props = defineProps<{
   status: ConnectionStatus;
-  section: PrimaryWorkstationSection;
+  section: WorkstationSection;
   overlay: Overlay | null;
 }>();
 const emit = defineEmits<{
-  navigate: [section: PrimaryWorkstationSection];
+  navigate: [section: WorkstationSection];
   'update:overlay': [overlay: Overlay | null];
 }>();
 const { t } = useI18n({ useScope: 'global' });
@@ -43,13 +47,7 @@ const connectionAnnouncement = computed(() =>
 );
 let overlayOpener: HTMLElement | null = null;
 let focusObserver: MutationObserver | null = null;
-const overlayTitle = computed(() =>
-  props.overlay === 'adopt'
-    ? t('shell.adoptStandaloneRun')
-    : props.overlay === 'settings'
-      ? t('shell.settings')
-      : t('shell.connection'),
-);
+const overlayTitle = computed(() => t('shell.adoptStandaloneRun'));
 function setOverlay(value: Overlay | null) {
   if (
     value &&
@@ -87,7 +85,7 @@ function focusOverlay(event: Event) {
     focusObserver.observe(body, { childList: true, subtree: true });
   });
 }
-function navigate(section: WorkstationSection) {
+async function navigate(section: WorkstationSection) {
   paletteOpen.value = false;
   const destination = SHELL_PRIMARY_NAVIGATION.find((item) => item.id === section);
   if (destination) {
@@ -96,7 +94,19 @@ function navigate(section: WorkstationSection) {
     else emit('navigate', destination.id);
     return;
   }
-  if (section === 'connection' || section === 'settings' || section === 'adopt') setOverlay(section);
+  const action = SHELL_ACTION_NAVIGATION.find((item) => item.id === section);
+  if (!action) return;
+  if (action.id === 'adopt') {
+    // props.section lags behind the router, so trust where navigation landed.
+    if (props.section !== 'experiments' && navigateTo) {
+      if (sectionForPath(await navigateTo('/experiments', false)) !== 'experiments') return;
+    }
+    setOverlay('adopt');
+    return;
+  }
+  setOverlay(null);
+  if (navigateTo) navigateTo(action.path);
+  else emit('navigate', section);
 }
 function shortcut(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -170,17 +180,13 @@ onScopeDispose(() => {
     <ShellCommandPalette v-model:open="paletteOpen" @navigate="navigate" />
     <Dialog :open="props.overlay !== null" @update:open="!$event && setOverlay(null)"
       ><DialogContent
-        class="shell-overlay"
-        :class="{
-          'shell-overlay-wide': props.overlay === 'settings' || props.overlay === 'adopt',
-          'shell-overlay-connection': props.overlay === 'connection',
-        }"
+        class="shell-overlay shell-overlay-wide"
         :show-close-button="false"
         :aria-describedby="undefined"
         @open-auto-focus="focusOverlay"
         @close-auto-focus="restoreOverlayFocus"
         ><div class="shell-overlay-header">
-          <DialogTitle :class="{ 'sr-only': props.overlay !== 'settings' }">{{
+          <DialogTitle class="sr-only">{{
             overlayTitle
           }}</DialogTitle>
           <DialogClose as-child
@@ -193,10 +199,7 @@ onScopeDispose(() => {
           ></DialogClose>
         </div>
         <div class="shell-overlay-body" tabindex="-1">
-          <slot v-if="props.overlay === 'connection'" name="connection" /><slot
-            v-else-if="props.overlay === 'settings'"
-            name="settings"
-          /><slot v-else-if="props.overlay === 'adopt'" name="adopt" /></div></DialogContent
+          <slot v-if="props.overlay === 'adopt'" name="adopt" /></div></DialogContent
     ></Dialog>
   </div>
 </template>

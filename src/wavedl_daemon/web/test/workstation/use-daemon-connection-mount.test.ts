@@ -3,6 +3,7 @@ import { mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
+import { createRouter, createWebHistory } from 'vue-router';
 import { useDaemonConnection } from '../../app/composables/useDaemonConnection';
 import { saveKeepSignedIn } from '../../app/lib/preferences';
 import { SESSION_CREDENTIAL_KEY, type SessionCredential } from '../../app/lib/session-credential';
@@ -38,6 +39,7 @@ function makeStorage() {
 
 let localStorageMock: ReturnType<typeof makeStorage>;
 let sessionStorageMock: ReturnType<typeof makeStorage>;
+const histories: Array<{ destroy(): void }> = [];
 
 beforeEach(() => {
   localStorageMock = makeStorage();
@@ -50,6 +52,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const history of histories.splice(0)) history.destroy();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorageMock.clear();
@@ -70,6 +73,17 @@ function host(
   });
 }
 
+async function mountHost(
+  fetcher: typeof fetch,
+  expose: (connection: ReturnType<typeof useDaemonConnection>) => void,
+) {
+  const history = createWebHistory();
+  histories.push(history);
+  const router = createRouter({ history, routes: [{ path: '/:path(.*)*', component: { render: () => null } }] });
+  await router.push(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+  return mount(host(fetcher, expose), { global: { plugins: [router] } });
+}
+
 describe('daemon connection mount ordering and storage fallback', () => {
   it.each(['session', 'local'] as const)(
     'resumes an unchanged %s envelope without writing or deleting it when storage is full',
@@ -83,7 +97,7 @@ describe('daemon connection mount ordering and storage fallback', () => {
       });
       const remove = vi.spyOn(storage, 'removeItem');
       const fetcher = vi.fn<typeof fetch>(async () => json(health));
-      const wrapper = mount(host(fetcher, () => undefined));
+      const wrapper = await mountHost(fetcher, () => undefined);
       await vi.waitFor(() => expect(wrapper.text()).toBe('connected'));
       expect(write).not.toHaveBeenCalled();
       expect(remove).not.toHaveBeenCalled();
@@ -105,13 +119,13 @@ describe('daemon connection mount ordering and storage fallback', () => {
       expect(window.location.hash).toBe('');
       const url = new URL(String(input));
       const authorization = new Headers(init?.headers).get('Authorization');
-      const body =
-        typeof init?.body === 'string' ? (JSON.parse(init.body) as { code?: string }) : {};
-      calls.push({ path: url.pathname, authorization, code: body.code });
+      const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
+      const code = body !== null && typeof body === 'object' && 'code' in body && typeof body.code === 'string' ? body.code : undefined;
+      calls.push({ path: url.pathname, authorization, code });
       return url.pathname === '/api/bootstrap' ? json(grant(freshToken)) : json(health);
     });
     let connection: ReturnType<typeof useDaemonConnection> | undefined;
-    const wrapper = mount(host(fetcher, (value) => (connection = value)));
+    const wrapper = await mountHost(fetcher, (value) => (connection = value));
     await vi.waitFor(() => expect(wrapper.text()).toBe('connected'));
     await flushPromises();
 
@@ -135,7 +149,7 @@ describe('daemon connection mount ordering and storage fallback', () => {
       new URL(String(input)).pathname === '/api/bootstrap' ? json(grant(ownToken)) : json(health),
     );
     let connection: ReturnType<typeof useDaemonConnection> | undefined;
-    const wrapper = mount(host(fetcher, (value) => (connection = value)));
+    const wrapper = await mountHost(fetcher, (value) => (connection = value));
     await vi.waitFor(() => expect(wrapper.text()).toBe('connected'));
 
     expect(localStorageMock.getItem(SESSION_CREDENTIAL_KEY)).toBeNull();
@@ -150,7 +164,7 @@ describe('daemon connection mount ordering and storage fallback', () => {
     localStorageMock.setItem(SESSION_CREDENTIAL_KEY, JSON.stringify(credential(token('q'))));
     const fetcher = vi.fn<typeof fetch>();
     let connection: ReturnType<typeof useDaemonConnection> | undefined;
-    const wrapper = mount(host(fetcher, (value) => (connection = value)));
+    const wrapper = await mountHost(fetcher, (value) => (connection = value));
     await flushPromises();
     expect(fetcher).not.toHaveBeenCalled();
     expect(connection?.keepSignedIn.value).toBe(false);
@@ -176,7 +190,7 @@ describe('daemon connection mount ordering and storage fallback', () => {
       expect(new Headers(init?.headers).get('Authorization')).toBe(`Bearer ${saved.token}`);
       return json(health);
     });
-    const wrapper = mount(host(fetcher, () => undefined));
+    const wrapper = await mountHost(fetcher, () => undefined);
     await vi.waitFor(() => expect(wrapper.text()).toBe('connected'));
 
     expect(getItem).toHaveBeenCalledWith(SESSION_CREDENTIAL_KEY);
@@ -210,7 +224,7 @@ describe('daemon connection mount ordering and storage fallback', () => {
         : json(health);
     });
     let connection: ReturnType<typeof useDaemonConnection> | undefined;
-    const wrapper = mount(host(fetcher, (value) => (connection = value)));
+    const wrapper = await mountHost(fetcher, (value) => (connection = value));
     await vi.waitFor(() => expect(wrapper.text()).toBe('connected'));
 
     expect(connection?.api.value).not.toBeNull();
@@ -224,7 +238,7 @@ describe('daemon connection mount ordering and storage fallback', () => {
       new URL(String(input)).pathname === '/api/health' ? json(health) : json(grant(activeToken)),
     );
     let connection: ReturnType<typeof useDaemonConnection> | undefined;
-    const wrapper = mount(host(fetcher, (value) => (connection = value)));
+    const wrapper = await mountHost(fetcher, (value) => (connection = value));
     await flushPromises();
     expect(localStorageMock.getItem('wavedl.appearance.v1')).toBeNull();
     expect(connection).toBeDefined();

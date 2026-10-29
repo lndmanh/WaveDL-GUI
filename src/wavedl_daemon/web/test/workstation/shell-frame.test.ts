@@ -30,13 +30,12 @@ function mountShell(locale: ShellLocale = 'en') {
     {
       props: {
         ...shellProps,
-        'onUpdate:overlay': (overlay: 'connection' | 'settings' | 'adopt' | null) =>
+        'onUpdate:overlay': (overlay: 'adopt' | null) =>
           wrapper.setProps({ overlay }),
       },
       slots: {
         default: '<p data-testid="shell-slot-content">Shell content</p>',
-        connection: '<button data-testid="connection-slot">Connect</button>',
-        settings: '<button data-testid="settings-slot">Settings</button>',
+        adopt: '<button data-testid="adopt-slot">Adopt</button>',
       },
       attachTo: document.body,
     },
@@ -205,7 +204,7 @@ describe('workstation shell frame', () => {
     expect(document.activeElement).toBe(opener.element);
   });
 
-  it.each(['connection', 'settings'] as const)(
+  it.each(['adopt'])(
     'keeps focus in the %s overlay and restores it on Escape',
     async (section) => {
       const wrapper = mountShell();

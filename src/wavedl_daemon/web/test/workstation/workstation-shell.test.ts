@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { flushPromises } from '@vue/test-utils';
 import { mountWithI18n as mount } from './mountWithI18n';
 import { computed, defineComponent, h, shallowRef } from 'vue';
 import { describe, expect, it } from 'vitest';
@@ -28,7 +29,7 @@ describe('workstation navigation', () => {
       false,
     );
     await navigation.get(`[data-testid="${workstationNavTestId('settings')}"]`).trigger('click');
-    expect(wrapper.emitted('update:overlay')).toContainEqual(['settings']);
+    expect(wrapper.emitted('navigate')).toContainEqual(['settings']);
     wrapper.unmount();
   });
 
@@ -70,10 +71,10 @@ describe('workstation navigation', () => {
         await wrapper.get(`[data-testid="${workstationNavTestId(section)}"]`).trigger('click');
       }
       expect(shell.emitted('navigate')).toEqual(
-        ['experiments', 'project', 'datasets', 'results'].map((section) => [section]),
+        ['experiments', 'project', 'datasets', 'results', 'connection', 'settings'].map((section) => [section]),
       );
       expect(shell.emitted('update:overlay')).toEqual(
-        expect.arrayContaining([['adopt'], ['connection'], ['settings']]),
+        expect.arrayContaining([['adopt']]),
       );
       expect(wrapper.get(`[data-testid="${WORKSTATION_SHELL_TEST_IDS.content}"]`).exists()).toBe(
         true,
@@ -85,17 +86,56 @@ describe('workstation navigation', () => {
     }
   });
 
-  it('routes primary navigation and keeps connection and settings as overlays', async () => {
+  it.each([
+    ['/experiments', 'adopt'],
+    ['/login?next=%2Fexperiments', null],
+  ])('opens adoption only once navigation lands on Experiments (%s), despite a lagging rendered route', async (landed, expected) => {
+    // Nuxt updates the layout's rendered route after the router resolves, as here.
+    const renderedPath = shallowRef('/datasets');
+    const overlay = shallowRef<'adopt' | null>(null);
+    const navigations: string[] = [];
+    const Host = defineComponent({
+      setup() {
+        provideShellRouting(
+          computed(() => renderedPath.value),
+          async (nextPath) => {
+            navigations.push(nextPath);
+            const landedPath = landed.split('?')[0] ?? landed;
+            setTimeout(() => { renderedPath.value = landedPath; }, 0);
+            return landedPath;
+          },
+        );
+        return () =>
+          h(WorkstationShell, {
+            status: 'connected',
+            section: sectionForPath(renderedPath.value),
+            overlay: overlay.value,
+            'onUpdate:overlay': (value) => (overlay.value = value),
+          });
+      },
+    });
+    const wrapper = mount(Host);
+    const palette = wrapper.getComponent({ name: 'ShellCommandPalette' });
+    palette.vm.$emit('navigate', 'adopt');
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(navigations).toEqual(['/experiments']);
+    expect(overlay.value).toBe(expected);
+    wrapper.unmount();
+  });
+
+  it('routes primary navigation, connection and settings and only overlays adoption', async () => {
     const path = shallowRef('/experiments');
-    const overlay = shallowRef<'connection' | 'settings' | 'adopt' | null>(null);
+    const overlay = shallowRef<'adopt' | null>(null);
     const navigations: string[] = [];
     const Host = defineComponent({
       setup() {
         provideShellRouting(
           computed(() => path.value),
-          (nextPath) => {
+          async (nextPath) => {
             navigations.push(nextPath);
             path.value = nextPath;
+            return nextPath;
           },
         );
         return () =>
@@ -120,12 +160,14 @@ describe('workstation navigation', () => {
     ).toBe('page');
 
     await wrapper.get(`[data-testid="${workstationNavTestId('connection')}"]`).trigger('click');
-    expect(overlay.value).toBe('connection');
-    expect(navigations).toEqual(['/datasets']);
+    expect(overlay.value).toBeNull();
+    expect(navigations).toEqual(['/datasets', '/login']);
+    expect(wrapper.get('[data-testid="nav-connection"]').attributes('aria-current')).toBe('page');
 
     await wrapper.get(`[data-testid="${workstationNavTestId('settings')}"]`).trigger('click');
-    expect(overlay.value).toBe('settings');
-    expect(navigations).toEqual(['/datasets']);
+    expect(overlay.value).toBeNull();
+    expect(navigations).toEqual(['/datasets', '/login', '/settings']);
+    expect(wrapper.get('[data-testid="nav-settings"]').attributes('aria-current')).toBe('page');
     expect(shell.emitted('navigate')).toBeUndefined();
     wrapper.unmount();
   });

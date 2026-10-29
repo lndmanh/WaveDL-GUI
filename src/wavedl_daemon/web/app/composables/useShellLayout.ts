@@ -21,20 +21,22 @@ import {
   type ShellPanelTabDefinition,
   type ShellPanelTabId,
 } from '../shell/constants';
-import type { PrimaryWorkstationSection } from '../lib/shell-test-ids';
+import type { WorkstationSection } from '../lib/shell-test-ids';
 import { sectionForPath } from '../shell/sections';
 
 export type { ShellPanelTabDefinition, ShellPanelTabId } from '../shell/constants';
 
 const shellRoutePathKey: InjectionKey<ComputedRef<string>> = Symbol('shell-route-path');
-const shellNavigateKey: InjectionKey<(path: string) => void> = Symbol('shell-navigate');
+/** Resolves to the path the router actually landed on, which guards may change. */
+type ShellNavigate = (path: string, preserveRun?: boolean) => Promise<string>;
+const shellNavigateKey: InjectionKey<ShellNavigate> = Symbol('shell-navigate');
 
 function clampPanelWidth(value: number): number {
   return Math.max(SHELL_PANEL_MIN_WIDTH, Math.min(SHELL_PANEL_MAX_WIDTH, Math.round(value)));
 }
 
 export interface ShellLayoutState {
-  activeSection: ComputedRef<PrimaryWorkstationSection>;
+  activeSection: ComputedRef<WorkstationSection>;
   isRailVisible: Ref<boolean>;
   isPanelOpen: Ref<boolean>;
   isPanelVisible: ComputedRef<boolean>;
@@ -140,13 +142,13 @@ export function useShellLayout(): ShellLayoutState {
 
 export function provideShellRouting(
   routePath: ComputedRef<string>,
-  navigate: (path: string) => void,
+  navigate: ShellNavigate,
 ): void {
   provide(shellRoutePathKey, routePath);
   provide(shellNavigateKey, navigate);
 }
 
-export function useShellNavigation(): ((path: string) => void) | null {
+export function useShellNavigation(): ShellNavigate | null {
   return hasInjectionContext() ? inject(shellNavigateKey, null) : null;
 }
 

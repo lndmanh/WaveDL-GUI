@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { computed, defineComponent, h, onScopeDispose, shallowReadonly, shallowRef } from 'vue';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import { flushPromises } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHead, renderDOMHead } from '@unhead/vue/client';
 import { mountWithI18n as mount } from './mountWithI18n';
 import WorkstationLayout from '../../app/layouts/default.vue';
+import SettingsPage from '../../app/pages/settings.vue';
 import { useShellNavigation } from '../../app/composables/useShellLayout';
 import { useWorkstation, type WorkstationContext } from '../../app/composables/useWorkstation';
 import { defaultAppearance, saveAppearance } from '../../app/lib/preferences';
@@ -69,12 +70,12 @@ const Settings = defineComponent({
 const Shell = defineComponent({
   props: { overlay: String, section: String },
   emits: ['update:overlay'],
-  setup(props, { emit, slots }) {
+  setup(props, { slots }) {
+    const navigate = useShellNavigation();
     return () => h('main', [
       h('output', { 'data-section': '' }, props.section),
-      h('button', { 'data-settings': '', onClick: () => emit('update:overlay', 'settings') }, 'Settings'),
+      h('button', { 'data-settings': '', onClick: () => navigate?.('/settings') }, 'Settings'),
       slots.default?.(),
-      props.overlay === 'settings' ? slots.settings?.() : [],
     ]);
   },
 });
@@ -105,13 +106,13 @@ describe('workstation layout ownership and retained locale', () => {
     for (let reopen = 0; reopen < 2; reopen++) {
       const router = createRouter({
         history: createMemoryHistory(),
-        routes: [{ path: '/:path(.*)*', component: Probe }],
+        routes: [{ path: '/settings', component: SettingsPage }, { path: '/:path(.*)*', component: Probe }],
       });
       await router.push('/datasets');
       const head = createHead({ document });
       const fallback = head.push({ htmlAttrs: { lang: 'en' } });
       const wrapper = mount(WorkstationLayout, {
-        slots: { default: () => h(Probe) },
+        slots: { default: () => [h(Probe), h(RouterView)] },
         global: {
           plugins: [router, head],
           stubs: {

@@ -4,12 +4,12 @@ import { useI18n } from 'vue-i18n';
 import { Command, PanelRight } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import type { ConnectionStatus } from '../../lib/connection-session';
-import type { PrimaryWorkstationSection, WorkstationSection } from '../../lib/shell-test-ids';
+import type { WorkstationSection } from '../../lib/shell-test-ids';
 import { workstationNavigationMessageKeys } from '../../i18n/dynamic-keys';
 import { useShellLayout } from '../../composables/useShellLayout';
 
 const props = defineProps<{
-  section: PrimaryWorkstationSection;
+  section: WorkstationSection;
   status: ConnectionStatus;
 }>();
 

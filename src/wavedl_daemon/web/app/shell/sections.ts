@@ -11,7 +11,7 @@ import { isUuid } from '../lib/daemon-api-schemas';
  * - useShellLayout().setActiveTab('logs' | 'artifacts') selects and opens a tab;
  *   useShellPanelTabs() can register a section-specific subset of the real tabs.
  * - WorkstationShell exposes an `actions` slot beside its Experiments Adopt action.
- *   Connection, Settings and Adopt are overlays, never canvas destinations.
+ *   Connection and Settings are pages; Adopt is an overlay on Experiments.
  */
 import { FileChartColumn, Layers, Database, Plus, Cable, Settings2, Import } from '@lucide/vue';
 import {
@@ -96,7 +96,9 @@ export function sectionPath(section: PrimaryWorkstationSection, runId?: string):
   return `${path}/${encodeURIComponent(runId)}`;
 }
 
-export function sectionForPath(path: string): PrimaryWorkstationSection {
+export function sectionForPath(path: string): WorkstationSection {
+  if (path === '/login' || path === '/login/') return 'connection';
+  if (path === '/settings' || path.startsWith('/settings/')) return 'settings';
   return (
     SHELL_PRIMARY_NAVIGATION.find(
       (item) => path === item.path || path.startsWith(`${item.path}/`),

@@ -1,11 +1,11 @@
 import { inject, provide, type ComputedRef, type InjectionKey, type ShallowRef } from 'vue';
 import type { DaemonApiError } from '../lib/daemon-api';
 import type { ConnectionSession } from '../lib/connection-session';
+import type { AppearancePreferences } from '../lib/preferences';
 import type { useAutomaticPlots } from './useAutomaticPlots';
 import type { useDaemonConnection } from './useDaemonConnection';
 
-// Connection and Settings remain overlays until their dedicated pages are introduced.
-export type WorkstationOverlay = 'connection' | 'settings' | 'adopt' | null;
+export type WorkstationOverlay = 'adopt' | null;
 export type WorkstationConnection = ReturnType<typeof useDaemonConnection>;
 export type WorkstationAutomaticPlots = ReturnType<typeof useAutomaticPlots>;
 
@@ -18,6 +18,8 @@ export interface WorkstationContext {
   reportFailure: ComputedRef<(error: DaemonApiError) => void>;
   revision: ComputedRef<number>;
   overlay: ShallowRef<WorkstationOverlay>;
+  appearance: ShallowRef<AppearancePreferences>;
+  appearanceChanged(value: AppearancePreferences): void;
   monitorRun(runId: string): Promise<void>;
 }
 

@@ -84,13 +84,16 @@ async function open(path: string) {
   const Host = defineComponent({
     setup() {
       const route = useRoute();
-      provideShellRouting(computed(() => route.path), (path) => { void router.push(path); });
-      const overlay = shallowRef<'connection' | 'settings' | 'adopt' | null>(null);
+      provideShellRouting(computed(() => route.path), async (path) => {
+        await router.push(path);
+        return router.currentRoute.value.path;
+      });
+      const overlay = shallowRef<'adopt' | null>(null);
       return () => h(WorkstationShell, {
         status: 'connected',
         section: sectionForPath(route.path),
         overlay: overlay.value,
-        'onUpdate:overlay': (value: 'connection' | 'settings' | 'adopt' | null) => {
+        'onUpdate:overlay': (value: 'adopt' | null) => {
           overlay.value = value;
         },
       }, {
