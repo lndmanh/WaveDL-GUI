@@ -10,6 +10,7 @@ import {
 import type { HTMLAttributes } from 'vue'
 
 import { cn } from '@/lib/utils'
+import { usePageActive } from '@/composables/usePageActive'
 
 const props = withDefaults(
   defineProps<DropdownMenuContentProps & { class?: HTMLAttributes['class'] }>(),
@@ -22,11 +23,13 @@ const emits = defineEmits<DropdownMenuContentEmits>()
 const delegatedProps = reactiveOmit(props, 'class')
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
+const { isActive } = usePageActive()
 </script>
 
 <template>
   <DropdownMenuPortal>
     <DropdownMenuContent
+      v-if="isActive"
       data-slot="dropdown-menu-content"
       v-bind="forwarded"
       :class="

@@ -11,6 +11,7 @@ import { useRuns } from '../../composables/useRuns';
 import RunList from './RunList.vue';
 import RunDetail from './RunDetail.vue';
 import RunOverview from './RunOverview.vue';
+import { usePageActive } from '../../composables/usePageActive';
 const { clientMessage } = useClientMessages();
 const props = defineProps<{ api: DaemonApi; runId: string | null }>();
 const emit = defineEmits<{
@@ -31,13 +32,21 @@ const {
   replay,
   cancel,
   close,
-} = useRuns(props.api, (error) => emit('connectionError', error));
+  pause,
+  resume,
+} = useRuns(props.api, (error) => emit('connectionError', error), true);
+const { isActive } = usePageActive(resume, pause);
 const root = useTemplateRef<HTMLElement>('root');
 const stage = useTemplateRef<HTMLElement>('stage');
-const { width } = useElementSize(root);
+const { width } = useElementSize(() => isActive.value ? root.value : null);
 // Zero until measured: keep the split layout rather than flashing the stacked one.
 const stacked = computed(() => width.value > 0 && width.value < 720);
-const now = useNow({ interval: 30_000 });
+const clock = useNow({ interval: 30_000, controls: true, immediate: false });
+usePageActive(() => {
+  clock.now.value = new Date();
+  clock.resume();
+}, clock.pause);
+const now = clock.now;
 const query = shallowRef('');
 const filter = shallowRef<RunFilter>('all');
 // The monitor's run id, known before its first snapshot arrives.

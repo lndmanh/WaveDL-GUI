@@ -13,6 +13,8 @@ import EvaluationResultsPanel from './EvaluationResultsPanel.vue';
 import type { RunMonitorSnapshot } from '../../lib/run-monitor';
 import InfoChip from '../common/InfoChip.vue';
 import { useShellLayout } from '../../composables/useShellLayout';
+import { usePageActive } from '../../composables/usePageActive';
+const { isActive } = usePageActive();
 const { t } = useI18n({ useScope: 'global' });
 const shellLayout = useShellLayout();
 const props = defineProps<{
@@ -31,7 +33,9 @@ const downloadStatus = shallowRef('');
 const imageUrl = shallowRef<string | null>(null);
 const previewPath = shallowRef<string | null>(null);
 const panelTarget = shallowRef<HTMLElement | null>(null);
+const parkedArtifacts = shallowRef<HTMLElement | null>(null);
 onMounted(() => {
+  parkedArtifacts.value = document.createElement('div');
   panelTarget.value = document.getElementById('shell-panel-tab-artifacts');
 });
 let scope = new AbortController();
@@ -169,7 +173,11 @@ onBeforeUnmount(() => {
       @download="consume"
       @preview="consume($event, true)"
     />
-    <Teleport v-if="panelTarget && artifacts.length" :to="panelTarget" defer>
+    <Teleport
+      v-if="panelTarget && parkedArtifacts && artifacts.length"
+      :to="isActive ? panelTarget : parkedArtifacts"
+      defer
+    >
       <ul class="flex flex-col gap-3" :aria-label="t('results.artifact')">
         <li
           v-for="artifact in artifacts"

@@ -4,6 +4,7 @@ import type { HTMLAttributes } from 'vue'
 import { reactiveOmit } from '@vueuse/core'
 import { SelectContent, SelectPortal, SelectViewport, useForwardPropsEmits } from 'reka-ui'
 import { cn } from '@/lib/utils'
+import { usePageActive } from '@/composables/usePageActive'
 import { SelectScrollDownButton, SelectScrollUpButton } from '.'
 
 defineOptions({
@@ -21,11 +22,13 @@ const emits = defineEmits<SelectContentEmits>()
 const delegatedProps = reactiveOmit(props, 'class')
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
+const { isActive } = usePageActive()
 </script>
 
 <template>
   <SelectPortal>
     <SelectContent
+      v-if="isActive"
       data-slot="select-content"
       v-bind="{ ...forwarded, ...$attrs }"
       :class="

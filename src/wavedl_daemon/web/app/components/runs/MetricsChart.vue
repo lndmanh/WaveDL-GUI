@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
+import { computed, shallowRef, useTemplateRef, watch } from 'vue';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { ChartLine, Maximize2 } from '@lucide/vue';
@@ -10,14 +10,16 @@ import type { MetricRecord } from '../../lib/metric-history';
 import { buildPlotSeries, type PlotChannel, type PlotSeries } from '../../lib/plot-series';
 import { plotMetricMessageKeys } from '../../i18n/dynamic-keys';
 import InfoChip from '../common/InfoChip.vue';
+import { usePageActive } from '../../composables/usePageActive';
 
 const { t, locale } = useI18n({ useScope: 'global' });
 const props = defineProps<{ records: readonly MetricRecord[]; unavailable?: boolean }>();
 const channel = shallowRef<PlotChannel>('loss');
 const host = useTemplateRef<HTMLDivElement>('host');
 const plot = shallowRef<uPlot | null>(null);
-const mounted = shallowRef(false);
 const renderError = shallowRef('');
+const { isActive } = usePageActive(resumePlot, pausePlot);
+let retainedRange: { min: number; max: number } | null = null;
 let observer: ResizeObserver | null = null;
 let frame: number | null = null;
 const projection = computed<{ series: PlotSeries | null; error: string }>(() => {
@@ -47,7 +49,7 @@ function destroyPlot() {
 }
 function renderPlot() {
   frame = null;
-  if (!mounted.value || !host.value) return;
+  if (!isActive.value || !host.value) return;
   const series = projection.value.series;
   if (!series || series.pointCount === 0 || props.unavailable) {
     destroyPlot();
@@ -95,6 +97,8 @@ function renderPlot() {
       series.data,
       host.value,
     );
+    if (retainedRange) plot.value.setScale('x', retainedRange);
+    retainedRange = null;
   } catch {
     destroyPlot();
     renderError.value = t('runs.chartRenderError');
@@ -112,7 +116,7 @@ function areaFill(chart: uPlot, color: string): CanvasGradient | string {
   return gradient;
 }
 function scheduleRender() {
-  if (!mounted.value || frame !== null) return;
+  if (!isActive.value || frame !== null) return;
   frame = requestAnimationFrame(renderPlot);
 }
 function resetZoom() {
@@ -145,20 +149,21 @@ watch(
   },
   { flush: 'post' },
 );
-onMounted(() => {
-  mounted.value = true;
+function resumePlot() {
   observer = new ResizeObserver(scheduleRender);
   if (host.value) observer.observe(host.value);
   scheduleRender();
-});
-onBeforeUnmount(() => {
-  mounted.value = false;
+}
+function pausePlot() {
+  const range = plot.value?.scales.x;
+  retainedRange = range?.min !== undefined && range.max !== undefined
+    ? { min: range.min, max: range.max } : null;
   observer?.disconnect();
   observer = null;
   if (frame !== null) cancelAnimationFrame(frame);
   frame = null;
   destroyPlot();
-});
+}
 </script>
 
 <template>

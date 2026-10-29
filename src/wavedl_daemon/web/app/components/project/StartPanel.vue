@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue';
+import { computed, shallowRef, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { motion } from 'motion-v';
 import { CornerDownLeft, FileUp, Plus } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
+import { usePageActive } from '../../composables/usePageActive';
 
 export interface DraftSummary {
   readonly savedAt: number;
@@ -37,12 +38,15 @@ function keydown(event: KeyboardEvent) {
   event.preventDefault();
   emit('continue');
 }
-onMounted(() => {
+function attach() {
   window.addEventListener('keydown', keydown);
   const element = continueButton.value?.$el;
   if (element instanceof HTMLElement) element.focus({ preventScroll: true });
-});
-onBeforeUnmount(() => window.removeEventListener('keydown', keydown));
+}
+function detach() {
+  window.removeEventListener('keydown', keydown);
+}
+usePageActive(attach, detach);
 </script>
 <template>
   <section class="start-stage" :aria-label="t('builder.startTitle')">

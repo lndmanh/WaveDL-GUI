@@ -4,7 +4,11 @@ import { DaemonApi, DaemonApiError, type RunView } from '../lib/daemon-api';
 import { CursorStore } from '../lib/event-stream';
 import { RunMonitor, type RunMonitorSnapshot } from '../lib/run-monitor';
 
-export function useRuns(api: DaemonApi, reportFailure: (error: DaemonApiError) => void) {
+export function useRuns(
+  api: DaemonApi,
+  reportFailure: (error: DaemonApiError) => void,
+  initiallyPaused = false,
+) {
   const runs = shallowRef<readonly RunView[]>([]);
   const selected = shallowRef<RunMonitorSnapshot | null>(null);
   const loading = shallowRef(false);
@@ -17,6 +21,7 @@ export function useRuns(api: DaemonApi, reportFailure: (error: DaemonApiError) =
   let monitor: RunMonitor | null = null;
   let unsubscribe: (() => void) | null = null;
   let disposed = false;
+  let paused = initiallyPaused;
   async function refresh(offset = page.value): Promise<void> {
     listAbort?.abort();
     const controller = new AbortController();
@@ -94,7 +99,7 @@ export function useRuns(api: DaemonApi, reportFailure: (error: DaemonApiError) =
         staleRunIds.value = stale;
       }
     });
-    void monitor.start();
+    if (!paused) void monitor.start();
   }
   function replay(): void {
     if (monitor) select(monitor.runId);
@@ -109,12 +114,28 @@ export function useRuns(api: DaemonApi, reportFailure: (error: DaemonApiError) =
     monitor = null;
     selected.value = null;
   }
+  function pause(): void {
+    paused = true;
+    listAbort?.abort();
+    listAbort = null;
+    monitor?.pause();
+    loading.value = false;
+  }
+  function resume(): void {
+    paused = false;
+    if (lastRefreshed.value === null) void refresh();
+    const current = monitor;
+    if (current) {
+      void current.resume(() => !paused && !disposed && monitor === current);
+      void current.start();
+    }
+  }
   onScopeDispose(() => {
     disposed = true;
     listAbort?.abort();
     close();
   });
-  void refresh();
+  if (!paused) void refresh();
   return {
     runs,
     selected,
@@ -128,5 +149,7 @@ export function useRuns(api: DaemonApi, reportFailure: (error: DaemonApiError) =
     replay,
     cancel,
     close,
+    pause,
+    resume,
   };
 }

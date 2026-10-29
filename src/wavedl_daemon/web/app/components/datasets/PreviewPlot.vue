@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import { usePreviewExport } from '../../composables/usePreviewExport';
-import { onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue';
+import { shallowRef, useTemplateRef, watch } from 'vue';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { Button } from '@/components/ui/button';
 import InfoChip from '../common/InfoChip.vue';
+import { usePageActive } from '../../composables/usePageActive';
 
 const { t, locale } = useI18n({ useScope: 'global' });
 
@@ -26,7 +27,8 @@ const {
   resetExport,
 } = usePreviewExport('dataset-preview.png');
 let observer: ResizeObserver | null = null;
-let mounted = false;
+const { isActive } = usePageActive(resumePlot, pausePlot);
+let retainedScales: { key: string; min: number; max: number }[] = [];
 let pan: { clientX: number; min: number; max: number } | null = null;
 function dispose() {
   plot.value?.destroy();
@@ -40,8 +42,8 @@ function render(preserveView = false) {
             ? [{ key, min: scale.min, max: scale.max }]
             : [],
         )
-      : [];
-  if (!mounted || !host.value) return;
+      : retainedScales;
+  if (!isActive.value || !host.value) return;
   resetExport();
   dispose();
   const width = Math.floor(host.value.getBoundingClientRect().width);
@@ -74,6 +76,7 @@ function render(preserveView = false) {
     );
     for (const scale of savedScales)
       plot.value.setScale(scale.key, { min: scale.min, max: scale.max });
+    retainedScales = [];
     message.value = '';
   } catch {
     message.value = 'Chart unavailable in this browser.';
@@ -115,18 +118,21 @@ watch(
   () => render(true),
   { flush: 'post' },
 );
-onMounted(() => {
-  mounted = true;
+function resumePlot() {
   observer = new ResizeObserver(() => render());
   if (host.value) observer.observe(host.value);
   render();
-});
-onBeforeUnmount(() => {
-  mounted = false;
+}
+function pausePlot() {
   pan = null;
   observer?.disconnect();
+  observer = null;
+  retainedScales = Object.entries(plot.value?.scales ?? {}).flatMap(([key, scale]) =>
+    scale.min !== undefined && scale.max !== undefined
+      ? [{ key, min: scale.min, max: scale.max }] : [],
+  );
   dispose();
-});
+}
 </script>
 
 <template>

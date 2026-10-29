@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useId, useTemplateRef, watch, type Component } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { usePageActive } from '../../composables/usePageActive';
 import { useFormContext } from 'vee-validate';
 import {
   Atom,
@@ -164,6 +165,7 @@ function resultId(index: number): string {
   return `${listId}-${index}`;
 }
 async function jump(name: TrainingFieldName) {
+  if (!isActive.value) return;
   if (!results.value.some((item) => item.name === name && !item.hidden)) return;
   query.value = '';
   searchFocused.value = false;
@@ -173,8 +175,9 @@ async function jump(name: TrainingFieldName) {
   const row = settingsRoot.value?.querySelector(`[data-field="${name}"]`);
   if (!(row instanceof HTMLElement)) return;
   // An opening group unhides its content a frame or two later; land once it is laid out.
-  for (let frame = 0; frame < 10 && !row.getClientRects().length; frame++)
+  for (let frame = 0; frame < 10 && isActive.value && !row.getClientRects().length; frame++)
     await new Promise((resolve) => requestAnimationFrame(resolve));
+  if (!isActive.value) return;
   const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   row.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
   const control = row.querySelector('input, textarea, [role="switch"], [role="combobox"], [role="radio"]');
@@ -188,6 +191,7 @@ async function jump(name: TrainingFieldName) {
       { duration: 1600, easing: 'ease-out' },
     );
 }
+const { isActive } = usePageActive();
 function searchKeydown(event: KeyboardEvent) {
   const count = results.value.length;
   if (event.key === 'ArrowDown' && count) {

@@ -6,6 +6,7 @@ import { motion } from 'motion-v';
 import { useClipboard } from '@vueuse/core';
 import { Check, Copy, OctagonX, RotateCcw, ScrollText, X } from '@lucide/vue';
 import { useShellLayout } from '../../composables/useShellLayout';
+import { usePageActive } from '../../composables/usePageActive';
 import { useRunLabels } from '../../composables/useRunLabels';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +28,7 @@ import {
 const { t, locale } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 const shellLayout = useShellLayout();
+const { isActive } = usePageActive();
 const labels = useRunLabels();
 function backendLabel(backend: string): string {
   const key = runBackendMessageKeys[backend as keyof typeof runBackendMessageKeys];
@@ -35,7 +37,9 @@ function backendLabel(backend: string): string {
 const props = defineProps<{ snapshot: RunMonitorSnapshot; now?: Date }>();
 defineEmits<{ cancel: []; replay: []; close: [] }>();
 const logTarget = shallowRef<HTMLElement | null>(null);
+const parkedLogs = shallowRef<HTMLElement | null>(null);
 onMounted(() => {
+  parkedLogs.value = document.createElement('div');
   logTarget.value = document.querySelector<HTMLElement>('#shell-panel-tab-logs');
 });
 const { copy, copied, isSupported: canCopy } = useClipboard({ copiedDuring: 1600 });
@@ -199,7 +203,11 @@ const streamLabel = computed(() => t(runStreamMessageKeys[props.snapshot.stream]
       :events="snapshot.events"
       :freshness="snapshot.freshness"
     />
-    <Teleport v-if="logTarget && snapshot.events.length" to="#shell-panel-tab-logs" defer>
+    <Teleport
+      v-if="logTarget && parkedLogs && snapshot.events.length"
+      :to="isActive ? logTarget : parkedLogs"
+      defer
+    >
       <LogPanel :events="snapshot.events" :truncated="snapshot.truncated" panel />
     </Teleport>
     <LogPanel

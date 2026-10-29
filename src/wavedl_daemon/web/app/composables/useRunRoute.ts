@@ -1,4 +1,4 @@
-import { computed, watch } from 'vue';
+import { computed, shallowRef, watch } from 'vue';
 import { useRouter } from '#app';
 import { isUuid } from '../lib/daemon-api-schemas';
 import { sectionPath } from '../shell/sections';
@@ -17,10 +17,12 @@ export function useRunRoute(section: 'experiments' | 'results') {
     const value = router.currentRoute.value.params.runId;
     return typeof value === 'string' ? value : null;
   });
-  const runId = computed(() => active.value && isUuid(routeRunId.value) ? routeRunId.value : null);
+  const runId = shallowRef<string | null>(null);
   watch(
     () => active.value ? routeRunId.value : undefined,
     (value) => {
+      if (!active.value) return;
+      runId.value = isUuid(value) ? value : null;
       if (value && !isUuid(value)) void router.replace(root);
     },
     { immediate: true },
@@ -29,7 +31,7 @@ export function useRunRoute(section: 'experiments' | 'results') {
     void router.push(sectionPath(section, id ?? undefined));
   }
   function unknown(id: string): void {
-    if (runId.value === id) void router.replace(root);
+    if (active.value && runId.value === id) void router.replace(root);
   }
   return { runId, select, unknown };
 }

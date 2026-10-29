@@ -61,9 +61,11 @@ function fatal(error: unknown): boolean {
 /** In-memory projection and cursor always move together. A fresh monitor replays from zero. */
 export class RunMonitor {
   #abort = new AbortController();
+  #cancelAbort = new AbortController();
   #cursor: Cursor = { ...INITIAL_CURSOR };
   #listeners = new Set<(snapshot: RunMonitorSnapshot) => void>();
   #started = false;
+  #running: Promise<void> | null = null;
   #refreshRevision = 0;
   #publicationTimer: ReturnType<typeof setTimeout> | null = null;
   #pendingEvents = false;
@@ -346,10 +348,22 @@ export class RunMonitor {
       this.#abort.signal.addEventListener('abort', finish, { once: true });
     });
   }
-  async start(): Promise<void> {
-    if (this.#started) return;
+  start(): Promise<void> {
+    if (this.#started) return this.#running ?? Promise.resolve();
     this.#started = true;
-    void this.#poll();
+    this.#running = Promise.all([this.#receive(), this.#poll()]).then(() => undefined);
+    return this.#running;
+  }
+  /** Resume the retained projection and its cursor only after aborted readers settle. */
+  async resume(allowed: () => boolean): Promise<void> {
+    if (!this.#abort.signal.aborted) return;
+    await this.#running;
+    if (!allowed() || !this.#abort.signal.aborted) return;
+    this.#abort = new AbortController();
+    this.#started = false;
+    await this.start();
+  }
+  async #receive(): Promise<void> {
     let retries = 0;
     while (!this.#abort.signal.aborted) {
       try {
@@ -444,10 +458,12 @@ export class RunMonitor {
     )
       return;
     this.#publish({ cancellation: 'sending' });
+    // A page pause must not turn an explicit durable cancellation into a lost ack.
+    const signal = this.#cancelAbort.signal;
     const revision = ++this.#refreshRevision;
     try {
-      const run = await this.transport.cancelRun(this.runId, this.#abort.signal);
-      if (!this.#abort.signal.aborted) {
+      const run = await this.transport.cancelRun(this.runId, signal);
+      if (!signal.aborted) {
         this.#verifyOwnership(run);
         if (revision === this.#refreshRevision) this.#accept(run);
         this.#publish({
@@ -456,7 +472,7 @@ export class RunMonitor {
         });
       }
     } catch (error) {
-      if (!this.#abort.signal.aborted)
+      if (!signal.aborted)
         this.#publish({
           cancellation: this.#cancellationConfirmed() ? 'requested' : 'unknown',
           message: this.#cancellationConfirmed()
@@ -472,6 +488,10 @@ export class RunMonitor {
     }
   }
   stop(): void {
+    this.#cancelAbort.abort();
+    this.pause();
+  }
+  pause(): void {
     this.#flushCursor();
     this.#abort.abort();
     this.#publish({
