@@ -140,6 +140,7 @@ tools/*
 !tools/browser_source_snapshot.mjs
 !tools/browser_source_snapshot.test.mjs
 !tools/vendor_web_assets.py
+!tools/export_daemon_openapi.py
 !tools/browser_daemon_fixture.py
 !tools/browser_adoption_fixture.py
 !tools/stream_asgi_boundary.py

@@ -15,7 +15,12 @@ from starlette.responses import Response  # noqa: TC002 - FastAPI resolves it at
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
 from wavedl_daemon.http.app import strict_json_route
-from wavedl_daemon.http.schemas.common import NO_STORE, exact_query
+from wavedl_daemon.http.schemas.common import (
+    API_ERRORS,
+    JSON_BODY_ERRORS,
+    NO_STORE,
+    exact_query,
+)
 from wavedl_daemon.http.schemas.runs import (
     AttemptPage,
     PlanRequest,
@@ -114,6 +119,8 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
     router.add_api_route(
         "/api/runs/plan",
         plan,
+        operation_id="plan_run",
+        responses=JSON_BODY_ERRORS,
         methods=["POST"],
         response_model=PlanView,
         route_class_override=strict_json_route(65536),
@@ -121,6 +128,8 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
     router.add_api_route(
         "/api/runs",
         submit,
+        operation_id="submit_run",
+        responses=JSON_BODY_ERRORS,
         methods=["POST"],
         response_model=RunResponse,
         status_code=202,
@@ -129,6 +138,8 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
     router.add_api_route(
         "/api/runs",
         list_runs,
+        operation_id="list_runs",
+        responses=API_ERRORS,
         methods=["GET", "HEAD"],
         response_model=RunList,
         dependencies=[Depends(exact_query("limit", "offset", "state"))],
@@ -136,6 +147,8 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
     router.add_api_route(
         "/api/runs/{run_id}/cancel",
         cancel,
+        operation_id="cancel_run",
+        responses=API_ERRORS,
         methods=["POST"],
         response_model=RunResponse,
         status_code=202,
@@ -143,6 +156,8 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
     router.add_api_route(
         "/api/runs/{run_id}/attempts",
         attempts,
+        operation_id="list_run_attempts",
+        responses=API_ERRORS,
         methods=["GET", "HEAD"],
         response_model=AttemptPage,
         dependencies=[Depends(exact_query("limit", "offset"))],
@@ -150,6 +165,8 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
     router.add_api_route(
         "/api/runs/{run_id}",
         get,
+        operation_id="get_run",
+        responses=API_ERRORS,
         methods=["GET", "HEAD"],
         response_model=RunResponse,
     )
