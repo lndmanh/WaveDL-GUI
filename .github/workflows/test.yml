@@ -98,13 +98,13 @@ jobs:
       # wheel smoke tests. This one cell supplies an explicit complete wheelhouse;
       # missing dependencies are failures, not accepted optional skips.
       - name: Prepare an isolated CPU wheelhouse
-        if: matrix.python-version == '3.11' && matrix.runtime == 'latest'
+        if: matrix.python-version == '3.11'
         run: |
           python -m pip freeze --exclude-editable > "$RUNNER_TEMP/wheel-constraints.txt"
           python -m pip wheel ".[daemon]" --only-binary=:all: --wheel-dir "$RUNNER_TEMP/wavedl-wheelhouse" --constraint "$RUNNER_TEMP/wheel-constraints.txt" --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Require dependency-resolved wheel installation outside the checkout
-        if: matrix.python-version == '3.11' && matrix.runtime == 'latest'
+        if: matrix.python-version == '3.11'
         env:
           WAVEDL_ACCEPTANCE_WHEELHOUSE: ${{ runner.temp }}/wavedl-wheelhouse
         run: python -m pytest unit_tests/daemon/test_installed_cli.py --noconftest -k isolated_resolved -v --junitxml=isolated-wheel.xml
