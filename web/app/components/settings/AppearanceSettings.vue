@@ -4,7 +4,6 @@ import { useClientMessages } from '../../composables/useClientMessages';
 import { onMounted, onUnmounted, shallowRef } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldGroup, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field';
 import {
   Select,
@@ -164,19 +163,6 @@ const { t } = useI18n({ useScope: 'global' });
               </SelectContent>
             </Select>
             <FieldDescription>{{ t('shell.languageHelp') }}</FieldDescription>
-          </Field>
-        </VeeField>
-        <VeeField v-slot="{ field, errors }" name="showProjectGuide">
-          <Field orientation="horizontal" :data-invalid="!!errors.length">
-            <Checkbox
-              id="preference-guide"
-              :aria-label="t('shell.showTheNewProjectGuide')"
-              :model-value="field.value"
-              @update:model-value="field.onChange"
-              @blur="field.onBlur"
-            />
-            <FieldLabel for="preference-guide">{{ t('shell.showTheNewProjectGuide') }}</FieldLabel>
-            <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
           </Field>
         </VeeField>
       </FieldGroup>

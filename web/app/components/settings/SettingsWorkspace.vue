@@ -11,11 +11,6 @@ const { t } = useI18n({ useScope: 'global' });
 </script>
 <template>
   <div class="flex flex-col gap-8">
-    <header>
-      <p class="text-muted-foreground">
-        {{ t('shell.preferencesSubtitle') }}
-      </p>
-    </header>
     <AppearanceSettings :appearance="appearance" @changed="emit('appearanceChanged', $event)" />
     <TrainingDefaultsSettings :daemon-id="daemonId" />
     <section aria-labelledby="downloads-heading" class="flex flex-col gap-3">
