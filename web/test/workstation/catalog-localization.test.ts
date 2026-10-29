@@ -2,12 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
-import { flushPromises } from '@vue/test-utils';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import BrowseContainer from '../../app/components/catalog/BrowseContainer.vue';
-import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
-import ModelList from '../../app/components/catalog/ModelList.vue';
+import ModelInspector from '../../app/components/project/ModelInspector.vue';
+import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
 import { provideWorkstationLocale } from '../../app/composables/useWorkstationI18n';
 import {
   bundledModelMessages,
@@ -55,6 +55,28 @@ const cnn: ModelDescription = {
   bestFor: 'Quick baselines and prototyping across all data types',
 };
 
+beforeEach(() => {
+  // Recent models and drafts persist per browser; each test starts without any.
+  const items = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      items.set(key, value);
+    },
+    removeItem: (key: string) => {
+      items.delete(key);
+    },
+    clear: () => items.clear(),
+    key: (index: number) => [...items.keys()][index] ?? null,
+    get length() {
+      return items.size;
+    },
+  };
+  Object.defineProperty(window, 'localStorage', { configurable: true, get: () => storage });
+});
+function detail(wrapper: VueWrapper) {
+  return wrapper.get('article').text();
+}
 function translateModel(key: ModelMessageKey): string {
   const [, id, field, strength] = key.split('.');
   const model = bundledModelMessages.vi[id as keyof typeof bundledModelMessages.vi];
@@ -181,23 +203,91 @@ describe('catalogue localization preserves daemon authority', () => {
           ),
         ),
       });
+      const session = new ConnectionSession({
+        origin: window.location.origin,
+        buildId: '1.8.1',
+        fetcher: async () => {
+          throw new Error('No requests expected');
+        },
+      });
       const wrapper = mount(
-        ModelList,
-        { props: { models: Object.freeze([model]), busy: false } },
+        ModelInspector,
+        {
+          props: {
+            session,
+            models: Object.freeze([model]),
+            busy: false,
+            message: '',
+            selection: null,
+            pretrained: false,
+            inspection: null,
+            singleChannel: false,
+            disabled: false,
+          },
+        },
         createTestI18n('vi'),
       );
-      expect(wrapper.get('[data-testid="model-card"]').text()).toContain(model.shortDescription);
-      await wrapper.get('[data-testid="model-details"]').trigger('click');
-      await nextTick();
-      expect(document.body.textContent).toContain(model.description);
-      expect(document.body.textContent).toContain(model.pros[0]);
-      expect(document.body.textContent).toContain(model.pros[1]);
-      expect(document.body.textContent).toContain('không có bản dịch đi kèm khớp nội dung');
+      expect(wrapper.get('[data-testid="model-card"]').text()).toContain(model.displayName);
+      expect(detail(wrapper)).toContain(model.bestFor);
+      expect(detail(wrapper)).not.toContain(bundledModelMessages.vi.cnn.bestFor);
+      expect(detail(wrapper)).toContain(model.pros[0]);
+      expect(detail(wrapper)).toContain(model.pros[1]);
+      expect(detail(wrapper)).toContain('không có bản dịch đi kèm khớp nội dung');
       await wrapper.get('[data-testid="model-select"]').trigger('click');
-      expect(wrapper.emitted('select')?.[0]?.[0]).toBe(model);
+      expect(wrapper.emitted('choose')?.[0]?.[0]).toBe(model);
       wrapper.unmount();
     },
   );
+
+  it('shows translated pros in Vietnamese while English-only cons appear only in English', async () => {
+    const locale = shallowRef<WorkstationLocale>('en');
+    const session = new ConnectionSession({
+      origin: window.location.origin,
+      buildId: '1.8.1',
+      fetcher: async () => {
+        throw new Error('No requests expected');
+      },
+    });
+    const Provider = defineComponent({
+      setup() {
+        provideWorkstationLocale(locale);
+        return () =>
+          h(ModelInspector, {
+            session,
+            models: [cnn],
+            busy: false,
+            message: '',
+            selection: null,
+            pretrained: false,
+            inspection: null,
+            singleChannel: false,
+            disabled: false,
+          });
+      },
+    });
+    const wrapper = mount(Provider);
+    expect(detail(wrapper)).toContain('Good at');
+    expect(detail(wrapper)).toContain(cnn.pros[0]);
+    expect(detail(wrapper)).toContain('Watch out');
+    expect(detail(wrapper)).toContain('Limited capacity');
+    locale.value = 'vi';
+    await nextTick();
+    expect(detail(wrapper)).toContain('Điểm mạnh');
+    expect(detail(wrapper)).toContain(bundledModelMessages.vi.cnn.pros.first);
+    expect(detail(wrapper)).toContain(bundledModelMessages.vi.cnn.pros.second);
+    expect(detail(wrapper)).not.toContain(cnn.pros[0]);
+    // Cons have no bundled translation, so Vietnamese omits them instead of mixing languages.
+    expect(detail(wrapper)).not.toContain('Lưu ý');
+    expect(detail(wrapper)).not.toContain('Watch out');
+    expect(detail(wrapper)).not.toContain('Limited capacity');
+    expect(detail(wrapper)).not.toContain('không có bản dịch đi kèm khớp nội dung');
+    locale.value = 'en';
+    await nextTick();
+    expect(detail(wrapper)).toContain('Watch out');
+    expect(detail(wrapper)).toContain('Limited capacity');
+    expect(detail(wrapper)).toContain(cnn.pros[0]);
+    wrapper.unmount();
+  });
 
   it('reactively translates mounted model browsing while preserving search, unknown text and scoped selection', async () => {
     const models = [
@@ -207,11 +297,12 @@ describe('catalogue localization preserves daemon authority', () => {
         id: 'custom_cnn',
         displayName: 'Custom 東京',
         description: '<script>custom description</script>',
-        bestFor: 'Original daemon purpose',
+        bestFor: '<script>Original daemon purpose</script>',
       },
     ];
     let catalogueReads = 0;
-    const session = await connected(() => {
+    const session = await connected((url) => {
+      if (!url.endsWith('/api/models')) throw new Error(`Unexpected request: ${url}`);
       catalogueReads++;
       return json({
         source: 'bundled_metadata',
@@ -246,50 +337,49 @@ describe('catalogue localization preserves daemon authority', () => {
     const Provider = defineComponent({
       setup() {
         provideWorkstationLocale(locale);
-        return () => h(ModelSelector, { session });
+        return () => h(ProjectContainer, { session });
       },
     });
-    const wrapper = mount(Provider);
+    const wrapper = mount(Provider, {
+      global: { stubs: { DatasetPathPicker: true, DatasetInfoPanel: true } },
+    });
     await flushPromises();
-    expect(wrapper.text()).toContain('not runtime certification');
-    await wrapper.find('[data-testid="model-details"]').trigger('click');
-    await nextTick();
-    expect(document.body.textContent).toContain(cnn.description);
-    await wrapper.get('input').setValue('cnn');
+    await wrapper.get('[data-testid="guide-step-1"]').trigger('click');
+    await wrapper.get('[data-model-entry="cnn"]').trigger('click');
+    expect(detail(wrapper)).toContain(cnn.bestFor);
+    expect(wrapper.text()).toContain('Classic CNNs');
+    await wrapper.get('[data-testid="model-search"]').setValue('cnn');
     locale.value = 'vi';
     await nextTick();
-    await wrapper.find('[data-testid="model-details"]').trigger('click');
-    await nextTick();
-    expect(wrapper.get('input').element.value).toBe('cnn');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="model-search"]').element.value).toBe('cnn');
     expect(wrapper.text()).toContain('CNN cổ điển');
-    expect(wrapper.text()).toContain('Mô tả, không phải chứng nhận khi chạy');
-    expect(wrapper.findAll('[data-testid="model-card"]')[0]!.text()).toContain(
-      bundledModelMessages.vi.cnn.shortDescription,
-    );
-    expect(wrapper.findAll('[data-testid="model-card"]')[0]!.text()).not.toContain(
-      cnn.shortDescription,
-    );
-    expect(document.body.textContent).toContain('Mạng nơ-ron tích chập cơ bản');
-    expect(document.body.textContent).toContain(bundledModelMessages.vi.cnn.pros.first);
-    expect(document.body.textContent).toContain(bundledModelMessages.vi.cnn.pros.second);
-    await wrapper.findAll('[data-testid="model-details"]')[1]!.trigger('click');
+    expect(detail(wrapper)).toContain(bundledModelMessages.vi.cnn.bestFor);
+    expect(detail(wrapper)).not.toContain(cnn.bestFor);
+    expect(detail(wrapper)).toContain(bundledModelMessages.vi.cnn.pros.first);
+    expect(detail(wrapper)).toContain(bundledModelMessages.vi.cnn.pros.second);
+    expect(detail(wrapper)).not.toContain('không có bản dịch đi kèm khớp nội dung');
+    await wrapper.get('[data-model-entry="custom_cnn"]').trigger('click');
     await nextTick();
-    expect(document.body.textContent).toContain('<script>custom description</script>');
-    expect(document.body.textContent).toContain('Original daemon purpose');
-    expect(document.body.textContent).toContain('không có bản dịch đi kèm khớp nội dung');
+    expect(detail(wrapper)).toContain('Custom 東京');
+    expect(detail(wrapper)).toContain('<script>Original daemon purpose</script>');
+    expect(detail(wrapper)).toContain('không có bản dịch đi kèm khớp nội dung');
     expect(wrapper.find('script').exists()).toBe(false);
-    const choose = wrapper.findAll('button').find((button) => button.text() === 'Chọn CNN');
+    await wrapper.get('[data-model-entry="cnn"]').trigger('click');
+    await nextTick();
+    const choose = wrapper.findAll('button').find((button) => button.text() === 'Dùng mô hình này');
     expect(choose).toBeDefined();
     await choose?.trigger('click');
-    const selection = wrapper.getComponent(ModelSelector).emitted('select')?.[0]?.[0];
+    await flushPromises();
+    const selection = wrapper.getComponent(ModelInspector).props('selection');
     expect(selection).toEqual({ model: 'cnn', daemonId: 'daemon-one' });
+    if (!selection) throw new Error('Missing model selection');
     expect(() => new CatalogApi(session).assertSelection(selection)).not.toThrow();
+    expect(wrapper.get('[data-testid="model-select"]').text()).toBe('Đang dùng');
     locale.value = 'en';
     await nextTick();
-    await wrapper.findAll('[data-testid="model-details"]')[0]!.trigger('click');
-    await nextTick();
-    expect(document.body.textContent).toContain(cnn.description);
-    expect(document.body.textContent).not.toContain('no matching bundled translation');
+    expect(detail(wrapper)).toContain(cnn.bestFor);
+    expect(wrapper.get('[data-testid="model-select"]').text()).toBe('In use');
+    expect(wrapper.text()).not.toContain('no matching bundled translation');
     expect(catalogueReads).toBe(1);
     wrapper.unmount();
     session.detach();
@@ -335,7 +425,7 @@ describe('catalogue localization preserves daemon authority', () => {
     expect(wrapper.text()).toContain('1–100 trên 101');
     expect(wrapper.text()).toContain('wave 東京.npz');
     expect(wrapper.get('[aria-label="Đường dẫn tập dữ liệu"]').text()).toContain('remote-research');
-    expect(wrapper.get('button[aria-label="Chọn tệp wave 東京.npz"]').text()).toBe('Chọn tệp');
+    expect(wrapper.get('button[aria-label="Chọn tệp wave 東京.npz"]').text()).toContain('Dùng');
     await wrapper.get('button[aria-label="Chọn tệp wave 東京.npz"]').trigger('click');
     await flushPromises();
     expect(wrapper.getComponent(BrowseContainer).emitted('select')?.[0]?.[0]).toEqual({
@@ -347,9 +437,7 @@ describe('catalogue localization preserves daemon authority', () => {
     });
     locale.value = 'en';
     await nextTick();
-    expect(wrapper.get('button[aria-label="Select file wave 東京.npz"]').text()).toBe(
-      'Select file',
-    );
+    expect(wrapper.get('button[aria-label="Select file wave 東京.npz"]').text()).toContain('Use');
     wrapper.unmount();
     session.detach();
   });

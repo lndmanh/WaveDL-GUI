@@ -7,13 +7,13 @@ import { createTestI18n, mountWithI18n as mount } from './mountWithI18n';
 import RunList from '../../app/components/runs/RunList.vue';
 import RunDetail from '../../app/components/runs/RunDetail.vue';
 import MetricSummary from '../../app/components/runs/MetricSummary.vue';
-import TrainingFields from '../../app/components/project/TrainingFields.vue';
-import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
-import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
+import TrainingInspector from '../../app/components/project/TrainingInspector.vue';
+import RunPipeline, { type PipelineBlock } from '../../app/components/project/RunPipeline.vue';
+import ModelInspector from '../../app/components/project/ModelInspector.vue';
 import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
-import TrainingExport from '../../app/components/project/TrainingExport.vue';
+import ConfigMenu from '../../app/components/project/ConfigMenu.vue';
 import EnvironmentFields from '../../app/components/project/EnvironmentFields.vue';
-import type { TrainingRequest } from '../../shared/schemas/training-request';
+import { trainingRequestSchema } from '../../shared/schemas/training-request';
 import { MetricHistory } from '../../app/lib/metric-history';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
@@ -135,52 +135,90 @@ describe.each(['en', 'vi'] as const)('review UI contracts (%s)', (locale) => {
     wrapper.unmount();
   });
 
-  it('renders labelled horizontal boolean controls and a badge only for changed advanced values', async () => {
+  it('renders labelled boolean switches and a count only for changed advanced values', async () => {
     const i18n = createTestI18n(locale);
     const Host = defineComponent({
       setup() {
         useForm({ initialValues: { config: structuredClone(trainingDefaults) } });
-        return () => h(TrainingFields, { disabled: false });
+        return () => h(TrainingInspector, { disabled: false });
       },
     });
     const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
-    expect(
-      wrapper.get('[data-testid="training-tab-advanced"]').find('[data-slot="badge"]').exists(),
-    ).toBe(false);
-    const checkbox = wrapper.get('[id$="-training-nesterov"]');
-    const field = checkbox.element.closest('[data-orientation="horizontal"]');
-    expect(field).not.toBeNull();
-    expect(field?.querySelector('label')?.textContent).toBe(
-      i18n.global.t('training.nesterov.label'),
+    const advanced = wrapper.get('[data-testid="training-tab-advanced"]');
+    expect(advanced.find('.training-section-count').exists()).toBe(false);
+    const control = wrapper.get('[id$="-training-deterministic"]');
+    expect(control.attributes('role')).toBe('switch');
+    expect(control.attributes('aria-checked')).toBe('false');
+    expect(wrapper.get(`label[for="${control.attributes('id')}"]`).text()).toBe(
+      i18n.global.t('training.deterministic.label'),
     );
-    expect(
-      wrapper
-        .get('[id$="-training-lr"]')
-        .element.closest('[data-slot="field"]')
-        ?.querySelector('label')?.textContent,
-    ).toBe(i18n.global.t('training.lr.label'));
-    await checkbox.trigger('click');
+    const lr = wrapper.get('[id$="-training-lr"]');
+    expect(wrapper.get(`label[for="${lr.attributes('id')}"]`).text()).toBe(
+      i18n.global.t('training.lr.label'),
+    );
+    await control.trigger('click');
     await flushPromises();
-    expect(
-      wrapper.get('[data-testid="training-tab-advanced"] [data-slot="badge"]').text(),
-    ).toContain('1');
+    expect(control.attributes('aria-checked')).toBe('true');
+    const counts = advanced.findAll('.training-section-count');
+    expect(counts).toHaveLength(1);
+    expect(counts[0]?.text()).toBe(i18n.global.t('project.nonDefaultFields', { count: 1 }));
+    // The changed row offers a one-click reset to its default.
+    await wrapper
+      .get(
+        `button[aria-label="${i18n.global.t('builder.resetSetting', {
+          label: i18n.global.t('training.deterministic.label'),
+        })}"]`,
+      )
+      .trigger('click');
+    await flushPromises();
+    expect(control.attributes('aria-checked')).toBe('false');
+    expect(advanced.find('.training-section-count').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('Available: ()');
     wrapper.unmount();
   });
 
-  it('renders the guide as a current/completed/upcoming stepper without bypassing next logic', async () => {
+  it('renders the run pipeline as complete/attention/pending tabs that defer selection to the owner', async () => {
+    const blocks: PipelineBlock[] = [
+      { id: 'dataset', label: 'Dataset', value: 'train.npz', detail: 'data', state: 'complete' },
+      { id: 'model', label: 'Model', value: 'custom', detail: 'unverified', state: 'attention' },
+      { id: 'training', label: 'Training', value: 'Defaults', detail: '', state: 'complete' },
+      { id: 'runtime', label: 'Runs on', value: 'CPU', detail: '', state: 'pending' },
+      { id: 'plan', label: 'Plan', value: 'Not ready', detail: '', state: 'pending' },
+    ];
+    const i18n = createTestI18n(locale);
     const wrapper = mount(
-      ProjectGuide,
-      { props: { enabled: true, step: 2, busy: false } },
-      createTestI18n(locale),
+      RunPipeline,
+      {
+        props: {
+          blocks,
+          active: 'training',
+          panelId: 'panel',
+          reviewLabel: i18n.global.t('builder.createPlan'),
+          reviewDisabled: true,
+          reviewBusy: false,
+        },
+      },
+      i18n,
     );
-    expect(wrapper.get('[data-testid="guide-step-0"]').attributes('data-state')).toBe('completed');
-    expect(wrapper.get('[data-testid="guide-step-2"]').attributes('data-state')).toBe('active');
-    expect(wrapper.get('[data-testid="guide-step-3"]').attributes('data-state')).toBe('inactive');
-    await wrapper.get('[data-testid="guide-step-3"] button').trigger('mousedown');
-    expect(wrapper.emitted('next')).toEqual([[]]);
-    expect(wrapper.get('[data-testid="guide-step-5"] button').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[role="tablist"]').attributes('aria-label')).toBe(
+      i18n.global.t('builder.runSteps'),
+    );
+    expect(wrapper.get('[data-testid="guide-step-0"]').attributes('data-state')).toBe('complete');
+    expect(wrapper.get('[data-testid="guide-step-1"]').attributes('data-state')).toBe('attention');
+    expect(wrapper.get('[data-testid="guide-step-3"]').attributes('data-state')).toBe('pending');
+    expect(wrapper.get('[data-testid="guide-step-2"]').attributes('aria-current')).toBe('step');
+    expect(wrapper.get('[data-testid="guide-step-2"]').attributes('aria-controls')).toBe('panel');
+    expect(wrapper.get('[data-testid="guide-step-3"]').attributes('aria-current')).toBeUndefined();
+    await wrapper.get('[data-testid="guide-step-3"]').trigger('click');
+    await wrapper.get('[data-testid="guide-step-2"]').trigger('keydown', { key: 'ArrowLeft' });
+    // The strip only asks; the owner decides whether the active block changes.
+    expect(wrapper.emitted('select')).toEqual([['runtime'], ['model']]);
+    expect(wrapper.get('[data-testid="guide-step-2"]').attributes('aria-current')).toBe('step');
+    const review = wrapper.get('button:not([role="tab"])');
+    expect(review.attributes('disabled')).toBeDefined();
+    await review.trigger('click');
+    expect(wrapper.emitted('review')).toBeUndefined();
     wrapper.unmount();
   });
 });
@@ -243,15 +281,29 @@ it('opens the logs tab through the public shell API and fills the companion heig
 
 it('announces catalogue/root emptiness and loading, without a redundant model heading or alert', async () => {
   const owner = await session();
-  vi.spyOn(CatalogApi.prototype, 'models').mockResolvedValue([]);
   vi.spyOn(CatalogApi.prototype, 'roots').mockResolvedValue([]);
-  const models = mount(ModelSelector, { props: { session: owner } });
+  const props = {
+    session: owner,
+    models: [],
+    busy: true,
+    message: '',
+    selection: null,
+    pretrained: false,
+    inspection: null,
+    singleChannel: false,
+    disabled: false,
+  } as const;
+  const loading = mount(ModelInspector, { props });
   const paths = mount(DatasetPathPicker, { props: { session: owner } });
-  expect(models.get('[role="status"]').text()).toContain('Reading model descriptions');
+  expect(loading.get('[role="status"]').text()).toContain('Reading model descriptions');
   expect(paths.get('[role="status"]').text()).toContain('Reading dataset paths');
+  loading.unmount();
+  const models = mount(ModelInspector, { props: { ...props, busy: false } });
   await flushPromises();
   expect(models.get('[role="status"]').text()).toContain('No matching');
-  expect(models.find('h2').exists()).toBe(false);
+  // The inspector's own title is the only heading; no empty listbox is rendered.
+  expect(models.findAll('h2')).toHaveLength(1);
+  expect(models.find('[role="listbox"]').exists()).toBe(false);
   expect(models.find('[role="alert"]').exists()).toBe(false);
   expect(paths.get('[role="status"]').text()).toContain('No browse roots');
   models.unmount();
@@ -282,18 +334,37 @@ it('announces an empty directory after navigating the searchable root picker', a
 
 it('keeps secondary export and environment panels closed until deliberately opened', async () => {
   // Acceptance scripts prove that opening these panels is a deliberate, side-effect-free action.
-  const panels = [
-    mount(TrainingExport, { props: { draft: {} as TrainingRequest, disabled: false } }),
-    mount(EnvironmentFields, { props: { environment: {}, disabled: false } }),
-  ];
-  for (const wrapper of panels) {
-    const trigger = wrapper.get('[data-slot="collapsible-trigger"]');
-    expect(trigger.attributes('aria-expanded')).toBe('false');
-    expect(wrapper.get('[data-slot="collapsible-content"]').classes()).toContain(
-      'data-[state=closed]:hidden',
-    );
-    await trigger.trigger('click');
-    expect(trigger.attributes('aria-expanded')).toBe('true');
-    wrapper.unmount();
-  }
+  const draft = trainingRequestSchema.parse({
+    backend: 'local',
+    operation: 'train',
+    config: { ...trainingDefaults, model: 'cnn', data_path: '/data/train.npz' },
+    runtime: { python: '/usr/bin/python3', mode: 'existing', device: 'cpu', environment: {} },
+    topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
+  });
+  const menu = mount(ConfigMenu, {
+    props: { draft, disabled: false },
+    attachTo: document.body,
+  });
+  const menuTrigger = menu.get('[data-testid="config-menu"]');
+  expect(menuTrigger.attributes('aria-expanded')).toBe('false');
+  expect(document.body.querySelector('[role="menuitem"]')).toBeNull();
+  await menuTrigger.trigger('keydown', { key: 'Enter' });
+  await flushPromises();
+  expect(menuTrigger.attributes('aria-expanded')).toBe('true');
+  expect(document.body.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
+  // Opening the menu neither exports nor reports anything.
+  expect(menu.emitted('notice')).toBeUndefined();
+  expect(menu.emitted('import')).toBeUndefined();
+  menu.unmount();
+
+  const environment = mount(EnvironmentFields, { props: { environment: {}, disabled: false } });
+  const trigger = environment.get('[data-slot="collapsible-trigger"]');
+  expect(trigger.attributes('aria-expanded')).toBe('false');
+  // Closed content stays mounted for its fields but hidden, so it can animate shut.
+  const content = environment.get('[data-slot="collapsible-content"]');
+  expect(content.classes()).toContain('collapsible-motion');
+  expect(content.attributes('hidden')).toBeDefined();
+  await trigger.trigger('click');
+  expect(trigger.attributes('aria-expanded')).toBe('true');
+  environment.unmount();
 });

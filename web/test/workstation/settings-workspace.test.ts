@@ -164,7 +164,7 @@ describe('settings workspace acceptance', () => {
     wrapper.unmount();
   });
 
-  it('uses saved defaults and guide only when a fresh project mounts, not on settings saves', async () => {
+  it('uses saved defaults only when a fresh project mounts, not on settings saves', async () => {
     const owner = new ConnectionSession({
       origin: window.location.origin,
       buildId: '1.8.1',
@@ -175,24 +175,20 @@ describe('settings workspace acceptance', () => {
         ),
     });
     expect(await owner.connect('credential')).toBe(true);
-    saveAppearance({ ...defaultAppearance, showProjectGuide: false });
     saveTrainingPreferences('one', { ...defaultTrainingPreferences(), epochs: 13 });
     const wrapper = mount(ProjectContainer, { props: { session: owner } });
     await flushPromises();
     expect(wrapper.get('[id$="-training-epochs"]').element).toHaveProperty('value', '13');
-    expect(wrapper.find('[aria-current="step"]').exists()).toBe(false);
     saveTrainingPreferences('one', { ...defaultTrainingPreferences(), epochs: 99 });
     await flushPromises();
     expect(wrapper.get('[id$="-training-epochs"]').element).toHaveProperty('value', '13');
     wrapper.unmount();
-    saveAppearance({ ...defaultAppearance, showProjectGuide: true });
     // The intentionally minimal health fixture is not a catalogue response;
     // reverify identity before constructing the next fresh draft.
     expect(await owner.connect('credential')).toBe(true);
     const next = mount(ProjectContainer, { props: { session: owner } });
     await flushPromises();
     expect(next.get('[id$="-training-epochs"]').element).toHaveProperty('value', '99');
-    expect(next.find('[aria-current="step"]').exists()).toBe(true);
     next.unmount();
     owner.detach();
   });

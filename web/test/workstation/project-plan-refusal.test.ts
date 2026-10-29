@@ -1,17 +1,20 @@
 // @vitest-environment happy-dom
 import { mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
-import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
-import CustomModelSelector from '../../app/components/project/CustomModelSelector.vue';
-import PlanApproval from '../../app/components/project/PlanApproval.vue';
-import ProjectGuide from '../../app/components/project/ProjectGuide.vue';
-import TrainingExport from '../../app/components/project/TrainingExport.vue';
-import TrainingPresets from '../../app/components/project/TrainingPresets.vue';
+import ConfigMenu from '../../app/components/project/ConfigMenu.vue';
+import TrainingInspector from '../../app/components/project/TrainingInspector.vue';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
+import {
+  builderForm,
+  builderStubs,
+  button,
+  chooseSelections,
+  installMemoryStorage,
+  modelCatalogue,
+} from './project-builder-fixture';
 
 const ids = {
   plan_id: '11111111-1111-4111-8111-111111111111',
@@ -24,6 +27,9 @@ const refusal = 'The daemon refused this plan. Correct the settings and preview 
 const uncertain =
   'The request was not acknowledged; server work may already exist. Reconnect if needed, then retry preview with this unchanged draft, or check/retry the approved submission. Never create a replacement draft merely to retry.';
 const cleanups: (() => void)[] = [];
+beforeEach(() => {
+  installMemoryStorage();
+});
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
 
 function response(value: object, status = 200) {
@@ -46,6 +52,7 @@ async function setup(timeoutMs = 1000) {
       const path = new URL(String(input)).pathname;
       calls.push(path);
       if (path === '/api/health') return response(health);
+      if (path === '/api/models') return response(modelCatalogue);
       if (path === '/api/browse/resolve')
         return response({
           root: 'data',
@@ -67,28 +74,18 @@ async function setup(timeoutMs = 1000) {
   expect(await session.connect('credential')).toBe(true);
   const wrapper = mount(ProjectContainer, {
     props: { session },
-    global: { stubs: { DatasetPathPicker: true, ModelSelector: true, DatasetInfoPanel: true } },
+    global: { stubs: builderStubs },
   });
   cleanups.push(() => {
     wrapper.unmount();
     session.detach();
   });
-  if (wrapper.getComponent(ProjectGuide).props('enabled'))
-    await wrapper
-      .findAll('button')
-      .find((button) => button.text() === 'Show full editor')
-      ?.trigger('click');
   const catalogue = new CatalogApi(session);
   const data = await catalogue.resolve('data', 'train.npz');
-  wrapper.getComponent(DatasetPathPicker).vm.$emit('select', data);
   const model = await catalogue.selectCustomModel('custom_model');
-  wrapper.getComponent(CustomModelSelector).vm.$emit('select', model);
-  await nextTick();
+  await chooseSelections(wrapper, data, model);
   await wrapper.get('input[name="runtime.python"]').setValue('/usr/bin/python3');
-  const editor = wrapper
-    .findAll('form')
-    .find((form) => form.find('input[name="runtime.python"]').exists());
-  if (!editor) throw new Error('Missing project form');
+  const editor = builderForm(wrapper);
   return {
     wrapper,
     session,
@@ -106,24 +103,26 @@ async function setup(timeoutMs = 1000) {
 describe('project plan refusal feedback', () => {
   it('shows a safe refusal, retains the exact draft, and previews again after correction', async () => {
     const { wrapper, editor, calls, respond } = await setup();
-    const draftBefore = JSON.stringify(wrapper.getComponent(TrainingExport).props('draft'));
+    const draftBefore = JSON.stringify(wrapper.getComponent(ConfigMenu).props('draft'));
     await editor.trigger('submit');
     await vi.waitFor(() => expect(wrapper.text()).toContain(refusal));
     expect(wrapper.text()).not.toContain('sensitive internal detail');
-    expect(JSON.stringify(wrapper.getComponent(TrainingExport).props('draft'))).toBe(draftBefore);
-    expect(
-      wrapper.get('button[aria-label^="Dataset: /data/train.npz"]').attributes('aria-label'),
-    ).toBe('Dataset: /data/train.npz · daemon daemon-one. Browser files are not uploaded.');
-    expect(wrapper.find('button[aria-label^="Dataset: Dataset:"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain('Model: custom_model');
+    expect(JSON.stringify(wrapper.getComponent(ConfigMenu).props('draft'))).toBe(draftBefore);
+    // The selections survive the refusal and are named once, without a repeated prefix.
+    expect(wrapper.get('[data-testid="selected-dataset"]').text()).toBe('train.npz');
+    expect(wrapper.get('[data-testid="guide-step-0"]').attributes('title')).toBe(
+      'train.npz · data',
+    );
+    expect(wrapper.get('[data-testid="guide-step-0"]').text()).not.toContain('DatasetDataset');
+    expect(wrapper.get('[data-testid="guide-step-1"]').text()).toContain('custom_model');
     expect(calls.filter((path) => path === '/api/runs/plan')).toHaveLength(1);
-    expect(wrapper.findComponent(PlanApproval).exists()).toBe(false);
+    expect(wrapper.find('#approved-plan-title').exists()).toBe(false);
     expect(wrapper.emitted('submitted')).toBeUndefined();
 
     respond(async () => response(plan));
     await wrapper.get('[id$="-training-epochs"]').setValue('17');
     await editor.trigger('submit');
-    await vi.waitFor(() => expect(wrapper.findComponent(PlanApproval).exists()).toBe(true));
+    await vi.waitFor(() => expect(wrapper.find('#approved-plan-title').exists()).toBe(true));
     expect(calls.filter((path) => path === '/api/runs/plan')).toHaveLength(2);
     expect(calls.filter((path) => path === '/api/runs')).toHaveLength(0);
   });
@@ -137,7 +136,7 @@ describe('project plan refusal feedback', () => {
         if (failure === 'network') throw new Error('sensitive transport detail');
         return new Promise<Response>(() => {});
       });
-      const draftBefore = JSON.stringify(wrapper.getComponent(TrainingExport).props('draft'));
+      const draftBefore = JSON.stringify(wrapper.getComponent(ConfigMenu).props('draft'));
       await editor.trigger('submit');
       await vi.waitFor(() =>
         expect(wrapper.text()).toContain(
@@ -146,8 +145,8 @@ describe('project plan refusal feedback', () => {
       );
       expect(wrapper.text()).not.toContain(refusal);
       expect(wrapper.text()).not.toContain('sensitive transport detail');
-      expect(JSON.stringify(wrapper.getComponent(TrainingExport).props('draft'))).toBe(draftBefore);
-      expect(wrapper.findComponent(PlanApproval).exists()).toBe(false);
+      expect(JSON.stringify(wrapper.getComponent(ConfigMenu).props('draft'))).toBe(draftBefore);
+      expect(wrapper.find('#approved-plan-title').exists()).toBe(false);
       expect(calls.filter((path) => path === '/api/runs/plan')).toHaveLength(1);
       expect(calls.filter((path) => path === '/api/runs')).toHaveLength(0);
     },
@@ -169,9 +168,11 @@ describe('project plan refusal feedback', () => {
         expect(calls.filter((path) => path === '/api/runs/plan')).toHaveLength(1),
       );
       if (change === 'draft change') {
-        wrapper.getComponent(TrainingPresets).vm.$emit('apply', { epochs: 17 });
+        wrapper.getComponent(TrainingInspector).vm.$emit('preset', 'fast');
         await vi.waitFor(() =>
-          expect(wrapper.get('[id$="-training-epochs"]').element.value).toBe('17'),
+          expect(wrapper.get<HTMLInputElement>('[id$="-training-epochs"]').element.value).toBe(
+            '100',
+          ),
         );
       } else session.detach();
       if (!release) throw new Error('Missing pending response');
@@ -179,7 +180,7 @@ describe('project plan refusal feedback', () => {
       await flushPromises();
       expect(wrapper.text()).not.toContain(refusal);
       expect(wrapper.text()).not.toContain(uncertain);
-      expect(wrapper.findComponent(PlanApproval).exists()).toBe(false);
+      expect(wrapper.find('#approved-plan-title').exists()).toBe(false);
       expect(calls.filter((path) => path === '/api/runs/plan')).toHaveLength(1);
       expect(calls.filter((path) => path === '/api/runs')).toHaveLength(0);
     },
@@ -191,13 +192,16 @@ describe('project plan refusal feedback', () => {
       const { wrapper, editor, respond, operationStatus } = await setup();
       respond(async () => response(plan));
       await editor.trigger('submit');
-      await vi.waitFor(() => expect(wrapper.findComponent(PlanApproval).exists()).toBe(true));
+      await vi.waitFor(() => expect(wrapper.find('#approved-plan-title').exists()).toBe(true));
       operationStatus(400);
-      wrapper.getComponent(PlanApproval).vm.$emit(operation);
+      await button(
+        wrapper,
+        operation === 'submit' ? 'Approve and start this plan' : 'Check submission status',
+      ).trigger('click');
       await vi.waitFor(() => expect(wrapper.text()).toContain(uncertain));
       expect(wrapper.text()).not.toContain(refusal);
       expect(wrapper.text()).not.toContain('sensitive internal detail');
-      expect(wrapper.findComponent(PlanApproval).exists()).toBe(true);
+      expect(wrapper.find('#approved-plan-title').exists()).toBe(true);
       expect(wrapper.emitted('submitted')).toBeUndefined();
     },
   );

@@ -108,9 +108,9 @@ describe.each(['en', 'vi'] as const)('section visual contracts (%s)', (locale) =
       createTestI18n(locale),
     );
     expect(wrapper.findAll('.kpi-tile')).toHaveLength(4);
-    expect(wrapper.findAll('svg.sparkline path')).toHaveLength(4);
+    expect(wrapper.findAll('svg.sparkline path[fill="none"]')).toHaveLength(4);
     expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('30');
-    expect(wrapper.get('svg.sparkline path').attributes('d')).toContain('L120,4');
+    expect(wrapper.get('svg.sparkline path[fill="none"]').attributes('d')).toContain('L120,4');
     wrapper.unmount();
   });
 });

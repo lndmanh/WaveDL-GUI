@@ -11,11 +11,11 @@ describe('workstation locale foundation', () => {
     const Consumer = defineComponent({
       setup() {
         const { t } = useI18n({ useScope: 'global' });
-        return () => h('p', t('catalog.chooseModelName', { name: '{name}<script>東京</script>' }));
+        return () => h('p', t('builder.resetSetting', { label: '{name}<script>東京</script>' }));
       },
     });
     const wrapper = mount(Consumer);
-    expect(wrapper.text()).toBe('Choose {name}<script>東京</script>');
+    expect(wrapper.text()).toBe('Reset {name}<script>東京</script>');
     expect(wrapper.find('script').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -27,7 +27,7 @@ describe('workstation locale foundation', () => {
       setup() {
         const { t } = useI18n({ useScope: 'global' });
         const draft = shallowRef('my experiment');
-        const label = computed(() => t('catalog.chooseModel'));
+        const label = computed(() => t('builder.chooseModel'));
         onMounted(() => {
           mounts += 1;
         });
@@ -69,7 +69,7 @@ describe('workstation locale foundation', () => {
       setup(props) {
         const { t, locale } = useI18n({ useScope: 'global' });
         if (props.vietnamese) locale.value = 'vi';
-        return () => h('p', t('catalog.chooseModel'));
+        return () => h('p', t('builder.chooseModel'));
       },
     });
     const vi = mount(Consumer, { props: { vietnamese: true } });

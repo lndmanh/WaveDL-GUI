@@ -1,13 +1,8 @@
 // @vitest-environment happy-dom
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
-import { useForm } from 'vee-validate';
-import { z } from 'zod';
-import TrainingFields from '../../app/components/project/TrainingFields.vue';
 import {
   trainingConfigSchema,
   trainingDefaults,
@@ -16,11 +11,19 @@ import {
   type TrainingConfig,
 } from '../../shared/schemas/training-request';
 import { trainingCommand, trainingYaml } from '../../app/lib/training-export';
+import { trainingFieldVisible, type TrainingFieldName } from '../../app/lib/training-layout';
 import { ConnectionSession } from './session-fixture';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ProjectPlan } from '../../app/lib/project-plan';
 import type { Json } from '../../app/lib/daemon-api';
-import { chooseSelectOption } from './select-interaction';
+import {
+  markedInvalid,
+  revealTrainingControl,
+  trainingFieldName,
+  setTrainingControl,
+  trainingControl,
+  trainingEditor as editor,
+} from './training-editor';
 
 // An explicit inventory, not values generated from metadata: newly added fields
 // must acquire a deliberate authoring case before this acceptance test passes.
@@ -75,22 +78,6 @@ const authored: TrainingConfig = {
   run_name: "run 'one'; $(never executed)",
 };
 
-function editor() {
-  const form: { current?: ReturnType<typeof useForm<{ config: TrainingConfig }>> } = {};
-  const host = defineComponent({
-    setup() {
-      form.current = useForm<{ config: TrainingConfig }>({
-        initialValues: { config: structuredClone(trainingDefaults) },
-        validationSchema: z.object({ config: trainingConfigSchema }),
-      });
-      return () => h(TrainingFields, { disabled: false });
-    },
-  });
-  const wrapper = mount(host);
-  if (!form.current) throw new Error('Form did not mount');
-  return { wrapper, form: form.current };
-}
-
 async function authorEveryControl() {
   const { wrapper, form } = editor();
   await flushPromises();
@@ -101,21 +88,25 @@ async function authorEveryControl() {
     if (option.name === 'cv') expect(value).toBe(0);
     else
       expect(value, `${option.name} must have an authored nondefault`).not.toEqual(option.default);
-    const control = wrapper.get(`[id$="-training-${option.name}"]`);
-    if (option.kind === 'boolean') {
-      await control.trigger('click');
-      expect(control.attributes('aria-checked')).toBe('true');
-    } else if (option.choices.length) {
-      await chooseSelectOption(control, String(value));
-    } else {
-      await control.setValue(Array.isArray(value) ? value.join('\n') : String(value));
+    if (option.name === 'pretrained') {
+      // The Model block owns pretrained alongside the weights variant.
+      expect(wrapper.find('[id$="-training-pretrained"]').exists()).toBe(false);
+      form.setFieldValue('config.pretrained', true);
+      continue;
     }
-    await flushPromises();
+    // Irrelevant settings are hidden until their controlling choice makes them apply.
+    const restore = await revealTrainingControl(wrapper, form, option.name);
+    await setTrainingControl(wrapper, option.name, value);
+    if (option.kind === 'boolean')
+      expect(trainingControl(wrapper, option.name).attributes('aria-checked')).toBe('true');
     expect(Object.entries(form.values.config).find(([name]) => name === option.name)?.[1]).toEqual(
       value,
     );
+    // A changed value stays visible after its controlling choice moves on.
+    await restore();
+    expect(wrapper.find(`[id$="-training-${option.name}"]`).exists()).toBe(true);
   }
-  // These two fields are catalogue-owned rather than TrainingFields controls;
+  // These two fields are catalogue-owned rather than TrainingInspector controls;
   // the plan case below obtains actual branded selections before preparing.
   const config = trainingConfigSchema.parse({
     ...form.values.config,
@@ -143,7 +134,7 @@ const requestFor = (config: TrainingConfig) =>
   });
 
 describe('exhaustive training field authoring acceptance', () => {
-  it('authors every one of the 44 editable controls through its DOM contract without losing precision', async () => {
+  it('authors all 44 editable options, 43 through their TrainingInspector DOM contract, without losing precision', async () => {
     await authorEveryControl();
   });
 
@@ -222,7 +213,7 @@ describe('exhaustive training field authoring acceptance', () => {
     session.detach();
   });
 
-  it.each([
+  it.each<[TrainingFieldName, string]>([
     ['batch_size', '1.5'],
     ['batch_size', '0'],
     ['lr', '0'],
@@ -246,7 +237,8 @@ describe('exhaustive training field authoring acceptance', () => {
     async (name, value) => {
       const { wrapper, form } = editor();
       await flushPromises();
-      await wrapper.get(`[id$="-training-${name}"]`).setValue(value);
+      await revealTrainingControl(wrapper, form, name);
+      await trainingControl(wrapper, name).setValue(value);
       await flushPromises();
       const validation = await form.validate();
       expect(validation.valid).toBe(false);
@@ -255,20 +247,16 @@ describe('exhaustive training field authoring acceptance', () => {
         await form.validate();
         expect(Object.keys(form.errors.value), JSON.stringify(validation)).not.toEqual([]);
       });
-      await expect
-        .poll(() => wrapper.get(`[id$="-training-${name}"]`).attributes('aria-invalid'))
-        .toBe('true');
+      await expect.poll(() => markedInvalid(trainingControl(wrapper, name))).toBe(true);
       expect(Object.keys(form.errors.value).some((key) => key.startsWith(`config.${name}`))).toBe(
         true,
       );
       const valid = Object.entries(authored).find(([key]) => key === name)?.[1];
-      await wrapper
-        .get(`[id$="-training-${name}"]`)
-        .setValue(Array.isArray(valid) ? valid.join('\n') : String(valid));
+      await trainingControl(wrapper, name).setValue(
+        Array.isArray(valid) ? valid.join('\n') : String(valid),
+      );
       await vi.waitFor(async () => expect((await form.validate()).valid).toBe(true));
-      await expect
-        .poll(() => wrapper.get(`[id$="-training-${name}"]`).attributes('aria-invalid'))
-        .toBe('false');
+      await expect.poll(() => markedInvalid(trainingControl(wrapper, name))).toBe(false);
       wrapper.unmount();
     },
   );
@@ -276,10 +264,14 @@ describe('exhaustive training field authoring acceptance', () => {
   it('does not show untouched errors and roundtrips optional list/text clearing', async () => {
     const { wrapper, form } = editor();
     await flushPromises();
-    for (const option of trainingFieldMetadata)
-      expect(wrapper.get(`[id$="-training-${option.name}"]`).attributes('aria-invalid')).toBe(
-        'false',
+    for (const option of trainingFieldMetadata) {
+      const control = wrapper.find(`[id$="-training-${option.name}"]`);
+      expect(control.exists()).toBe(
+        option.name !== 'pretrained' &&
+          trainingFieldVisible(trainingFieldName(option.name), trainingDefaults),
       );
+      if (control.exists()) expect(markedInvalid(control)).toBe(false);
+    }
     for (const name of [
       'import_modules',
       'constraint',
@@ -287,9 +279,10 @@ describe('exhaustive training field authoring acceptance', () => {
       'resume',
       'constraint_file',
       'run_name',
-    ]) {
+    ] as const) {
       const value = Object.entries(authored).find(([key]) => key === name)?.[1];
-      const control = wrapper.get(`[id$="-training-${name}"]`);
+      await revealTrainingControl(wrapper, form, name);
+      const control = trainingControl(wrapper, name);
       await control.setValue(Array.isArray(value) ? value.join('\n') : String(value));
       await control.setValue('');
       expect(Object.entries(form.values.config).find(([key]) => key === name)?.[1]).toEqual(

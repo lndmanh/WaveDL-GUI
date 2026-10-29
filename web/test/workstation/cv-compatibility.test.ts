@@ -1,12 +1,6 @@
 // @vitest-environment happy-dom
-import { mountWithI18n as mount } from './mountWithI18n';
 import { flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
-import { useForm } from 'vee-validate';
-import { z } from 'zod';
-import TrainingFields from '../../app/components/project/TrainingFields.vue';
-import { chooseSelectOption } from './select-interaction';
 import {
   trainingConfigSchema,
   trainingDefaults,
@@ -23,6 +17,15 @@ import {
   loadTrainingPreferences,
   saveTrainingPreferences,
 } from '../../app/lib/preferences';
+import { trainingFieldVisible } from '../../app/lib/training-layout';
+import {
+  markedInvalid,
+  revealTrainingControl,
+  trainingFieldName,
+  setTrainingControl,
+  trainingControl,
+  trainingEditor as editor,
+} from './training-editor';
 
 const unsupported: { name: keyof TrainingConfig; value: string | number | boolean }[] = [
   { name: 'resume', value: '/private/checkpoint.pth' },
@@ -38,44 +41,26 @@ const unsupported: { name: keyof TrainingConfig; value: string | number | boolea
 const dependentCases: {
   name: keyof TrainingConfig;
   patch: Partial<TrainingConfig>;
-  correction: string;
+  correction: string | number;
 }[] = [
   { name: 'optimizer', patch: { nesterov: true, optimizer: 'adam' }, correction: 'sgd' },
-  { name: 'momentum', patch: { nesterov: true, optimizer: 'sgd', momentum: 0 }, correction: '0.9' },
+  { name: 'momentum', patch: { nesterov: true, optimizer: 'sgd', momentum: 0 }, correction: 0.9 },
   {
     name: 'scheduler_factor',
     patch: { scheduler: 'plateau', scheduler_factor: -0.1 },
-    correction: '0.5',
+    correction: 0.5,
   },
   {
     name: 'scheduler_factor',
     patch: { scheduler: 'plateau', scheduler_factor: 1 },
-    correction: '0.5',
+    correction: 0.5,
   },
   {
     name: 'scheduler_factor',
     patch: { scheduler: 'plateau', scheduler_factor: 1.5 },
-    correction: '0.5',
+    correction: 0.5,
   },
 ];
-
-function editor(config: TrainingConfig = structuredClone(trainingDefaults)) {
-  const form: { current?: ReturnType<typeof useForm<{ config: TrainingConfig }>> } = {};
-  const preview = vi.fn();
-  const host = defineComponent({
-    setup() {
-      form.current = useForm<{ config: TrainingConfig }>({
-        initialValues: { config },
-        validationSchema: z.object({ config: trainingConfigSchema }),
-      });
-      const submit = form.current.handleSubmit(preview);
-      return () => h('form', { onSubmit: submit }, [h(TrainingFields, { disabled: false })]);
-    },
-  });
-  const wrapper = mount(host);
-  if (!form.current) throw new Error('Form did not mount');
-  return { wrapper, form: form.current, preview };
-}
 
 describe('CV authoring compatibility', () => {
   it.each(dependentCases)(
@@ -97,16 +82,14 @@ describe('CV authoring compatibility', () => {
       const { wrapper, form, preview } = editor({ ...trainingDefaults, cv: 2, ...patch });
       await wrapper.trigger('submit');
       await expect.poll(() => form.errors.value[`config.${name}`]).toContain('Cross-validation');
-      const control = wrapper.get(`[id$="-training-${name}"]`);
-      await expect.poll(() => control.attributes('aria-invalid')).toBe('true');
+      const control = trainingControl(wrapper, name);
+      await expect.poll(() => markedInvalid(control)).toBe(true);
       expect(preview).not.toHaveBeenCalled();
-      if (control.element.tagName === 'BUTTON') {
-        await chooseSelectOption(control, correction);
-      } else await control.setValue(correction);
+      await setTrainingControl(wrapper, name, correction);
       await vi.waitFor(async () => expect((await form.validate()).valid).toBe(true));
       await wrapper.trigger('submit');
       await expect.poll(() => preview.mock.calls.length).toBe(1);
-      await expect.poll(() => control.attributes('aria-invalid')).toBe('false');
+      await expect.poll(() => markedInvalid(control)).toBe(false);
       expect(form.errors.value[`config.${name}`]).toBeUndefined();
       wrapper.unmount();
     },
@@ -122,7 +105,7 @@ describe('CV authoring compatibility', () => {
     await expect.poll(() => preview.mock.calls.length).toBe(1);
     expect(form.errors.value).toEqual({});
     expect(form.values.config.deterministic).toBe(true);
-    expect(wrapper.get('[id$="-training-deterministic"]').attributes('aria-invalid')).toBe('false');
+    expect(markedInvalid(trainingControl(wrapper, 'deterministic'))).toBe(false);
     wrapper.unmount();
   });
 
@@ -262,14 +245,16 @@ describe('CV authoring compatibility', () => {
       const { wrapper, form, preview } = editor();
       await flushPromises();
       await wrapper.get('[id$="-training-cv"]').setValue('2');
-      const control = wrapper.get(`[id$="-training-${name}"]`);
-      if (typeof value === 'boolean') await control.trigger('click');
-      else await control.setValue(String(value));
+      // W&B details appear only with W&B on; a changed value stays visible after it is off.
+      const restore = await revealTrainingControl(wrapper, form, name);
+      await setTrainingControl(wrapper, name, value);
+      await restore();
+      const control = trainingControl(wrapper, name);
       await control.trigger('blur');
       await wrapper.trigger('submit');
       await flushPromises();
       expect(preview).not.toHaveBeenCalled();
-      await expect.poll(() => control.attributes('aria-invalid')).toBe('true');
+      await expect.poll(() => markedInvalid(control)).toBe(true);
       expect(form.errors.value[`config.${name}`]).toContain('Cross-validation');
       expect(wrapper.findAll('[data-slot="field-error"]').length).toBeGreaterThan(0);
       expect(
@@ -278,16 +263,17 @@ describe('CV authoring compatibility', () => {
           .map((error) => error.text())
           .join('\n'),
       ).not.toContain(String(value));
-      if (typeof value === 'boolean') await control.trigger('click');
-      else
-        await control.setValue(
-          trainingDefaults[name] === null ? '' : String(trainingDefaults[name]),
-        );
+      await setTrainingControl(wrapper, name, trainingDefaults[name]);
       await vi.waitFor(async () => expect((await form.validate()).valid).toBe(true));
       await wrapper.trigger('submit');
       await flushPromises();
       await expect.poll(() => preview.mock.calls.length).toBe(1);
-      await expect.poll(() => control.attributes('aria-invalid')).toBe('false');
+      // A setting returned to its default hides again when its controlling choice is off.
+      const corrected = wrapper.find(`[id$="-training-${name}"]`);
+      expect(corrected.exists()).toBe(
+        trainingFieldVisible(trainingFieldName(name), form.values.config),
+      );
+      if (corrected.exists()) await expect.poll(() => markedInvalid(corrected)).toBe(false);
       wrapper.unmount();
     },
   );
@@ -311,9 +297,7 @@ describe('CV authoring compatibility', () => {
     await flushPromises();
     expect(preview).not.toHaveBeenCalled();
     await expect.poll(() => form.errors.value['config.cv']).toContain('at least two folds');
-    await expect
-      .poll(() => wrapper.get('[id$="-training-cv"]').attributes('aria-invalid'))
-      .toBe('true');
+    await expect.poll(() => markedInvalid(trainingControl(wrapper, 'cv'))).toBe(true);
     await wrapper.get('[id$="-training-cv"]').setValue('2');
     await wrapper.trigger('submit');
     await flushPromises();

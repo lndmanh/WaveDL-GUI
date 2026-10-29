@@ -60,7 +60,7 @@ function storedTranslationKeys(source: string, file: string): string[] {
   function visit(node: ts.Node): void {
     if (ts.isStringLiteralLike(node)) {
       if (
-        /^(catalog|cv|datasets|models|project|results|runs|shell|storage|training|clientErrors)\.[A-Za-z0-9_.]+$/.test(
+        /^(builder|catalog|cv|datasets|models|project|results|runs|shell|storage|training|clientErrors)\.[A-Za-z0-9_.]+$/.test(
           node.text,
         )
       )
@@ -120,15 +120,6 @@ function validMessageKey(key: string): boolean {
 }
 
 describe('message contracts', () => {
-  it('leaves the dataset label to the InfoChip without repeating it in the summary', () => {
-    for (const locale of ['en', 'vi'] as const) {
-      expect(messages[locale].project.datasetSelectionSummary).toMatch(/^\{path\}\{daemon\}\./);
-      expect(messages[locale].project.datasetSelectionSummary).not.toMatch(
-        /^(Dataset|Bộ dữ liệu):/,
-      );
-    }
-  });
-
   it('covers every closed state/operation/runtime enum and every derived key in both languages', () => {
     expect(Object.keys(runStateMessageKeys).sort()).toEqual([...RUN_STATES].sort());
     expect(Object.keys(runOperationMessageKeys).sort()).toEqual(['plot', 'test', 'train']);

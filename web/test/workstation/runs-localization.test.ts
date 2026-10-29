@@ -282,7 +282,11 @@ describe('run presentation localization', () => {
     expect(wrapper.text()).toContain('Đánh giá');
     expect(wrapper.text()).toContain('Vẽ biểu đồ');
     expect(wrapper.text()).toContain('Cụm Slurm');
-    await wrapper.getComponent(RunList).findAll('button')[1]!.trigger('click');
+    await wrapper
+      .getComponent(RunList)
+      .findAll('button.run-row')
+      .find((row) => row.text().includes('train-run'))
+      ?.trigger('click');
     expect(wrapper.getComponent(RunList).emitted('select')).toEqual([['train-run']]);
     expect(runs.map(({ operation, backend }) => [operation, backend])).toEqual([
       ['train', 'local'],

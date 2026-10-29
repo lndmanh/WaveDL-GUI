@@ -76,9 +76,6 @@ describe('shell and settings live localization', () => {
     const wrapper = mount(Host, undefined, i18n);
     await flushPromises();
     const initial = wrapper.get('#preference-theme').element;
-    expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
-      'Show the new-project guide',
-    );
     await chooseSelectOption(wrapper, 'preference-theme', 'dark');
     await chooseSelectOption(wrapper, 'preference-language', 'vi');
     appearance.value = { ...appearance.value, language: 'vi' };
@@ -90,9 +87,6 @@ describe('shell and settings live localization', () => {
     expect(wrapper.get('[data-testid="workstation-nav"]').attributes('aria-label')).toBe(
       'Sections',
     );
-    expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
-      'Show the new-project guide',
-    );
     expect(wrapper.get('#preference-theme').text()).toContain('System');
     expect(wrapper.get('#preference-theme').element).toBe(initial);
     expect(loadAppearance().language).toBe('en');
@@ -100,9 +94,6 @@ describe('shell and settings live localization', () => {
     await chooseSelectOption(wrapper, 'preference-language', 'en');
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() => expect(wrapper.text()).toContain('Browser preferences saved.'));
-    expect(wrapper.get('#preference-guide').attributes('aria-label')).toBe(
-      'Show the new-project guide',
-    );
     wrapper.unmount();
   });
 
@@ -168,12 +159,12 @@ describe('shell and settings live localization', () => {
     message.value = clientError('daemonReplaced');
     await flushPromises();
     expect(wrapper.text()).toContain(
-      'Một daemon WaveDL khác đang phục vụ địa chỉ này. Hãy đăng nhập lại.',
+      'WaveDL đã được khởi động lại hoặc thay thế. Hãy đăng nhập lại.',
     );
     await wrapper.get('#daemon-bearer').setValue('');
     await wrapper.get('form').trigger('submit');
     await vi.waitFor(() =>
-      expect(wrapper.text()).toContain('Nhập thông tin xác thực bearer của daemon.'),
+      expect(wrapper.text()).toContain('Dán khóa truy cập của bạn.'),
     );
     wrapper.unmount();
   });

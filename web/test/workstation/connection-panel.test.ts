@@ -24,12 +24,28 @@ describe('connection UI ownership', () => {
     const wrapper = mount(ConnectionPanel, { props: { state: initial } });
 
     expect(wrapper.get('[data-testid="connection-card"]').exists()).toBe(true);
-    expect(wrapper.get('#connection-title').text()).toBe('Connect to your daemon.');
-    expect(wrapper.text()).toContain('Execution belongs to the daemon.');
+    expect(wrapper.get('#connection-title').text()).toBe('Connect to WaveDL');
+    expect(wrapper.text()).toContain('Enter your access key to get started.');
     expect(wrapper.findAll('input')).toHaveLength(1);
     expect(wrapper.findAll('button[type="submit"]')).toHaveLength(1);
     expect(wrapper.get('#daemon-bearer').attributes('aria-describedby')).toBe('daemon-bearer-help');
     expect(wrapper.get('#keep-signed-in').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('reveals the typed key on request and hides it again after connecting', async () => {
+    const wrapper = mount(ConnectionPanel, { props: { state: initial } });
+    const reveal = wrapper.get('button[aria-label="Show access key"]');
+    expect(reveal.attributes('aria-pressed')).toBe('false');
+    await reveal.trigger('click');
+    expect(wrapper.get('#daemon-bearer').attributes('type')).toBe('text');
+    expect(wrapper.get('button[aria-label="Hide access key"]').attributes('aria-pressed')).toBe(
+      'true',
+    );
+    await wrapper.get('#daemon-bearer').setValue('visible-token');
+    await wrapper.get('form').trigger('submit');
+    await vi.waitFor(() => expect(wrapper.emitted('connect')).toEqual([['visible-token', false]]));
+    expect(wrapper.get('#daemon-bearer').attributes('type')).toBe('password');
     wrapper.unmount();
   });
 
@@ -67,12 +83,12 @@ describe('connection UI ownership', () => {
     await wrapper.setProps({
       state: { ...initial, status: 'skew', revision: 3, message: 'Daemon identity changed.' },
     });
-    expect(wrapper.text()).toContain('Connection identity changed');
+    expect(wrapper.text()).toContain('WaveDL has changed');
     await wrapper.get('input[type="password"]').setValue('fresh-token');
     await wrapper.get('form').trigger('submit');
     await flushPromises();
     await vi.waitFor(() => expect(wrapper.emitted('reconnect')).toEqual([['fresh-token', false]]));
-    const clear = wrapper.findAll('button').find((button) => button.text().includes('clear scope'));
+    const clear = wrapper.findAll('button').find((button) => button.text().includes('start fresh'));
     await clear?.trigger('click');
     expect(wrapper.emitted('detach')).toEqual([[]]);
     wrapper.unmount();
@@ -128,12 +144,11 @@ describe('connection UI ownership', () => {
         },
       },
     });
-    const hedge =
-      'Disconnecting never cancels running jobs. An offline page cannot confirm live status or perform actions. A changed daemon identity requires an explicit disconnect before starting a new scope.';
+    const hedge = 'Disconnecting never stops your runs. Reconnect anytime to check on them.';
     expect(document.body.textContent).not.toContain(hedge);
     const trigger = wrapper
       .findAll('button')
-      .find((button) => button.text() === 'Connection details');
+      .find((button) => button.text() === 'What happens when I disconnect?');
     expect(trigger?.attributes('aria-haspopup')).toBe('dialog');
     // Assert on the first render: happy-dom's focus emulation later trips reka's
     // dismiss-on-focus-outside, which a real browser does not.

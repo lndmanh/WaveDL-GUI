@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 import { mountWithI18n as mount } from './mountWithI18n';
-import { flushPromises } from '@vue/test-utils';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { defineComponent, h, nextTick, shallowRef } from 'vue';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import ProjectContainer from '../../app/components/project/ProjectContainer.vue';
+import ModelInspector from '../../app/components/project/ModelInspector.vue';
 import DatasetPathPicker from '../../app/components/datasets/DatasetPathPicker.vue';
 import DatasetInfoPanel from '../../app/components/datasets/DatasetInfoPanel.vue';
-import ModelSelector from '../../app/components/catalog/ModelSelector.vue';
-import ModelList from '../../app/components/catalog/ModelList.vue';
 import { CatalogApi, type ModelDescription } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
 import type { DatasetInspection } from '../../app/lib/dataset-inspection';
@@ -44,6 +43,61 @@ const model: ModelDescription = {
   supportedDims: [1],
   pretrained: false,
 };
+function variant(id: string, supportedDims: number[], pretrained = false): ModelDescription {
+  return { ...model, id, displayName: id, supportedDims, pretrained };
+}
+function inspectorProps(session: ConnectionSession, models: readonly ModelDescription[]) {
+  return {
+    session,
+    models,
+    busy: false,
+    message: '',
+    selection: null,
+    pretrained: false,
+    singleChannel: false,
+    disabled: false,
+  } as const;
+}
+function offline() {
+  return new ConnectionSession({
+    origin: window.location.origin,
+    buildId: '1.8.1',
+    fetcher: async () => {
+      throw new Error('No requests expected');
+    },
+  });
+}
+function rows(wrapper: VueWrapper) {
+  return wrapper
+    .findAll('[data-testid="model-card"]')
+    .map((row) => row.attributes('data-model-entry'));
+}
+function option(wrapper: VueWrapper, label: string, text: string) {
+  const match = wrapper
+    .get(`[aria-label="${label}"]`)
+    .findAll('button')
+    .find((item) => item.text() === text);
+  if (!match) throw new Error(`Missing ${label} option ${text}`);
+  return match;
+}
+beforeEach(() => {
+  const items = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      items.set(key, value);
+    },
+    removeItem: (key: string) => {
+      items.delete(key);
+    },
+    clear: () => items.clear(),
+    key: (index: number) => [...items.keys()][index] ?? null,
+    get length() {
+      return items.size;
+    },
+  };
+  Object.defineProperty(window, 'localStorage', { configurable: true, get: () => storage });
+});
 function json(value: unknown) {
   return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
 }
@@ -64,6 +118,32 @@ async function connected() {
           kind: 'file',
         });
       }
+      if (path === '/api/models')
+        return json({
+          source: 'bundled_metadata',
+          runtime_verified: false,
+          categories: { 'Classic CNNs': { short_description: 'Classics', models: ['cnn'] } },
+          models: [
+            {
+              id: 'cnn',
+              display_name: 'CNN',
+              architecture_family: 'CNN',
+              author_institution: 'Example',
+              year_published: 1989,
+              params_m: 1.6,
+              size_mb: 6,
+              short_description: 'Simple convolutional baseline',
+              description: 'Guidance',
+              best_for: 'Baseline',
+              pros: ['Fast'],
+              cons: ['Limited capacity'],
+              compute_tier: 'Edge',
+              tags: ['baseline'],
+              supported_dims: [1],
+              is_pretrained: false,
+            },
+          ],
+        });
       throw new Error(`Unexpected request: ${path}`);
     },
   });
@@ -75,52 +155,108 @@ describe('model dataset guidance UI', () => {
   it('updates localized advice without disabling model selection or claiming validation', async () => {
     const locale = shallowRef<WorkstationLocale>('en');
     const data = shallowRef<DatasetInspection | null>(inspection);
+    const session = offline();
     const Provider = defineComponent({
       setup() {
         provideWorkstationLocale(locale);
-        return () => h(ModelList, { models: [model], busy: false, inspection: data.value });
+        return () =>
+          h(ModelInspector, { ...inspectorProps(session, [model]), inspection: data.value });
       },
     });
     const wrapper = mount(Provider);
-    expect(wrapper.text()).toContain('Dimension mismatch');
-    expect(wrapper.text()).toContain('32 × 32');
-    await wrapper.get('[data-testid="model-details"]').trigger('click');
-    await nextTick();
-    expect(document.body.textContent).toContain('not runtime validation');
-    expect(wrapper.get('button').attributes('disabled')).toBeUndefined();
+    // A 2D sample does not fit a 1D-only model, so it is only listed under "All".
+    expect(rows(wrapper)).toEqual([]);
+    await option(wrapper, 'Compatibility', 'All · 1').trigger('click');
+    expect(rows(wrapper)).toEqual(['cnn']);
+    expect(wrapper.get('[data-model-entry="cnn"]').attributes('data-dim')).toBe('true');
+    expect(wrapper.get('[role="note"]').text()).toBe(
+      'Dimension mismatch: dataset sample 32 × 32 is treated as 2D spatial data by training (batch excluded; a channel is added), outside this model’s described dimensions. Review the dataset and model; this is advisory, not runtime validation.',
+    );
+    expect(wrapper.get('[data-testid="model-select"]').attributes('disabled')).toBeUndefined();
     await wrapper.get('[data-testid="model-select"]').trigger('click');
-    expect(wrapper.getComponent(ModelList).emitted('select')?.[0]?.[0]).toEqual(model);
+    expect(wrapper.getComponent(ModelInspector).emitted('choose')?.[0]).toEqual([model, false]);
     data.value = { ...inspection, inputShape: [32] };
     await nextTick();
-    expect(wrapper.text()).toContain('Dimensions described');
-    expect(wrapper.get('[aria-label^="Dimensions described:"]').attributes('aria-label')).toBe(
-      'Dimensions described: Dataset sample: 32 (batch excluded). Training treats this as 1D spatial data and adds a channel. This dimensionality is described by this model; exact sizes, channels and runtime compatibility remain unverified.',
+    expect(wrapper.get('[data-model-entry="cnn"]').attributes('data-dim')).toBeUndefined();
+    expect(wrapper.get('[role="note"]').text()).toBe(
+      'Dataset sample: 32 (batch excluded). Training treats this as 1D spatial data and adds a channel. This dimensionality is described by this model; exact sizes, channels and runtime compatibility remain unverified.',
     );
     locale.value = 'vi';
     await nextTick();
-    expect(wrapper.text()).toContain('Có mô tả số chiều');
-    expect(wrapper.get('[aria-label^="Có mô tả số chiều:"]').attributes('aria-label')).toBe(
-      'Có mô tả số chiều: Mẫu dữ liệu: 32 (không gồm chiều lô). Huấn luyện xem đây là dữ liệu không gian 1D và thêm chiều kênh. Số chiều này có trong mô tả mô hình; kích thước cụ thể, kênh và khả năng tương thích khi chạy vẫn chưa được xác minh.',
+    expect(wrapper.get('[role="note"]').text()).toBe(
+      'Mẫu dữ liệu: 32 (không gồm chiều lô). Huấn luyện xem đây là dữ liệu không gian 1D và thêm chiều kênh. Số chiều này có trong mô tả mô hình; kích thước cụ thể, kênh và khả năng tương thích khi chạy vẫn chưa được xác minh.',
     );
     data.value = { ...inspection, inputShape: [3, 128, 128] };
     await nextTick();
-    expect(wrapper.text()).toContain('Hình dạng chưa rõ');
-    expect(wrapper.get('[aria-label^="Hình dạng chưa rõ:"]').attributes('aria-label')).toBe(
-      'Hình dạng chưa rõ: Mẫu dữ liệu chưa rõ: 3 × 128 × 128 (không gồm chiều lô). Đây có thể là dữ liệu 2D có chiều kênh đầu tiên hoặc thể tích 3D nông. Huấn luyện yêu cầu xác nhận single_channel cho thể tích đơn kênh; không nên mặc định tương thích kênh. Khả năng tương thích khi chạy vẫn chưa được xác minh.',
+    expect(wrapper.get('[role="note"]').text()).toBe(
+      'Mẫu dữ liệu chưa rõ: 3 × 128 × 128 (không gồm chiều lô). Đây có thể là dữ liệu 2D có chiều kênh đầu tiên hoặc thể tích 3D nông. Huấn luyện yêu cầu xác nhận single_channel cho thể tích đơn kênh; không nên mặc định tương thích kênh. Khả năng tương thích khi chạy vẫn chưa được xác minh.',
     );
     expect(wrapper.text()).not.toContain('Không khớp số chiều');
+    expect(wrapper.get('[data-testid="model-select"]').text()).toBe('Dùng mô hình này');
     data.value = null;
     await nextTick();
-    expect(wrapper.text()).toContain('Chưa kiểm tra hình dạng');
-    expect(wrapper.get('[aria-label^="Chưa kiểm tra hình dạng:"]').attributes('aria-label')).toBe(
-      'Chưa kiểm tra hình dạng: Chưa có gợi ý hình dạng. Chọn và kiểm tra dữ liệu từ daemon hiện tại; bố cục mẫu không được hỗ trợ hoặc chưa rõ cần được kiểm tra khi chạy. Bạn vẫn có thể chọn mô hình.',
-    );
+    // Without an inspected dataset there is no advice to give, and choosing stays open.
+    expect(wrapper.find('[role="note"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Tương thích"]').exists()).toBe(false);
+    // Choosing remembered the model, so it is also listed under "Recent".
+    expect(rows(wrapper)).toEqual(['cnn', 'cnn']);
+    expect(wrapper.find('[role="group"][aria-label="Gần đây"]').exists()).toBe(true);
     locale.value = 'en';
     await nextTick();
-    expect(wrapper.text()).toContain('Shape not inspected');
-    expect(wrapper.get('[aria-label^="Shape not inspected:"]').attributes('aria-label')).toBe(
-      'Shape not inspected: Shape guidance unavailable. Select and inspect a dataset from the current daemon; unsupported or unknown sample layouts require runtime review. Model selection remains available.',
-    );
+    expect(wrapper.find('[role="note"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="model-select"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('[data-testid="model-select"]').text()).toBe('Use this model');
+    wrapper.unmount();
+  });
+
+  it('filters to models that fit the inspected dataset, counting either weights variant', async () => {
+    const data = shallowRef<DatasetInspection | null>(inspection);
+    const singleChannel = shallowRef(false);
+    const session = offline();
+    const models = [
+      variant('cnn', [1]),
+      variant('vit', [2]),
+      variant('resnet50', [1]),
+      variant('resnet50_pretrained', [2], true),
+    ];
+    const Provider = defineComponent({
+      setup() {
+        return () =>
+          h(ModelInspector, {
+            ...inspectorProps(session, models),
+            inspection: data.value,
+            singleChannel: singleChannel.value,
+          });
+      },
+    });
+    const wrapper = mount(Provider);
+    expect(rows(wrapper).sort()).toEqual(['resnet50', 'vit']);
+    expect(wrapper.text()).toContain('Fits your data · 2');
+    expect(wrapper.text()).toContain('All · 3');
+    await wrapper.get('[data-testid="model-search"]').setValue('vit');
+    expect(rows(wrapper)).toEqual(['vit']);
+    expect(wrapper.text()).toContain('Fits your data · 1');
+    expect(wrapper.text()).toContain('All · 1');
+    await wrapper.get('[data-testid="model-search"]').setValue('');
+    await option(wrapper, 'Compatibility', 'All · 3').trigger('click');
+    expect(rows(wrapper).sort()).toEqual(['cnn', 'resnet50', 'vit']);
+    expect(wrapper.get('[data-model-entry="cnn"]').attributes('data-dim')).toBe('true');
+    expect(wrapper.get('[data-model-entry="resnet50"]').attributes('data-dim')).toBeUndefined();
+    await option(wrapper, 'Compatibility', 'Fits your data · 2').trigger('click');
+    // An ambiguous rank-three sample is advisory, not a mismatch.
+    data.value = { ...inspection, inputShape: [3, 128, 128] };
+    await nextTick();
+    expect(rows(wrapper).sort()).toEqual(['cnn', 'resnet50', 'vit']);
+    // Confirming single_channel makes it a 3D volume, which none of these describe.
+    singleChannel.value = true;
+    await nextTick();
+    expect(rows(wrapper)).toEqual([]);
+    expect(wrapper.text()).toContain('Fits your data · 0');
+    expect(wrapper.text()).toContain('No matching model descriptions');
+    data.value = null;
+    await nextTick();
+    expect(wrapper.find('[aria-label="Compatibility"]').exists()).toBe(false);
+    expect(rows(wrapper).sort()).toEqual(['cnn', 'resnet50', 'vit']);
     wrapper.unmount();
   });
 
@@ -131,11 +267,11 @@ describe('model dataset guidance UI', () => {
     const second = await api.resolve('data', 'second.npz');
     const wrapper = mount(ProjectContainer, {
       props: { session },
-      global: { stubs: { DatasetPathPicker: true, DatasetInfoPanel: true, ModelSelector: true } },
+      global: { stubs: { DatasetPathPicker: true, DatasetInfoPanel: true, ModelInspector: true } },
     });
     const browse = wrapper.getComponent(DatasetPathPicker);
     const panel = wrapper.getComponent(DatasetInfoPanel);
-    const selector = wrapper.getComponent(ModelSelector);
+    const selector = wrapper.getComponent(ModelInspector);
     expect(selector.props('singleChannel')).toBe(false);
     browse.vm.$emit('select', first);
     await nextTick();
