@@ -901,14 +901,14 @@ This is a local CPU development workflow, not a completed Windows/GPU/Slurm or
 production-release certification. Keep the master credential private and the
 daemon loopback-only. The bootstrap exchange gives the browser a separate,
 revocable session token; only that derived session envelope is stored, in
-`sessionStorage` by default. **Keep me signed in on this browser** opts into
+`sessionStorage` by default. **Stay signed in** on the connect screen opts into
 `localStorage`; it is off by default. The envelope key is `wavedl.session.v1`.
 Session tokens use a 12-hour idle sliding lifetime and a 7-day absolute lifetime.
 The master bearer is never persisted, and
 credentials are not placed in the URL after bootstrap. Reloading the page
 resumes the same browser session without rotating its token. A rejected session
 reports **Your session ended. Sign in again.** A changed daemon identity reports
-**A different WaveDL daemon is now serving this address. Sign in again.**
+**WaveDL was restarted or replaced. Sign in again.**
 Only stored envelopes matching the rejected token are cleared. The sign-in
 preference is remembered separately, and its switch is also available while
 connected. Turning it off removes the localStorage credential copy. Explicitly
