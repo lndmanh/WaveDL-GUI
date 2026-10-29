@@ -307,8 +307,8 @@ def train_fold(
                 val_loss += loss.item() * x.size(0)
                 val_samples += x.size(0)
 
-                all_preds.append(pred.float().cpu())
-                all_targets.append(y.cpu())
+                all_preds.append(pred.detach().float().cpu())
+                all_targets.append(y.detach().cpu())
 
         avg_val_loss = val_loss / val_samples
 
@@ -372,8 +372,8 @@ def train_fold(
                     f"Model output shape {tuple(pred.shape)} does not match "
                     f"target shape {tuple(y.shape)}."
                 )
-            all_preds.append(pred.float().cpu())
-            all_targets.append(y.cpu())
+            all_preds.append(pred.detach().float().cpu())
+            all_targets.append(y.detach().cpu())
 
     y_pred = torch.cat(all_preds).numpy()
     y_true = torch.cat(all_targets).numpy()
