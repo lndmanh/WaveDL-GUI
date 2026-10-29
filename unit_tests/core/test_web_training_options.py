@@ -18,7 +18,16 @@ def test_browser_metadata_covers_daemon_supported_training_options():
     actions = {
         action.dest: action
         for action in build_training_parser()._actions
-        if action.dest not in {"help", "list_models", "config", "output_dir"}
+        # allow_pickle and selection_metric are CLI/HPO-only, never daemon options.
+        if action.dest
+        not in {
+            "help",
+            "list_models",
+            "config",
+            "output_dir",
+            "allow_pickle",
+            "selection_metric",
+        }
         and action.help != argparse.SUPPRESS
     }
     assert set(fields) == set(actions)

@@ -90,6 +90,13 @@ _TEST_VALUES = frozenset(
     ]
 )
 _TEST_FLAGS = frozenset(["save_predictions", "plot", "verbose", "no_denorm"])
+# Recorded CLI configurations carry these, but the daemon never runs them:
+# pickled datasets execute code, and selection_metric is an HPO-only switch.
+_DEFAULT_ONLY = {
+    OperationKind.TRAIN: {"allow_pickle": False, "selection_metric": "loss"},
+    OperationKind.TEST: {"allow_pickle": False},
+    OperationKind.PLOT: {"allow_pickle": False},
+}
 
 
 class LocalBackend(LocalExecution):
@@ -223,6 +230,13 @@ class LocalBackend(LocalExecution):
             argv += ["wavedl.test"]
         for name, value in sorted(config.items()):
             if name in {"output_dir", "config"} or value is None:
+                continue
+            default_only = _DEFAULT_ONLY.get(manifest.operation, {})
+            if name in default_only:
+                if value != default_only[name] or type(value) is not type(
+                    default_only[name]
+                ):
+                    raise UnsupportedPlan(f"Unsupported resolved option: {name}")
                 continue
             if name in flags:
                 if type(value) is not bool:
