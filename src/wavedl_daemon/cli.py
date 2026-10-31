@@ -1,14 +1,18 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Explicit daemon startup; no listener, threads or storage at import time."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
 import ipaddress
 import os
 import secrets
 import socket
 import sys
+import threading
+import webbrowser
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,15 +25,31 @@ from wavedl_daemon.backends.local import LocalBackend
 from wavedl_daemon.backends.scheduler import SchedulerCommands
 from wavedl_daemon.backends.slurm import SlurmBackend, SlurmSite
 from wavedl_daemon.execution.budget import WorkBudget
+from wavedl_daemon.serve_state import (
+    AlreadyRunning,
+    check_not_running,
+    remove_run_url,
+    write_run_url,
+)
 from wavedl_daemon.storage.settings import Settings, default_state_dir
 
 
+DEFAULT_PORTS = (8420, 8421)
+
+
+class PortUnavailable(OSError):
+    """None of the requested listener ports could be bound."""
+
+    def __init__(self, ports: tuple[int, ...]):
+        super().__init__("Requested ports are in use")
+        self.ports = ports
+
+
 def build_parser():
-    parser = argparse.ArgumentParser(prog="wavedl-daemon")
-    commands = parser.add_subparsers(dest="command", required=True)
-    serve = commands.add_parser("serve", help="Serve one user-owned loopback daemon")
+    parser = argparse.ArgumentParser(prog="wavedl serve")
+    serve = parser
     serve.add_argument("--host", choices=("127.0.0.1", "::1"), default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8420)
+    serve.add_argument("--port", type=int, default=None)
     serve.add_argument("--state-root", type=Path, default=default_state_dir())
     serve.add_argument("--run-root", type=Path)
     serve.add_argument("--credential-file", type=Path)
@@ -76,7 +96,14 @@ def _site(path):
         raise ValueError("Invalid Slurm site fields") from None
 
 
-async def serve(options, *, output=None, services_factory=None, server_factory=None):
+async def serve(
+    options,
+    *,
+    output=None,
+    services_factory=None,
+    server_factory=None,
+    open_browser=None,
+):
     """Pre-bind before storage mutation; lifespan owns actual draining/cleanup.
 
     Only loopback binding is supported. Remote clients use SSH forwarding or an
@@ -88,7 +115,9 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
         or not ipaddress.ip_address(options.host).is_loopback
     ):
         raise ValueError("Daemon must bind a loopback address")
-    if type(options.port) is not int or not 0 <= options.port <= 65535:
+    if options.port is not None and (
+        type(options.port) is not int or not 0 <= options.port <= 65535
+    ):
         raise ValueError("Port must be between 0 and 65535")
     budget = WorkBudget(
         max_workers=options.max_workers,
@@ -109,6 +138,7 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
         if not separator or name in browse_roots or not Path(path).is_absolute():
             raise ValueError("Browse authority must be a unique name and absolute path")
         browse_roots[name] = Path(path)
+    check_not_running(settings.state_root)
     token = (
         read_credential(options.credential_file)
         if options.credential_file
@@ -124,7 +154,16 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
     family = socket.AF_INET6 if ":" in options.host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as listener:
         # Do not use SO_REUSEPORT: one listener must have one dispatch owner.
-        listener.bind((options.host, options.port))
+        ports = DEFAULT_PORTS if options.port is None else (options.port,)
+        for candidate in ports:
+            try:
+                listener.bind((options.host, candidate))
+                break
+            except OSError as error:
+                if error.errno != errno.EADDRINUSE:
+                    raise
+        else:
+            raise PortUnavailable(ports)
         listener.listen(128)
         listener.setblocking(False)
         port = listener.getsockname()[1]
@@ -170,21 +209,45 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
         )
 
         class ReadyServer(uvicorn.Server):
+            async def shutdown(self, sockets=None):
+                # Uvicorn re-raises a captured SIGTERM after serve() returns,
+                # killing the process before the outer finally can run.
+                try:
+                    remove_run_url(settings.state_root)
+                except OSError:
+                    pass
+                await super().shutdown(sockets=sockets)
+
             async def startup(self, sockets=None):
                 await super().startup(sockets=sockets)
                 if self.started:
-                    code = bootstrap.mint()
+                    code = bootstrap.mint_launch()
+                    link = f"http://{authority}/?bootstrap={code}"
                     print(
-                        f"WaveDL daemon: http://{authority}/?bootstrap={code}",
+                        f"WaveDL is running at {link}",
                         file=output,
                         flush=True,
                     )
                     print(
-                        "Bootstrap expires in 120 seconds and can be exchanged once. "
-                        "The master token is never printed.",
+                        "Open that link in your browser if it did not open automatically. "
+                        "Press Ctrl+C to stop.",
                         file=output,
                         flush=True,
                     )
+                    try:
+                        write_run_url(settings.state_root, f"http://{authority}/")
+                    except OSError:
+                        # Only "already running" messages read it; never fatal.
+                        pass
+                    if open_browser is not None:
+
+                        def launch_browser():
+                            try:
+                                open_browser(link)
+                            except Exception:
+                                pass
+
+                        threading.Thread(target=launch_browser, daemon=True).start()
 
         config = uvicorn.Config(
             app,
@@ -193,6 +256,8 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
             lifespan="on",
             proxy_headers=False,
             access_log=False,
+            # Keep the terminal to the two WaveDL lines; warnings still show.
+            log_level="warning",
             ws="none",
             server_header=False,
             limit_concurrency=256,
@@ -205,7 +270,11 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
         async def close_owned_resources():
             try:
                 lifespan = getattr(server, "lifespan", None)
-                if lifespan is not None and not lifespan.shutdown_event.is_set():
+                if (
+                    lifespan is not None
+                    and lifespan.startup_event.is_set()
+                    and not lifespan.shutdown_event.is_set()
+                ):
                     if hasattr(server, "servers"):
                         await server.shutdown(sockets=[listener])
                     else:
@@ -216,6 +285,10 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
         try:
             await server.serve(sockets=[listener])
         finally:
+            try:
+                remove_run_url(settings.state_root)
+            except OSError:
+                pass
             # Uvicorn's mainloop/startup failures do not always run shutdown.
             # Explicit ownership also covers caller cancellation and broken
             # startup output. HostedServices.close is idempotent and draining.
@@ -229,12 +302,36 @@ async def serve(options, *, output=None, services_factory=None, server_factory=N
             raise RuntimeError("Daemon startup failed")
 
 
-def main(argv=None):
+def main(argv=None, *, open_browser=webbrowser.open):
     options = build_parser().parse_args(argv)
     try:
-        asyncio.run(serve(options))
+        asyncio.run(serve(options, open_browser=open_browser))
     except KeyboardInterrupt:
         return 130
+    except AlreadyRunning as error:
+        print(
+            f"WaveDL is already running at {error.url}"
+            if error.url
+            else "WaveDL is already running.",
+            file=sys.stderr,
+        )
+        return 1
+    except PortUnavailable as error:
+        print(
+            "Ports 8420 and 8421 are both in use. Close the program using them "
+            "or choose another port with --port."
+            if options.port is None
+            else f"Port {error.ports[0]} is in use. Choose another port with --port.",
+            file=sys.stderr,
+        )
+        return 1
+    except PermissionError:
+        print(
+            "WaveDL cannot use its state folder. Check that it belongs to you "
+            "and is private, or choose another with --state-root.",
+            file=sys.stderr,
+        )
+        return 1
     except (OSError, ValueError, RuntimeError, ImportError):
         print(
             "Daemon unavailable: check listener, private credentials and storage.",

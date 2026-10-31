@@ -192,6 +192,7 @@ class DaemonClient:
 def build_parser():
     parser = argparse.ArgumentParser(prog="wavedl")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("serve", help="Start WaveDL and open it in your browser")
     run = commands.add_parser("run", help="Plan and submit an explicit daemon request")
     run.add_argument("--daemon", required=True)
     run.add_argument(
@@ -209,6 +210,11 @@ def build_parser():
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "serve":
+        from wavedl_daemon.cli import main as serve_main
+
+        return serve_main(argv[1:])
     options = build_parser().parse_args(argv)
     try:
         token = (
