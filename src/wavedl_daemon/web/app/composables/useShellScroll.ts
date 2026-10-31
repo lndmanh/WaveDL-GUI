@@ -1,5 +1,3 @@
-import { computed, inject, provide, type ComputedRef, type InjectionKey, type Ref } from 'vue';
-
 export const shellScrollKey: InjectionKey<Ref<HTMLElement | null>> = Symbol('shell-scroll');
 
 export type ShellScrollTarget = Window | HTMLElement;
@@ -10,11 +8,15 @@ export function provideShellScroll(container: Ref<HTMLElement | null>): void {
 
 export function useShellScroll(): { scrollTarget: ComputedRef<ShellScrollTarget | null> } {
   const injected = inject(shellScrollKey, undefined);
+
   const scrollTarget = computed<ShellScrollTarget | null>(() => {
     if (injected) return injected.value;
+
     if (import.meta.client) return window;
+
     return null;
   });
+
   return { scrollTarget };
 }
 
@@ -30,6 +32,7 @@ export function getShellScrollMax(target: ShellScrollTarget): number {
   if (isShellScrollElement(target)) {
     return Math.max(0, target.scrollHeight - target.clientHeight);
   }
+
   return Math.max(0, document.documentElement.scrollHeight - target.innerHeight);
 }
 

@@ -1,5 +1,3 @@
-import { computed, toValue, type MaybeRefOrGetter } from 'vue';
-import { useI18n } from 'vue-i18n';
 import { validateJson, type Json, type JsonObject, type PlanView } from '../lib/daemon-api';
 import { trainingDefaults } from '../../shared/schemas/training-request';
 import { inferenceDefaults } from '../../shared/schemas/result-request';
@@ -19,9 +17,12 @@ export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
 
   function display(value: Json | undefined): string {
     if (value === undefined || value === null) return t('project.none');
+
     if (Array.isArray(value))
       return value.length ? value.map((item) => display(item)).join(', ') : t('project.none');
+
     if (typeof value === 'object') return JSON.stringify(value);
+
     return String(value);
   }
 
@@ -31,10 +32,13 @@ export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
 
   const manifest = computed<JsonObject | null>(() => {
     const raw = toValue(source)?.preview.manifest_json;
+
     if (typeof raw !== 'string') return null;
+
     try {
       const value: Json = JSON.parse(raw);
       validateJson(value);
+
       return object(value) ? value : null;
     } catch {
       return null;
@@ -43,6 +47,7 @@ export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
 
   const config = computed(() => {
     const value = manifest.value?.resolved_config;
+
     return object(value) ? value : {};
   });
 
@@ -50,9 +55,12 @@ export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
     const defaults = Object.entries(
       manifest.value?.operation === 'train' ? trainingDefaults : inferenceDefaults,
     );
+
     return Object.entries(config.value).flatMap(([name, value]) => {
       const fallback = defaults.find(([key]) => key === name);
+
       if (!fallback || equal(value, fallback[1])) return [];
+
       return [
         {
           name,
@@ -70,6 +78,7 @@ export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
     const topologyValue = plan?.preview.topology;
     const runtime = object(runtimeValue) ? runtimeValue : {};
     const topology = object(topologyValue) ? topologyValue : {};
+
     return [
       { label: t('project.contextBackend'), value: text(plan?.preview.target) },
       { label: t('project.contextOperation'), value: text(manifest.value?.operation) },

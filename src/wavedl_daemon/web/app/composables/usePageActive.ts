@@ -1,17 +1,3 @@
-import {
-  computed,
-  inject,
-  onActivated,
-  onBeforeUnmount,
-  onDeactivated,
-  onMounted,
-  provide,
-  shallowRef,
-  watch,
-  type ComputedRef,
-  type InjectionKey,
-} from 'vue';
-
 const pageActiveKey: InjectionKey<ComputedRef<boolean>> = Symbol('page-active');
 
 /**
@@ -33,6 +19,7 @@ export function usePageActive(resume?: () => void, pause?: () => void) {
     (active) => {
       if (active === running) return;
       running = active;
+
       if (active) resume?.();
       else pause?.();
     },
@@ -50,5 +37,6 @@ export function usePageActive(resume?: () => void, pause?: () => void) {
   onBeforeUnmount(() => {
     mounted.value = false;
   });
+
   return { isActive };
 }

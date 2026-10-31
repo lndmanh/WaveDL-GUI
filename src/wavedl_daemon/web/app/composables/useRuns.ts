@@ -1,4 +1,3 @@
-import { onScopeDispose, shallowRef } from 'vue';
 import { clientError, type ClientMessage } from '../i18n/client-messages';
 import { DaemonApi, DaemonApiError, type RunView } from '../lib/daemon-api';
 import { CursorStore } from '../lib/event-stream';
@@ -22,18 +21,21 @@ export function useRuns(
   let unsubscribe: (() => void) | null = null;
   let disposed = false;
   let paused = initiallyPaused;
+
   async function refresh(offset = page.value): Promise<void> {
     listAbort?.abort();
     const controller = new AbortController();
     listAbort = controller;
     loading.value = true;
     const detailAtStart = detailRevision;
+
     try {
       const result = await api.listRuns({
         limit: 50,
         offset,
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
       });
+
       if (!controller.signal.aborted && !disposed) {
         const detail = selected.value;
         runs.value =
@@ -51,12 +53,14 @@ export function useRuns(
         message.value =
           error instanceof DaemonApiError ? error : clientError('unableToRefreshRuns');
         staleRunIds.value = new Set(runs.value.map((run) => run.run_id));
+
         if (error instanceof DaemonApiError) reportFailure(error);
       }
     } finally {
       if (listAbort === controller && !disposed) loading.value = false;
     }
   }
+
   function select(runId: string): void {
     unsubscribe?.();
     monitor?.stop();
@@ -82,12 +86,14 @@ export function useRuns(
     unsubscribe = monitor.subscribe((snapshot) => {
       const previous = selected.value;
       selected.value = snapshot;
+
       if (
         snapshot.run &&
         (snapshot.run !== previous?.run || snapshot.freshness !== previous.freshness)
       ) {
         detailRevision++;
         const stale = new Set(staleRunIds.value);
+
         if (snapshot.freshness === 'fresh') {
           runs.value = runs.value.map((run) =>
             run.run_id === snapshot.run?.run_id ? snapshot.run : run,
@@ -96,17 +102,22 @@ export function useRuns(
         } else {
           stale.add(snapshot.run.run_id);
         }
+
         staleRunIds.value = stale;
       }
     });
+
     if (!paused) void monitor.start();
   }
+
   function replay(): void {
     if (monitor) select(monitor.runId);
   }
+
   async function cancel(): Promise<void> {
     await monitor?.cancel();
   }
+
   function close(): void {
     unsubscribe?.();
     unsubscribe = null;
@@ -114,6 +125,7 @@ export function useRuns(
     monitor = null;
     selected.value = null;
   }
+
   function pause(): void {
     paused = true;
     listAbort?.abort();
@@ -121,21 +133,27 @@ export function useRuns(
     monitor?.pause();
     loading.value = false;
   }
+
   function resume(): void {
     paused = false;
+
     if (lastRefreshed.value === null) void refresh();
     const current = monitor;
+
     if (current) {
       void current.resume(() => !paused && !disposed && monitor === current);
       void current.start();
     }
   }
+
   onScopeDispose(() => {
     disposed = true;
     listAbort?.abort();
     close();
   });
+
   if (!paused) void refresh();
+
   return {
     runs,
     selected,

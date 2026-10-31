@@ -1,4 +1,3 @@
-import { useState } from '#app';
 import type { ConnectionStatus } from '../lib/connection-session';
 
 export interface WorkstationAuthState {

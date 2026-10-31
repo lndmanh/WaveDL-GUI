@@ -1,4 +1,3 @@
-import { onMounted, onScopeDispose, shallowReadonly } from 'vue';
 import type { ConnectionSession } from '../lib/connection-session';
 import { AutoPlotController } from '../lib/autoplot-controller';
 import type { PlanView, RunView } from '../lib/daemon-api';
@@ -10,8 +9,10 @@ export function useAutomaticPlots(session: ConnectionSession) {
   onMounted(() => window.addEventListener('pagehide', stop));
   onScopeDispose(() => {
     controller.dispose();
+
     if (typeof window !== 'undefined') window.removeEventListener('pagehide', stop);
   });
+
   return {
     state: shallowReadonly(controller.state),
     capture: (run: RunView, plan: PlanView) => controller.capture(run, plan),

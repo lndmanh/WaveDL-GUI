@@ -1,4 +1,3 @@
-import { onBeforeUnmount, shallowRef, toRaw, toValue, watch, type MaybeRefOrGetter } from 'vue';
 import type { ConnectionSession } from '../lib/connection-session';
 import { CatalogApi } from '../lib/catalog-api';
 import type { HostProfile } from '../../shared/schemas/host-profile';
@@ -23,8 +22,10 @@ export function useHostProfile(source: MaybeRefOrGetter<ConnectionSession>) {
     const current = revision;
     request = new AbortController();
     busy.value = true;
+
     try {
       const value = await new CatalogApi(toRaw(toValue(source))).host(request.signal);
+
       if (current === revision) profile.value = value;
     } catch {
       if (current === revision) profile.value = null;
@@ -50,6 +51,7 @@ export function useHostProfile(source: MaybeRefOrGetter<ConnectionSession>) {
         connected = state.status === 'connected';
         cancel();
         profile.value = null;
+
         if (state.status === 'connected') void load();
       });
     },

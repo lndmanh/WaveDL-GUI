@@ -1,4 +1,3 @@
-import { onBeforeUnmount, shallowRef, toRaw, toValue, watch, type MaybeRefOrGetter } from 'vue';
 import type { ConnectionSession } from '../lib/connection-session';
 import { CatalogApi, type ModelDescription, type ModelSelection } from '../lib/catalog-api';
 
@@ -27,8 +26,10 @@ export function useModelCatalogue(source: MaybeRefOrGetter<ConnectionSession>) {
     busy.value = true;
     message.value = '';
     models.value = [];
+
     try {
       const value = await new CatalogApi(toRaw(toValue(source))).models(request.signal);
+
       if (current === revision) models.value = value;
     } catch {
       if (current === revision) message.value = 'catalog.modelsUnavailable';
@@ -47,6 +48,7 @@ export function useModelCatalogue(source: MaybeRefOrGetter<ConnectionSession>) {
     } catch {
       models.value = [];
       message.value = 'catalog.connectionChanged';
+
       return null;
     }
   }
@@ -65,6 +67,7 @@ export function useModelCatalogue(source: MaybeRefOrGetter<ConnectionSession>) {
         connected = state.status === 'connected';
         cancel();
         models.value = [];
+
         if (state.status === 'connected') {
           message.value = '';
           void load();

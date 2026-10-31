@@ -1,5 +1,3 @@
-import { watch, type Ref } from 'vue';
-import { useI18n } from 'vue-i18n';
 import { configureValidationLocale } from '../i18n/client-messages';
 import type { WorkstationLocale } from '../i18n/core';
 
