@@ -19,6 +19,7 @@ import uvicorn
 
 from wavedl.client import ClientError, DaemonClient
 from wavedl.core.credentials import read_credential
+from wavedl_daemon import cli
 from wavedl_daemon.cli import _site, build_parser, serve
 from wavedl_daemon.runs.runtime_service import HostedServices
 from wavedl_daemon.storage.ownership import acquire_dispatch_lock
@@ -31,8 +32,8 @@ def daemon_entrypoint(tmp_path):
     """Exercise the declared callable in a fresh dependency-free interpreter."""
     root = Path(__file__).resolve().parents[2]
     project = tomllib.loads((root / "pyproject.toml").read_text())
-    entrypoint = project["project"]["scripts"]["wavedl-daemon"]
-    assert entrypoint == "wavedl_daemon.cli:main"
+    entrypoint = project["project"]["scripts"]["wavedl"]
+    assert entrypoint == "wavedl.client:main"
     environment = dict(os.environ)
     for key in ("PYTHONPATH", "PYTHONHOME", "WAVEDL_DAEMON_TOKEN"):
         environment.pop(key, None)
@@ -43,7 +44,7 @@ def daemon_entrypoint(tmp_path):
             "import importlib, importlib.abc, runpy, sys; "
             "sys.path.insert(0, sys.argv.pop(1)); "
             "target = sys.argv.pop(1); "
-            "sys.argv[0] = 'wavedl-daemon'\n"
+            "sys.argv[0] = 'wavedl'\n"
             "blocked = {'torch', 'numpy', 'PySide6', 'qfluentwidgets', "
             "'uvicorn', 'starlette'}\n"
             "class NoOptionalDependencies(importlib.abc.MetaPathFinder):\n"
@@ -67,8 +68,8 @@ def daemon_entrypoint(tmp_path):
                 "-c",
                 script,
                 str(root / "src"),
-                entrypoint.split(":")[0] if module else entrypoint,
-                *args,
+                "wavedl_daemon.cli" if module else entrypoint,
+                *(args if module else ("serve", *args)),
             ],
             cwd=tmp_path,
             env=environment,
@@ -85,10 +86,15 @@ def daemon_entrypoint(tmp_path):
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
-        (("--help",), ("usage: wavedl-daemon", "serve")),
         (
-            ("serve", "--help"),
-            ("--credential-file", "--state-root", "--run-root", "--port"),
+            ("--help",),
+            (
+                "usage: wavedl serve",
+                "--credential-file",
+                "--state-root",
+                "--run-root",
+                "--port",
+            ),
         ),
     ],
 )
@@ -106,7 +112,7 @@ def test_daemon_inspect_is_not_a_supported_command(daemon_entrypoint, tmp_path):
     """Do not advertise an inspect command that the package does not implement."""
     result = daemon_entrypoint("inspect")
     assert result.returncode == 2
-    assert "invalid choice: 'inspect'" in result.stderr
+    assert "unrecognized arguments: inspect" in result.stderr
     assert "Traceback" not in result.stderr
     assert result.stdout == ""
     assert list(tmp_path.iterdir()) == []
@@ -121,7 +127,6 @@ def test_daemon_credential_failure_exits_redacted_before_startup(
         credential.write_bytes(content)
         credential.chmod(0o600)
     result = daemon_entrypoint(
-        "serve",
         "--port",
         "0",
         "--state-root",
@@ -141,8 +146,67 @@ def test_daemon_credential_failure_exits_redacted_before_startup(
 
 def options(tmp_path, *extra):
     return build_parser().parse_args(
-        ["serve", "--state-root", str(tmp_path / "state"), "--port", "0", *extra]
+        ["--state-root", str(tmp_path / "state"), "--port", "0", *extra]
     )
+
+
+def test_wavedl_help_lists_serve():
+    result = subprocess.run(
+        [sys.executable, "-m", "wavedl.client", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "serve" in result.stdout
+    assert "Start WaveDL and open it in your browser" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("kind", "message", "code"),
+    [
+        ("running-url", "WaveDL is already running at http://127.0.0.1:8420/", 1),
+        ("running", "WaveDL is already running.", 1),
+        (
+            "ports",
+            "Ports 8420 and 8421 are both in use. Close the program using them or choose another port with --port.",
+            1,
+        ),
+        ("port", "Port 9000 is in use. Choose another port with --port.", 1),
+        (
+            "permission",
+            "WaveDL cannot use its state folder. Check that it belongs to you and is private, or choose another with --state-root.",
+            1,
+        ),
+        (
+            "other",
+            "Daemon unavailable: check listener, private credentials and storage.",
+            1,
+        ),
+        ("interrupt", "", 130),
+    ],
+)
+def test_main_messages(monkeypatch, capsys, kind, message, code):
+    async def fail(options, **kwargs):
+        errors = {
+            "running-url": cli.AlreadyRunning("http://127.0.0.1:8420/"),
+            "running": cli.AlreadyRunning(None),
+            "ports": cli.PortUnavailable((8420, 8421)),
+            "port": cli.PortUnavailable((9000,)),
+            "permission": PermissionError("private"),
+            "other": ValueError("private"),
+            "interrupt": KeyboardInterrupt(),
+        }
+        raise errors[kind]
+
+    monkeypatch.setattr(cli, "serve", fail)
+    assert (
+        cli.main(["--port", "9000"] if kind == "port" else [], open_browser=None)
+        == code
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (message + "\n" if message else "")
 
 
 def test_busy_port_refuses_before_storage_or_factory(tmp_path):
@@ -335,6 +399,12 @@ def test_default_serve_prints_only_bootstrap_after_ready(tmp_path, monkeypatch):
         r"http://127\.0\.0\.1:\d+/\?bootstrap=[A-Za-z0-9_-]{43}", output.getvalue()
     )
     assert "?token=" not in output.getvalue()
+    link = output.getvalue().splitlines()[0].removeprefix("WaveDL is running at ")
+    assert output.getvalue().splitlines() == [
+        f"WaveDL is running at {link}",
+        "Open that link in your browser if it did not open automatically. Press Ctrl+C to stop.",
+    ]
+    assert not (tmp_path / "state" / "serve.json").exists()
 
 
 @pytest.mark.parametrize("failure", ["exception", "cancel"])
@@ -359,8 +429,158 @@ def test_server_failure_after_startup_drains_owned_resources(tmp_path, failure):
             )
         )
     assert not retained["services"].host._thread.is_alive()
+    assert not (tmp_path / "state" / "serve.json").exists()
     with acquire_dispatch_lock(tmp_path / "state" / "dispatch.lock"):
         pass
+
+
+def test_second_serve_reports_already_running(tmp_path):
+    settings = options(tmp_path)
+    with (
+        acquire_dispatch_lock(settings.state_root / "dispatch.lock"),
+        pytest.raises(cli.AlreadyRunning),
+    ):
+        asyncio.run(
+            serve(
+                settings,
+                services_factory=lambda *a, **kw: pytest.fail("factory called"),
+            )
+        )
+
+
+@pytest.mark.parametrize("failure", ["exception", "cancel", "interrupt-before-ready"])
+def test_run_file_removed_after_shutdown(tmp_path, monkeypatch, failure):
+    from wavedl_daemon.serve_state import read_run_url
+
+    async def broken_loop(server):
+        assert read_run_url(tmp_path / "state") is not None
+        if failure == "cancel":
+            raise asyncio.CancelledError
+        raise OSError("Broken listener")
+
+    async def interrupted_startup(server, sockets=None):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(uvicorn.Server, "main_loop", broken_loop)
+    if failure == "interrupt-before-ready":
+        monkeypatch.setattr(uvicorn.Server, "startup", interrupted_startup)
+    error = {
+        "exception": OSError,
+        "cancel": asyncio.CancelledError,
+        "interrupt-before-ready": KeyboardInterrupt,
+    }[failure]
+    with pytest.raises(error):
+        asyncio.run(serve(options(tmp_path), output=io.StringIO()))
+    assert not (tmp_path / "state" / "serve.json").exists()
+    with acquire_dispatch_lock(tmp_path / "state" / "dispatch.lock"):
+        pass
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX termination signal")
+def test_sigterm_removes_run_file(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    state = tmp_path / "state"
+    environment = dict(os.environ, BROWSER="true", PYTHONPATH=str(root / "src"))
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "wavedl_daemon.cli",
+            "--state-root",
+            str(state),
+            "--port",
+            "0",
+        ],
+        cwd=tmp_path,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    try:
+        assert "WaveDL is running at" in process.stdout.readline()
+        deadline = time.monotonic() + 10
+        while not (state / "serve.json").exists():
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+        process.terminate()
+        process.wait(timeout=20)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        process.stdout.close()
+    assert not (state / "serve.json").exists()
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_busy_ports_raise_port_unavailable(tmp_path, monkeypatch, explicit):
+    with socket.socket() as first, socket.socket() as second:
+        for listener in (first, second):
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+        ports = (first.getsockname()[1], second.getsockname()[1])
+        monkeypatch.setattr(cli, "DEFAULT_PORTS", ports)
+        settings = options(tmp_path)
+        settings.port = ports[0] if explicit else None
+        with pytest.raises(cli.PortUnavailable) as error:
+            asyncio.run(serve(settings))
+        assert error.value.ports == (ports[:1] if explicit else ports)
+        assert not settings.state_root.exists()
+
+
+@pytest.mark.parametrize("browser", ["record", "raise", "hang"])
+def test_launch_link_reusable_browser_and_port_fallback(tmp_path, monkeypatch, browser):
+    import threading
+    from urllib.parse import parse_qs, urlsplit
+
+    from wavedl_daemon.serve_state import read_run_url
+
+    output = io.StringIO()
+    called = threading.Event()
+    release = threading.Event()
+    opened = []
+    original = uvicorn.Server.main_loop
+
+    def opener(url):
+        opened.append(url)
+        called.set()
+        if browser == "raise":
+            raise RuntimeError("private browser failure")
+        if browser == "hang":
+            release.wait(10)
+
+    async def exercise(server):
+        link = output.getvalue().splitlines()[0].removeprefix("WaveDL is running at ")
+        assert read_run_url(tmp_path / "state") == link.split("?")[0]
+        code = parse_qs(urlsplit(link).query)["bootstrap"][0]
+        async with httpx.AsyncClient() as client:
+            for _ in range(2):
+                response = await client.post(
+                    link.split("?")[0] + "api/bootstrap", json={"code": code}
+                )
+                assert response.status_code == 200
+        assert called.wait(1)
+        assert opened == [link]
+        server.should_exit = True
+        await original(server)
+
+    monkeypatch.setattr(uvicorn.Server, "main_loop", exercise)
+    with socket.socket() as occupied, socket.socket() as free:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+        free.bind(("127.0.0.1", 0))
+        ports = (occupied.getsockname()[1], free.getsockname()[1])
+        free.close()
+        monkeypatch.setattr(cli, "DEFAULT_PORTS", ports)
+        settings = options(tmp_path)
+        settings.port = None
+        try:
+            asyncio.run(serve(settings, output=output, open_browser=opener))
+        finally:
+            release.set()
+    assert f":{ports[1]}/" in output.getvalue()
+    assert not (tmp_path / "state" / "serve.json").exists()
 
 
 @pytest.mark.parametrize(

@@ -398,7 +398,7 @@ def build_installed(tmp_path_factory, *, wheelhouse=None):
                     "--only-binary=:all:",
                     "--find-links",
                     str(wheelhouse),
-                    f"{wheel}[daemon]",
+                    str(wheel),
                 ]
             ),
         ],
@@ -571,7 +571,7 @@ def test_installed_entrypoints_and_lightweight_modules(installed):
     outside, venv, binary, python, environment = installed
     for name, args in (
         ("wavedl", ["run", "--help"]),
-        ("wavedl-daemon", ["serve", "--help"]),
+        ("wavedl", ["serve", "--help"]),
         ("wavedl-train", ["--help"]),
     ):
         script = binary / (name + (".exe" if os.name == "nt" else ""))
@@ -630,7 +630,7 @@ def test_isolated_resolved_wheelhouse_console_scripts_and_assets(
     checked([str(python), "-m", "pip", "check"], cwd=outside, environment=environment)
     for name, args in (
         ("wavedl", ["run", "--help"]),
-        ("wavedl-daemon", ["serve", "--help"]),
+        ("wavedl", ["serve", "--help"]),
         ("wavedl-train", ["--help"]),
     ):
         script = binary / (name + (".exe" if os.name == "nt" else ""))
@@ -681,7 +681,7 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed, record_pr
 
     async def exercise():
         argv = [
-            str(binary / ("wavedl-daemon.exe" if os.name == "nt" else "wavedl-daemon")),
+            str(binary / ("wavedl.exe" if os.name == "nt" else "wavedl")),
             "serve",
             "--port",
             "0",
@@ -711,7 +711,8 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed, record_pr
                 else await asyncio.wait_for(process.stdout.readline(), 15)
             ).decode()
             match = re.search(
-                r"(http://127\.0\.0\.1:\d+)/\?bootstrap=([A-Za-z0-9_-]{43})", line
+                r"WaveDL is running at (http://127\.0\.0\.1:\d+)/\?bootstrap=([A-Za-z0-9_-]{43})",
+                line,
             )
             assert match, line
             base, code = match.groups()
@@ -741,7 +742,7 @@ def test_installed_serve_bootstrap_plan_client_and_shutdown(installed, record_pr
                 assert token not in line
                 assert (
                     await client.post("/api/bootstrap", json={"code": code})
-                ).status_code == 401
+                ).status_code == 200
                 headers = {"Authorization": f"Bearer {token}"}
                 authenticated_health = await client.get("/api/health", headers=headers)
                 assert authenticated_health.status_code == 200, (

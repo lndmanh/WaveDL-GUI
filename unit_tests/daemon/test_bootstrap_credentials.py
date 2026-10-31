@@ -22,6 +22,58 @@ from wavedl_daemon.http.bootstrap import (
 TOKEN = "daemon-secret+/=private"
 
 
+def test_launch_code_is_reusable_and_never_expires():
+    now = [0.0]
+    pool = BootstrapCredentials(TOKEN, clock=lambda: now[0])
+    code = pool.mint_launch()
+    assert len(code) == 43
+    assert code not in repr(pool.__dict__)
+    first = pool.exchange(code)
+    now[0] = 10_000.0
+    second = pool.exchange(code)
+    assert first.token != second.token
+
+
+def test_launch_code_minted_once():
+    pool = BootstrapCredentials(TOKEN)
+    pool.mint_launch()
+    with pytest.raises(BootstrapCapacityError):
+        pool.mint_launch()
+
+
+def test_launch_code_survives_session_eviction():
+    pool = BootstrapCredentials(TOKEN, max_sessions=16)
+    code = pool.mint_launch()
+    grants = [pool.exchange(code) for _ in range(17)]
+    assert len({grant.token for grant in grants}) == 17
+    assert not pool.authenticate(grants[0].token)
+
+
+def test_one_time_code_still_single_use_beside_launch_code():
+    pool = BootstrapCredentials(TOKEN)
+    pool.mint_launch()
+    once = pool.mint()
+    pool.exchange(once)
+    with pytest.raises(BootstrapExchangeError):
+        pool.exchange(once)
+
+
+@pytest.mark.parametrize("operation", ["mint", "mint_session", "exchange"])
+def test_launch_digest_collision_fails_closed(monkeypatch, operation):
+    pool = BootstrapCredentials(TOKEN)
+    once = pool.mint()
+    launch = pool.mint_launch()
+    monkeypatch.setattr(
+        "wavedl_daemon.http.bootstrap.secrets.token_urlsafe", lambda size: launch
+    )
+    with pytest.raises(BootstrapCapacityError):
+        if operation == "exchange":
+            pool.exchange(once)
+        else:
+            getattr(pool, operation)()
+    assert pool._launch_digest == hashlib.sha256(launch.encode()).digest()
+
+
 def test_code_is_random_and_only_digests_are_stored():
     credentials = BootstrapCredentials(TOKEN)
     first, second = credentials.mint(), credentials.mint()

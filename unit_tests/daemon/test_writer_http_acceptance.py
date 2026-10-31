@@ -65,7 +65,7 @@ def test_actual_cpu_writer_training_public_http(tmp_path, monkeypatch):
         raise AssertionError("Writer mode must not allocate an attempt in the daemon")
 
     monkeypatch.setattr(
-        "wavedl_daemon.runs.controller.allocate_attempt", daemon_must_not_allocate
+        "wavedl_daemon.runs.control.dispatch.allocate_attempt", daemon_must_not_allocate
     )
     generator = np.random.default_rng(19)
     data = tmp_path / "data.npz"

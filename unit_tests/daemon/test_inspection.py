@@ -11,9 +11,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+from unit_tests.daemon.conftest import route_app
 from wavedl.core.dataset_headers import InspectionLimits, InspectionRefused
 from wavedl_daemon.execution.budget import WorkBudget
 from wavedl_daemon.execution.commands import run_command
@@ -141,7 +141,7 @@ def test_http_strict_path_only_and_generic_errors():
         async def inspect(self, root, path):
             raise InspectionRefused("private secret path")
 
-    app = Starlette(routes=inspection_routes(Inspector()))
+    app = route_app(routes=inspection_routes(Inspector()))
     with TestClient(app) as client:
         response = client.post(
             "/api/datasets/inspect",
@@ -151,7 +151,8 @@ def test_http_strict_path_only_and_generic_errors():
         response = client.post(
             "/api/datasets/inspect", json={"root": "data", "path": "data.npy"}
         )
-        assert response.status_code == 422 and "private" not in response.text
+        assert response.status_code == 400
+        assert response.json() == {"error": "Bad request"}
 
 
 def test_http_success_is_noncacheable():
@@ -159,7 +160,7 @@ def test_http_success_is_noncacheable():
         async def inspect(self, root, path):
             return {"schema_version": 1, "format": "npy", "variables": []}
 
-    with TestClient(Starlette(routes=inspection_routes(Inspector()))) as client:
+    with TestClient(route_app(routes=inspection_routes(Inspector()))) as client:
         response = client.post(
             "/api/datasets/inspect", json={"root": "data", "path": "data.npy"}
         )
@@ -200,7 +201,7 @@ def test_http_disconnect_cancels_and_drains_inspection(
                 stopped.set()
 
     async def scenario():
-        app = Starlette(routes=inspection_routes(Inspector()))
+        app = route_app(routes=inspection_routes(Inspector()))
         messages = asyncio.Queue()
         await messages.put(
             {

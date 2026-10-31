@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from starlette.applications import Starlette
 
+from unit_tests.daemon.conftest import route_app
 from wavedl.core.events import HelloPayload
 from wavedl.core.manifest import RuntimeSelection
 from wavedl.journal import RunJournal, bootstrap_run
@@ -240,7 +240,7 @@ def test_adoption_http_shape_idempotency_and_no_filesystem_disclosure(adoption_s
     service, bootstrap = adoption_service
 
     async def check():
-        app = Starlette(routes=adoption_routes(service))
+        app = route_app(routes=adoption_routes(service))
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:

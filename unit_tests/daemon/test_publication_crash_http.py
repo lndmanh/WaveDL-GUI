@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from starlette.applications import Starlette
+from fastapi import FastAPI
 
 from wavedl.core.generations import publish_generation, published_generations
 from wavedl.core.layout import OperationKind, RunLayout, allocate_attempt
@@ -113,7 +113,7 @@ def test_abrupt_publication_crash_preserves_http_inventory_and_retry(tmp_path, c
         store = ArtifactStore(lambda run_id: layout)
         with BoundedThreadPool(WorkBudget()) as pool:
             app = SecurityBoundary(
-                Starlette(routes=artifact_routes(store, pool)),
+                FastAPI(routes=artifact_routes(store, pool)),
                 token=b"publication-test-token",
                 allowed_hosts=("localhost",),
             )

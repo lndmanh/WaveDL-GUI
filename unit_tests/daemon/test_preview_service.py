@@ -13,9 +13,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 from scipy.io import savemat
-from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+from unit_tests.daemon.conftest import route_app
 from wavedl.core.dataset_preview import PreviewLimits
 from wavedl_daemon.execution.budget import BudgetExhausted, WorkBudget
 from wavedl_daemon.execution.pool import BoundedThreadPool, WorkCancelled
@@ -199,9 +199,32 @@ def test_http_no_store_and_refusal_codes():
                 raise PreviewBadRequest("secret")
             if body.get("view") == "refused":
                 raise PreviewRefused("secret")
-            return {"schema_version": 1}
+            return {
+                "schema_version": 1,
+                "identity": {
+                    "st_dev": 1,
+                    "st_ino": 1,
+                    "st_size": 1,
+                    "st_mtime_ns": 1,
+                },
+                "format": "npz",
+                "input_key": "inputs",
+                "output_key": "outputs",
+                "input_shape": [1, 1],
+                "output_shape": [1, 1],
+                "sample_indices": [0],
+                "input_histograms": [],
+                "output_histograms": [],
+                "correlation": {"feature_indices": [], "matrix": None},
+                "input_statistics": {"feature_indices": [], "means": [], "stds": []},
+                "scatter": {"feature_indices": [], "output_index": 0, "x": [], "y": []},
+                "samples": [],
+                "limits": {},
+                "selection": {"root": body["root"], "path": body["path"]},
+                "view": body["view"],
+            }
 
-    with TestClient(Starlette(routes=preview_routes(Previewer()))) as client:
+    with TestClient(route_app(routes=preview_routes(Previewer()))) as client:
         result = client.post("/api/datasets/preview", json=request())
         assert result.status_code == 200
         assert result.headers["cache-control"] == "no-store"
@@ -209,7 +232,8 @@ def test_http_no_store_and_refusal_codes():
             client.post("/api/datasets/preview", json=request("bad")).status_code == 400
         )
         refused = client.post("/api/datasets/preview", json=request("refused"))
-        assert refused.status_code == 422
+        assert refused.status_code == 400
+        assert refused.json() == {"error": "Bad request"}
         assert "secret" not in refused.text
 
 
@@ -508,7 +532,7 @@ def test_hosted_authenticated_preview_real_child_and_identity_boundary(tmp_path)
             client.post(
                 "/api/datasets/preview", json=request(path="bad.npz")
             ).status_code
-            == 422
+            == 400
         )
         np.savez(
             tmp_path / "object.npz",
@@ -519,7 +543,7 @@ def test_hosted_authenticated_preview_real_child_and_identity_boundary(tmp_path)
             client.post(
                 "/api/datasets/preview", json=request(path="object.npz")
             ).status_code
-            == 422
+            == 400
         )
         np.savez(
             tmp_path / "wide.npz", inputs=np.ones((1, 65537)), outputs=np.zeros((1, 1))
@@ -575,7 +599,7 @@ def test_http_disconnect_cancels_and_drains_preview():
                 stopped.set()
 
     async def scenario():
-        app = Starlette(routes=preview_routes(Previewer()))
+        app = route_app(routes=preview_routes(Previewer()))
         messages = asyncio.Queue()
         await messages.put(
             {

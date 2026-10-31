@@ -42,7 +42,7 @@ def bound_runtime(native_runtime):
 def _advance(runtime, generation, state):
     controller, plan, _, backend, executions, _, _ = runtime
     backend.native(generation, state)
-    controller._record_observation(plan.plan_id, backend.observe(backend.handle))
+    controller.observations.record(plan.plan_id, backend.observe(backend.handle))
     return executions.get(plan.plan_id)
 
 
@@ -81,8 +81,8 @@ def test_positive_runtime_collection_is_scoped_across_native_head_advance(
     until(
         controller,
         lambda: (
-            plan.plan_id in controller._inflight
-            and controller._inflight[plan.plan_id][0] == "collect"
+            plan.plan_id in controller.dispatch._inflight
+            and controller.dispatch._inflight[plan.plan_id][0] == "collect"
         ),
     )
     assert started.wait(5)
@@ -102,8 +102,8 @@ def test_positive_runtime_collection_is_scoped_across_native_head_advance(
             expected_revision=advanced.revision,
         )
     release.set()
-    _wait(controller._inflight[plan.plan_id][1])
-    controller._harvest()
+    _wait(controller.dispatch._inflight[plan.plan_id][1])
+    controller.dispatch.harvest()
 
     saved = collections.get(plan.plan_id, runtime_handle.attempt)
     if activate_replacement:
@@ -137,21 +137,21 @@ def test_late_native_cancel_callback_is_fenced_after_new_head(bound_runtime):
     until(
         controller,
         lambda: (
-            plan.plan_id in controller._inflight
-            and controller._inflight[plan.plan_id][0] == "cancel"
+            plan.plan_id in controller.dispatch._inflight
+            and controller.dispatch._inflight[plan.plan_id][0] == "cancel"
         ),
     )
     assert started.wait(5)
     current = _advance(bound_runtime, 2, "RUNNING")
     assert current.native_identity == identity(backend.handle, 2)
     release.set()
-    _wait(controller._inflight[plan.plan_id][1])
-    controller._harvest()
+    _wait(controller.dispatch._inflight[plan.plan_id][1])
+    controller.dispatch.harvest()
 
     current = executions.get(plan.plan_id)
     assert current.native_identity == identity(backend.handle, 2)
     assert not current.cancel_delivered
-    assert plan.plan_id not in controller._inflight
+    assert plan.plan_id not in controller.dispatch._inflight
 
 
 @pytest.mark.parametrize("stage", [0, 7])
@@ -174,18 +174,18 @@ def test_late_bound_native_collection_cannot_commit_after_new_head(
         return pending
 
     backend.collect_submission = collect_submission
-    controller._schedule(plan, source)
-    assert controller._inflight[plan.plan_id][0] == "collect_generation"
+    controller.dispatch.schedule(plan, source)
+    assert controller.dispatch._inflight[plan.plan_id][0] == "collect_generation"
     assert started.wait(5)
     advanced = _advance(bound_runtime, 2, "PENDING")
     release.set()
-    _wait(controller._inflight[plan.plan_id][1])
-    controller._harvest()
+    _wait(controller.dispatch._inflight[plan.plan_id][1])
+    controller.dispatch.harvest()
 
     assert executions.get(plan.plan_id) == advanced
     assert collections.get_submission_generation(plan.plan_id, pending.identity) is None
     assert collections.history(plan.plan_id) == []
-    assert plan.plan_id not in controller._inflight_sources
+    assert plan.plan_id not in controller.dispatch._inflight_sources
 
 
 def test_pending_fleet_error_does_not_mutate_retained_runtime_evidence(bound_runtime):
@@ -200,9 +200,9 @@ def test_pending_fleet_error_does_not_mutate_retained_runtime_evidence(bound_run
     with RuntimeProvenanceStore(
         executions.path, dispatch_lock=executions.dispatch_lock
     ) as provenance:
-        controller.provenance_store = provenance
+        controller.context.provenance_store = provenance
         controller.accept_runtime_events(plan.plan_id, events)
-        tracker = controller._runtime[plan.plan_id]
+        tracker = controller.handshake._runtime[plan.plan_id]
         negotiation = tracker.result
         protected = {
             table: [
@@ -237,7 +237,7 @@ def test_pending_fleet_error_does_not_mutate_retained_runtime_evidence(bound_run
         assert retained.observation == current.observation
         assert retained.latest_observation == current.latest_observation
         assert retained.latest_native_observation.native_identity is None
-        assert controller._runtime[plan.plan_id] is tracker
+        assert controller.handshake._runtime[plan.plan_id] is tracker
         assert tracker.result == negotiation
         assert layout.journal(current.attempt).read_bytes() == contents
         for table, before in protected.items():
@@ -245,4 +245,4 @@ def test_pending_fleet_error_does_not_mutate_retained_runtime_evidence(bound_run
                 tuple(row)
                 for row in executions._connection.execute(f"SELECT * FROM {table}")
             ] == before
-        controller.provenance_store = None
+        controller.context.provenance_store = None

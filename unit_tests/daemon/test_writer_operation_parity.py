@@ -28,7 +28,9 @@ def writer_cpu_http(tmp_path, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("The daemon must not allocate writer attempts")
 
-    monkeypatch.setattr("wavedl_daemon.runs.controller.allocate_attempt", forbidden)
+    monkeypatch.setattr(
+        "wavedl_daemon.runs.control.dispatch.allocate_attempt", forbidden
+    )
     generator = np.random.default_rng(31)
     data = tmp_path / "data.npz"
     np.savez(

@@ -10,10 +10,10 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from starlette.applications import Starlette
 from starlette.requests import ClientDisconnect, Request
 
 from unit_tests.daemon import test_adoption_service as adoption_tests
+from unit_tests.daemon.conftest import route_app
 from wavedl.core.events import HelloPayload
 from wavedl.core.journal_reader import JournalReader
 from wavedl.core.protocol import Envelope, ProtocolError, decode, encode
@@ -390,7 +390,7 @@ def test_http_rejects_invalid_or_partial_cursors(query):
 
     async def scenario():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             response = await client.get(f"/api/runs/{RUN_ID}/events?{query}")
@@ -413,7 +413,7 @@ def test_http_rejects_noncanonical_run_identity_without_resolving():
 
     async def scenario():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             response = await client.get(
@@ -432,7 +432,7 @@ def test_http_push_is_bounded_and_requires_explicit_attempt():
 
     async def scenario():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             path = f"/api/runs/{RUN_ID}/events"
@@ -620,7 +620,7 @@ def test_async_owner_adapter_replay_and_http_push():
             resolve_plan=resolve,
         )
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             import json
@@ -798,7 +798,7 @@ def test_event_http_resolver_storage_failures_are_redacted_503(method, failure):
 
     async def scenario():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             response = await client.request(
@@ -824,7 +824,7 @@ def test_event_http_full_broker_rejects_before_stream_headers():
             resolve_plan=lambda run: "plan",
         )
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             response = await client.get(f"/api/runs/{RUN_ID}/events")
@@ -853,7 +853,7 @@ def test_event_http_first_read_failure_releases_admitted_subscriber():
             resolve_plan=lambda run: "plan",
         )
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             response = await client.get(f"/api/runs/{RUN_ID}/events")
@@ -881,7 +881,7 @@ def test_event_http_cancelled_initial_query_releases_admitted_subscriber():
             resolve_plan=lambda run: "plan",
         )
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=Starlette(routes=routes)),
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
             task = asyncio.create_task(client.get(f"/api/runs/{RUN_ID}/events"))
@@ -935,7 +935,7 @@ def test_stream_asgi_failure_before_iteration_releases_preadmitted_subscriber():
             "path_params": {"run_id": RUN_ID},
             "asgi": {"version": "3.0", "spec_version": "2.4"},
         }
-        response = await routes[1].endpoint(Request(scope))
+        response = await routes[1].endpoint(RUN_ID, Request(scope))
         assert broker._subscribers
 
         async def receive():

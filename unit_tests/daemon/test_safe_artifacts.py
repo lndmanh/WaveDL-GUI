@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from starlette.applications import Starlette
+from fastapi import FastAPI
 
 from wavedl.core.generations import publish_generation
 from wavedl.core.layout import OperationKind, RunLayout, allocate_attempt
@@ -167,7 +167,7 @@ def test_download_is_attachment_and_io_runs_off_loop(artifact_run, monkeypatch):
 
     async def check():
         with BoundedThreadPool(WorkBudget()) as pool:
-            app = Starlette(routes=artifact_routes(store, pool))
+            app = FastAPI(routes=artifact_routes(store, pool))
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app), base_url="http://test"
             ) as client:
@@ -239,7 +239,7 @@ def test_sql_metadata_resolution_stays_on_owner_and_once_per_request(artifact_ru
 
     async def check():
         with BoundedThreadPool(WorkBudget()) as pool:
-            app = Starlette(
+            app = FastAPI(
                 routes=artifact_routes(
                     ArtifactStore(forbidden_lookup), pool, resolve_layout=resolve_layout
                 )
@@ -279,7 +279,7 @@ def test_artifact_http_failure_policy_is_redacted(artifact_run, failure, status)
 
     async def check():
         with BoundedThreadPool(WorkBudget()) as pool:
-            app = Starlette(
+            app = FastAPI(
                 routes=artifact_routes(store, pool, resolve_layout=resolve_layout)
             )
             async with httpx.AsyncClient(
@@ -297,7 +297,7 @@ def test_encoded_spaces_unicode_and_nested_files_are_downloadable(artifact_run):
 
     async def check():
         with BoundedThreadPool(WorkBudget()) as pool:
-            app = Starlette(routes=artifact_routes(store, pool))
+            app = FastAPI(routes=artifact_routes(store, pool))
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app), base_url="http://test"
             ) as client:
@@ -329,7 +329,7 @@ def test_literal_and_encoded_legal_path_punctuation_download_same_inventory_memb
 
     async def check():
         with BoundedThreadPool(WorkBudget()) as pool:
-            app = Starlette(routes=artifact_routes(store, pool))
+            app = FastAPI(routes=artifact_routes(store, pool))
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app), base_url="http://test"
             ) as client:

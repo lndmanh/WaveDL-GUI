@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -56,6 +57,291 @@ def request(app, method="GET", path="/api/health", *, content=None):
 
 def test_create_app_is_fastapi(app):
     assert isinstance(app, FastAPI)
+
+
+def test_create_app_requires_full_services_protocol(fake_services):
+    # Everything except preview conforms, so this cannot pass on another member.
+    fake_services.preview = None
+    with pytest.raises(TypeError, match="preview"):
+        create_app(
+            None,
+            token=TOKEN,
+            daemon_id="daemon-test",
+            build_id="build-test",
+            services=fake_services,
+        )
+
+
+def test_session_routes_are_api_routes():
+    from wavedl_daemon.http.bootstrap import BootstrapCredentials
+
+    app = create_app(
+        None,
+        token=TOKEN,
+        daemon_id="daemon-test",
+        build_id="build-test",
+        bootstrap_credentials=BootstrapCredentials(TOKEN),
+    )
+    routes = [route for route in app.routes if route.path.startswith("/api")]
+    assert len(routes) == 4
+    assert all(isinstance(route, APIRoute) for route in routes)
+
+
+def hosted_app(fake_services):
+    return create_app(
+        None,
+        token=TOKEN,
+        daemon_id="daemon-test",
+        build_id="build-test",
+        services=fake_services,
+    )
+
+
+def test_dataset_routes_are_api_routes(fake_services):
+    paths = {
+        "/api/runs/adopt",
+        "/api/models",
+        "/api/browse",
+        "/api/browse/resolve",
+        "/api/datasets/inspect",
+        "/api/datasets/preview",
+        "/api/host",
+    }
+    routes = [
+        route for route in hosted_app(fake_services).routes if route.path in paths
+    ]
+    assert len(routes) == len(paths)
+    assert all(isinstance(route, APIRoute) for route in routes)
+
+
+def test_browse_rejects_repeated_query_key(fake_services):
+    response = request(
+        hosted_app(fake_services), path="/api/browse?root=data&root=data"
+    )
+    assert response.status_code == 400
+    fake_services.catalog.browse.assert_not_called()
+
+
+def test_models_rejects_any_query(fake_services):
+    response = request(hosted_app(fake_services), path="/api/models?private=secret")
+    assert response.status_code == 400
+    fake_services.catalog.models.assert_not_called()
+
+
+@pytest.mark.parametrize("query", ["limit=1.0", "offset=0.0"])
+def test_browse_preserves_integer_pagination_syntax(fake_services, query):
+    response = request(hosted_app(fake_services), path=f"/api/browse?root=data&{query}")
+    assert response.status_code == 400
+    fake_services.catalog.browse.assert_not_called()
+
+
+def test_inspect_cancelled_on_disconnect(fake_services):
+    async def scenario():
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def inspect_dataset(root, path):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        fake_services.inspect = inspect_dataset
+        app = hosted_app(fake_services)
+        first = True
+
+        async def receive():
+            nonlocal first
+            if first:
+                first = False
+                return {
+                    "type": "http.request",
+                    "more_body": False,
+                    "body": b'{"root":"data","path":"data.npy"}',
+                }
+            await started.wait()
+            return {"type": "http.disconnect"}
+
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        await app(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "scheme": "http",
+                "method": "POST",
+                "path": "/api/datasets/inspect",
+                "query_string": b"",
+                "headers": [
+                    (b"host", b"localhost:8420"),
+                    (b"authorization", f"Bearer {TOKEN}".encode()),
+                    (b"content-type", b"application/json"),
+                ],
+            },
+            receive,
+            send,
+        )
+        assert cancelled.is_set()
+        assert sent[0]["status"] == 503
+
+    asyncio.run(scenario())
+
+
+def test_artifact_routes_are_api_routes(fake_services):
+    routes = [
+        route
+        for route in hosted_app(fake_services).routes
+        if "/artifacts" in route.path
+    ]
+    assert len(routes) == 2
+    assert all(isinstance(route, APIRoute) for route in routes)
+
+
+def test_event_routes_are_api_routes(fake_services):
+    routes = [
+        route
+        for route in hosted_app(fake_services).routes
+        if route.path.endswith("/events")
+    ]
+    assert len(routes) == 2
+    assert all(isinstance(route, APIRoute) for route in routes)
+
+
+@pytest.mark.parametrize("malformed", [None, [], "private-secret", 42, True, {}])
+def test_event_malformed_envelope_is_rejected_by_ingestor(fake_services, malformed):
+    run_id = "11111111-1111-1111-1111-111111111111"
+    response = request(
+        hosted_app(fake_services),
+        method="POST",
+        path=f"/api/runs/{run_id}/events",
+        content=json.dumps({"attempt": 1, "events": [malformed]}),
+    )
+    assert response.status_code == 409
+    assert response.content == b'{"error":"Conflict"}'
+    fake_services.ingestor.reject_runtime_events.assert_called_once()
+    args = fake_services.ingestor.reject_runtime_events.call_args.args
+    assert args[:3] == (run_id, run_id, 1)
+    fake_services.ingestor.push.assert_not_called()
+
+
+def test_event_push_ignores_extra_top_level_key(fake_services):
+    from wavedl.core.protocol import Envelope, encode
+
+    run_id = "11111111-1111-1111-1111-111111111111"
+    event = Envelope(
+        run_id,
+        1,
+        "log",
+        0,
+        "2026-10-31T00:00:00Z",
+        {"message": "message", "level": "info", "stream": "stdout"},
+    )
+    fake_services.ingestor.push.return_value = 0
+    response = request(
+        hosted_app(fake_services),
+        method="POST",
+        path=f"/api/runs/{run_id}/events",
+        content=json.dumps(
+            {"attempt": 1, "events": [json.loads(encode(event))], "extra": True}
+        ),
+    )
+    assert response.status_code == 200
+    assert response.content == b'{"attempt":1,"seq":0}'
+    assert "cache-control" not in response.headers
+    fake_services.ingestor.push.assert_called_once_with(run_id, run_id, 1, [event])
+    fake_services.ingestor.reject_runtime_events.assert_not_called()
+
+
+@pytest.mark.parametrize("content", [b"not-json", b" " * (1048576 + 1)])
+def test_event_push_checks_run_identity_before_reading_body(fake_services, content):
+    response = request(
+        hosted_app(fake_services),
+        method="POST",
+        path="/api/runs/not-a-uuid/events",
+        content=content,
+    )
+    assert response.status_code == 400
+    fake_services.ingestor.reject_runtime_events.assert_not_called()
+    fake_services.ingestor.push.assert_not_called()
+
+
+def test_every_api_route_is_fastapi(fake_services):
+    routes = [
+        route
+        for route in hosted_app(fake_services).routes
+        if route.path.startswith("/api")
+    ]
+    assert (
+        len(routes) == 20
+    )  # Bootstrap is separately covered with credentials enabled.
+    assert all(isinstance(route, APIRoute) for route in routes)
+
+
+@pytest.mark.parametrize(
+    ("path", "limit"),
+    [
+        ("/api/bootstrap", 4096),
+        ("/api/runs/plan", 65536),
+        ("/api/runs", 4096),
+        ("/api/runs/adopt", 8192),
+        ("/api/browse/resolve", 8192),
+        ("/api/datasets/inspect", 16384),
+        ("/api/datasets/preview", 65536),
+        ("/api/runs/11111111-1111-1111-1111-111111111111/events", 1048576),
+    ],
+)
+@pytest.mark.parametrize("case", ["duplicate", "nan", "oversize"])
+def test_strict_json_on_every_body_route(fake_services, path, limit, case):
+    from wavedl_daemon.http.bootstrap import BootstrapCredentials
+
+    app = create_app(
+        None,
+        token=TOKEN,
+        daemon_id="daemon-test",
+        build_id="build-test",
+        services=fake_services,
+        bootstrap_credentials=BootstrapCredentials(TOKEN),
+    )
+    # Bodyless POST /session and /runs/{id}/cancel must not enter this gate.
+    body = {
+        "duplicate": b'{"attempt":1,"attempt":2}',
+        "nan": b'{"attempt":NaN}',
+        "oversize": b"{" + b" " * limit,
+    }[case]
+    response = request(app, method="POST", path=path, content=body)
+    assert response.status_code == (413 if case == "oversize" else 400)
+
+
+@pytest.mark.parametrize("group", ["inspect", "preview"])
+def test_dataset_refusal_is_bad_request(fake_services, group):
+    from wavedl.core.dataset_headers import InspectionRefused
+    from wavedl_daemon.runs.preview_service import PreviewRefused
+
+    async def inspect_dataset(root, path):
+        raise InspectionRefused("private-secret")
+
+    async def preview_dataset(body):
+        raise PreviewRefused("private-secret")
+
+    fake_services.inspect = inspect_dataset
+    fake_services.preview = preview_dataset
+    body = {"root": "data", "path": "data.npz"}
+    if group == "preview":
+        body["view"] = "all"
+    response = request(
+        hosted_app(fake_services),
+        method="POST",
+        path=f"/api/datasets/{group}",
+        content=json.dumps(body),
+    )
+    assert response.status_code == 400
+    assert response.content == b'{"error":"Bad request"}'
 
 
 @pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc"])

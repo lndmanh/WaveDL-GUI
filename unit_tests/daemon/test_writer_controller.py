@@ -67,7 +67,7 @@ class WaitingLocal:
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
-    import wavedl_daemon.runs.controller as controller_module
+    import wavedl_daemon.runs.control.dispatch as controller_module
 
     def forbidden_allocation(*args, **kwargs):
         pytest.fail("daemon must not allocate a writer-mode runtime attempt")

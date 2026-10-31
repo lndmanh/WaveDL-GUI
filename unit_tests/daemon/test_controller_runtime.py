@@ -263,7 +263,10 @@ def test_store_failure_does_not_expose_accepted_hello(runtime, monkeypatch):
     with pytest.raises(OSError, match="disk failure"):
         controller.accept_runtime_events(plan.plan_id, [hello()])
     assert not controller.derive(plan.plan_id).runtime.hello_seen
-    assert controller._runtime[plan.plan_id].result.status == NegotiationStatus.WAITING
+    assert (
+        controller.handshake._runtime[plan.plan_id].result.status
+        == NegotiationStatus.WAITING
+    )
 
 
 def test_malformed_first_journal_record_is_not_silently_skipped(runtime):
@@ -302,10 +305,10 @@ def test_read_only_provenance_prevents_dispatch(runtime):
     with RuntimeProvenanceStore(
         provenance.path, dispatch_lock=lock, read_only=True
     ) as recovery:
-        controller.provenance_store = recovery
+        controller.context.provenance_store = recovery
         with pytest.raises(PermissionError, match="Read-only recovery"):
             controller.accept_runtime_events(plan.plan_id, [hello()])
-        controller.provenance_store = provenance
+        controller.context.provenance_store = provenance
 
 
 def test_mismatched_provenance_ownership_prevents_dispatch(runtime):
@@ -333,7 +336,7 @@ def test_journal_worker_never_commits_sqlite(runtime, monkeypatch):
         writer.append("hello", hello().payload)
     until(controller, lambda: provenance.get(plan.plan_id) is not None)
     assert commits == [owner]
-    assert controller._pool.budget.max_workers == 1
+    assert controller.context.budget.max_workers == 1
 
 
 def test_partial_first_record_waits_and_oversize_first_record_fails(runtime):
@@ -399,7 +402,7 @@ def test_wrong_actual_interpreter_is_sticky_automatic_protocol_failure(runtime):
     assert provenance.get(plan.plan_id) is None
     for _ in range(5):
         controller.reconcile_once()
-    assert plan.plan_id not in controller._runtime_work
+    assert plan.plan_id not in controller.handshake._runtime_work
     assert controller.derive(plan.plan_id).state == RunState.FAILED
 
 

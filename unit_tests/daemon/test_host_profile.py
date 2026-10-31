@@ -75,7 +75,18 @@ def test_relative_interpreter_is_refused():
 def test_http_requires_auth_and_rejects_queries(tmp_path):
     class Services:
         async def host_profile(self):
-            return {"python": "/usr/bin/python3"}
+            return {
+                "hostname": "test",
+                "os": "test",
+                "os_release": "test",
+                "arch": "test",
+                "cpu_count": None,
+                "memory_bytes": None,
+                "python": "/usr/bin/python3",
+                "python_version": "3.11",
+                "accelerators": None,
+                "backends": [],
+            }
 
     app = create_app(
         Settings(tmp_path / "state", tmp_path / "runs"),
@@ -94,7 +105,7 @@ def test_http_requires_auth_and_rejects_queries(tmp_path):
             response = await client.get("/api/host")
             assert response.status_code == 200
             assert response.headers["cache-control"] == "no-store"
-            assert response.json() == {"python": "/usr/bin/python3"}
+            assert response.json() == await Services().host_profile()
             assert (await client.get("/api/host?x=1")).status_code == 400
 
     asyncio.run(run())

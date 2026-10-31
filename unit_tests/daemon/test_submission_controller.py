@@ -135,7 +135,9 @@ def test_supplied_backend_owner_does_not_lookup_login(environment, monkeypatch):
     def missing_login():
         raise KeyError("UID has no passwd entry")
 
-    monkeypatch.setattr("wavedl_daemon.runs.controller.getpass.getuser", missing_login)
+    monkeypatch.setattr(
+        "wavedl_daemon.runs.control.dispatch.getpass.getuser", missing_login
+    )
     submitted = controller.request_submit(record.plan_id)
     assert submitted.owner == backend.owner
     assert executions.get(record.plan_id).owner == backend.owner
@@ -145,9 +147,9 @@ def test_missing_backend_owner_uses_login(environment, monkeypatch):
     controller, _, _, backend, record, _ = environment
     monkeypatch.delattr(type(backend), "owner")
     monkeypatch.setattr(
-        "wavedl_daemon.runs.controller.getpass.getuser", lambda: "current-login"
+        "wavedl_daemon.runs.control.dispatch.getpass.getuser", lambda: "current-login"
     )
-    assert controller._ensure(record).owner == "current-login"
+    assert controller.dispatch.ensure(record).owner == "current-login"
 
 
 def test_missing_backend_owner_preserves_login_failure(environment, monkeypatch):
@@ -157,9 +159,11 @@ def test_missing_backend_owner_preserves_login_failure(environment, monkeypatch)
     def missing_login():
         raise KeyError("UID has no passwd entry")
 
-    monkeypatch.setattr("wavedl_daemon.runs.controller.getpass.getuser", missing_login)
+    monkeypatch.setattr(
+        "wavedl_daemon.runs.control.dispatch.getpass.getuser", missing_login
+    )
     with pytest.raises(KeyError, match="UID has no passwd entry"):
-        controller._ensure(record)
+        controller.dispatch.ensure(record)
 
 
 def test_accept_before_receipt_crash_recovers_one_job(environment, monkeypatch):
@@ -192,7 +196,7 @@ def test_accept_before_receipt_crash_recovers_one_job(environment, monkeypatch):
 def test_claim_crash_never_resubmits_on_missing_or_failed_search(environment, error):
     controller, plans, executions, backend, record, lock = environment
     requested = plans.request_submission(record.plan_id)
-    controller._ensure(requested)
+    controller.dispatch.ensure(requested)
     executions.claim_submission(record.plan_id)
     backend.lookup_error = error
     replacement, restarted = reopen(controller, plans, executions, backend, lock)
@@ -275,7 +279,7 @@ def test_local_lost_supervision_never_adopts_or_restarts(environment):
     )
     controller.backends["local"] = backend
     requested = plans.request_submission(local.plan_id)
-    controller._ensure(requested)
+    controller.dispatch.ensure(requested)
     executions.claim_submission(local.plan_id)
     controller.reconcile_once()
     assert executions.get(local.plan_id).state == ExecutionState.LOCAL_LOST
@@ -435,7 +439,7 @@ def test_slurm_fleet_tick_never_uses_individual_observe(environment):
 
     backend.observe_many = observe_many
     backend.observe = refused_individual
-    controller._fleets["slurm"] = SchedulerReconciler(backend)
+    controller.fleet._fleets["slurm"] = SchedulerReconciler(backend)
     controller.request_submit(record.plan_id)
     tick_until(
         controller,
@@ -522,7 +526,9 @@ def test_multiple_pages_preserve_fleet_interval_and_backoff(environment):
         }
 
     backend.observe_many = observe_many
-    controller._fleets["slurm"] = SchedulerReconciler(backend, clock=lambda: now[0])
+    controller.fleet._fleets["slurm"] = SchedulerReconciler(
+        backend, clock=lambda: now[0]
+    )
     ids = [record.plan_id]
     manifest = record.plan.manifest
     run_id = "00000000-0000-4000-8000-000000000002"
@@ -555,10 +561,10 @@ def test_multiple_pages_preserve_fleet_interval_and_backoff(environment):
         controller.reconcile_once()
         time.sleep(0.003)
     assert len(calls) == first_count
-    assert len(controller._fleet_active["slurm"]) == 2
+    assert len(controller.fleet._fleet_active["slurm"]) == 2
     now[0] = 6
     tick_until(controller, lambda: len(calls) > first_count)
-    assert len(controller._fleet_active["slurm"]) == 2
+    assert len(controller.fleet._fleet_active["slurm"]) == 2
 
 
 def test_controller_capability_probe_applies_short_min_job_age(environment):
@@ -582,13 +588,14 @@ def test_controller_capability_probe_applies_short_min_job_age(environment):
 
     backend.capabilities = capabilities
     backend.observe_many = observe_many
-    controller._fleets["slurm"] = SchedulerReconciler(backend)
+    controller.fleet._fleets["slurm"] = SchedulerReconciler(backend)
     controller.request_submit(record.plan_id)
     tick_until(
         controller,
         lambda: (
-            bool(called) and controller._fleets["slurm"].capabilities.min_job_age == 5
+            bool(called)
+            and controller.fleet._fleets["slurm"].capabilities.min_job_age == 5
         ),
     )
-    assert controller._fleets["slurm"]._interval() < 5
+    assert controller.fleet._fleets["slurm"]._interval() < 5
     assert controller.capability_errors == {}

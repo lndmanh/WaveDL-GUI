@@ -148,13 +148,13 @@ def execution(tmp_path):
             # tests inject an independently persisted terminal receipt.
             deadline = time.monotonic() + 3
             while (
-                controller._inflight
-                or controller._runtime_work
-                or controller._restart_work
+                controller.dispatch._inflight
+                or controller.handshake._runtime_work
+                or controller.restarts._restart_work
             ):
-                controller._harvest()
-                controller._harvest_runtime()
-                controller._harvest_restarts()
+                controller.dispatch.harvest()
+                controller.handshake.harvest()
+                controller.restarts.harvest()
                 assert time.monotonic() < deadline
                 time.sleep(0.005)
             yield SimpleNamespace(
@@ -227,24 +227,27 @@ def test_native_activation_keeps_old_provenance_and_requires_new_hello(execution
         controller.accept_runtime_events(plan_id, [event(1)]).status
         == NegotiationStatus.ACCEPTED
     )
-    old_tracker = controller._runtime[plan_id]
+    old_tracker = controller.handshake._runtime[plan_id]
     old_tracker.reject("prior failure")
-    controller._runtime_errors[plan_id] = "prior failure"
+    controller.handshake._runtime_errors[plan_id] = "prior failure"
     current = activate(env)
     assert current.attempt == 2 and current.observation is None
     assert env.backend.submissions == 1
-    assert controller._runtime[plan_id].result.status == NegotiationStatus.WAITING
-    assert plan_id not in controller._runtime_errors
+    assert (
+        controller.handshake._runtime[plan_id].result.status
+        == NegotiationStatus.WAITING
+    )
+    assert plan_id not in controller.handshake._runtime_errors
     assert env.provenance.get(plan_id) is None
     assert env.provenance.get(plan_id, 1).event == event(1)
     assert (
         controller.accept_runtime_events(plan_id, [event(2)]).status
         == NegotiationStatus.ACCEPTED
     )
-    tracker = controller._runtime[plan_id]
+    tracker = controller.handshake._runtime[plan_id]
     env.now[0] = 20
-    tick_until(controller, lambda: plan_id not in controller._restart_work)
-    assert controller._runtime[plan_id] is tracker
+    tick_until(controller, lambda: plan_id not in controller.restarts._restart_work)
+    assert controller.handshake._runtime[plan_id] is tracker
     assert env.executions.history(plan_id)[0].attempt == 1
 
 
@@ -260,18 +263,18 @@ def test_late_old_cancel_never_marks_new_attempt_delivered_or_failed(execution, 
     env.backend.cancel_release.set()
     deadline = time.monotonic() + 2
     while (
-        not env.controller._inflight[env.plan.plan_id][1].done()
+        not env.controller.dispatch._inflight[env.plan.plan_id][1].done()
         and time.monotonic() < deadline
     ):
         time.sleep(0.005)
-    env.controller._harvest()
+    env.controller.dispatch.harvest()
     record = env.executions.get(env.plan.plan_id)
     assert not record.cancel_delivered
     assert (
         record.latest_observation is None
         or record.latest_observation.status != ObservationStatus.ERROR
     )
-    assert env.plan.plan_id not in env.controller._cancel_observe
+    assert env.plan.plan_id not in env.controller.fleet._cancel_observe
     tick_until(
         env.controller, lambda: env.executions.get(env.plan.plan_id).cancel_delivered
     )
@@ -284,7 +287,8 @@ def test_late_old_probe_error_cannot_poison_new_attempt(execution):
     # Finish any real bounded first-record probe before installing the deliberate
     # old-generation failure. The work stays admitted through actual cleanup.
     tick_until(
-        env.controller, lambda: env.plan.plan_id not in env.controller._runtime_work
+        env.controller,
+        lambda: env.plan.plan_id not in env.controller.handshake._runtime_work,
     )
 
     def old_probe(token):
@@ -292,17 +296,17 @@ def test_late_old_probe_error_cannot_poison_new_attempt(execution):
         release.wait(3)
         raise ProtocolError("old malformed hello")
 
-    work = env.controller._pool.submit(old_probe)
-    env.controller._runtime_work[env.plan.plan_id] = (1, work)
+    work = env.controller.context.lane.submit(old_probe)
+    env.controller.handshake._runtime_work[env.plan.plan_id] = (1, work)
     assert entered.wait(2)
     activate(env)
     release.set()
     deadline = time.monotonic() + 2
     while not work.done() and time.monotonic() < deadline:
         time.sleep(0.005)
-    env.controller._harvest_runtime()
-    assert env.plan.plan_id not in env.controller._runtime_errors
-    assert env.plan.plan_id not in env.controller._runtime_skip
+    env.controller.handshake.harvest()
+    assert env.plan.plan_id not in env.controller.handshake._runtime_errors
+    assert env.plan.plan_id not in env.controller.handshake._runtime_skip
     assert (
         env.controller.accept_runtime_events(env.plan.plan_id, [event(2)]).status
         == NegotiationStatus.ACCEPTED
@@ -354,28 +358,28 @@ def test_fleet_capacity_refuses_before_durable_activation(execution):
     env = execution
     current = env.executions.get(env.plan.plan_id)
     env.backend.proposal = proposed(current)
-    work = env.controller._pool.submit(lambda token: env.backend.proposal)
+    work = env.controller.context.lane.submit(lambda token: env.backend.proposal)
     work.result(timeout=2)
-    env.controller._restart_work[current.plan_id] = (current, work)
-    env.controller._fleets["slurm"] = SimpleNamespace(
+    env.controller.restarts._restart_work[current.plan_id] = (current, work)
+    env.controller.fleet._fleets["slurm"] = SimpleNamespace(
         policy=SimpleNamespace(max_active=1)
     )
-    env.controller._fleet_active["slurm"] = {"other": current}
-    env.controller._harvest_restarts()
+    env.controller.fleet._fleet_active["slurm"] = {"other": current}
+    env.controller.restarts.harvest()
     assert env.executions.get(current.plan_id) == current
     assert env.executions.history(current.plan_id) == []
-    assert env.controller._fleet_active["slurm"] == {"other": current}
+    assert env.controller.fleet._fleet_active["slurm"] == {"other": current}
     assert env.controller.restart_errors[current.plan_id] == "BudgetExhausted"
-    assert current.plan_id not in env.controller._restart_work
+    assert current.plan_id not in env.controller.restarts._restart_work
 
 
 def test_retired_restart_watch_cannot_exhaust_new_active_admission(execution):
     env = execution
     current = env.executions.get(env.plan.plan_id)
-    env.controller._runtime_capacity = 1
-    env.controller._restart_due = {"retired-missing-plan": 100}
+    env.controller.context.runtime_capacity = 1
+    env.controller.restarts._restart_due = {"retired-missing-plan": 100}
     env.now[0] = 70
-    env.controller._schedule_restart(env.plan, current)
-    assert current.plan_id in env.controller._restart_work
-    assert "retired-missing-plan" not in env.controller._restart_due
+    env.controller.restarts.schedule(env.plan, current)
+    assert current.plan_id in env.controller.restarts._restart_work
+    assert "retired-missing-plan" not in env.controller.restarts._restart_due
     assert env.controller.restart_watch_refusals == 1

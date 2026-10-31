@@ -23,6 +23,7 @@ from wavedl_daemon.backends.slurm_observation import SlurmObservation
 from wavedl_daemon.backends.slurm_plan import SlurmPlanner, SlurmSite
 from wavedl_daemon.backends.slurm_submission import SlurmSubmission
 from wavedl_daemon.execution.budget import WorkBudget
+from wavedl_daemon.runs.control.records import initial_hint
 from wavedl_daemon.runs.controller import SubmissionController
 from wavedl_daemon.runs.reducer import RunState
 from wavedl_daemon.storage.collections import CollectionStore
@@ -102,7 +103,7 @@ class FakeSlurm:
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
-    import wavedl_daemon.runs.controller as module
+    import wavedl_daemon.runs.control.dispatch as module
 
     def forbidden(*args, **kwargs):
         pytest.fail("daemon allocated a writer attempt")
@@ -141,7 +142,7 @@ def runtime(tmp_path, monkeypatch):
             collection_store=collections,
             clock=clock,
         )
-        controller._fleets["slurm"].clock = clock
+        controller.fleet._fleets["slurm"].clock = clock
         try:
             yield controller, plan, layout, backend, executions, collections, clock
         finally:
@@ -185,7 +186,7 @@ def test_queued_fleet_then_real_core_claim_positive_activation(runtime):
         layout.run_dir, identity(native.submission_handle), initial_attempt=None
     )
     assert proof.attempt == 1
-    assert controller._initial_hint(native.submission_handle)
+    assert initial_hint(native.submission_handle)
     clock.now = 5
     until(controller, lambda: executions.get(plan.plan_id).attempt == proof.attempt)
     active = executions.get(plan.plan_id)
@@ -219,10 +220,10 @@ def test_stale_unbound_fleet_result_is_fenced_after_native_activation(runtime):
     until(
         controller,
         lambda: (
-            "slurm" not in controller._fleet_work
+            "slurm" not in controller.fleet._fleet_work
             or all(
                 record.attempt is not None
-                for record in controller._fleet_work["slurm"][1].values()
+                for record in controller.fleet._fleet_work["slurm"][1].values()
             )
         ),
     )

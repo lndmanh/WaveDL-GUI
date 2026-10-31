@@ -28,6 +28,19 @@ def test_openapi_documents_run_lifecycle():
     spec = module.build_openapi()
     paths = spec["paths"]
     assert set(paths) == {
+        "/api/health",
+        "/api/bootstrap",
+        "/api/session",
+        "/api/runs/adopt",
+        "/api/models",
+        "/api/browse",
+        "/api/browse/resolve",
+        "/api/datasets/inspect",
+        "/api/datasets/preview",
+        "/api/host",
+        "/api/runs/{run_id}/artifacts",
+        "/api/runs/{run_id}/artifacts/{generation}/{path}",
+        "/api/runs/{run_id}/events",
         "/api/runs/plan",
         "/api/runs",
         "/api/runs/{run_id}",
@@ -84,6 +97,16 @@ def test_offline_service_raises_if_called():
             getattr(service, name)()
 
 
+def test_openapi_has_no_422():
+    spec = exporter().build_openapi()
+    assert "/api/datasets/inspect" in spec["paths"]
+    assert "/api/datasets/preview" in spec["paths"]
+    assert "/api/bootstrap" in spec["paths"]
+    for methods in spec["paths"].values():
+        for operation in methods.values():
+            assert "422" not in operation["responses"]
+
+
 def test_cli_output_is_byte_identical(tmp_path):
     outputs = []
     for seed in ("1", "2"):
@@ -119,6 +142,24 @@ def test_openapi_documents_daemon_errors_not_fastapi_422():
         for method, operation in methods.items()
     }
     assert {key: op["operationId"] for key, op in operations.items()} == {
+        ("get", "/api/health"): "get_health",
+        ("post", "/api/bootstrap"): "exchange_bootstrap",
+        ("post", "/api/session"): "rotate_session",
+        ("delete", "/api/session"): "revoke_session",
+        ("post", "/api/runs/adopt"): "adopt_run",
+        ("get", "/api/models"): "list_models",
+        ("get", "/api/browse"): "browse_files",
+        ("post", "/api/browse/resolve"): "resolve_browse",
+        ("post", "/api/datasets/inspect"): "inspect_dataset",
+        ("post", "/api/datasets/preview"): "preview_dataset",
+        ("get", "/api/host"): "get_host",
+        ("get", "/api/runs/{run_id}/artifacts"): "list_artifacts",
+        (
+            "get",
+            "/api/runs/{run_id}/artifacts/{generation}/{path}",
+        ): "download_artifact",
+        ("post", "/api/runs/{run_id}/events"): "push_events",
+        ("get", "/api/runs/{run_id}/events"): "stream_events",
         ("post", "/api/runs/plan"): "plan_run",
         ("post", "/api/runs"): "submit_run",
         ("get", "/api/runs"): "list_runs",

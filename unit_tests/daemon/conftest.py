@@ -5,8 +5,69 @@ import sys
 from contextlib import contextmanager
 from queue import Queue
 from threading import Thread
+from unittest.mock import Mock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException
+
+from wavedl_daemon.events.broker import EventBroker
+from wavedl_daemon.http.app import _http_error, _validation_error
+
+
+def route_app(*, routes):
+    """Mount isolated API groups with the production validation/error boundary."""
+    return FastAPI(
+        routes=routes,
+        exception_handlers={
+            HTTPException: _http_error,
+            RequestValidationError: _validation_error,
+        },
+    )
+
+
+class FakeServices:
+    """Complete inert HTTP facade; individual tests replace only their operation."""
+
+    def __init__(self):
+        self.daemon_id = "daemon-test"
+        self.run_service = Mock()
+        self.catalog = Mock()
+        self.ingestor = Mock()
+        self.event_log = Mock()
+        self.broker = EventBroker()
+        self.artifacts = Mock()
+        self.pool = Mock()
+
+    async def resolve_plan(self, run_id):
+        return "11111111-1111-1111-1111-111111111111"
+
+    async def health(self):
+        return {}
+
+    async def adopt(self, path, *, attempt=None, idempotency_key):
+        raise AssertionError("Unexpected adoption")
+
+    async def inspect(self, root, path):
+        raise AssertionError("Unexpected inspection")
+
+    async def preview(self, request):
+        raise AssertionError("Unexpected preview")
+
+    async def host_profile(self):
+        raise AssertionError("Unexpected host profile")
+
+    async def start(self):
+        pass
+
+    async def close(self):
+        pass
+
+
+@pytest.fixture
+def fake_services():
+    return FakeServices()
 
 
 @pytest.fixture

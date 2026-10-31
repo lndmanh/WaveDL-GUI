@@ -12,7 +12,7 @@ from dataclasses import asdict
 from types import SimpleNamespace
 
 import pytest
-from starlette.applications import Starlette
+from fastapi import FastAPI
 
 from wavedl.core.client_transport import (
     ClientTransportError,
@@ -164,7 +164,7 @@ async def wire_phase(app, *, timeout=5, **options):
 
 
 def authenticated_app(ingestor, store, broker):
-    app = Starlette(
+    app = FastAPI(
         routes=event_routes(
             ingestor=ingestor,
             event_log=store,

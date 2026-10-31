@@ -43,6 +43,14 @@ TOKEN = "hosted-test-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 
+def test_session_controller_uses_shared_pool_lane(tmp_path):
+    from wavedl_daemon.runs.runtime_service import ServiceSession
+
+    settings = Settings(tmp_path / "state", tmp_path / "runs")
+    with ServiceSession(settings) as session:
+        assert session.controller.context.lane is session.pool.control_lane
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX state-root confidentiality")
 def test_public_state_root_is_refused_without_chmod_or_registry_write(tmp_path):
     settings = Settings(tmp_path / "state", tmp_path / "runs")
@@ -152,7 +160,7 @@ def test_hosted_lifecycle_push_and_artifacts(tmp_path, monkeypatch):
         pytest.fail("The daemon must not allocate writer-mode runtime attempts")
 
     monkeypatch.setattr(
-        "wavedl_daemon.runs.controller.allocate_attempt", forbidden_allocation
+        "wavedl_daemon.runs.control.dispatch.allocate_attempt", forbidden_allocation
     )
     settings = Settings(tmp_path / "state", tmp_path / "runs")
     backend = Backend()

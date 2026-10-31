@@ -80,7 +80,7 @@ class NativeBackend:
 
 @pytest.fixture
 def native_runtime(tmp_path, monkeypatch):
-    import wavedl_daemon.runs.controller as module
+    import wavedl_daemon.runs.control.dispatch as module
 
     def forbidden(*args, **kwargs):
         pytest.fail("daemon allocated an unproved writer attempt")
@@ -119,7 +119,7 @@ def native_runtime(tmp_path, monkeypatch):
             collection_store=collections,
             clock=clock,
         )
-        controller._fleets["slurm"].clock = clock
+        controller.fleet._fleets["slurm"].clock = clock
         try:
             controller.request_submit(plan.plan_id)
             until(
@@ -230,7 +230,7 @@ def test_late_generation0_fleet_result_cannot_overwrite_generation2(native_runti
     backend.block = True
     clock.now = 30
     until(controller, backend.started.is_set)
-    old_work = controller._fleet_work["slurm"][0]
+    old_work = controller.fleet._fleet_work["slurm"][0]
     backend.native(2, "FAILED", "9:0")
     current = executions.record_observation(
         plan.plan_id, backend.observe(backend.handle)
@@ -240,8 +240,8 @@ def test_late_generation0_fleet_result_cannot_overwrite_generation2(native_runti
     until(
         controller,
         lambda: (
-            "slurm" not in controller._fleet_work
-            or controller._fleet_work["slurm"][0] is not old_work
+            "slurm" not in controller.fleet._fleet_work
+            or controller.fleet._fleet_work["slurm"][0] is not old_work
         ),
     )
     saved = executions.get(plan.plan_id)
@@ -334,16 +334,16 @@ def test_foreign_hash_collection_callback_is_retained_as_uncertainty(
     until(
         controller,
         lambda: (
-            plan.plan_id in controller._inflight
-            and controller._inflight[plan.plan_id][0] == "collect_generation"
+            plan.plan_id in controller.dispatch._inflight
+            and controller.dispatch._inflight[plan.plan_id][0] == "collect_generation"
         ),
     )
-    work = controller._inflight[plan.plan_id][1]
+    work = controller.dispatch._inflight[plan.plan_id][1]
     deadline = time.monotonic() + 5
     while not work.done() and time.monotonic() < deadline:
         time.sleep(0.002)
     assert work.done()
-    controller._harvest()
+    controller.dispatch.harvest()
     current = executions.get(plan.plan_id)
     assert current.submission_observation.native_identity == identity(backend.handle, 2)
     assert current.submission_observation.status == ObservationStatus.TERMINAL
@@ -378,20 +378,20 @@ def test_stale_initial_binding_callback_cannot_activate_older_native_generation(
     until(
         controller,
         lambda: (
-            plan.plan_id in controller._inflight
-            and controller._inflight[plan.plan_id][0] == "startup"
-            and controller._inflight_sources[
+            plan.plan_id in controller.dispatch._inflight
+            and controller.dispatch._inflight[plan.plan_id][0] == "startup"
+            and controller.dispatch._inflight_sources[
                 plan.plan_id
             ].submission_observation.native_identity
             == identity(backend.handle, 2)
         ),
     )
-    work = controller._inflight[plan.plan_id][1]
+    work = controller.dispatch._inflight[plan.plan_id][1]
     deadline = time.monotonic() + 5
     while not work.done() and time.monotonic() < deadline:
         time.sleep(0.002)
     assert work.done()
-    controller._harvest()
+    controller.dispatch.harvest()
     current = executions.get(plan.plan_id)
     assert current.attempt is None and current.handle is None
     assert current.submission_handle == backend.handle
@@ -406,9 +406,9 @@ def test_stale_initial_binding_callback_cannot_activate_older_native_generation(
             ).fetchone()[0]
             == 0
         )
-    assert plan.plan_id not in controller._inflight
-    assert plan.plan_id not in controller._inflight_sources
-    assert plan.plan_id not in controller._receipts
+    assert plan.plan_id not in controller.dispatch._inflight
+    assert plan.plan_id not in controller.dispatch._inflight_sources
+    assert plan.plan_id not in controller.dispatch._receipts
     # The writer's authentic reservation remains untouched; the daemon neither
     # promotes it nor allocates a replacement to patch the generation mismatch.
     assert list(layout.attempts.iterdir()) == [layout.attempt_dir(1)]

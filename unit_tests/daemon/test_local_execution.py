@@ -22,7 +22,8 @@ from wavedl_daemon.backends.contracts import (
 )
 from wavedl_daemon.backends.local import LocalBackend
 from wavedl_daemon.backends.local_execution import SupervisionLost
-from wavedl_daemon.execution.budget import BudgetExhausted
+from wavedl_daemon.execution.budget import BudgetExhausted, WorkBudget
+from wavedl_daemon.execution.pool import BoundedThreadPool
 from wavedl_daemon.storage.ownership import DispatchLock, DispatchRequired
 
 
@@ -60,7 +61,7 @@ if mode=='tree':
     child=subprocess.Popen([sys.executable,'-c','import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)'])
     print('CHILD='+str(child.pid),flush=True)
     time.sleep(60)
-if mode=='sleep': time.sleep(60)
+if mode=='sleep': time.sleep(float(os.environ.get('STUB_SLEEP','60')))
 sys.exit(int(os.environ.get('STUB_EXIT','0')))
 """
 
@@ -98,6 +99,33 @@ def terminal(backend, handle):
             return observation
         time.sleep(0.01)
     raise AssertionError("process did not become terminal")
+
+
+def test_local_runs_not_capped_by_worker_budget(tmp_path, dispatch):
+    budget = WorkBudget(max_workers=1)
+    # The backend's own process cap is separate; lift it to isolate the worker budget.
+    backend = LocalBackend(dispatch_lock=dispatch, max_processes=3)
+    handles = []
+    try:
+        with BoundedThreadPool(budget) as pool:
+            for index in range(3):
+                plan, attempt = prepared(tmp_path, STUB_MODE="sleep", STUB_SLEEP="0.5")
+                handle = pool.control_lane.submit(
+                    lambda token,
+                    plan=plan,
+                    attempt=attempt,
+                    index=index: backend.submit(
+                        plan, request_id=f"request-{index}", attempt=attempt
+                    )
+                ).result(5)
+                handles.append(handle)
+            assert len(handles) == 3
+            assert all(
+                backend.observe(handle).status == ObservationStatus.RUNNING
+                for handle in handles
+            )
+    finally:
+        backend.close()
 
 
 def test_ambient_launcher_identity_is_removed_from_probe_and_actual_child(
