@@ -28,23 +28,25 @@ Python **3.11+** required. Licensed under MIT.
 ## Build & Install
 
 ```bash
-pip install -e ".[dev]"        # Core + dev tools (ruff, pytest)
-pip install -e ".[dev,daemon]" # Core + dev + daemon/browser runtime
+pip install -e ".[dev]"        # Core + daemon/browser runtime + dev tools
 ```
 
 For browser development, use the existing `src/wavedl_daemon/web/package.json` and lockfile:
 
 ```bash
 cd src/wavedl_daemon/web
-npm ci
-npm run typecheck
-npm test
-npm run lint
-npm run format:check
-npm run generate
+pnpm install --frozen-lockfile
+pnpm run typecheck
+pnpm test
+pnpm run lint
+pnpm run format:check
+pnpm run generate
 cd ../../..
 python tools/vendor_web_assets.py
 ```
+
+Web tests cover daemon-client logic only; component and browser automation tests
+are not retained. Type checking and static generation remain required.
 
 Do not run formatting/autofix unless requested. Use clean staging for package
 builds to avoid stale `build/lib` modules; never clean user preferences/databases.
