@@ -1,0 +1,1 @@
+import{b as e,k as t,mt as n}from"./CX6HF-I0.js";import{t as r}from"./CNs_Ozdc.js";var i=t({__name:`[...slug]`,setup(t){return r({redirect:`/experiments`}),(t,r)=>(n(),e(`div`))}});export{i as default};

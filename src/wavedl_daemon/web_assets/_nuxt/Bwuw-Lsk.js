@@ -1,0 +1,1 @@
+import{at as e}from"./njdHZ8PZ.js";import{t}from"#entry";function n(n,r){return e(n)?!1:Array.isArray(n)?n.some(e=>t(e,r)):t(n,r)}export{n as t};
