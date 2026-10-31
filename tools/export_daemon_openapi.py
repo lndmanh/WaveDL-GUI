@@ -1,4 +1,4 @@
-"""Export the daemon lifecycle OpenAPI document without starting the daemon."""
+"""Export every daemon API contract without starting the daemon."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi.openapi.utils import get_openapi
 
 from wavedl_daemon.http.app import create_app
-from wavedl_daemon.http.runs import lifecycle_routes
+from wavedl_daemon.http.bootstrap import BootstrapCredentials
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +25,21 @@ class _InertRunService:
             raise AssertionError(f"OpenAPI generation called service method {name}")
 
         return forbidden
+
+
+class _InertServices(_InertRunService):
+    """Complete assembly facade; no operation may execute during export."""
+
+    daemon_id = "offline-openapi-daemon"
+
+    def __init__(self):
+        self.run_service = _InertRunService()
+        self.catalog = _InertRunService()
+        self.ingestor = _InertRunService()
+        self.event_log = _InertRunService()
+        self.broker = _InertRunService()
+        self.artifacts = _InertRunService()
+        self.pool = _InertRunService()
 
 
 def _package_version() -> str:
@@ -41,20 +56,19 @@ def _package_version() -> str:
 
 
 def build_openapi() -> dict:
-    """Build the deterministic lifecycle schema without invoking a service."""
+    """Build the deterministic complete API schema without invoking a service."""
     app = create_app(
         None,
         token="offline-openapi-token",
         daemon_id="offline-openapi-daemon",
         build_id="offline-openapi-build",
-        services=None,
+        services=_InertServices(),
+        bootstrap_credentials=BootstrapCredentials("offline-openapi-token"),
         web_assets=None,
     )
-    routes = lifecycle_routes(_InertRunService())
-    for route in routes:
+    for route in app.routes:
         # GET and HEAD share a handler; document GET only.
         route.methods.discard("HEAD")
-    app.router.routes.extend(routes)
     spec = get_openapi(
         title="WaveDL daemon API",
         version=_package_version(),
