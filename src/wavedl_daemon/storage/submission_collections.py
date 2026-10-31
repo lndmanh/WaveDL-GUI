@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Immutable native wrapper outcomes without a fabricated runtime attempt."""
 
 from __future__ import annotations

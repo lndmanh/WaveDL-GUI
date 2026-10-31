@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Pure Local planning with bounded live process ownership for execution."""
 
 from __future__ import annotations

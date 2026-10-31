@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Mutable native lifecycle diagnostics scoped to immutable scheduler proofs."""
 
 from __future__ import annotations

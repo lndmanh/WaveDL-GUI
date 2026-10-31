@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Bounded scheduler evidence, never a training verdict.
 
 Native field semantics follow https://slurm.schedmd.com/{sacct,squeue,scontrol}.html.

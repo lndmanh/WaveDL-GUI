@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Owner-thread atomic registration after bounded standalone file verification."""
 
 from __future__ import annotations

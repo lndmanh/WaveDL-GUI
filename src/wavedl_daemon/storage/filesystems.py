@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Filesystem identification, using only the standard library.
 
 ``psutil`` is not a declared dependency of this project, and ``os.statvfs``

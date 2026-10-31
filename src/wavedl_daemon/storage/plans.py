@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Authoritative pre-runtime plans and control intent, not journal projections.
 
 Request identity survives lost responses and runtime attempts. SQLite uniqueness

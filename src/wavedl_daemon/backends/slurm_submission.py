@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Fail-closed Slurm submission, identity recovery and cancellation requests."""
 
 from __future__ import annotations

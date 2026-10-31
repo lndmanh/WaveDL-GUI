@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Published inventory authority and owned, no-follow artifact streams."""
 
 from __future__ import annotations

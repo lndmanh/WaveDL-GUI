@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Immutable pre-runtime collections keyed by native scheduler generation."""
 
 from __future__ import annotations

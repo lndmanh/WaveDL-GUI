@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Authoritative execution receipts; never reconstructed from runtime telemetry.
 
 A committed claim precedes every external submission. Interrupted claims are

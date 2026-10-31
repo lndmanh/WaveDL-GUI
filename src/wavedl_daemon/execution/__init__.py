@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Bounded blocking execution for daemon consumers."""
 
 from .budget import BudgetExhausted, StorageWorkError, WorkBudget

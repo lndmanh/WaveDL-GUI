@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Admission limits and fail-closed storage policy for blocking daemon work."""
 
 from __future__ import annotations

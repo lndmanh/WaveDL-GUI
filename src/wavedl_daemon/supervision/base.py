@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Portable, stdlib-only process supervision contracts."""
 
 from __future__ import annotations

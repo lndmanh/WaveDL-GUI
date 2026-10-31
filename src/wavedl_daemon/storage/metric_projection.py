@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """SQLite metric telemetry fold; its caller owns the cursor transaction."""
 
 from __future__ import annotations

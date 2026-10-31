@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Shell-free command execution with real process-tree deadlines.
 
 run_command is synchronous. Event-loop callers use submit_command and await its

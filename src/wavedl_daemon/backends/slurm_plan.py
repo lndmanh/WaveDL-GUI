@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Pure, identity-bindable Slurm plans; no scheduler or filesystem side effects.
 
 The preview is immutable. Submission may substitute only the three declared

@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Bounded Local process ownership; saved PIDs never authorize signalling.
 
 Supervisors own pipe draining and tree cleanup. This adapter retains a bounded

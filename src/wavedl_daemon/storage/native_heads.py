@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Immutable verified scheduler proofs, independent of lifecycle diagnostics."""
 
 from __future__ import annotations

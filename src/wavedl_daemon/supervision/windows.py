@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Windows Job Object supervision, with assignment before first execution.
 
 The Windows-only stdlib modules are loaded lazily. CPython's ``_winapi``

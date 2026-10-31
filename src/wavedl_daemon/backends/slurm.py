@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Slurm backend composition: preview, identity recovery and native evidence."""
 
 from __future__ import annotations

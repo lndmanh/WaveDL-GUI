@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Typed lifecycle facade over already-open, owner-thread stores.
 
 Planning is pure apart from committing an immutable SQLite preview. The

@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Telemetry projections alongside authoritative, durable plan/control records.
 
 Runtime journals can rebuild only telemetry projections and ingestion cursors.

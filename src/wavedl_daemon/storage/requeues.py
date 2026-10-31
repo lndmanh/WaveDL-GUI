@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Immutable scheduler restart bindings and archived execution generations."""
 
 from __future__ import annotations

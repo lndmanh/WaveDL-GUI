@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Durable replay rows committed with projections and ingestion cursors."""
 
 from __future__ import annotations

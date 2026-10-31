@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Dependency-light bundled model descriptions and explicitly scoped browsing.
 
 Bundled descriptions are not runtime capability evidence. Browsing never reads

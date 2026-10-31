@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Safe, capability-scoped dataset preview selection.
 
 Only administrator-configured roots may be selected.  Paths are lexical slash

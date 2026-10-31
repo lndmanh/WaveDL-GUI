@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Bounded journal reads and authenticated-push ingestion on the owner thread."""
 
 from __future__ import annotations

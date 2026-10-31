@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Pure reconciliation of durable intent, runtime, backend and publication.
 
 Backend lifecycle confirms termination, not training success. Runtime success

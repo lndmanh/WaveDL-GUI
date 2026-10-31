@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """An inert, bounded bridge to one SQLite-owning thread and asyncio loop.
 
 A caller deadline requests cooperative asynchronous cancellation and limits

@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Explicit standalone provenance verification; never adopts a PID or handle."""
 
 from __future__ import annotations

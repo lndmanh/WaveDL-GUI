@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Bounded supervised metadata workers; no numerical imports in the daemon."""
 
 from __future__ import annotations

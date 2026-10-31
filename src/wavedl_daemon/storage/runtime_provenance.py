@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Immutable execution-environment evidence, separate from approved requests."""
 
 from __future__ import annotations

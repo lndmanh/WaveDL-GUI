@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Dependency-light, immutable planning and backend evidence contracts.
 
 Backend evidence is not an application verdict. Runtime, wrapper/batch and

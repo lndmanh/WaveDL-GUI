@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Attempt-scoped runtime handshake validation with caller-supplied clocks.
 
 Scheduler waiting never starts a deadline. A current positive RUNNING observation

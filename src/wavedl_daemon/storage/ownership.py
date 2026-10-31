@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Single-writer dispatch ownership, released by the kernel on process death.
 
 Exactly one daemon may mutate run state at a time. The obvious implementation --

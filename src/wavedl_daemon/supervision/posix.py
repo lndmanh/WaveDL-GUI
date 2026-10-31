@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """POSIX process-group supervision with bounded, continuously drained pipes.
 
 Only the direct child is waitable on macOS. Orphaned descendants are reaped by

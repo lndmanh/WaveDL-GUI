@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Immutable independently collected outcomes, never reconstructed from telemetry."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Forward-only migrations and consistent SQLite recovery snapshots.
 
 Only the daemon schema is handled here; legacy Qt download tables are not

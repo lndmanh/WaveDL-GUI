@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Daemon roots and the storage guarantees each one has to provide.
 
 The daemon owns two roots with opposite requirements. The *state root* holds the

@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Describe the daemon host so the client can prefill a runnable Local runtime.
 
 The daemon never imports numerical packages: accelerators are probed in a reaped

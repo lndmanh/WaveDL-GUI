@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Atomic registration of verified external runs, never dispatchable intents."""
 
 from __future__ import annotations
