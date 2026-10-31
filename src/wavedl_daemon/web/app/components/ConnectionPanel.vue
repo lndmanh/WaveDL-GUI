@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { computed, shallowRef, watch } from 'vue';
+import { cn } from '@/lib/utils';
 import { Field as VeeField, useForm } from 'vee-validate';
-import { motion, MotionConfig, useReducedMotion } from 'motion-v';
+import { motion } from 'motion-v';
 import {
   ArrowRight,
-  AudioWaveform,
   Check,
   Eye,
   EyeOff,
@@ -16,24 +14,48 @@ import {
   TriangleAlert,
   Unplug,
 } from '@lucide/vue';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Field, FieldError, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Spinner } from '@/components/ui/spinner';
-import { Switch } from '@/components/ui/switch';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useClientMessages } from '../composables/useClientMessages';
 import type { ConnectionState } from '../lib/connection-session';
 import {
   daemonCredentialSchema,
   type DaemonCredentialValues,
 } from '#shared/schemas/daemon-connection';
 
+// Utility bundles keep state and descendant styling beside their component.
+const styles = {
+  connectBeacon: cn(
+    '[--beacon:var(--primary)] relative grid size-20 place-items-center',
+    "[&[data-tone='idle']]:[--beacon:var(--muted-foreground)]",
+    "[&[data-tone='ready']]:[--beacon:var(--success)] [&[data-tone='warn']]:[--beacon:var(--warning)]",
+  ),
+  connectBeaconTile: cn(
+    'relative grid size-full place-items-center rounded-[1.5rem] text-(--beacon)',
+    '[background:linear-gradient(_160deg,_color-mix(in_srgb,_var(--beacon)_14%,_var(--surface)),_var(--surface)_70%_)]',
+    'shadow-[0_0_0_0.5px_color-mix(in_srgb,_var(--foreground)_12%,_transparent),_inset_0_1px_0_rgb(255_255_255_/_0.5),_0_18px_36px_-18px_color-mix(in_srgb,_var(--beacon)_55%,_transparent),_0_2px_6px_rgb(0_0_0_/_0.05)]',
+    '[transition:color_400ms_ease,_box-shadow_400ms_ease]',
+  ),
+  connectBeaconBadge: cn(
+    'absolute right-[-0.3rem] bottom-[-0.3rem] grid size-6 place-items-center rounded-full text-white',
+    'bg-(--beacon) shadow-[0_0_0_3px_var(--background)]',
+  ),
+  connectInput: cn(
+    'h-12 [padding-inline:2.6rem_3rem] rounded-[0.9rem] bg-surface dark:bg-surface text-[0.95rem] md:text-[0.95rem]',
+    'shadow-[0_0_0_0.5px_color-mix(in_srgb,_var(--foreground)_6%,_transparent),_0_1px_2px_rgb(0_0_0_/_0.04)]',
+  ),
+  connectSubmit: cn(
+    'h-12 rounded-[0.9rem] text-[0.95rem]',
+    'shadow-[inset_0_1px_0_rgb(255_255_255_/_0.22),_0_8px_20px_-8px_color-mix(in_srgb,_var(--primary)_75%,_transparent)]',
+  ),
+  connectRow: cn(
+    'flex min-h-[2.9rem] items-center justify-between gap-4 p-[0.65rem_1rem] text-sm',
+    '[&+&]:[border-top:0.5px_solid_color-mix(in_srgb,_var(--foreground)_10%,_transparent)]!',
+    '[&_dt]:shrink-0 [&_dt]:text-muted-foreground',
+  ),
+};
+
 const props = withDefaults(defineProps<{ state: ConnectionState; keepSignedIn?: boolean }>(), {
   keepSignedIn: false,
 });
+
 const emit = defineEmits<{
   connect: [token: string, keepSignedIn: boolean];
   reconnect: [token: string, keepSignedIn: boolean];
@@ -41,54 +63,71 @@ const emit = defineEmits<{
   detach: [];
   refresh: [];
 }>();
+
 const { handleSubmit, resetForm } = useForm<DaemonCredentialValues>({
   initialValues: { token: '' },
   validationSchema: daemonCredentialSchema,
 });
+
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 const reducedMotion = useReducedMotion();
 const keepSignedIn = computed(() => props.keepSignedIn);
 const revealed = shallowRef(false);
 const shakes = shallowRef(0);
+
 const busy = computed(
   () => props.state.status === 'connecting' || props.state.status === 'offline',
 );
+
 const connected = computed(() => props.state.status === 'connected');
+
 const tone = computed<'idle' | 'busy' | 'ready' | 'warn'>(() => {
   if (connected.value) return 'ready';
+
   if (props.state.status === 'connecting') return 'busy';
+
   return props.state.message ? 'warn' : 'idle';
 });
+
 const heading = computed(() =>
   connected.value ? t('shell.connectedToYourDaemon') : t('shell.connectToYourDaemon'),
 );
+
 const subtitle = computed(() =>
   connected.value ? t('shell.connectedSubtitle') : t('shell.executionBelongsToTheDaemon'),
 );
+
 const daemonId = computed(() => props.state.health?.daemon_id ?? '');
+
 const shortDaemonId = computed(() =>
   daemonId.value.length > 16
     ? `${daemonId.value.slice(0, 8)}…${daemonId.value.slice(-4)}`
     : daemonId.value,
 );
+
 // Rejected keys surface under the field; everything else gets a notice above it.
 const rejection = computed(() =>
   props.state.status === 'authentication' && props.state.message ? props.state.message : null,
 );
+
 const notice = computed(() => (rejection.value ? null : props.state.message));
 const spring = { type: 'spring', stiffness: 260, damping: 26 } as const;
+
 const submit = handleSubmit((values) => {
   const token = values.token;
   resetForm({ values: { token: '' } });
   revealed.value = false;
+
   if (props.state.revision > 0) emit('reconnect', token, keepSignedIn.value);
   else emit('connect', token, keepSignedIn.value);
 });
+
 watch(
   () => props.state.revision,
   () => resetForm({ values: { token: '' } }),
 );
+
 watch(rejection, (message) => {
   if (message) shakes.value += 1;
 });
@@ -97,12 +136,12 @@ watch(rejection, (message) => {
 <template>
   <MotionConfig reduced-motion="user">
     <section
-      class="connect-stage mx-auto flex w-full flex-1 items-center justify-center px-4 py-10 sm:px-8"
+      class="mx-auto flex w-full flex-1 items-center justify-center px-4 py-10 sm:px-8 [background:radial-gradient(_closest-side_at_50%_30%,_color-mix(in_srgb,_var(--primary)_9%,_transparent),_transparent_)]"
       aria-labelledby="connection-title"
     >
       <div class="flex w-full max-w-[25rem] flex-col items-center" data-testid="connection-card">
         <motion.div
-          class="connect-beacon"
+          :class="cn(styles.connectBeacon)"
           :data-tone="tone"
           :initial="{ opacity: 0, scale: 0.8 }"
           :animate="{ opacity: 1, scale: 1 }"
@@ -113,7 +152,7 @@ watch(rejection, (message) => {
             <motion.span
               v-for="ring in 2"
               :key="`${tone}-${ring}`"
-              class="connect-beacon-ring"
+              class="absolute inset-0 rounded-[1.5rem] [border:1.5px_solid_color-mix(in_srgb,_var(--beacon)_55%,_transparent)]!"
               :initial="{ opacity: 0.5, scale: 1 }"
               :animate="{ opacity: 0, scale: tone === 'busy' ? 1.9 : 1.6 }"
               :transition="{
@@ -124,13 +163,13 @@ watch(rejection, (message) => {
               }"
             />
           </template>
-          <span class="connect-beacon-tile">
-            <AudioWaveform class="size-7" />
+          <span :class="cn(styles.connectBeaconTile)">
+            <img src="/favicon.svg" alt="" class="size-10 rounded-[0.75rem]" />
           </span>
           <motion.span
             v-if="tone === 'ready' || tone === 'warn'"
             :key="tone"
-            class="connect-beacon-badge"
+            :class="cn(styles.connectBeaconBadge)"
             :initial="{ opacity: 0, scale: 0.4 }"
             :animate="{ opacity: 1, scale: 1 }"
             :transition="{ ...spring, delay: 0.15 }"
@@ -174,18 +213,21 @@ watch(rejection, (message) => {
           <div v-if="connected && state.health" class="mt-7 flex w-full flex-col gap-4">
             <TooltipProvider>
               <dl
-                class="connect-list"
+                class="overflow-hidden rounded-[1rem] bg-surface batch-r-surface-shadow"
                 data-testid="connection-live-chip"
                 :aria-label="t('shell.connectedDaemonIdentity', { daemonId })"
               >
-                <div class="connect-row">
+                <div :class="cn('connect-row', styles.connectRow)">
                   <dt>{{ t('shell.connectionStateLabel') }}</dt>
                   <dd class="flex items-center gap-2 font-medium">
-                    <span class="connect-live-dot" aria-hidden="true" />
+                    <span
+                      class="size-2 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_srgb,_var(--success)_20%,_transparent)]"
+                      aria-hidden="true"
+                    />
                     {{ t('shell.connected') }}
                   </dd>
                 </div>
-                <div class="connect-row">
+                <div :class="cn('connect-row', styles.connectRow)">
                   <dt>{{ t('shell.connectionIdLabel') }}</dt>
                   <dd class="min-w-0">
                     <Tooltip>
@@ -203,7 +245,7 @@ watch(rejection, (message) => {
                     </Tooltip>
                   </dd>
                 </div>
-                <div class="connect-row">
+                <div :class="cn('connect-row', styles.connectRow)">
                   <dt>{{ t('shell.connectionVersionLabel') }}</dt>
                   <dd class="text-muted-foreground tabular-nums">{{ state.health.build_id }}</dd>
                 </div>
@@ -216,7 +258,7 @@ watch(rejection, (message) => {
               <Button
                 type="button"
                 variant="secondary"
-                class="connect-pill"
+                class="h-[2.6rem] rounded-[0.8rem]"
                 @click="emit('refresh')"
               >
                 <RefreshCw data-icon="inline-start" aria-hidden="true" />
@@ -225,7 +267,7 @@ watch(rejection, (message) => {
               <Button
                 type="button"
                 variant="secondary"
-                class="connect-pill"
+                class="h-[2.6rem] rounded-[0.8rem]"
                 @click="emit('detach')"
               >
                 <Unplug data-icon="inline-start" aria-hidden="true" />
@@ -242,10 +284,9 @@ watch(rejection, (message) => {
                 </FieldLabel>
                 <div
                   :key="shakes"
-                  class="connect-field"
+                  class="relative flex items-center [&[data-shake='true']]:[animation:connect-shake_420ms_cubic-bezier(0.36,_0.07,_0.19,_0.97)]"
                   :data-shake="shakes > 0 && !reducedMotion"
                 >
-                  <KeyRound class="connect-field-icon" aria-hidden="true" />
                   <Input
                     id="daemon-bearer"
                     v-bind="field"
@@ -253,17 +294,17 @@ watch(rejection, (message) => {
                     autocomplete="off"
                     autocapitalize="off"
                     spellcheck="false"
-                    :placeholder="t('shell.accessKeyPlaceholder')"
+                    placeholder="your-access-key"
                     :aria-invalid="!!errors.length || !!rejection"
                     :disabled="busy"
                     aria-describedby="daemon-bearer-help"
-                    class="connect-input"
+                    :class="cn(styles.connectInput)"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    class="connect-reveal"
+                    class="absolute right-[0.45rem] rounded-[0.6rem] text-muted-foreground"
                     :disabled="busy"
                     :aria-pressed="revealed"
                     :aria-label="revealed ? t('shell.hideAccessKey') : t('shell.showAccessKey')"
@@ -277,7 +318,7 @@ watch(rejection, (message) => {
                 <FieldError v-else-if="rejection" :errors="[clientMessage(rejection)]" />
               </Field>
             </VeeField>
-            <Button type="submit" size="lg" class="connect-submit" :disabled="busy">
+            <Button type="submit" size="lg" :class="cn(styles.connectSubmit)" :disabled="busy">
               <template v-if="state.status === 'connecting'">
                 <Spinner size="sm" class="text-current" :label="t('shell.connecting2')" />
                 {{ t('shell.connecting2') }}
@@ -291,7 +332,7 @@ watch(rejection, (message) => {
               v-if="state.revision > 0"
               type="button"
               variant="ghost"
-              class="connect-pill text-muted-foreground"
+              class="text-muted-foreground h-[2.6rem] rounded-[0.8rem]"
               :disabled="state.status === 'connecting'"
               @click="emit('detach')"
             >
@@ -299,10 +340,12 @@ watch(rejection, (message) => {
             </Button>
           </form>
 
-          <div class="connect-list mt-4 w-full">
-            <div class="connect-row">
+          <div class="mt-4 w-full overflow-hidden rounded-[1rem] bg-surface batch-r-surface-shadow">
+            <div :class="cn('connect-row', styles.connectRow)">
               <label for="keep-signed-in" class="flex min-w-0 flex-col gap-0.5">
-                <span class="text-sm font-medium">{{ t('shell.keepMeSignedInOnThisBrowser') }}</span>
+                <span class="text-sm font-medium">{{
+                  t('shell.keepMeSignedInOnThisBrowser')
+                }}</span>
                 <span id="keep-signed-in-help" class="text-xs text-muted-foreground">
                   {{ t('shell.sessionStorageHelp') }}
                 </span>
@@ -347,157 +390,3 @@ watch(rejection, (message) => {
     </section>
   </MotionConfig>
 </template>
-
-<style>
-.connect-stage {
-  background: radial-gradient(
-    closest-side at 50% 30%,
-    color-mix(in srgb, var(--primary) 9%, transparent),
-    transparent
-  );
-}
-.connect-beacon {
-  --beacon: var(--primary);
-  position: relative;
-  display: grid;
-  width: 5rem;
-  height: 5rem;
-  place-items: center;
-}
-.connect-beacon[data-tone='idle'] {
-  --beacon: var(--muted-foreground);
-}
-.connect-beacon[data-tone='ready'] {
-  --beacon: var(--success);
-}
-.connect-beacon[data-tone='warn'] {
-  --beacon: var(--warning);
-}
-.connect-beacon-tile {
-  position: relative;
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  border-radius: 1.5rem;
-  color: var(--beacon);
-  background:
-    linear-gradient(
-      160deg,
-      color-mix(in srgb, var(--beacon) 14%, var(--surface)),
-      var(--surface) 70%
-    );
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 12%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 0.5),
-    0 18px 36px -18px color-mix(in srgb, var(--beacon) 55%, transparent),
-    0 2px 6px rgb(0 0 0 / 0.05);
-  transition:
-    color 400ms ease,
-    box-shadow 400ms ease;
-}
-.connect-beacon-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 1.5rem;
-  border: 1.5px solid color-mix(in srgb, var(--beacon) 55%, transparent);
-}
-.connect-beacon-badge {
-  position: absolute;
-  right: -0.3rem;
-  bottom: -0.3rem;
-  display: grid;
-  width: 1.5rem;
-  height: 1.5rem;
-  place-items: center;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--beacon);
-  box-shadow: 0 0 0 3px var(--background);
-}
-.connect-field {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.connect-field[data-shake='true'] {
-  animation: connect-shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
-}
-@keyframes connect-shake {
-  20%,
-  60% {
-    transform: translateX(-6px);
-  }
-  40%,
-  80% {
-    transform: translateX(6px);
-  }
-}
-.connect-field-icon {
-  position: absolute;
-  left: 1rem;
-  width: 1rem;
-  height: 1rem;
-  color: var(--muted-foreground);
-  pointer-events: none;
-}
-.connect-input {
-  height: 3rem;
-  padding-inline: 2.6rem 3rem;
-  border-radius: 0.9rem;
-  background: var(--surface);
-  font-size: 0.95rem;
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 6%, transparent),
-    0 1px 2px rgb(0 0 0 / 0.04);
-}
-.connect-reveal {
-  position: absolute;
-  right: 0.45rem;
-  border-radius: 0.6rem;
-  color: var(--muted-foreground);
-}
-.connect-submit {
-  height: 3rem;
-  border-radius: 0.9rem;
-  font-size: 0.95rem;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.22),
-    0 8px 20px -8px color-mix(in srgb, var(--primary) 75%, transparent);
-}
-.connect-pill {
-  height: 2.6rem;
-  border-radius: 0.8rem;
-}
-.connect-list {
-  overflow: hidden;
-  border-radius: 1rem;
-  background: var(--surface);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 10%, transparent),
-    0 1px 2px rgb(0 0 0 / 0.04);
-}
-.connect-row {
-  display: flex;
-  min-height: 2.9rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.65rem 1rem;
-  font-size: 0.875rem;
-}
-.connect-row + .connect-row {
-  border-top: 0.5px solid color-mix(in srgb, var(--foreground) 10%, transparent);
-}
-.connect-row dt {
-  flex-shrink: 0;
-  color: var(--muted-foreground);
-}
-.connect-live-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 999px;
-  background: var(--success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
-}
-</style>

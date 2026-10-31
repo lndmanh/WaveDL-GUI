@@ -1,14 +1,7 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { shallowRef, watch } from 'vue';
 import { useForm } from 'vee-validate';
 import { z } from 'zod';
-import { Button } from '@/components/ui/button';
-import { FieldGroup } from '@/components/ui/field';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import ShellInfo from '../shell/ShellInfo.vue';
 import { ChevronDown } from '@lucide/vue';
-import TrainingOptionField from '../project/TrainingOptionField.vue';
 import {
   loadTrainingPreferences,
   saveTrainingPreferences,
@@ -17,12 +10,15 @@ import {
   trainingPreferenceFields,
   trainingPreferencesSchema,
 } from '../../lib/preferences';
+
 const props = defineProps<{ daemonId: string | null }>();
 const message = shallowRef('');
+
 const { handleSubmit, resetForm } = useForm({
   validationSchema: z.strictObject({ config: trainingPreferencesSchema }),
   initialValues: { config: defaultTrainingPreferences() },
 });
+
 watch(
   () => props.daemonId,
   (daemonId) => {
@@ -35,6 +31,7 @@ watch(
   },
   { immediate: true },
 );
+
 const submit = handleSubmit((value) => {
   if (!props.daemonId) return;
   message.value = saveTrainingPreferences(
@@ -44,12 +41,15 @@ const submit = handleSubmit((value) => {
     ? 'shell.trainingDefaultsSaved'
     : 'shell.trainingDefaultsSaveFailed';
 });
+
 function resetDefaults() {
   if (!props.daemonId) return;
   const reset = resetTrainingPreferences(props.daemonId);
+
   if (reset) resetForm({ values: { config: defaultTrainingPreferences() } });
   message.value = reset ? 'shell.trainingDefaultsReset' : 'shell.defaultsCouldNotBeReset';
 }
+
 const { t } = useI18n({ useScope: 'global' });
 </script>
 <template>

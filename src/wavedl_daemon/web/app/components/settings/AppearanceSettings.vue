@@ -1,19 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { useClientMessages } from '../../composables/useClientMessages';
-import { onMounted, onUnmounted, shallowRef } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
-import { Button } from '@/components/ui/button';
-import { Field, FieldGroup, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import ShellInfo from '../shell/ShellInfo.vue';
 import {
   appearanceSchema,
   loadAppearance,
@@ -27,23 +13,30 @@ const props = defineProps<{ appearance?: AppearancePreferences }>();
 const emit = defineEmits<{ changed: [value: AppearancePreferences] }>();
 const { clientMessage } = useClientMessages();
 const message = shallowRef('');
+
 const { handleSubmit, resetForm } = useForm({
   validationSchema: appearanceSchema,
   initialValues: props.appearance ?? loadAppearance(),
 });
+
 let media: MediaQueryList | null = null;
 let applied = props.appearance ?? loadAppearance();
+
 function applySystem() {
   applyAppearance(applied, document.documentElement, media?.matches ?? false);
 }
+
 function controlChange(name: string, value: string, change: (value: string | number) => void) {
   change(name === 'zoom' ? Number(value) : value);
 }
+
 onMounted(() => {
   media = window.matchMedia('(prefers-color-scheme: dark)');
   media.addEventListener('change', applySystem);
 });
+
 onUnmounted(() => media?.removeEventListener('change', applySystem));
+
 const submit = handleSubmit((value) => {
   const parsed = appearanceSchema.parse(value);
   applied = parsed;
@@ -52,10 +45,12 @@ const submit = handleSubmit((value) => {
   emit('changed', parsed);
   message.value = saved ? 'shell.browserPreferencesSaved' : 'shell.appearanceSessionOnly';
 });
+
 function reload() {
   resetForm({ values: applied });
   message.value = '';
 }
+
 const controls = [
   {
     name: 'theme',
@@ -87,6 +82,7 @@ const controls = [
     ],
   },
 ];
+
 const { t } = useI18n({ useScope: 'global' });
 </script>
 <template>

@@ -1,167 +1,124 @@
+<script setup lang="ts">
+import { cn } from '@/lib/utils';
+
+// Utility bundles keep state and descendant styling beside their component.
+const styles = {
+  readerSkeleton: cn(
+    "relative overflow-hidden isolate",
+  ),
+  readerSkeleton__shine: cn(
+    "absolute inset-0 block rounded-[inherit]",
+    "[background:linear-gradient(_90deg,_transparent_0%,_color-mix(in_oklch,_var(--primary)_0%,_transparent)_18%,_color-mix(in_oklch,_var(--primary)_4%,_transparent)_32%,_color-mix(in_oklch,_var(--primary)_14%,_transparent)_50%,_color-mix(in_oklch,_var(--primary)_4%,_transparent)_68%,_color-mix(in_oklch,_var(--primary)_0%,_transparent)_82%,_transparent_100%_)]",
+    "shadow-[0_0_14px_color-mix(in_oklch,_var(--primary)_5%,_transparent)]",
+    "[transform:translate3d(-140%,_0,_0)_skewX(-12deg)] [will-change:transform,_opacity]",
+    "[animation-name:reader-skeleton-shimmer] [animation-duration:var(--reader-skeleton-duration,_2.45s)]",
+    "[animation-timing-function:cubic-bezier(0.4,_0,_0.2,_1)] [animation-iteration-count:infinite]",
+    "motion-reduce:animate-none motion-reduce:opacity-[0]",
+  ),
+  readerSkeletonPrimary: cn(
+    String.raw`[&_.reader-skeleton\_\_shine]:[--reader-skeleton-duration:2.35s]`,
+  ),
+  readerSkeletonSecondary: cn(
+    String.raw`[&_.reader-skeleton\_\_shine]:[--reader-skeleton-duration:2.55s]`,
+  ),
+  readerSkeletonPill: cn(
+    String.raw`[&_.reader-skeleton\_\_shine]:[--reader-skeleton-duration:2.7s]`,
+    String.raw`[&_.reader-skeleton\_\_shine]:opacity-[0.7]`,
+  ),
+  readerSkeletonCover: cn(
+    String.raw`[&_.reader-skeleton\_\_shine]:[--reader-skeleton-duration:2.85s]`,
+  ),
+};
+</script>
+
 <template>
   <div class="w-full max-w-3xl mx-auto px-4 py-8 space-y-8">
     <!-- Story title -->
     <div class="space-y-3">
-      <div class="reader-skeleton reader-skeleton--primary w-2/3 rounded">
+      <div :class="cn('w-2/3 rounded', styles.readerSkeleton, styles.readerSkeletonPrimary)">
         <Skeleton class="h-8 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton reader-skeleton--secondary w-1/3 rounded">
+      <div :class="cn('w-1/3 rounded', styles.readerSkeleton, styles.readerSkeletonSecondary)">
         <Skeleton class="h-5 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
     </div>
 
     <!-- Meta row: author, date, tags -->
     <div class="flex flex-wrap items-center gap-3">
-      <div class="reader-skeleton reader-skeleton--pill w-20 rounded-full">
+      <div :class="cn('w-20 rounded-full', styles.readerSkeleton, styles.readerSkeletonPill)">
         <Skeleton class="h-6 w-full rounded-full bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton reader-skeleton--pill w-24 rounded-full">
+      <div :class="cn('w-24 rounded-full', styles.readerSkeleton, styles.readerSkeletonPill)">
         <Skeleton class="h-6 w-full rounded-full bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton reader-skeleton--pill w-16 rounded-full">
+      <div :class="cn('w-16 rounded-full', styles.readerSkeleton, styles.readerSkeletonPill)">
         <Skeleton class="h-6 w-full rounded-full bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton reader-skeleton--pill w-20 rounded-full">
+      <div :class="cn('w-20 rounded-full', styles.readerSkeleton, styles.readerSkeletonPill)">
         <Skeleton class="h-6 w-full rounded-full bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
     </div>
 
     <!-- Cover image placeholder -->
-    <div class="reader-skeleton reader-skeleton--cover rounded-lg">
+    <div :class="cn('rounded-lg', styles.readerSkeleton, styles.readerSkeletonCover)">
       <Skeleton class="h-56 w-full rounded-lg bg-muted/75 animate-none sm:h-72" />
-      <span class="reader-skeleton__shine" />
+      <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
     </div>
 
     <!-- Section heading -->
-    <div class="reader-skeleton w-1/2 rounded">
+    <div class="w-1/2 rounded relative overflow-hidden isolate">
       <Skeleton class="h-6 w-full rounded bg-muted/75 animate-none" />
-      <span class="reader-skeleton__shine" />
+      <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
     </div>
 
     <!-- Paragraph 1 -->
     <div class="space-y-2">
-      <div class="reader-skeleton w-full rounded">
+      <div class="w-full rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton w-full rounded">
+      <div class="w-full rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton w-full rounded">
+      <div class="w-full rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton w-4/5 rounded">
+      <div class="w-4/5 rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
     </div>
 
     <!-- Paragraph 2 -->
     <div class="space-y-2">
-      <div class="reader-skeleton w-full rounded">
+      <div class="w-full rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton w-full rounded">
+      <div class="w-full rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton w-5/6 rounded">
+      <div class="w-5/6 rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton w-full rounded">
+      <div class="w-full rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
-      <div class="reader-skeleton w-3/4 rounded">
+      <div class="w-3/4 rounded relative overflow-hidden isolate">
         <Skeleton class="h-4 w-full rounded bg-muted/75 animate-none" />
-        <span class="reader-skeleton__shine" />
+        <span :class="cn('reader-skeleton__shine', styles.readerSkeleton__shine)" />
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.reader-skeleton {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.reader-skeleton__shine {
-  position: absolute;
-  inset: 0;
-  display: block;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in oklch, var(--primary) 0%, transparent) 18%,
-    color-mix(in oklch, var(--primary) 4%, transparent) 32%,
-    color-mix(in oklch, var(--primary) 14%, transparent) 50%,
-    color-mix(in oklch, var(--primary) 4%, transparent) 68%,
-    color-mix(in oklch, var(--primary) 0%, transparent) 82%,
-    transparent 100%
-  );
-  box-shadow: 0 0 14px color-mix(in oklch, var(--primary) 5%, transparent);
-  transform: translate3d(-140%, 0, 0) skewX(-12deg);
-  will-change: transform, opacity;
-  animation-name: reader-skeleton-shimmer;
-  animation-duration: var(--reader-skeleton-duration, 2.45s);
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  animation-iteration-count: infinite;
-}
-
-.reader-skeleton--primary .reader-skeleton__shine {
-  --reader-skeleton-duration: 2.35s;
-}
-
-.reader-skeleton--secondary .reader-skeleton__shine {
-  --reader-skeleton-duration: 2.55s;
-}
-
-.reader-skeleton--pill .reader-skeleton__shine {
-  --reader-skeleton-duration: 2.7s;
-  opacity: 0.7;
-}
-
-.reader-skeleton--cover .reader-skeleton__shine {
-  --reader-skeleton-duration: 2.85s;
-}
-
-@keyframes reader-skeleton-shimmer {
-  0% {
-    transform: translate3d(-140%, 0, 0) skewX(-12deg);
-    opacity: 0;
-  }
-
-  18% {
-    opacity: 0.72;
-  }
-
-  54% {
-    opacity: 0.62;
-  }
-
-  100% {
-    transform: translate3d(140%, 0, 0) skewX(-12deg);
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reader-skeleton__shine {
-    animation: none;
-    opacity: 0;
-  }
-}
-</style>

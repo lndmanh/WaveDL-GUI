@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { shallowRef } from 'vue';
 import { CircleHelp } from '@lucide/vue';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 defineProps<{ label: string; text: string; uncertain?: boolean }>();
+
 const open = shallowRef(false);
 </script>
 
