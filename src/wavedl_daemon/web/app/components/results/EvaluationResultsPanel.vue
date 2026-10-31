@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { computed } from 'vue';
 import type { RunView } from '../../lib/daemon-api';
 import type { RunEvent } from '../../lib/event-stream';
 import { evaluationResults } from '../../lib/evaluation-results';
 import { evaluationMetricMessageKeys } from '../../i18n/dynamic-keys';
 
 const { t } = useI18n({ useScope: 'global' });
+
 const props = defineProps<{
   run: RunView | null;
   events: readonly RunEvent[];
   freshness: 'fresh' | 'stale' | 'unconfirmed';
 }>();
+
 const metrics = computed(() => {
   if (!props.run || props.freshness !== 'fresh') return null;
+
   return evaluationResults(props.run, props.events);
 });
+
 const rows = computed(() =>
   Object.entries(metrics.value ?? {}).map(([name, value]) => ({
     name,

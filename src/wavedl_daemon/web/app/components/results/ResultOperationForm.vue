@@ -1,19 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { useClientMessages } from '../../composables/useClientMessages';
-import { onBeforeUnmount, shallowRef, watch, toRaw } from 'vue';
 import { useForm, Field as VeeField } from 'vee-validate';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Field, FieldLabel, FieldError, FieldGroup } from '@/components/ui/field';
-import InferenceFields from './InferenceFields.vue';
 import { resultRequestSchema } from '../../../shared/schemas/result-request';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { Artifact } from '../../lib/artifact-client';
@@ -25,17 +11,14 @@ import {
   type CheckpointOption,
 } from '../../lib/result-operations';
 import { createResultOperationDefaults } from '../../lib/result-operation-defaults';
-import BrowseContainer from '../catalog/BrowseContainer.vue';
-import RuntimeFields from '../project/RuntimeFields.vue';
-import EnvironmentFields from '../project/EnvironmentFields.vue';
-import StorageMappingFields from '../project/StorageMappingFields.vue';
-import PlanApproval from '../project/PlanApproval.vue';
-import InfoChip from '../common/InfoChip.vue';
+
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+
 function fieldMessage(message: string): string {
   return message.startsWith('results.') ? t(message) : clientMessage(message);
 }
+
 const props = defineProps<{ session: ConnectionSession; artifacts: readonly Artifact[] }>();
 const session = toRaw(props.session);
 const emit = defineEmits<{ runSelected: [runId: string] }>();
@@ -47,14 +30,17 @@ const busy = shallowRef(false);
 const message = shallowRef('');
 const sources = shallowRef<readonly CheckpointOption[]>([]);
 const sourceMessage = shallowRef('');
+
 const { handleSubmit, values, setFieldValue, setFieldError } = useForm({
   validationSchema: resultRequestSchema,
   initialValues: {
     ...createResultOperationDefaults(),
   },
 });
+
 let scope = new AbortController();
 let epoch = 0;
+
 function invalidate() {
   epoch++;
   scope.abort();
@@ -63,7 +49,9 @@ function invalidate() {
   plan.value = null;
   busy.value = false;
 }
+
 watch(values, invalidate, { deep: true });
+
 watch(
   () => props.artifacts,
   async (_items, _prior, onCleanup) => {
@@ -74,8 +62,10 @@ watch(
     const controller = new AbortController();
     const revision = session.snapshot().revision;
     onCleanup(() => controller.abort());
+
     try {
       const options = await checkpointOptions(session, props.artifacts, controller.signal);
+
       if (!controller.signal.aborted && session.api && session.snapshot().revision === revision) {
         sources.value = options;
         sourceMessage.value = options.length ? '' : 'results.noClassification';
@@ -86,6 +76,7 @@ watch(
   },
   { immediate: true },
 );
+
 const unsubscribe = toRaw(props.session).subscribe((state) => {
   if (state.status !== 'connected') {
     invalidate();
@@ -94,19 +85,24 @@ const unsubscribe = toRaw(props.session).subscribe((state) => {
     data.value = null;
   }
 });
+
 function chooseSource(value: unknown) {
   if (typeof value !== 'string') return;
+
   const selected = sources.value.find(
     (item) => item.selectable && item.artifact.generation === value,
   )?.artifact;
+
   source.value = selected ?? null;
   setFieldValue('checkpoint_source', {
     run_id: selected?.runId ?? '',
     generation: selected?.generation ?? '',
   });
 }
+
 function sourceLabel(item: CheckpointOption): string {
   const kind = item.classification.kind;
+
   const kindKeys: Readonly<Record<CheckpointOption['classification']['kind'], string>> = {
     best: 'results.best',
     periodic: 'results.periodic',
@@ -114,6 +110,7 @@ function sourceLabel(item: CheckpointOption): string {
     cross_validation_fold: 'results.cvFold',
     cross_validation_summary: 'results.cvSummary',
   };
+
   return t('results.sourceLabel', {
     generation: item.artifact.generation,
     attempt: item.artifact.attempt,
@@ -121,18 +118,22 @@ function sourceLabel(item: CheckpointOption): string {
     fold: item.classification.fold === undefined ? '' : ` ${item.classification.fold}`,
   });
 }
+
 function chooseData(selected: DataSelection) {
   data.value = selected;
   setFieldValue('config.data_path', selected.path);
 }
+
 function exportValue(value: unknown): 'onnx' | null {
   return value === 'onnx' ? 'onnx' : null;
 }
+
 async function work(action: (signal: AbortSignal) => Promise<void>) {
   if (busy.value) return;
   const current = epoch;
   busy.value = true;
   message.value = '';
+
   try {
     await action(scope.signal);
   } catch {
@@ -144,30 +145,37 @@ async function work(action: (signal: AbortSignal) => Promise<void>) {
     if (current === epoch) busy.value = false;
   }
 }
+
 const preview = handleSubmit(async (draft) => {
   const selectedData = data.value;
   const selectedSource = source.value;
+
   if (!selectedData || !selectedSource) {
     message.value = 'results.selectionRequired';
+
     return;
   }
+
   await work(async (signal) => {
     await workflow.prepare(draft, selectedData, selectedSource, signal);
     plan.value = await workflow.preview(signal);
   });
 });
+
 async function submit() {
   await work(async (signal) => {
     const view = await workflow.submit(signal);
     emit('runSelected', view.run_id);
   });
 }
+
 async function status() {
   await work(async (signal) => {
     const view = await workflow.status(signal);
     emit('runSelected', view.run_id);
   });
 }
+
 onBeforeUnmount(() => {
   unsubscribe();
   invalidate();

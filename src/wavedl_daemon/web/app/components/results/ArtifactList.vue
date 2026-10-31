@@ -1,24 +1,30 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Empty, EmptyDescription } from '@/components/ui/empty';
-import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import type { Artifact } from '../../lib/artifact-client';
+
+// Utility bundles keep state and descendant styling beside their component.
+const styles = {
+  artifactGrid: cn(
+    "[&_[data-slot='card']]:min-w-0 [&_[data-slot='card']]:max-w-full [&_[data-slot='badge']]:max-w-full",
+    "[&_[data-slot='badge']]:whitespace-normal [&_[data-slot='badge']]:wrap-anywhere",
+  ),
+};
+
 const { t, locale } = useI18n({ useScope: 'global' });
+
 defineProps<{
   artifacts: readonly Artifact[];
   busy: boolean;
   imageUrl?: string | null;
   previewPath?: string | null;
 }>();
+
 defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>();
 </script>
 <template>
   <section
     :aria-label="t('results.publications')"
-    class="artifact-grid flex min-w-0 max-w-full flex-col gap-4"
+    :class="cn('flex min-w-0 max-w-full flex-col gap-4', styles.artifactGrid)"
   >
     <Skeleton v-if="busy && !artifacts.length" class="h-32 w-full" />
     <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-4">
@@ -74,15 +80,3 @@ defineEmits<{ download: [artifact: Artifact]; preview: [artifact: Artifact] }>()
     >
   </section>
 </template>
-
-<style scoped>
-.artifact-grid :deep([data-slot='card']) {
-  min-width: 0;
-  max-width: 100%;
-}
-.artifact-grid :deep([data-slot='badge']) {
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-</style>

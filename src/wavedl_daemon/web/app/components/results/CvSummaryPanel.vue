@@ -1,31 +1,23 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, shallowRef, toRaw, useId, watch } from 'vue';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import type { Artifact } from '../../lib/artifact-client';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { loadCvSummary, type CvMetric, type CvSummary } from '../../lib/cv-summary';
-import { useI18n } from 'vue-i18n';
-import InfoChip from '../common/InfoChip.vue';
+
 const props = defineProps<{ session: ConnectionSession; artifacts: readonly Artifact[] }>();
 const { t, locale } = useI18n({ useScope: 'global' });
 const id = useId();
+
 const publications = computed(() =>
   props.artifacts.filter((artifact) => artifact.path === 'cv_summary.json'),
 );
+
 const selected = shallowRef<Artifact | null>(null);
 const summary = shallowRef<CvSummary | null>(null);
 const busy = shallowRef(false);
 const failed = shallowRef(false);
 let scope = new AbortController();
 let epoch = 0;
+
 function reset() {
   scope.abort();
   scope = new AbortController();
@@ -35,20 +27,25 @@ function reset() {
   busy.value = false;
   failed.value = false;
 }
+
 watch(() => props.artifacts, reset);
+
 watch(
   () => toRaw(props.session),
   (session, _prior, onCleanup) => {
     reset();
     let revision = session.snapshot().revision;
+
     const unsubscribe = session.subscribe((state) => {
       if (state.status !== 'connected' || revision !== state.revision) reset();
       revision = state.revision;
     });
+
     onCleanup(unsubscribe);
   },
   { immediate: true },
 );
+
 function choose(generation: unknown) {
   const artifact = publications.value.find((item) => item.generation === generation);
   scope.abort();
@@ -59,13 +56,16 @@ function choose(generation: unknown) {
   busy.value = false;
   failed.value = false;
 }
+
 async function load() {
   if (!selected.value || busy.value) return;
   const current = epoch;
   busy.value = true;
   failed.value = false;
+
   try {
     const result = await loadCvSummary(props.session, selected.value, scope.signal);
+
     if (current === epoch) summary.value = result;
   } catch {
     if (current === epoch) failed.value = true;
@@ -73,6 +73,7 @@ async function load() {
     if (current === epoch) busy.value = false;
   }
 }
+
 function number(value: CvMetric) {
   return value === null
     ? t('cv.unavailable')
@@ -80,6 +81,7 @@ function number(value: CvMetric) {
         maximumSignificantDigits: 6,
       }).format(value);
 }
+
 const overall = computed(() =>
   summary.value
     ? [
@@ -89,6 +91,7 @@ const overall = computed(() =>
       ]
     : [],
 );
+
 onBeforeUnmount(() => {
   reset();
 });

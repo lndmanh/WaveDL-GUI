@@ -1,27 +1,19 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { computed, onBeforeUnmount, onMounted, shallowRef, watch, toRaw } from 'vue';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { ArtifactClient, pngPreviewBlob, type Artifact } from '../../lib/artifact-client';
 import { artifactDownloadName } from '../../lib/artifact-download';
-import ArtifactList from './ArtifactList.vue';
-import CvSummaryPanel from './CvSummaryPanel.vue';
-import ResultOperationForm from './ResultOperationForm.vue';
-import EvaluationResultsPanel from './EvaluationResultsPanel.vue';
 import type { RunMonitorSnapshot } from '../../lib/run-monitor';
-import InfoChip from '../common/InfoChip.vue';
-import { useShellLayout } from '../../composables/useShellLayout';
-import { usePageActive } from '../../composables/usePageActive';
+
 const { isActive } = usePageActive();
 const { t } = useI18n({ useScope: 'global' });
 const shellLayout = useShellLayout();
+
 const props = defineProps<{
   session: ConnectionSession;
   runId: string | null;
   monitor?: RunMonitorSnapshot | null;
 }>();
+
 const session = computed(() => toRaw(props.session));
 const connected = shallowRef(false);
 const scopeGeneration = shallowRef(0);
@@ -34,17 +26,21 @@ const imageUrl = shallowRef<string | null>(null);
 const previewPath = shallowRef<string | null>(null);
 const panelTarget = shallowRef<HTMLElement | null>(null);
 const parkedArtifacts = shallowRef<HTMLElement | null>(null);
+
 onMounted(() => {
   parkedArtifacts.value = document.createElement('div');
   panelTarget.value = document.getElementById('shell-panel-tab-artifacts');
 });
+
 let scope = new AbortController();
 let epoch = 0;
+
 function clearImage() {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
   imageUrl.value = null;
   previewPath.value = null;
 }
+
 function reset() {
   scope.abort();
   scope = new AbortController();
@@ -56,18 +52,22 @@ function reset() {
   downloadStatus.value = '';
   clearImage();
 }
+
 watch(
   session,
   (owner, _prior, onCleanup) => {
     reset();
     let active = true;
     let revision = owner.snapshot().revision;
+
     const unsubscribe = owner.subscribe((state) => {
       if (!active || owner !== session.value) return;
       connected.value = state.status === 'connected';
+
       if (state.status !== 'connected' || revision !== state.revision) reset();
       revision = state.revision;
     });
+
     onCleanup(() => {
       active = false;
       unsubscribe();
@@ -75,14 +75,18 @@ watch(
   },
   { immediate: true, flush: 'sync' },
 );
+
 watch(() => props.runId, reset, { flush: 'sync' });
+
 async function refresh() {
   if (!props.runId || busy.value) return;
   const current = epoch;
   busy.value = true;
   message.value = '';
+
   try {
     const items = await new ArtifactClient(session.value).list(props.runId, scope.signal);
+
     if (current === epoch) artifacts.value = items;
   } catch {
     if (current === epoch) message.value = 'results.artifactsFailed';
@@ -90,22 +94,28 @@ async function refresh() {
     if (current === epoch) busy.value = false;
   }
 }
+
 async function consume(artifact: Artifact, preview = false) {
   if (busy.value) return;
   const current = epoch;
   busy.value = true;
   message.value = '';
+
   try {
     const blob = await new ArtifactClient(session.value).verifiedBlob(artifact, scope.signal);
+
     if (current !== epoch) return;
+
     if (preview) {
       const image = await pngPreviewBlob(blob);
+
       if (current !== epoch) return;
       clearImage();
       imageUrl.value = URL.createObjectURL(image);
       previewPath.value = `${artifact.generation}/${artifact.path}`;
     } else {
       const name = await artifactDownloadName(artifact, artifacts.value);
+
       if (current !== epoch) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -123,6 +133,7 @@ async function consume(artifact: Artifact, preview = false) {
     if (current === epoch) busy.value = false;
   }
 }
+
 onBeforeUnmount(() => {
   reset();
 });

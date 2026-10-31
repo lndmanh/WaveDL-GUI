@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { useClientMessages } from '../../composables/useClientMessages';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import InfoChip from '../common/InfoChip.vue';
 import type { AutomaticPlotState } from '../../lib/autoplot-controller';
+
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+
 defineProps<{ state: AutomaticPlotState }>();
+
 defineEmits<{ retry: []; stop: []; monitor: [runId: string] }>();
 </script>
 

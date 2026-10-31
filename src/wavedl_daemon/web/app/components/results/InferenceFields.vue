@@ -1,23 +1,12 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { useClientMessages } from '../../composables/useClientMessages';
 import { Field as VeeField } from 'vee-validate';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Field, FieldLabel, FieldError, FieldGroup } from '@/components/ui/field';
 import { inferenceFieldMessageKeys } from '../../i18n/dynamic-keys';
-import InfoChip from '../common/InfoChip.vue';
+
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+
 defineProps<{ disabled: boolean }>();
+
 const numbers = [
   { name: 'batch_size', label: inferenceFieldMessageKeys.batchSize, min: 1, nullable: false },
   { name: 'workers', label: inferenceFieldMessageKeys.workers, min: 0, nullable: false },
@@ -30,24 +19,30 @@ const numbers = [
   { name: 'out_size', label: inferenceFieldMessageKeys.outputSize, min: 1, nullable: true },
   { name: 'export_opset', label: inferenceFieldMessageKeys.opset, min: 11, nullable: false },
 ];
+
 const texts = [
   { name: 'model', label: inferenceFieldMessageKeys.model },
   { name: 'input_key', label: inferenceFieldMessageKeys.inputKey },
   { name: 'output_key', label: inferenceFieldMessageKeys.outputKey },
 ];
+
 const flags = [
   { name: 'save_predictions', label: inferenceFieldMessageKeys.predictions },
   { name: 'plot', label: inferenceFieldMessageKeys.plot },
   { name: 'verbose', label: inferenceFieldMessageKeys.verbose },
   { name: 'no_denorm', label: inferenceFieldMessageKeys.normalized },
 ];
+
 function numberValue(value: string | number, nullable: boolean): number | null {
   return value === '' ? (nullable ? null : Number.NaN) : Number(value);
 }
+
 function listValue(input: string | number): string[] | null {
   const value = String(input).trim();
+
   return value === '' ? null : value.split(',').map((item) => item.trim());
 }
+
 function nullableText(input: string | number): string | null {
   return input === '' ? null : String(input);
 }
