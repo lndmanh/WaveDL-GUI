@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { jsonObjectSchema } from './json';
 
 export const cvMetricSchema = z.number().finite().nullable();
 
@@ -32,7 +33,10 @@ export const cvSummarySchema = z.strictObject({
   mae_std: cvNonnegativeSchema,
   val_loss_mean: cvNonnegativeSchema,
   val_loss_std: cvNonnegativeSchema,
-  fold_results: z.array(z.object({
+  fold_results: z.array(jsonObjectSchema.refine((value) => Object.keys(value).every((key) =>
+    ['fold', 'best_val_loss', 'best_epoch', 'r2', 'mae_normalized', 'mae_physical', 'epochs_trained'].includes(key) ||
+    /^(r2|mae)_target_(0|[1-9]\d*)$/.test(key),
+  )).pipe(z.object({
     fold: cvIntegerSchema(1, 256),
     best_val_loss: cvNonnegativeSchema,
     best_epoch: cvIntegerSchema(0, 1_000_000),
@@ -40,5 +44,5 @@ export const cvSummarySchema = z.strictObject({
     mae_normalized: cvNonnegativeSchema,
     mae_physical: cvNonnegativeSchema,
     epochs_trained: cvIntegerSchema(1, 1_000_000),
-  }).catchall(cvMetricSchema)),
+  }).catchall(cvMetricSchema))),
 }).refine((value) => value.config.folds === value.folds && value.fold_results.length === value.folds);

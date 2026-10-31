@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
-export const trainingImportSchema = z.record(z.string(), z.unknown());
+const trainingImportFieldsSchema = z.record(z.string(), z.unknown());
 
-export type TrainingImportDocument = z.infer<typeof trainingImportSchema>;
+export type TrainingImportDocument = z.infer<typeof trainingImportFieldsSchema>;
+
+export const trainingImportSchema = z.custom<TrainingImportDocument>((value) =>
+  trainingImportFieldsSchema.safeParse(value).success,
+);
 
 export const importedSelectionSchema = z.string().max(8192).refine((value) => value.trim().length > 0);
 

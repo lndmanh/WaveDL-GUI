@@ -1,6 +1,37 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConnectionSession } from './session-fixture';
 import { CatalogApi, relativePath } from '../../app/lib/catalog-api';
+import { parseDatasetInspection } from '../../app/lib/dataset-inspection';
+import { previewValuesSchema } from '../../shared/schemas/dataset-preview';
+
+describe('dataset boundary parity', () => {
+  const variable = { name: 'X', dtype: 'float32', shape: [2, 3], sample_count: 2, declared_bytes: 24 };
+
+  const header = { schema_version: 1, format: 'npz', variables: [variable, { ...variable, name: 'Y', shape: [2], declared_bytes: 8 }] };
+
+  it('keeps exact metadata bounds, selected extension, sample counts and unique variable names', () => {
+    expect(parseDatasetInspection(header, { relativePath: 'train.npz' })).toMatchObject({ numSamples: 2, inputShape: [3], outputShape: [1] });
+
+    for (const value of [
+      { ...header, extra: true },
+      { ...header, variables: [variable, { ...variable, name: 'Y', sample_count: null }] },
+      { ...header, variables: [variable, variable] },
+      { ...header, variables: [variable, { ...variable, name: 'Y', shape: [2.5] }] },
+    ]) {
+      expect(() => parseDatasetInspection(value, { relativePath: 'train.npz' })).toThrow();
+    }
+
+    expect(() => parseDatasetInspection(header, { relativePath: 'train.mat' })).toThrow();
+  });
+
+  it('retains finite nullable nested preview values without coercion', () => {
+    expect(previewValuesSchema.parse([[null, -1e100], [0, 1e100]])).toEqual([[null, -1e100], [0, 1e100]]);
+
+    for (const value of [[[true]], [['1']], [[Infinity]], [[NaN]], {}]) {
+      expect(previewValuesSchema.safeParse(value).success).toBe(false);
+    }
+  });
+});
 
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
 

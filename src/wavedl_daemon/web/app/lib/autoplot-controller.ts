@@ -524,27 +524,27 @@ export class AutoPlotController {
     const source = selected.artifact;
     const config = captured.config;
 
-    const request = resultRequestSchema.parse({
-        backend: captured.backend,
-        operation: 'plot',
-        runtime: captured.runtime,
-        topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
-        checkpoint_source: { run_id: run.run_id, generation: source.generation },
-        config: {
-          ...inferenceDefaults,
-          data_path: config.data_path,
-          model: config.model,
-          import_modules: config.import_modules,
-          batch_size: config.batch_size,
-          workers: Math.max(0, config.workers),
-          plot: true,
-        },
-      });
+    const request: ResultRequest = {
+      backend: captured.backend,
+      operation: 'plot',
+      runtime: captured.runtime,
+      topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
+      checkpoint_source: { run_id: run.run_id, generation: source.generation },
+      config: {
+        ...inferenceDefaults,
+        data_path: config.data_path,
+        model: config.model,
+        import_modules: config.import_modules,
+        batch_size: config.batch_size,
+        workers: Math.max(0, config.workers),
+        plot: true,
+      },
+    };
 
     if (captured.storage_map !== undefined) request.storage_map = captured.storage_map;
 
     return {
-      request,
+      request: resultRequestSchema.parse(request),
       idempotencyKey: `web-autoplot-v1:${sourceRun.run_id}:${sourceRun.request_id}:${source.generation}`,
     };
   }

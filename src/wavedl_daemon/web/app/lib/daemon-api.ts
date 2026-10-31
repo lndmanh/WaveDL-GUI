@@ -1,6 +1,6 @@
 /** Browser-only, same-origin daemon transport. Browser authority is session-scoped. */
 import { z } from 'zod';
-import { jsonObjectSchema, jsonScalarSchema, jsonContainerSchema } from '../../shared/schemas/json';
+import { jsonObjectSchema, jsonScalarSchema } from '../../shared/schemas/json';
 import {
   RUN_STATES,
   evidenceSchemaFor,
@@ -203,10 +203,8 @@ export function validateJson<T>(
     return;
   }
 
-  const container = jsonContainerSchema.safeParse(value);
-
-  if (container.success) {
-    for (const child of Object.values(container.data)) validateJson(child, depth + 1, budget);
+  if (object(value)) {
+    for (const child of Object.values(value)) validateJson(child, depth + 1, budget);
 
     return;
   }

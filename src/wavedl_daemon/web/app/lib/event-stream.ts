@@ -4,26 +4,14 @@ import {
   object,
   parseJson,
   type Json,
-  type JsonObject,
 } from './daemon-api';
 
 import { cursorSchema, runEventSchema } from '../../shared/schemas/event-stream';
+import type { z } from 'zod';
 
-export interface Cursor {
-  attempt: number;
-  seq: number;
-}
+export type Cursor = z.infer<typeof cursorSchema>;
 
-export interface RunEvent {
-  protocol: 'wavedl-jsonl';
-  version: 1;
-  run_id: string;
-  attempt: number;
-  seq: number;
-  type: string;
-  ts: string;
-  payload: JsonObject;
-}
+export type RunEvent = z.infer<typeof runEventSchema>;
 
 export interface StreamControl {
   type: 'overflow' | 'error';

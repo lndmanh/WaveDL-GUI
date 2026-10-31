@@ -1,17 +1,11 @@
 import { clientError } from '../i18n/client-messages';
-import { z } from 'zod';
 import { parseJson, type Json } from './daemon-api';
+import { credentialSchema, type SessionCredential } from '../../shared/schemas/session-credential';
 
 export const SESSION_CREDENTIAL_KEY = 'wavedl.session.v1';
 export const SESSION_CREDENTIAL_LIMIT = 16 * 1024;
 
-export interface SessionCredential {
-  version: 1;
-  daemonId: string;
-  origin: string;
-  token: string;
-  expiresAt: number;
-}
+export type { SessionCredential } from '../../shared/schemas/session-credential';
 
 export type SessionCredentialStorageArea = 'session' | 'local';
 
@@ -25,14 +19,6 @@ export interface StoredSessionCredential {
   credential: SessionCredential;
   storage: SessionCredentialStorageArea;
 }
-
-const credentialSchema = z.strictObject({
-  version: z.literal(1),
-  daemonId: z.string().regex(/^[\x21-\x7e]{1,256}$/),
-  origin: z.string().max(512),
-  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-  expiresAt: z.number().safe().int().positive(),
-});
 
 function validOrigin(value: string): boolean {
   try {

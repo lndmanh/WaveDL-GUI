@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConnectionSession } from '../../app/lib/connection-session';
 import { DaemonApi, DaemonApiError, parseJson, stripBootstrapUrl } from '../../app/lib/daemon-api';
 import { translateClientDiagnostic } from '../../app/i18n/client-messages';
+import { jsonSchema } from '../../shared/schemas/json';
+
+describe('bounded JSON schema parity', () => {
+  it('retains additive own members and rejects invalid numbers without narrowing finite metrics', () => {
+    const value = parseJson('{"__proto__":{"metric":1e100},"nested":[null,true,""]}');
+    const parsed = jsonSchema.parse(value);
+
+    expect(parsed).toBe(value);
+    expect(Object.hasOwn(parsed, '__proto__')).toBe(true);
+    expect(jsonSchema.safeParse({ metric: Infinity }).success).toBe(false);
+    expect(jsonSchema.safeParse({ metric: NaN }).success).toBe(false);
+    expect(jsonSchema.safeParse({ metric: undefined }).success).toBe(false);
+  });
+});
 
 const token = 'a'.repeat(64);
 const origin = 'http://127.0.0.1:8765';

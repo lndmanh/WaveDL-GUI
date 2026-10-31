@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { jsonObjectSchema } from './json';
 
 export const artifactPathSchema = z.string().max(4096).refine((value) =>
   !/[\\:%]/.test(value) &&
@@ -8,15 +9,29 @@ export const artifactPathSchema = z.string().max(4096).refine((value) =>
 
 const integer = z.number().refine(Number.isSafeInteger);
 
+const artifactFileSchema = z.strictObject({
+  size: integer.refine((value) => value >= 0),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+
+type ArtifactFiles = Record<string, z.infer<typeof artifactFileSchema>>;
+
+// z.record strips __proto__; it is a legal artifact basename, so validate
+// entries without replacing the original dictionary or losing that member.
+const artifactFilesSchema = z.custom<ArtifactFiles>((value) => {
+  const parsed = jsonObjectSchema.safeParse(value);
+
+  return parsed.success && Object.entries(parsed.data).every(([path, file]) =>
+    artifactPathSchema.safeParse(path).success && artifactFileSchema.safeParse(file).success,
+  );
+});
+
 export const inventorySchema = z.strictObject({
   generations: z.array(z.strictObject({
     generation: z.string().regex(/^gen-\d{6,}$/),
     attempt: integer.refine((value) => value >= 1),
     step: integer.refine((value) => value >= 0),
-    files: z.record(artifactPathSchema, z.strictObject({
-      size: integer.refine((value) => value >= 0),
-      sha256: z.string().regex(/^[a-f0-9]{64}$/),
-    })),
+    files: artifactFilesSchema,
   })).max(4096),
 });
 
