@@ -3,7 +3,8 @@ import {
   type ClientErrorKey,
   type ClientErrorParams,
 } from '../i18n/client-messages';
-import { DaemonApiError, object, validateJson, type JsonObject, type RunView } from './daemon-api';
+import { DaemonApiError, object, validateJson, type JsonObject, type Json, type RunView } from './daemon-api';
+import { metricIntegerSchema, metricValueSchema, metricPayloadSchema, metricGenerationSchema } from '../../shared/schemas/metric-history';
 import type { RunEvent } from './event-stream';
 
 export interface MetricRecord {
@@ -18,6 +19,7 @@ export interface MetricRecord {
   sourceGeneration: string | null;
   active: boolean;
 }
+
 export interface MetricSummary {
   progress: { epoch: number; totalEpochs: number; fraction: number } | null;
   best: number | null;
@@ -25,12 +27,14 @@ export interface MetricSummary {
   /** Present only when the selected runtime has emitted metrics. */
   current?: RuntimeMetricSummary;
 }
+
 export interface MetricHealth {
   label: string;
   value: string;
   status: string;
   severity: 'good' | 'warning' | 'error';
 }
+
 export interface RuntimeMetricSummary {
   trainLoss: number | null;
   validationLoss: number | null;
@@ -46,17 +50,20 @@ export interface RuntimeMetricSummary {
   parameters: { name: string; value: number | null }[];
   health: MetricHealth[];
 }
+
 export interface NumericPoint {
   attempt: number;
   seq: number;
   step: number;
   value: number | null;
 }
+
 interface Boundary {
   attempt: number;
   step: number;
   seq: number | null;
 }
+
 const numericFields = new Set([
   'train_loss',
   'val_loss',
@@ -75,16 +82,21 @@ const numericFields = new Set([
   'val_mae_avg',
   'total_time',
 ]);
+
 const integerFields = new Set(['epoch', 'total_epochs', 'patience_counter', 'max_patience']);
+
 function fail(clientMessageKey: ClientErrorKey, clientMessageParams?: ClientErrorParams): never {
   throw DaemonApiError.fromKey('protocol', clientMessageKey, { params: clientMessageParams });
 }
-function integer(value: unknown, minimum = 0): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
+
+function integer(value: Json | undefined, minimum = 0): value is number {
+  return metricIntegerSchema(minimum).safeParse(value).success;
 }
+
 function numeric(value: unknown): value is number | null {
-  return value === null || (typeof value === 'number' && Number.isFinite(value));
+  return metricValueSchema.safeParse(value).success;
 }
+
 function valueOf(record: MetricRecord, ...fields: string[]): number | null {
   for (const field of fields) {
     const value = Object.hasOwn(record.metrics, field)
@@ -92,8 +104,10 @@ function valueOf(record: MetricRecord, ...fields: string[]): number | null {
       : record.name === field
         ? record.value
         : undefined;
+
     if (numeric(value)) return value;
   }
+
   return null;
 }
 
@@ -114,12 +128,15 @@ function runtimeSummary(record: MetricRecord, bestR2: number | null): RuntimeMet
     parameters: [],
     health: [],
   };
+
   const used = record.metrics.patience_counter;
   const maximum = record.metrics.max_patience;
+
   if (integer(used) && integer(maximum, 1))
     current.patience = { used, maximum, fraction: used / maximum };
   const parameters = record.metrics.mae_per_param;
   const namedParameters = record.metrics.per_param_mae;
+
   if (Array.isArray(parameters))
     current.parameters = parameters.map((value, index) => ({
       name: `P${index + 1}`,
@@ -135,6 +152,7 @@ function runtimeSummary(record: MetricRecord, bestR2: number | null): RuntimeMet
       .filter(([name]) => name.startsWith('MAE_Phys_P'))
       .map(([name, value]) => ({ name, value: numeric(value) ? value : null }));
   const { trainLoss, validationLoss, learningRate, gradientNorm, patience } = current;
+
   if (trainLoss !== null && trainLoss > 0 && validationLoss !== null) {
     const gap = ((validationLoss - trainLoss) / trainLoss) * 100;
     current.health.push({
@@ -144,6 +162,7 @@ function runtimeSummary(record: MetricRecord, bestR2: number | null): RuntimeMet
       severity: gap > 50 ? 'error' : gap > 20 || gap <= 0 ? 'warning' : 'good',
     });
   }
+
   if (learningRate !== null && learningRate > 0)
     current.health.push({
       label: 'Learning rate',
@@ -151,6 +170,7 @@ function runtimeSummary(record: MetricRecord, bestR2: number | null): RuntimeMet
       status: learningRate < 1e-7 ? 'Very Low' : learningRate > 1e-2 ? 'High' : 'Normal',
       severity: learningRate < 1e-7 || learningRate > 1e-2 ? 'warning' : 'good',
     });
+
   if (gradientNorm !== null && gradientNorm > 0)
     current.health.push({
       label: 'Gradient health',
@@ -170,6 +190,7 @@ function runtimeSummary(record: MetricRecord, bestR2: number | null): RuntimeMet
             ? 'warning'
             : 'good',
     });
+
   if (patience)
     current.health.push({
       label: 'Patience used',
@@ -180,6 +201,7 @@ function runtimeSummary(record: MetricRecord, bestR2: number | null): RuntimeMet
   const best = valueOf(record, 'best_val_loss');
   const epoch = record.metrics.epoch;
   const total = record.metrics.total_epochs;
+
   if (
     best !== null &&
     validationLoss !== null &&
@@ -195,35 +217,39 @@ function runtimeSummary(record: MetricRecord, bestR2: number | null): RuntimeMet
       severity: distance < 1 ? 'good' : distance < 10 ? 'warning' : 'error',
     });
   }
+
   return current;
 }
+
 function metric(
   payload: JsonObject,
 ): Omit<MetricRecord, 'runId' | 'attempt' | 'seq' | 'active' | 'sourceGeneration'> {
-  if (
-    typeof payload.name !== 'string' ||
-    !numeric(payload.value) ||
-    !integer(payload.step) ||
-    (payload.unit !== undefined && typeof payload.unit !== 'string')
-  )
-    fail('invalidMetricPayload');
+  const parsed = metricPayloadSchema.safeParse(payload);
+
+  if (!parsed.success) fail('invalidMetricPayload');
   const details = payload.metrics ?? {};
+
   if (!object(details)) fail('invalidMetricDetails');
   validateJson(details);
+
   for (const [key, value] of Object.entries(details)) {
     if ((numericFields.has(key) || key.startsWith('MAE_Phys_P')) && !numeric(value))
       fail('invalidNumericMetric', { field: key });
+
     if (integerFields.has(key) && !integer(value)) fail('invalidIntegerMetric', { field: key });
+
     if (key === 'mae_per_param' && (!Array.isArray(value) || !value.every(numeric)))
       fail('invalidPerParameterMetrics');
+
     if (key === 'per_param_mae' && (!object(value) || !Object.values(value).every(numeric)))
       fail('invalidPerParameterMetrics');
   }
+
   return {
-    name: payload.name,
-    value: payload.value,
-    step: payload.step,
-    unit: payload.unit ?? '',
+    name: parsed.data.name,
+    value: parsed.data.value,
+    step: parsed.data.step,
+    unit: parsed.data.unit ?? '',
     metrics: structuredClone(details),
   };
 }
@@ -254,6 +280,7 @@ export class MetricHistory {
     options: { maxPoints?: number } = {},
   ) {
     this.maxPoints = options.maxPoints ?? 200_000;
+
     if (!integer(this.maxPoints, 1)) throw clientRangeError('invalidMaxPoints');
   }
   get size(): number {
@@ -270,6 +297,7 @@ export class MetricHistory {
   acknowledgeGeneration(sourceAttempt: number, step: number, generation: string): void {
     if (!integer(sourceAttempt, 1) || !integer(step) || !generation)
       fail('invalidVerifiedGeneration');
+
     if (this.#published.size >= this.maxPoints) fail('metricGenerationCapacityExceeded');
     this.#published.add(JSON.stringify([sourceAttempt, step, generation]));
     this.#known.add(sourceAttempt);
@@ -277,13 +305,18 @@ export class MetricHistory {
   apply(event: RunEvent): void {
     if (event.run_id !== this.runId || !integer(event.attempt, 1) || !integer(event.seq))
       fail('invalidMetricEventOwnership');
+
     if (event.seq <= (this.#cursors.get(event.attempt) ?? -1)) return;
+
     if (!this.#cursors.has(event.attempt) && this.#cursors.size >= this.maxPoints)
       fail('metricAttemptCapacityExceeded');
+
     if (event.type === 'metric') {
       const checked = metric(event.payload);
+
       if (this.size >= this.maxPoints) fail('metricHistoryCapacity');
       const active = event.attempt >= this.#head;
+
       const record: MetricRecord = {
         ...checked,
         runId: this.runId,
@@ -292,37 +325,44 @@ export class MetricHistory {
         sourceGeneration: this.#generations.get(event.attempt) ?? null,
         active,
       };
+
       const key = JSON.stringify([record.step, record.name]);
+
       if (active) {
         if (event.attempt > this.#head) this.#resetRuntimeSummary();
         const prior = this.#active.get(key);
+
         if (prior) prior.active = false;
         this.#trackR2(key, record);
         this.#active.set(key, record);
         this.#latest = record;
       }
+
       this.#records.push(record);
       let steps = this.#steps.get(event.attempt);
+
       if (!steps) {
         steps = new Map();
         this.#steps.set(event.attempt, steps);
       }
+
       steps.set(record.step, Math.min(steps.get(record.step) ?? event.seq, event.seq));
       this.#known.add(event.attempt);
       this.#head = Math.max(this.#head, event.attempt);
     } else if (event.type === 'supersede') {
       const payload = event.payload;
+
       if (
         !integer(payload.source_attempt, 1) ||
         payload.source_attempt >= event.attempt ||
         !integer(payload.step) ||
-        typeof payload.generation !== 'string' ||
-        !payload.generation ||
+        !metricGenerationSchema.safeParse(payload.generation).success ||
         (payload.source_seq !== undefined && !integer(payload.source_seq))
       )
         fail('invalidSupersessionBoundary');
       const seq = payload.source_seq ?? null;
       const first = this.#steps.get(payload.source_attempt)?.get(payload.step);
+
       if (
         !(first !== undefined && (seq === null || first <= seq)) &&
         !this.#published.has(
@@ -331,33 +371,40 @@ export class MetricHistory {
         !(payload.step === 0 && this.#known.has(payload.source_attempt))
       )
         fail('supersessionStepMissing');
+
       if (this.#lineage.has(event.attempt)) fail('supersessionAlreadySet');
       this.#lineage.set(event.attempt, {
         attempt: payload.source_attempt,
         step: payload.step,
         seq,
       });
+
       if (event.attempt >= this.#head) {
         this.#restore(event.attempt);
         this.#head = event.attempt;
         this.#resetRuntimeSummary();
         this.#latest = null;
+
         for (const record of this.#active.values()) {
           if (record.attempt === event.attempt && (!this.#latest || record.seq > this.#latest.seq))
             this.#latest = record;
         }
+
         for (const record of this.#active.values()) {
           if (record.attempt === event.attempt)
             this.#trackR2(JSON.stringify([record.step, record.name]), record);
         }
       }
+
       this.#generations.set(event.attempt, payload.generation);
     } else if (event.type === 'hello') {
       this.#known.add(event.attempt);
+
       if (event.attempt > this.#head) {
         this.#latest = null;
         this.#resetRuntimeSummary();
       }
+
       this.#head = Math.max(this.#head, event.attempt);
     } else if (event.type === 'artifact' && event.payload.kind === 'checkpoint')
       this.#known.add(event.attempt);
@@ -371,6 +418,7 @@ export class MetricHistory {
   #trackR2(key: string, record: MetricRecord): void {
     if (this.#r2Scores.get(key) === this.#bestR2) this.#bestR2Dirty = true;
     const score = valueOf(record, 'r2', 'val_r2');
+
     if (score === null) this.#r2Scores.delete(key);
     else {
       this.#r2Scores.set(key, score);
@@ -381,18 +429,23 @@ export class MetricHistory {
     const bounds = new Map<number, { step: number | null; seq: number | null }>();
     let step: number | null = null;
     let seq: number | null = null;
+
     for (;;) {
       bounds.set(attempt, { step, seq });
       const boundary = this.#lineage.get(attempt);
+
       if (!boundary) break;
       attempt = boundary.attempt;
       step = step === null ? boundary.step : Math.min(step, boundary.step);
       seq = boundary.seq;
     }
+
     this.#active.clear();
+
     for (const record of this.#records) {
       record.active = false;
       const bound = bounds.get(record.attempt);
+
       if (
         !bound ||
         (bound.step !== null && record.step > bound.step) ||
@@ -401,6 +454,7 @@ export class MetricHistory {
         continue;
       const key = JSON.stringify([record.step, record.name]);
       const prior = this.#active.get(key);
+
       if (
         !prior ||
         record.attempt > prior.attempt ||
@@ -408,6 +462,7 @@ export class MetricHistory {
       )
         this.#active.set(key, record);
     }
+
     for (const record of this.#active.values()) record.active = true;
   }
   metrics(
@@ -420,6 +475,7 @@ export class MetricHistory {
         (this.#scope !== undefined && this.#scope !== this.#head))
     )
       return [];
+
     return this.#records
       .filter(
         (record) =>
@@ -439,36 +495,45 @@ export class MetricHistory {
     const epoch = latest?.metrics.epoch;
     const totalEpochs = latest?.metrics.total_epochs;
     const best = latest?.metrics.best_val_loss;
+
     if (this.#bestR2Dirty) {
       this.#bestR2 = null;
+
       for (const score of this.#r2Scores.values())
         this.#bestR2 = this.#bestR2 === null ? score : Math.max(this.#bestR2, score);
       this.#bestR2Dirty = false;
     }
-    return {
+
+    const summary: MetricSummary = {
       progress:
         integer(epoch) && integer(totalEpochs, 1)
           ? { epoch, totalEpochs, fraction: Math.min(epoch / totalEpochs, 1) }
           : null,
       best: numeric(best) ? best : null,
       latest: latest ? structuredClone(latest) : null,
-      ...(latest ? { current: runtimeSummary(latest, this.#bestR2) } : {}),
     };
+
+    if (latest) summary.current = runtimeSummary(latest, this.#bestR2);
+
+    return summary;
   }
   series(
     field: string,
     options: { activeOnly?: boolean; attempt?: number; live?: boolean } = {},
   ): NumericPoint[] {
     const points: NumericPoint[] = [];
+
     for (const record of this.metrics(options)) {
       const value = Object.hasOwn(record.metrics, field)
         ? record.metrics[field]
         : record.name === field
           ? record.value
           : undefined;
+
       if (numeric(value))
         points.push({ attempt: record.attempt, seq: record.seq, step: record.step, value });
     }
+
     return points;
   }
 }

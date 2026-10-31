@@ -23,17 +23,22 @@ export function modelEntryKey(id: string): string {
 
 export function modelEntries(models: readonly ModelDescription[]): ModelEntry[] {
   const groups = new Map<string, ModelDescription[]>();
+
   for (const model of models) {
     const key = modelEntryKey(model.id);
     groups.set(key, [...(groups.get(key) ?? []), model]);
   }
+
   return [...groups.entries()].flatMap(([key, variants]) => {
     const scratch = variants.find((model) => !model.pretrained) ?? null;
+
     const weighted =
       variants.find((model) => model.pretrained && model.id.endsWith(suffix)) ??
       variants.find((model) => model.pretrained) ??
       null;
+
     const primary = scratch ?? weighted;
+
     return primary ? [{ key, scratch, weighted, primary }] : [];
   });
 }
@@ -50,6 +55,7 @@ export function loadRecentModels(storage: Pick<Storage, 'getItem'> | null): stri
   try {
     const raw = storage?.getItem(recentKey);
     const value = raw ? parseJson(raw) : [];
+
     return Array.isArray(value)
       ? value.filter((item): item is string => typeof item === 'string').slice(0, recentLimit)
       : [];
@@ -66,10 +72,12 @@ export function rememberRecentModel(
     0,
     recentLimit,
   );
+
   try {
     storage?.setItem(recentKey, JSON.stringify(next));
   } catch {
     // Recents are a convenience; private browsing may refuse storage.
   }
+
   return next;
 }

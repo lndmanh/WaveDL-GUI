@@ -1,27 +1,33 @@
 import { clientRangeError } from '../i18n/client-messages';
 import type uPlot from 'uplot';
 import type { MetricRecord } from './metric-history';
+import { metricValueSchema } from '../../shared/schemas/metric-history';
 
 export type PlotChannel = 'loss' | 'r2' | 'lr';
+
 export const PLOT_CHANNELS = ['loss', 'r2', 'lr'] as const;
 export const MAX_PLOT_RECORDS = 200_000;
+
 const fields: Record<PlotChannel, readonly string[]> = {
   loss: ['train_loss', 'val_loss'],
   r2: ['r2', 'val_r2'],
   lr: ['lr'],
 };
-export const PLOT_LABELS: Record<string, string> = {
+
+export const PLOT_LABELS = {
   train_loss: 'Training loss',
   val_loss: 'Validation loss',
   r2: 'Training R²',
   val_r2: 'Validation R²',
   lr: 'Learning rate',
-};
+} satisfies Record<string, string>;
+
 export interface PlotSeries {
   data: uPlot.AlignedData;
   fields: readonly string[];
   pointCount: number;
 }
+
 interface Cell {
   value: number | null;
   attempt: number;
@@ -40,32 +46,43 @@ export function buildPlotSeries(
     throw clientRangeError('chartCapacityExceeded', { limit: MAX_PLOT_RECORDS });
   const selected = fields[channel];
   const rows = new Map<number, Map<string, Cell>>();
+
   for (const record of records) {
     if (!record.active || !Number.isSafeInteger(record.step) || record.step < 0) continue;
+
     for (const field of selected) {
       const value = Object.hasOwn(record.metrics, field)
         ? record.metrics[field]
         : record.name === field
           ? record.value
           : undefined;
-      if (value !== null && (typeof value !== 'number' || !Number.isFinite(value))) continue;
+
+      const parsed = metricValueSchema.safeParse(value);
+
+      if (!parsed.success) continue;
       let row = rows.get(record.step);
+
       if (!row) {
         row = new Map();
         rows.set(record.step, row);
       }
+
       const previous = row.get(field);
+
       if (
         !previous ||
         record.attempt > previous.attempt ||
         (record.attempt === previous.attempt && record.seq > previous.seq)
       )
-        row.set(field, { value, attempt: record.attempt, seq: record.seq });
+        row.set(field, { value: parsed.data, attempt: record.attempt, seq: record.seq });
     }
   }
+
   const steps = [...rows.keys()].sort((a, b) => a - b);
+
   const values = selected.map((field) =>
     steps.map((step) => rows.get(step)?.get(field)?.value ?? null),
   );
+
   return { data: [steps, ...values], fields: selected, pointCount: steps.length };
 }

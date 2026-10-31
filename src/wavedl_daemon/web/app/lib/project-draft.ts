@@ -12,31 +12,36 @@ import type { TrainingRequest } from '../../shared/schemas/training-request';
 import type { RuntimeSetup } from '../../shared/schemas/host-profile';
 import type { DataSelection, ModelSelection } from './catalog-api';
 import { parseJson } from './daemon-api';
+import type { Json } from './daemon-api';
 import { boundedText, browserStorage, type PreferenceStorage } from './preferences';
 
 function draftKey(daemonId: string): string {
   if (!daemonId || daemonId.length > 256 || [...daemonId].some((char) => char.charCodeAt(0) < 32))
     throw clientError('invalidDaemonIdentity', {});
+
   return `wavedl.training-draft.v1.${encodeURIComponent(daemonId)}`;
 }
 
 /** Keeps only individually valid values, so one half-typed field never discards the rest. */
-export function validDraftConfig(config: Readonly<Record<string, unknown>>): DraftConfig {
+export function validDraftConfig(config: Readonly<Record<string, Json | undefined>>): DraftConfig {
   return draftConfigFields.reduce<DraftConfig>((valid, name) => {
     if (config[name] === undefined) return valid;
     const parsed = draftConfigSchema.safeParse({ [name]: config[name] });
+
     return parsed.success ? { ...valid, ...parsed.data } : valid;
   }, {});
 }
 
 function validTopology(topology: TrainingRequest['topology']): ProjectDraft['topology'] {
-  const shape = projectDraftSchema.shape.topology;
+  const topologySchema = projectDraftSchema.shape.topology;
+
   return [
     { num_machines: topology.num_machines },
     { processes_per_machine: topology.processes_per_machine },
     { machine_rank: topology.machine_rank },
   ].reduce<ProjectDraft['topology']>((valid, part) => {
-    const parsed = shape.safeParse(part);
+    const parsed = topologySchema.safeParse(part);
+
     return parsed.success ? { ...valid, ...parsed.data } : valid;
   }, {});
 }
@@ -44,6 +49,7 @@ function validTopology(topology: TrainingRequest['topology']): ProjectDraft['top
 function validMappings(mappings: TrainingRequest['storage_map']): StorageMapping[] {
   return (mappings ?? []).flatMap((mapping) => {
     const parsed = storageMappingSchema.safeParse(mapping);
+
     return parsed.success ? [parsed.data] : [];
   });
 }
@@ -58,6 +64,7 @@ export interface DraftSnapshot {
 
 export function projectDraft(daemonId: string, snapshot: DraftSnapshot): ProjectDraft {
   const { request } = snapshot;
+
   return projectDraftSchema.parse({
     version: 1,
     daemonId,
@@ -93,6 +100,7 @@ export function saveProjectDraft(
       draftKey(daemonId),
       boundedText(JSON.stringify(projectDraft(daemonId, snapshot))),
     );
+
     return true;
   } catch {
     return false;
@@ -105,8 +113,10 @@ export function loadProjectDraft(
 ): ProjectDraft | null {
   try {
     const raw = storage?.getItem(draftKey(daemonId));
+
     if (!raw) return null;
     const draft = projectDraftSchema.parse(parseJson(boundedText(raw)));
+
     return draft.daemonId === daemonId ? draft : null;
   } catch {
     return null;

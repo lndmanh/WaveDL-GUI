@@ -13,6 +13,7 @@ export function evaluationResults(view: RunView, events: readonly RunEvent[]): J
     return null;
   let result: JsonObject | null = null;
   let sequence = -1;
+
   for (const event of events) {
     if (
       event.run_id !== view.run_id ||
@@ -26,5 +27,6 @@ export function evaluationResults(view: RunView, events: readonly RunEvent[]): J
     sequence = event.seq;
     result = structuredClone(toRaw(event.payload.metrics));
   }
+
   return result;
 }

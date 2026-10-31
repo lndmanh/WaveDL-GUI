@@ -20,6 +20,7 @@ export function automaticRuntime(profile: HostProfile): AutomaticRuntime {
 /** Whether the request already holds exactly the automatic setup (storage remaps included). */
 export function matchesAutomatic(request: TrainingRequest, profile: HostProfile): boolean {
   const expected = automaticRuntime(profile);
+
   return (
     request.backend === expected.backend &&
     JSON.stringify(request.runtime) === JSON.stringify(expected.runtime) &&
@@ -33,14 +34,18 @@ export type HostAccelerator = 'cuda' | 'mps' | 'cpu' | 'unknown';
 /** What `auto` resolves to on this host, in the trainer's order of preference. */
 export function hostAccelerator(profile: HostProfile): HostAccelerator {
   const found = profile.accelerators;
+
   if (!found || !found.torch) return 'unknown';
+
   if (found.cuda.length) return 'cuda';
+
   return found.mps ? 'mps' : 'cpu';
 }
 
 /** Binary gigabytes as hardware reports them: 25769803776 → "24 GB". */
 export function gigabytes(bytes: number): string {
   const value = bytes / 1024 ** 3;
+
   return `${value >= 10 ? Math.round(value) : Number(value.toFixed(1))} GB`;
 }
 

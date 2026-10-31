@@ -34,6 +34,7 @@ export class ProjectPlan {
     const catalogue = new CatalogApi(this.session);
     catalogue.assertSelection(data);
     catalogue.assertSelection(model);
+
     if (
       data.kind !== 'file' ||
       draft.config.data_path !== data.path ||
@@ -41,13 +42,16 @@ export class ProjectPlan {
     )
       throw clientError('trainingSelectionMismatch', {});
     const request = trainingRequestSchema.parse(draft);
+
     if (!request.storage_map?.length) delete request.storage_map;
     const fingerprint = JSON.stringify(request);
+
     if (fingerprint !== this.#fingerprint) {
       this.#fingerprint = fingerprint;
       this.#key = this.keyFactory();
       this.#approved = null;
     }
+
     this.#request = request;
   }
   async preview(signal?: AbortSignal): Promise<PlanView> {
@@ -55,28 +59,37 @@ export class ProjectPlan {
     const request = this.#request;
     const key = this.#key;
     const epoch = this.#epoch;
+
     const plan = await this.session.perform((api, scoped) => api.plan(request, key, scoped), {
       signal,
     });
+
     if (epoch !== this.#epoch || key !== this.#key || request !== this.#request)
       throw clientError('planningDraftChanged', {});
     this.#revision = this.session.snapshot().revision;
     this.#approved = plan;
+
     return plan;
   }
   async submit(signal?: AbortSignal): Promise<RunView> {
     const plan = this.approved;
+
     if (!plan) throw clientError('trainingPreviewRequired', {});
+
     return this.session.perform((api, scoped) => api.submit(plan, scoped), { signal });
   }
   async status(signal?: AbortSignal): Promise<RunView> {
     const plan = this.approved;
+
     if (!plan) throw clientError('submissionPreviewRequired', {});
+
     return this.session.perform(
       async (api, scoped) => {
         const run = await api.getRun(plan.run_id, scoped);
+
         if (run.plan_id !== plan.plan_id || run.request_id !== plan.request_id)
           throw DaemonApiError.fromKey('identity', 'runPlanMismatch');
+
         return run;
       },
       { signal },

@@ -27,6 +27,7 @@ import {
 import type { ConnectionSession } from './connection-session';
 import { ArtifactClient, type Artifact, type SelectionMetadata } from './artifact-client';
 import { checkpointOptions, type CheckpointOption } from './result-operations';
+
 interface AutoPlotIntent {
   readonly request: ResultRequest;
   readonly idempotencyKey: string;
@@ -41,6 +42,7 @@ export function automaticPlotRequest(
   if (typeof plan.preview.manifest_json !== 'string')
     throw clientError('missingApprovedManifest', {});
   const manifest = parseJson(plan.preview.manifest_json);
+
   if (
     !object(manifest) ||
     manifest.schema_version !== 1 ||
@@ -55,12 +57,16 @@ export function automaticPlotRequest(
     throw clientError('unsupportedTrainingManifest', {});
   const mappings = storageMapSchema.parse(manifest.storage_map ?? []);
   const keys = new Set(Object.keys(trainingConfigSchema.shape));
+
   if (Object.keys(manifest.resolved_config).some((key) => key !== 'output_dir' && !keys.has(key)))
     throw clientError('unsupportedTrainingConfig', {});
+
   const config = Object.fromEntries(
     Object.entries(manifest.resolved_config).filter(([key]) => keys.has(key)),
   );
+
   const runtime = manifest.runtime;
+
   const normalized = trainingRequestSchema.parse({
     backend: plan.preview.target,
     operation: manifest.operation,
@@ -73,12 +79,16 @@ export function automaticPlotRequest(
     },
     topology: plan.preview.topology,
   });
+
   if (!originalRequest) {
     if (mappings.length) throw clientError('plotHostRequestRequired', {});
+
     return normalized;
   }
+
   const original = trainingRequestSchema.parse(originalRequest);
   const approvedMappings = original.storage_map ?? [];
+
   const mappingIdentity = (items: typeof mappings): string =>
     JSON.stringify(
       items
@@ -88,12 +98,15 @@ export function automaticPlotRequest(
         }))
         .sort((a, b) => a.host_root.localeCompare(b.host_root)),
     );
+
   if (
     mappingIdentity(approvedMappings) !== mappingIdentity(mappings) ||
     original.backend !== normalized.backend
   )
     throw clientError('storageApprovalMismatch', {});
+
   if (!mappings.length) return normalized;
+
   if (
     mappedStoragePath(original.config.data_path, mappings) !==
       normalizedStoragePath(normalized.config.data_path) ||
@@ -105,16 +118,19 @@ export function automaticPlotRequest(
   // their original host spelling after verifying one forward rewrite; sending
   // normalized execution paths would apply overlapping maps a second time.
   const imports = original.config.import_modules;
+
   if (
     imports.length !== normalized.config.import_modules.length ||
     imports.some((item, index) => {
       const approved = normalized.config.import_modules[index];
+
       return item.endsWith('.py')
         ? mappedStoragePath(item, mappings) !== normalizedStoragePath(approved ?? '')
         : item !== approved;
     })
   )
     throw clientError('registrationPathMismatch', {});
+
   return trainingRequestSchema.parse({
     ...normalized,
     config: {
@@ -126,18 +142,22 @@ export function automaticPlotRequest(
     storage_map: original.storage_map,
   });
 }
+
 export interface AutomaticPlotState {
   status: 'armed' | 'planning' | 'submitted' | 'error' | 'unavailable' | 'stopped';
   plotRunId: string | null;
   message: ClientMessage;
 }
+
 function canonical(value: Json): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+
   if (object(value))
     return `{${Object.keys(value)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonical(value[key] ?? null)}`)
       .join(',')}}`;
+
   return JSON.stringify(value);
 }
 
@@ -155,6 +175,7 @@ function hasInferenceSource(artifacts: readonly Artifact[], generation: string):
       .filter((artifact) => artifact.generation === generation)
       .map((artifact) => artifact.path),
   );
+
   return (
     paths.has('training_meta.pkl') &&
     paths.has('scaler.pkl') &&
@@ -196,6 +217,7 @@ export class AutoPlotController {
     readonly options: { pollMs?: number; deadlineMs?: number } = {},
   ) {
     this.session = toRaw(session);
+
     for (const value of [options.pollMs ?? 2000, options.deadlineMs ?? 15000])
       if (!Number.isSafeInteger(value) || value < 1)
         throw clientError('invalidAutomaticPlotDeadline', {});
@@ -213,27 +235,35 @@ export class AutoPlotController {
     if (this.#capturedRequests.has(run.request_id)) return;
     this.stop();
     const state = this.session.snapshot();
+
     if (state.status !== 'connected' || !state.health) return;
+
     if (this.#capturedRequests.size >= 256) {
       this.state.value = {
         status: 'unavailable',
         plotRunId: null,
         message: clientError('autoPlotCapacity', {}),
       };
+
       return;
     }
+
     this.#capturedRequests.add(run.request_id);
+
     try {
       const approved = toRaw(plan);
       const api = this.session.api;
+
       if (!api) throw clientError('autoPlotConnectionRequired', {});
       const request = automaticPlotRequest(run, approved, api.approvedRequest(approved));
+
       if (request.config.cv > 0) return;
       this.#revision = state.revision;
       this.#sourcePlan = approved;
       this.#sourceApi = api;
       this.#daemonId = state.health.daemon_id;
       this.#scope = new AbortController();
+
       if (
         !run.submission_requested ||
         run.operation !== 'train' ||
@@ -245,6 +275,7 @@ export class AutoPlotController {
       this.#request = structuredClone(request);
       this.#run = structuredClone(toRaw(run));
       this.#observedAttempt = run.attempt;
+
       if (!this.#acceptScope(run)) throw clientError('unsupportedCapturedNativeScope', {});
       this.state.value = {
         status: 'armed',
@@ -271,16 +302,20 @@ export class AutoPlotController {
   async #poll(): Promise<void> {
     const run = this.#run;
     const signal = this.#scope.signal;
+
     if (!run || !this.#current(signal)) return;
+
     try {
       const current = await this.session.perform((api, signal) => api.getRun(run.run_id, signal), {
         signal: this.#scope.signal,
         timeoutMs: this.options.deadlineMs ?? 15000,
       });
+
       await this.observeFresh(current);
     } catch {
       this.#error(signal);
     }
+
     this.#schedule();
   }
   #error(signal: AbortSignal): void {
@@ -293,43 +328,57 @@ export class AutoPlotController {
   }
   #current(signal: AbortSignal): boolean {
     const state = this.session.snapshot();
+
     const current =
       !signal.aborted &&
       state.status === 'connected' &&
       state.revision === this.#revision &&
       state.health?.daemon_id === this.#daemonId;
+
     if (!current) return false;
+
     try {
       if (!this.#sourcePlan || !this.#sourceApi || this.session.api !== this.#sourceApi)
         throw clientError('sourceApprovalScopeChanged', {});
       this.#sourceApi.approvedRequest(this.#sourcePlan);
+
       return true;
     } catch {
       this.stop();
+
       return false;
     }
   }
   async observeFresh(run: RunView): Promise<void> {
     if (this.#busy || this.state.value.status !== 'armed' || !this.#run) return;
+
     if (!this.#current(this.#scope.signal)) return;
+
     if (
       run.run_id !== this.#run.run_id ||
       run.plan_id !== this.#run.plan_id ||
       run.request_id !== this.#run.request_id
     )
       return;
+
     if (run.operation !== this.#run.operation || run.backend !== this.#run.backend) {
       this.stop();
+
       return;
     }
+
     if (!this.#acceptScope(run)) {
       this.stop();
+
       return;
     }
+
     if (run.state === 'failed' || run.state === 'cancelled') {
       this.stop();
+
       return;
     }
+
     if (
       run.state !== 'completed' ||
       run.uncertainty ||
@@ -337,29 +386,38 @@ export class AutoPlotController {
       run.attempt === null
     )
       return;
+
     if (run.backend === 'slurm' && !this.#nativeBinding) {
       this.stop();
+
       return;
     }
+
     this.#busy = true;
     const parent = this.#scope.signal;
     const signal = AbortSignal.any([parent, AbortSignal.timeout(this.options.deadlineMs ?? 15000)]);
+
     try {
       const client = new ArtifactClient(this.session);
       const artifacts = await client.list(run.run_id, signal);
+
       const candidates = artifacts.filter(
         (item) => item.attempt === run.attempt && item.path === 'checkpoint_selection.json',
       );
+
       candidates.sort((left, right) => {
         const a = BigInt(left.generation.slice(4)),
           b = BigInt(right.generation.slice(4));
+
         return a < b ? 1 : a > b ? -1 : 0;
       });
       const publications: CheckpointOption[] = [];
       let incompleteBest = false;
+
       for (const candidate of candidates) {
         if (!this.#current(signal)) return;
         let options: readonly CheckpointOption[];
+
         try {
           options = await checkpointOptions(this.session, [candidate], signal);
         } catch {
@@ -369,17 +427,22 @@ export class AutoPlotController {
           if (!this.#current(signal)) return;
           continue;
         }
+
         const option = options[0];
+
         if (option?.classification.kind === 'best') {
           if (!hasInferenceSource(artifacts, candidate.generation)) {
             incompleteBest = true;
             continue;
           }
+
           publications.push(option);
           break;
         }
       }
+
       if (!this.#current(signal)) return;
+
       if (!publications.length && incompleteBest) {
         this.stop();
         this.state.value = {
@@ -387,11 +450,15 @@ export class AutoPlotController {
           plotRunId: null,
           message: clientError('autoPlotCheckpointIncomplete', {}),
         };
+
         return;
       }
+
       this.#intent = this.#deriveIntent(run, publications[0]);
+
       if (!this.#intent) return;
       const selected = publications[0];
+
       if (!selected) return;
       this.#sourceFiles = artifacts.filter(
         (item) => item.generation === selected.artifact.generation,
@@ -399,11 +466,14 @@ export class AutoPlotController {
       this.#sourceSelection = selected.classification;
       this.#sourceAttempt = run.attempt;
       this.#sourceNative = JSON.stringify(run.evidence?.native_identity ?? null);
+
       // Re-read lifecycle after metadata downloads; it may have requeued meanwhile.
       const latest = await this.session.perform((api, scoped) => api.getRun(run.run_id, scoped), {
         signal,
       });
+
       if (!this.#current(signal)) return;
+
       if (
         latest.run_id !== run.run_id ||
         latest.plan_id !== run.plan_id ||
@@ -418,8 +488,10 @@ export class AutoPlotController {
         latest.evidence?.native_pending === true
       ) {
         this.stop();
+
         return;
       }
+
       for (const option of publications) client.assertSelection(option.artifact);
       await this.#execute(signal);
     } catch {
@@ -431,6 +503,7 @@ export class AutoPlotController {
   #deriveIntent(run: RunView, selected: CheckpointOption | undefined): AutoPlotIntent | null {
     const captured = this.#request;
     const sourceRun = this.#run;
+
     if (
       !captured ||
       !sourceRun ||
@@ -447,6 +520,7 @@ export class AutoPlotController {
     // Once this intent exists, retries execute it directly with the same key.
     const source = selected.artifact;
     const config = captured.config;
+
     return {
       request: resultRequestSchema.parse({
         backend: captured.backend,
@@ -472,37 +546,50 @@ export class AutoPlotController {
     if (!this.#intent || !this.#current(signal)) return;
     this.state.value = { ...this.state.value, status: 'planning' };
     const intent = this.#intent;
+
     if (!this.#plan) {
       const plan = await this.session.perform(
         (api, scoped) => api.plan(intent.request, intent.idempotencyKey, scoped),
         { signal, timeoutMs: this.options.deadlineMs ?? 15000 },
       );
+
       if (!this.#current(signal)) return;
+
       if (!(await this.#validatePlotPlan(plan, intent, signal)) || !this.#current(signal)) return;
       this.#plan = plan;
     } else {
       const plan = this.#plan;
+
       const observed = await this.session.perform(
         (api, scoped) => api.getRun(plan.run_id, scoped),
         { signal },
       );
+
       if (!this.#current(signal)) return;
+
       if (observed.plan_id !== plan.plan_id || observed.request_id !== plan.request_id)
         throw clientError('automaticPlotIdentityChanged', {});
+
       if (observed.submission_requested) {
         this.#complete(observed);
+
         return;
       }
     }
+
     if (!this.#current(signal)) return;
     const plan = this.#plan;
     const source = this.#run;
+
     if (!source) return;
+
     const sourceNow = await this.session.perform(
       (api, scoped) => api.getRun(source.run_id, scoped),
       { signal, timeoutMs: this.options.deadlineMs ?? 15000 },
     );
+
     if (!this.#current(signal)) return;
+
     if (
       sourceNow.plan_id !== source.plan_id ||
       sourceNow.request_id !== source.request_id ||
@@ -514,13 +601,17 @@ export class AutoPlotController {
       JSON.stringify(sourceNow.evidence?.native_identity ?? null) !== this.#sourceNative
     ) {
       this.stop();
+
       return;
     }
+
     if (!this.#current(signal)) return;
+
     const result = await this.session.perform((api, scoped) => api.submit(plan, scoped), {
       signal,
       timeoutMs: this.options.deadlineMs ?? 15000,
     });
+
     if (this.#current(signal)) this.#complete(result);
   }
   async #validatePlotPlan(
@@ -531,18 +622,23 @@ export class AutoPlotController {
     const parent = this.#scope.signal;
     const sourcePlan = this.#sourcePlan;
     const sourceApi = this.#sourceApi;
+
     const files = Object.fromEntries(
       this.#sourceFiles.map((file) => [file.path, { size: file.size, sha256: file.sha256 }]),
     );
+
     const selection = this.#sourceSelection ? { ...this.#sourceSelection } : null;
+
     const current = (): boolean =>
       this.#scope.signal === parent &&
       !signal.aborted &&
       this.#sourcePlan === sourcePlan &&
       this.#sourceApi === sourceApi &&
       this.#current(signal);
+
     try {
       if (!current()) return false;
+
       if (
         !sourcePlan ||
         typeof sourcePlan.preview.manifest_json !== 'string' ||
@@ -551,6 +647,7 @@ export class AutoPlotController {
         throw clientError('missingApprovedManifests', {});
       const source = parseJson(sourcePlan.preview.manifest_json);
       const plot = parseJson(plan.preview.manifest_json);
+
       if (
         !object(source) ||
         !object(plot) ||
@@ -560,6 +657,7 @@ export class AutoPlotController {
       )
         throw clientError('invalidPlotManifest', {});
       const pin = plot.checkpoint_source;
+
       const digest = Array.from(
         new Uint8Array(
           await crypto.subtle.digest(
@@ -569,7 +667,9 @@ export class AutoPlotController {
         ),
         (byte) => byte.toString(16).padStart(2, '0'),
       ).join('');
+
       if (!current()) return false;
+
       if (
         plot.schema_version !== 1 ||
         plot.run_id !== plan.run_id ||
@@ -590,6 +690,7 @@ export class AutoPlotController {
         canonical(pin.selection ?? null) !== canonical(selection)
       )
         throw clientError('plotAuthorityChanged', {});
+
       for (const [key, expected] of Object.entries(intent.request.config)) {
         if (
           key !== 'data_path' &&
@@ -598,6 +699,7 @@ export class AutoPlotController {
         )
           throw clientError('plotIntentChanged', {});
       }
+
       return true;
     } catch {
       if (!current()) return false;
@@ -607,6 +709,7 @@ export class AutoPlotController {
         plotRunId: null,
         message: clientError('autoPlotAuthorityMismatch', {}),
       };
+
       return false;
     }
   }
@@ -618,7 +721,9 @@ export class AutoPlotController {
       return false;
     this.#observedAttempt = run.attempt;
     const identity = run.evidence?.native_identity;
+
     if (identity === undefined || identity === null) return this.#nativeBinding === null;
+
     if (
       !object(identity) ||
       identity.run_id !== run.run_id ||
@@ -635,6 +740,7 @@ export class AutoPlotController {
     )
       return false;
     const prior = this.#nativeBinding;
+
     if (
       prior &&
       (prior.cluster !== identity.cluster ||
@@ -649,6 +755,7 @@ export class AutoPlotController {
       jobId: identity.job_id,
       restart: identity.restart_count,
     };
+
     return true;
   }
   #complete(run: RunView): void {
@@ -667,6 +774,7 @@ export class AutoPlotController {
       plotRunId: run.run_id,
       message: clientError('autoPlotAcknowledged', {}),
     };
+
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = null;
   }
@@ -678,21 +786,28 @@ export class AutoPlotController {
       !this.#current(this.#scope.signal)
     )
       return;
+
     if (!this.#intent) {
       this.state.value = { ...this.state.value, status: 'armed' };
       await this.#poll();
+
       return;
     }
+
     this.#busy = true;
     const parent = this.#scope.signal;
     const signal = AbortSignal.any([parent, AbortSignal.timeout(this.options.deadlineMs ?? 15000)]);
+
     try {
       const source = this.#run;
+
       if (!source) return;
+
       const current = await this.session.perform(
         (api, scoped) => api.getRun(source.run_id, scoped),
         { signal },
       );
+
       if (
         current.plan_id !== source.plan_id ||
         current.request_id !== source.request_id ||
@@ -704,8 +819,10 @@ export class AutoPlotController {
         current.evidence?.native_pending === true
       ) {
         this.stop();
+
         return;
       }
+
       await this.#execute(signal);
     } catch {
       this.#error(parent);
@@ -728,6 +845,7 @@ export class AutoPlotController {
     this.#sourceFiles = [];
     this.#sourceSelection = null;
     this.#busy = false;
+
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = null;
     this.state.value = { status: 'stopped', plotRunId: null, message: '' };

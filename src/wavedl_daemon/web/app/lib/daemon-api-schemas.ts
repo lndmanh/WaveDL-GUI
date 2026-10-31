@@ -1,11 +1,10 @@
 import { z } from 'zod';
-import type { JsonObject } from './daemon-api';
+import { jsonObjectSchema, jsonSchema } from '../../shared/schemas/json';
 
 // Run only after boundedJson/parseJson validate the JSON domain. All response
 // objects historically permit additive fields; DTO schemas strip only at return.
-export const jsonObjectSchema = z.custom<JsonObject>(
-  (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
-);
+export { jsonObjectSchema } from '../../shared/schemas/json';
+
 export const RUN_STATES = [
   'planned',
   'pending',
@@ -22,15 +21,19 @@ export const RUN_STATES = [
   'observation_unavailable',
   'supervision_lost',
 ] as const;
+
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+
 export function isUuid(value: unknown): value is string {
   return uuid.safeParse(value).success;
 }
+
 const integer = z.number().refine(Number.isSafeInteger);
 const positive = integer.refine((value) => value > 0);
 const printable = z.string().regex(/^[\x21-\x7e]{1,256}$/);
 const nullableInteger = integer.nullable();
 const signal = positive.nullable();
+
 const outcome = z
   .looseObject({
     status: z.enum(['success', 'failed', 'cancelled', 'unknown']).optional(),
@@ -55,7 +58,7 @@ const nativeIdentity = (runId: string, requestId: string) =>
     })
     .nullable();
 
-export const evidenceShape = (runId: string, requestId: string) =>
+export const evidenceSchemaFor = (runId: string, requestId: string) =>
   z.looseObject({
     native_pending: z.boolean().optional(),
     native_identity: nativeIdentity(runId, requestId).optional(),
@@ -69,6 +72,7 @@ export const evidenceShape = (runId: string, requestId: string) =>
     batch: jsonObjectSchema.nullable().optional(),
     stage_out: jsonObjectSchema.nullable().optional(),
   });
+
 export const runtimeSchema = z.looseObject({
   hello_seen: z.boolean().optional(),
   conflicting_exits: z.boolean().optional(),
@@ -77,7 +81,9 @@ export const runtimeSchema = z.looseObject({
   exit_seq: integer.refine((value) => value >= -1).optional(),
   outcome: outcome.optional(),
 });
+
 export const outcomeSchema = outcome;
+
 export const observationSchema = (runId: string, requestId: string) =>
   z.looseObject({
     status: z
@@ -119,22 +125,26 @@ export const runViewSchema = z.object({
     .nullable()
     .optional(),
 });
+
 export const healthSchema = z.object({
   daemon_id: printable,
   build_id: printable,
   protocol_min: integer,
   protocol_max: integer,
 });
+
 export const sessionGrantSchema = z.object({
   access_token: z.string(),
   token_type: z.literal('Bearer'),
   expires_at: positive,
   daemon_id: printable,
 });
+
 export const planSchema = z.object({
   plan_id: uuid,
   run_id: uuid,
   request_id: uuid,
   preview: jsonObjectSchema,
 });
-export const runListSchema = z.object({ runs: z.array(z.unknown()) });
+
+export const runListSchema = z.object({ runs: z.array(jsonSchema) });

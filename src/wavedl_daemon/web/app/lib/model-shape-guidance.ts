@@ -16,6 +16,7 @@ export function modelShapeGuidance(
   const shape = inspection?.inputShape ?? [];
   const dimensions = shape.length;
   const unknown: ModelShapeGuidance = { status: 'unknown', shape: '', dimensions: 0 };
+
   if (
     !inspection ||
     dimensions < 1 ||
@@ -25,6 +26,7 @@ export function modelShapeGuidance(
     return unknown;
   const result = { shape: shape.join(' × '), dimensions };
   const [first, second, third] = shape;
+
   // Training adds a channel; it does not strip a leading size of 1 or a small axis.
   // This exact rank-three heuristic requires explicit single_channel confirmation.
   if (
@@ -38,7 +40,9 @@ export function modelShapeGuidance(
     !singleChannel
   )
     return { ...result, status: 'ambiguous' };
+
   if (!model.supportedDims.length) return unknown;
+
   return {
     ...result,
     status: model.supportedDims.includes(dimensions) ? 'described' : 'mismatch',

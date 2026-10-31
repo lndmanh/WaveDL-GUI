@@ -9,11 +9,14 @@ import {
 } from './event-stream';
 import { MetricHistory, type MetricRecord, type MetricSummary } from './metric-history';
 
+import { monitorNativeIdentitySchema, nativePendingSchema, diagnosticTextSchema } from '../../shared/schemas/run-monitor';
+
 export interface RunTransport {
   getRun(runId: string, signal: AbortSignal): Promise<RunView>;
   openEvents(runId: string, cursor: Cursor, signal: AbortSignal): Promise<Response>;
   cancelRun(runId: string, signal: AbortSignal): Promise<RunView>;
 }
+
 export interface RunMonitorSnapshot {
   run: RunView | null;
   freshness: 'unconfirmed' | 'fresh' | 'stale';
@@ -26,10 +29,13 @@ export interface RunMonitorSnapshot {
   metrics: readonly MetricRecord[];
   summary: MetricSummary;
 }
+
 export type ReplayTargetStatus = 'none' | 'pending' | 'verified' | 'invalidated';
+
 export function terminalRun(run: RunView): boolean {
   return !run.uncertainty && ['completed', 'failed', 'cancelled'].includes(run.state);
 }
+
 /** Cancellation is one durable intent; once acknowledged, the UI must not resend it. */
 export function canRequestCancellation(
   run: RunView | null,
@@ -43,21 +49,26 @@ export function canRequestCancellation(
     state !== 'requested'
   );
 }
+
 function scope(run: RunView): string {
   return JSON.stringify([run.attempt, run.evidence?.native_pending, run.evidence?.native_identity]);
 }
+
 function pending(run: RunView): boolean {
   return run.evidence?.native_pending === true;
 }
-function message(error: unknown): ClientMessage | Error {
-  return error instanceof DaemonApiError ? error : clientError('lifecycleUnconfirmed');
+
+function message(cause: unknown): ClientMessage | Error {
+  return cause instanceof DaemonApiError ? cause : clientError('lifecycleUnconfirmed');
 }
-function fatal(error: unknown): boolean {
+
+function fatal(cause: unknown): boolean {
   return (
-    error instanceof DaemonApiError &&
-    ['authentication', 'identity', 'protocol', 'response'].includes(error.code)
+    cause instanceof DaemonApiError &&
+    ['authentication', 'identity', 'protocol', 'response'].includes(cause.code)
   );
 }
+
 /** In-memory projection and cursor always move together. A fresh monitor replays from zero. */
 export class RunMonitor {
   #abort = new AbortController();
@@ -107,8 +118,10 @@ export class RunMonitor {
     private readonly cursorStore: CursorStore | null = null,
   ) {
     this.#history = new MetricHistory(runId);
+
     if (cursorStore && cursorStore.runId !== runId)
       throw DaemonApiError.fromKey('identity', 'eventCursorBelongsToAnotherRun');
+
     if (cursorStore) this.#persistence = 'ready';
   }
   snapshot(): RunMonitorSnapshot {
@@ -128,41 +141,52 @@ export class RunMonitor {
     if (this.#loadedTarget || !this.cursorStore || this.#abort.signal.aborted) return;
     this.#loadedTarget = true;
     const stored = this.cursorStore.read();
+
     if (stored.status === 'unavailable') {
       this.#persistence = 'unavailable';
+
       return;
     }
+
     if (stored.status === 'invalid') {
       this.#replayTargetStatus = 'invalidated';
+
       return;
     }
+
     if (stored.status === 'empty') return;
     this.#replayTarget = stored.cursor;
     this.#replayTargetStatus = stored.cursor.attempt === 0 ? 'verified' : 'pending';
     // A hint ahead of the authoritative runtime is stale/corrupt. It must
     // never become authority or block reconstruction of the available prefix.
     const attempt = this.#snapshot.run?.attempt;
+
     if (attempt !== undefined && (attempt === null || stored.cursor.attempt > attempt))
       this.#replayTargetStatus = 'invalidated';
   }
   subscribe(listener: (snapshot: RunMonitorSnapshot) => void): () => void {
     this.#listeners.add(listener);
     listener(this.#snapshot);
+
     return () => this.#listeners.delete(listener);
   }
   #publish(patch: Partial<RunMonitorSnapshot>): void {
     if (this.#publicationTimer !== null) clearTimeout(this.#publicationTimer);
     this.#publicationTimer = null;
+
     if (this.#pendingEvents) {
       this.#pendingEvents = false;
       this.#snapshot = this.#eventSnapshot();
     }
+
     this.#snapshot = { ...this.#snapshot, ...patch };
     this.#liveEvents = [...this.#snapshot.liveEvents];
+
     for (const listener of this.#listeners) listener(this.#snapshot);
   }
   #eventSnapshot(): RunMonitorSnapshot {
     const fresh = this.#snapshot.freshness === 'fresh';
+
     return {
       ...this.#snapshot,
       events: [...this.#logEvents],
@@ -176,6 +200,7 @@ export class RunMonitor {
     if (run.run_id !== this.runId)
       throw DaemonApiError.fromKey('identity', 'runResponseBelongsToAnotherRun');
     const prior = this.#snapshot.run;
+
     if (
       prior &&
       (prior.plan_id !== run.plan_id ||
@@ -185,29 +210,22 @@ export class RunMonitor {
     ) {
       throw DaemonApiError.fromKey('identity', 'runOwnershipOrOperationChanged');
     }
+
     const identity = run.evidence?.native_identity;
+
     if (identity !== undefined && identity !== null) {
-      if (
-        !object(identity) ||
-        identity.run_id !== run.run_id ||
-        identity.request_id !== run.request_id ||
-        typeof identity.cluster !== 'string' ||
-        !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(identity.cluster) ||
-        typeof identity.owner !== 'string' ||
-        !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(identity.owner) ||
-        typeof identity.job_id !== 'string' ||
-        !/^[1-9][0-9]{0,18}$/.test(identity.job_id) ||
-        typeof identity.restart_count !== 'number' ||
-        !Number.isSafeInteger(identity.restart_count) ||
-        identity.restart_count < 0
-      )
+      const parsed = monitorNativeIdentitySchema.safeParse(identity);
+
+      if (!parsed.success || parsed.data.run_id !== run.run_id || parsed.data.request_id !== run.request_id)
         throw DaemonApiError.fromKey('identity', 'invalidNativeGenerationOwnership');
+      const native = parsed.data;
       const previous = this.#nativeIdentity;
+
       if (
         previous &&
-        (identity.cluster !== previous.cluster ||
-          identity.job_id !== previous.job_id ||
-          identity.owner !== previous.owner)
+        (native.cluster !== previous.cluster ||
+          native.job_id !== previous.job_id ||
+          native.owner !== previous.owner)
       )
         throw DaemonApiError.fromKey('identity', 'nativeGenerationConflict');
     }
@@ -221,6 +239,7 @@ export class RunMonitor {
   #accept(run: RunView): void {
     this.#verifyOwnership(run);
     const prior = this.#snapshot.run;
+
     if (
       prior?.attempt !== null &&
       prior?.attempt !== undefined &&
@@ -228,40 +247,44 @@ export class RunMonitor {
     ) {
       throw DaemonApiError.fromKey('protocol', 'runtimeAttemptRegressed');
     }
+
     const identity = run.evidence?.native_identity;
+
     if (this.#nativeIdentity && (identity === undefined || identity === null)) {
       throw DaemonApiError.fromKey('identity', 'nativeGenerationMissing');
     }
+
     if (run.evidence?.native_pending === true && (identity === undefined || identity === null)) {
       throw DaemonApiError.fromKey('identity', 'nativeIdentityMissing');
     }
+
     if (identity !== undefined && identity !== null) {
-      // Narrow the validated JSON fields before retaining the native head.
-      if (
-        !object(identity) ||
-        typeof identity.cluster !== 'string' ||
-        typeof identity.job_id !== 'string' ||
-        typeof identity.owner !== 'string' ||
-        typeof identity.restart_count !== 'number'
-      )
+      const parsed = monitorNativeIdentitySchema.safeParse(identity);
+
+      if (!parsed.success)
         throw DaemonApiError.fromKey('identity', 'invalidNativeGenerationOwnership');
+      const native = parsed.data;
       const previous = this.#nativeIdentity;
-      if (previous && identity.restart_count < previous.restart_count) {
+
+      if (previous && native.restart_count < previous.restart_count) {
         throw DaemonApiError.fromKey('identity', 'nativeGenerationConflict');
       }
+
       this.#nativeIdentity = {
-        cluster: identity.cluster,
-        job_id: identity.job_id,
-        owner: identity.owner,
-        restart_count: identity.restart_count,
+        cluster: native.cluster,
+        job_id: native.job_id,
+        owner: native.owner,
+        restart_count: native.restart_count,
       };
     }
+
     if (
       run.evidence?.native_pending !== undefined &&
-      typeof run.evidence.native_pending !== 'boolean'
+      !nativePendingSchema.safeParse(run.evidence.native_pending).success
     ) {
       throw DaemonApiError.fromKey('protocol', 'invalidNativePendingFlag');
     }
+
     const changed = this.#snapshot.run !== null && scope(this.#snapshot.run) !== scope(run);
     this.#history.setScope(run);
     this.#publish({
@@ -275,8 +298,10 @@ export class RunMonitor {
   }
   async #refresh(): Promise<void> {
     const revision = ++this.#refreshRevision;
+
     try {
       const run = await this.transport.getRun(this.runId, this.#abort.signal);
+
       if (!this.#abort.signal.aborted && revision === this.#refreshRevision) this.#accept(run);
     } catch (error) {
       if (!this.#abort.signal.aborted && revision === this.#refreshRevision) {
@@ -287,14 +312,17 @@ export class RunMonitor {
           summary: { progress: null, best: null, latest: null },
         });
       }
+
       throw error;
     }
   }
   #commit(event: RunEvent): void {
     if (this.#abort.signal.aborted) return;
     this.#history.apply(event);
+
     if (this.#replayTarget && this.#replayTargetStatus === 'pending') {
       const target = this.#replayTarget;
+
       if (event.attempt === target.attempt && event.seq === target.seq)
         this.#replayTargetStatus = 'verified';
       else if (
@@ -303,32 +331,40 @@ export class RunMonitor {
       )
         this.#replayTargetStatus = 'invalidated';
     }
+
     const bytes = new TextEncoder().encode(JSON.stringify(event)).byteLength;
     this.#logEvents.push(event);
     this.#logSizes.push(bytes);
     this.#logBytes += bytes;
+
     while (this.#logEvents.length > 1000 || this.#logBytes > 512 * 1024) {
       this.#logEvents.shift();
       this.#logBytes -= this.#logSizes.shift() ?? 0;
       this.#truncated = true;
     }
+
     const run = this.#snapshot.run;
     const fresh = this.#snapshot.freshness === 'fresh';
     const current = fresh && run !== null && !pending(run) && event.attempt === run.attempt;
+
     if (current) {
       this.#liveEvents.push(event);
+
       if (this.#liveEvents.length > 256) this.#liveEvents.shift();
     }
+
     this.#pendingEvents = true;
     // Metrics/logs are ordinary high-volume telemetry: after the first event,
     // always use one bounded trailing publication. Wall-clock elapsed time must
     // not turn a slow commit into per-event rendering again.
     const immediate = this.#logEvents.length === 1 || !['metric', 'log'].includes(event.type);
+
     if (immediate) {
       this.#publish({});
     } else if (this.#publicationTimer === null) {
       this.#publicationTimer = setTimeout(() => {
         this.#publicationTimer = null;
+
         if (!this.#abort.signal.aborted && this.#pendingEvents) {
           this.#publish({});
         }
@@ -344,6 +380,7 @@ export class RunMonitor {
         this.#abort.signal.removeEventListener('abort', finish);
         resolve();
       };
+
       const timer = setTimeout(finish, ms);
       this.#abort.signal.addEventListener('abort', finish, { once: true });
     });
@@ -352,12 +389,14 @@ export class RunMonitor {
     if (this.#started) return this.#running ?? Promise.resolve();
     this.#started = true;
     this.#running = Promise.all([this.#receive(), this.#poll()]).then(() => undefined);
+
     return this.#running;
   }
   /** Resume the retained projection and its cursor only after aborted readers settle. */
   async resume(allowed: () => boolean): Promise<void> {
     if (!this.#abort.signal.aborted) return;
     await this.#running;
+
     if (!allowed() || !this.#abort.signal.aborted) return;
     this.#abort = new AbortController();
     this.#started = false;
@@ -365,22 +404,27 @@ export class RunMonitor {
   }
   async #receive(): Promise<void> {
     let retries = 0;
+
     while (!this.#abort.signal.aborted) {
       try {
         await this.#refresh();
         this.#loadTarget();
         this.#flushCursor();
+
         const response = await this.transport.openEvents(
           this.runId,
           this.#cursor,
           this.#abort.signal,
         );
+
         if (this.#abort.signal.aborted) {
           await response.body?.cancel().catch(() => undefined);
           break;
         }
+
         if (!response.body) throw DaemonApiError.fromKey('response', 'missingEventStream');
         const reader = response.body.getReader();
+
         const parser = new EventStreamParser(
           this.runId,
           this.#cursor,
@@ -388,6 +432,7 @@ export class RunMonitor {
           (cursor) => {
             this.#cursor = cursor;
             this.#durableCursor = cursor;
+
             if (this.cursorStore && this.#persistTimer === null)
               this.#persistTimer = setTimeout(() => this.#flushCursor(), 250);
           },
@@ -396,22 +441,28 @@ export class RunMonitor {
           },
           this.#abort.signal,
         );
+
         this.#publish({ stream: 'live', message: '' });
+
         try {
           for (;;) {
             const { value, done } = await reader.read();
+
             if (done || this.#abort.signal.aborted) break;
             await parser.push(value);
             retries = 0;
           }
+
           await parser.finish();
           this.#publish({});
         } finally {
           await reader.cancel().catch(() => undefined);
           reader.releaseLock();
         }
+
         if (this.#abort.signal.aborted) break;
         await this.#refresh();
+
         if (this.#snapshot.run && terminalRun(this.#snapshot.run)) {
           if (this.#replayTargetStatus === 'pending') this.#replayTargetStatus = 'invalidated';
           this.#flushCursor();
@@ -422,13 +473,16 @@ export class RunMonitor {
       } catch (error) {
         if (this.#abort.signal.aborted) break;
         this.#publish({ stream: fatal(error) ? 'error' : 'reconnecting', message: message(error) });
+
         if (fatal(error)) {
           this.#abort.abort();
           this.#flushCursor();
+
           if (error instanceof DaemonApiError) this.reportFailure(error);
           break;
         }
       }
+
       this.#publish({ stream: 'reconnecting' });
       await this.#pause(Math.min(1000 * 2 ** Math.min(retries++, 5), 30000));
     }
@@ -436,16 +490,20 @@ export class RunMonitor {
   async #poll(): Promise<void> {
     while (!this.#abort.signal.aborted) {
       await this.#pause(this.pollMs);
+
       if (this.#abort.signal.aborted) break;
+
       try {
         await this.#refresh();
       } catch (error) {
         if (this.#abort.signal.aborted) break;
         this.#publish({ message: message(error) });
+
         if (fatal(error)) {
           this.#publish({ stream: 'error' });
           this.#abort.abort();
           this.#flushCursor();
+
           if (error instanceof DaemonApiError) this.reportFailure(error);
         }
       }
@@ -461,10 +519,13 @@ export class RunMonitor {
     // A page pause must not turn an explicit durable cancellation into a lost ack.
     const signal = this.#cancelAbort.signal;
     const revision = ++this.#refreshRevision;
+
     try {
       const run = await this.transport.cancelRun(this.runId, signal);
+
       if (!signal.aborted) {
         this.#verifyOwnership(run);
+
         if (revision === this.#refreshRevision) this.#accept(run);
         this.#publish({
           cancellation:
@@ -479,9 +540,11 @@ export class RunMonitor {
             ? this.#snapshot.message
             : clientError('cancellationAckUnknown'),
         });
+
       if (fatal(error)) {
         this.#abort.abort();
         this.#flushCursor();
+
         if (error instanceof DaemonApiError) this.reportFailure(error);
         this.stop();
       }
@@ -507,9 +570,12 @@ export class RunMonitor {
       clearTimeout(this.#persistTimer);
       this.#persistTimer = null;
     }
+
     const cursor = this.#durableCursor;
+
     if (!this.cursorStore || cursor === null || this.#abort.signal.aborted) return;
     this.#durableCursor = null;
+
     try {
       this.cursorStore.save(cursor);
       this.#persistence = 'saved';
@@ -520,29 +586,31 @@ export class RunMonitor {
   }
 }
 
-export function eventDiagnostic(event: RunEvent): { text: string; truncated: boolean } {
+export function eventDiagnostic(event: RunEvent) {
   const payload = event.payload;
-  const text =
-    typeof payload.message === 'string'
-      ? payload.message
-      : typeof payload.text === 'string'
-        ? payload.text
-        : JSON.stringify(payload);
+
+  const text = diagnosticTextSchema.safeParse(payload.message).data ??
+    diagnosticTextSchema.safeParse(payload.text).data ?? JSON.stringify(payload);
+
   // Keep the existing 4096-code-unit presentation ceiling, reserving space
   // for a visible omission marker and never splitting a surrogate pair.
   // The authoritative event and replay cursor remain untouched.
   const truncated = text.length > 4096;
   let end = 4093;
+
   if (truncated && /[\uD800-\uDBFF]/u.test(text.charAt(end - 1))) end--;
   const rendered = truncated ? `${text.slice(0, end)} …` : text;
+
   return {
     text: `${event.ts} [${event.attempt}:${event.seq}] ${event.type}: ${rendered}`,
     truncated,
   };
 }
+
 export function eventText(event: RunEvent): string {
   return eventDiagnostic(event).text;
 }
+
 export function nativePending(run: RunView): boolean {
   return object(run.evidence) && run.evidence.native_pending === true;
 }

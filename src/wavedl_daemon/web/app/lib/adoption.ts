@@ -3,7 +3,7 @@ import type { ClientErrorKey, ClientErrorParams } from '../i18n/client-messages'
 import { adoptionRequestSchema, type AdoptionRequest } from '../../shared/schemas/adoption-request';
 import { CatalogApi, type DataSelection } from './catalog-api';
 import type { ConnectionSession } from './connection-session';
-import { DaemonApiError, isUuid, object } from './daemon-api';
+import { DaemonApiError, isUuid, object, type Json } from './daemon-api';
 
 export interface AdoptionResult {
   readonly plan_id: string;
@@ -19,6 +19,7 @@ export interface AdoptionResult {
   readonly backend_status: 'unknown';
   readonly adopted: true;
 }
+
 export type AdoptionStatus =
   | 'draft'
   | 'ready'
@@ -26,6 +27,7 @@ export type AdoptionStatus =
   | 'acknowledgement_unknown'
   | 'rejected'
   | 'confirmed';
+
 export class AdoptionError extends Error {
   constructor(
     message: string,
@@ -37,8 +39,9 @@ export class AdoptionError extends Error {
     this.name = 'AdoptionError';
   }
 }
+
 function response(
-  value: object | null | string | number | boolean,
+  value: Json,
   attempt: number,
 ): AdoptionResult {
   if (
@@ -58,6 +61,7 @@ function response(
     value.adopted !== true
   )
     throw DaemonApiError.fromKey('response', 'invalidAdoptionAcknowledgement');
+
   return Object.freeze({
     plan_id: value.plan_id,
     run_id: value.run_id,
@@ -107,6 +111,7 @@ export class AdoptionWorkflow {
   }
   prepare(directory: DataSelection, attempt: number): void {
     new CatalogApi(this.session).assertSelection(directory);
+
     if (directory.kind !== 'directory')
       throw new AdoptionError(
         'Choose a daemon run directory.',
@@ -114,29 +119,35 @@ export class AdoptionWorkflow {
         'chooseADaemonRunDirectory',
       );
     const request = adoptionRequestSchema.parse({ path: directory.path, attempt });
+
     if (this.#status === 'pending')
       throw new AdoptionError(
         'Wait for the current adoption acknowledgement.',
         undefined,
         'adoptionAwaitingAck',
       );
+
     const same =
       this.#daemonId === directory.daemonId &&
       this.#request?.path === request.path &&
       this.#request.attempt === request.attempt;
+
     if (this.#status === 'acknowledgement_unknown' && !same)
       throw new AdoptionError(
         'Revalidate the same directory and attempt before retrying the retained request.',
         undefined,
         'adoptionRevalidationRequired',
       );
+
     if (!same) {
       this.#key = this.keyFactory();
       this.#request = Object.freeze(request);
       this.#daemonId = directory.daemonId;
       this.#result = null;
     }
+
     this.#source = directory;
+
     if (this.#status !== 'acknowledgement_unknown' && !(same && this.result))
       this.#status = 'ready';
   }
@@ -148,12 +159,14 @@ export class AdoptionWorkflow {
         'adoptionSelectionRequired',
       );
     new CatalogApi(this.session).assertSelection(this.#source);
+
     if (this.#status === 'pending')
       throw new AdoptionError(
         'An adoption request is already pending.',
         undefined,
         'adoptionAlreadyPending',
       );
+
     if (this.#result && this.#confirmedRevision === this.session.snapshot().revision)
       return this.#result;
     const request = this.#request;
@@ -161,6 +174,7 @@ export class AdoptionWorkflow {
     let httpStatus: number | undefined;
     this.#result = null;
     this.#status = 'pending';
+
     try {
       const result = await this.session.perform(async (api, signal) => {
         try {
@@ -173,9 +187,11 @@ export class AdoptionWorkflow {
           throw error;
         }
       });
+
       this.#result = result;
       this.#confirmedRevision = this.session.snapshot().revision;
       this.#status = 'confirmed';
+
       return result;
     } catch {
       // Service failures may follow a durable registration; retry only the retained request.

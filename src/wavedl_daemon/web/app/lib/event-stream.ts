@@ -11,6 +11,7 @@ export interface Cursor {
   attempt: number;
   seq: number;
 }
+
 export interface RunEvent {
   protocol: 'wavedl-jsonl';
   version: 1;
@@ -21,14 +22,17 @@ export interface RunEvent {
   ts: string;
   payload: JsonObject;
 }
+
 export interface StreamControl {
   type: 'overflow' | 'error';
   resumePosition: Cursor;
 }
+
 export interface CursorStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
+
 export const INITIAL_CURSOR: Readonly<Cursor> = Object.freeze({ attempt: 0, seq: -1 });
 const MAX_LINE = 1024 * 1024;
 const MAX_FRAME = 2 * 1024 * 1024;
@@ -59,6 +63,7 @@ export class CursorStore {
     ) {
       throw DaemonApiError.fromKey('identity', 'invalidCursorStorageScope');
     }
+
     this.key = `wavedl:cursor:v1:${encodeURIComponent(daemonId)}:${encodeURIComponent(runId)}`;
   }
   load(): Cursor {
@@ -66,13 +71,16 @@ export class CursorStore {
   }
   read(): { cursor: Cursor; status: 'saved' | 'empty' | 'invalid' | 'unavailable' } {
     let raw: string | null;
+
     try {
       raw = this.storage.getItem(this.key);
     } catch {
       return { cursor: { ...INITIAL_CURSOR }, status: 'unavailable' };
     }
+
     try {
       const value: unknown = raw === null || raw.length > 128 ? null : parseJson(raw);
+
       return validCursor(value)
         ? { cursor: { attempt: value.attempt, seq: value.seq }, status: 'saved' }
         : { cursor: { ...INITIAL_CURSOR }, status: raw === null ? 'empty' : 'invalid' };
@@ -92,11 +100,13 @@ function jsonObject(value: Json | undefined): value is JsonObject {
 
 function envelope(data: string, runId: string, id: string): RunEvent {
   let value;
+
   try {
     value = parseJson(data);
   } catch {
     throw DaemonApiError.fromKey('protocol', 'malformedOrUnsafeRunEventJson');
   }
+
   if (
     !object(value) ||
     value.protocol !== 'wavedl-jsonl' ||
@@ -119,11 +129,14 @@ function envelope(data: string, runId: string, id: string): RunEvent {
   ) {
     throw DaemonApiError.fromKey('protocol', 'invalidEventScope');
   }
+
   if (new Date(value.ts).toISOString().slice(0, 19) !== value.ts.slice(0, 19)) {
     throw DaemonApiError.fromKey('protocol', 'invalidEventTimestamp');
   }
+
   // parseJson recursively validated payload's JSON domain before narrowing.
   const payload = value.payload;
+
   return {
     protocol: 'wavedl-jsonl',
     version: 1,
@@ -167,21 +180,25 @@ export class EventStreamParser {
   async push(chunk: Uint8Array): Promise<void> {
     for (let offset = 0; offset < chunk.length; offset += 65536) {
       let text: string;
+
       try {
         text = this.#decoder.decode(chunk.subarray(offset, offset + 65536), { stream: true });
       } catch {
         throw DaemonApiError.fromKey('protocol', 'invalidUtf8Stream');
       }
+
       await this.#consume(text);
     }
   }
   async finish(): Promise<void> {
     let text: string;
+
     try {
       text = this.#decoder.decode();
     } catch {
       throw DaemonApiError.fromKey('protocol', 'truncatedUtf8Stream');
     }
+
     await this.#consume(text);
     // An incomplete final frame is discarded and replayed on reconnect.
     this.#pending = '';
@@ -191,13 +208,16 @@ export class EventStreamParser {
   async #consume(text: string): Promise<void> {
     // Slice before appending, so a large network chunk cannot create an unbounded line.
     let start = 0;
+
     for (;;) {
       const newline = text.indexOf('\n', start);
       const part = text.slice(start, newline < 0 ? text.length : newline);
       this.#lineBytes += new TextEncoder().encode(part).byteLength;
+
       if (this.#lineBytes > MAX_LINE)
         throw DaemonApiError.fromKey('protocol', 'streamLineExceedsLimit');
       this.#pending += part;
+
       if (newline < 0) return;
       const line = this.#pending.endsWith('\r') ? this.#pending.slice(0, -1) : this.#pending;
       this.#pending = '';
@@ -208,18 +228,24 @@ export class EventStreamParser {
   }
   async #line(line: string): Promise<void> {
     this.#frameBytes += new TextEncoder().encode(line).byteLength + 1;
+
     if (this.#frameBytes > MAX_FRAME)
       throw DaemonApiError.fromKey('protocol', 'streamFrameExceedsLimit');
+
     if (!line) {
       await this.#dispatch();
       this.#reset();
+
       return;
     }
+
     if (line.startsWith(':')) return;
     const colon = line.indexOf(':');
     const field = colon < 0 ? line : line.slice(0, colon);
     let value = colon < 0 ? '' : line.slice(colon + 1);
+
     if (value.startsWith(' ')) value = value.slice(1);
+
     if (field === 'data') this.#data.push(value);
     else if (field === 'id') {
       if (this.#id || value.includes('\0'))
@@ -238,30 +264,39 @@ export class EventStreamParser {
   }
   async #dispatch(): Promise<void> {
     this.signal?.throwIfAborted();
+
     if (!this.#data.length) return;
     const data = this.#data.join('\n');
+
     if (this.#type === 'overflow' || this.#type === 'error') {
       const value = parseJson(data);
+
       if (this.#id || !object(value))
         throw DaemonApiError.fromKey('protocol', 'invalidStreamControl');
       const resume: unknown = value.resumePosition;
+
       if (!validCursor(resume)) throw DaemonApiError.fromKey('protocol', 'invalidStreamControl');
+
       if (
         resume.attempt > this.#cursor.attempt ||
         (resume.attempt === this.#cursor.attempt && resume.seq > this.#cursor.seq)
       ) {
         throw DaemonApiError.fromKey('protocol', 'uncommittedStreamProgress');
       }
+
       await this.control({
         type: this.#type,
         resumePosition: { attempt: resume.attempt, seq: resume.seq },
       });
+
       return; // Server controls NEVER advance a runtime cursor.
     }
+
     if (this.#type && this.#type !== 'message')
       throw DaemonApiError.fromKey('protocol', 'unsupportedStreamEvent');
     const event = envelope(data, this.runId, this.#id);
     const current = this.#cursor;
+
     if (
       event.attempt < current.attempt ||
       (event.attempt === current.attempt && event.seq <= current.seq)
@@ -289,8 +324,10 @@ export async function streamRun(
     throw DaemonApiError.fromKey('identity', 'eventCursorBelongsToAnotherRun');
   const cursor = store.load();
   const response = await api.openEvents(runId, cursor, options.signal, store.daemonId);
+
   if (!response.body) throw DaemonApiError.fromKey('response', 'missingEventStream');
   const reader = response.body.getReader();
+
   const parser = new EventStreamParser(
     runId,
     cursor,
@@ -305,15 +342,19 @@ export async function streamRun(
       }),
     options.signal,
   );
+
   try {
     for (;;) {
       options.signal?.throwIfAborted();
       const { value, done } = await reader.read();
+
       if (done) break;
       await parser.push(value);
     }
+
     options.signal?.throwIfAborted();
     await parser.finish();
+
     return parser.cursor;
   } finally {
     await reader.cancel().catch(() => undefined);

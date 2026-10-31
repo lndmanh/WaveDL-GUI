@@ -21,12 +21,15 @@ export async function checkpointOptions(
 ): Promise<readonly CheckpointOption[]> {
   const client = new ArtifactClient(session);
   const result: CheckpointOption[] = [];
+
   for (const artifact of artifacts) {
     if (artifact.path !== 'checkpoint_selection.json') continue;
     const classification = await client.selectionMetadata(artifact, signal);
+
     const selectable =
       classification.kind !== 'cross_validation_summary' &&
       (classification.kind !== 'cross_validation_fold' || classification.fold !== undefined);
+
     const kind = classification.kind.replaceAll('_', ' ');
     result.push({
       artifact,
@@ -35,6 +38,7 @@ export async function checkpointOptions(
       label: `${artifact.generation} · attempt ${artifact.attempt} · ${kind}${classification.fold === undefined ? '' : ` ${classification.fold}`}`,
     });
   }
+
   return result;
 }
 
@@ -74,7 +78,9 @@ export class ResultOperations {
     const client = new ArtifactClient(this.session);
     client.assertSelection(metadata);
     const request = resultRequestSchema.parse(draft);
+
     if (!request.storage_map?.length) delete request.storage_map;
+
     if (
       data.kind !== 'file' ||
       request.config.data_path !== data.path ||
@@ -83,7 +89,9 @@ export class ResultOperations {
     )
       throw clientError('inferenceSelectionRequired', {});
     const classification = await client.selectionMetadata(metadata, signal);
+
     if (epoch !== this.#epoch) throw clientError('draftChangedPreviewAgain', {});
+
     if (
       classification.kind === 'cross_validation_summary' ||
       (classification.kind === 'cross_validation_fold' && classification.fold === undefined)
@@ -92,41 +100,53 @@ export class ResultOperations {
     client.assertSelection(metadata);
     new CatalogApi(this.session).assertSelection(data);
     const fingerprint = JSON.stringify(request);
+
     if (fingerprint !== this.#fingerprint) {
       this.#key = this.keyFactory();
       this.#fingerprint = fingerprint;
     }
+
     this.#request = request;
     this.#revision = this.session.snapshot().revision;
   }
   async preview(signal?: AbortSignal): Promise<PlanView> {
     if (!this.#request) throw clientError('validateTheInferenceDraftFirst', {});
+
     if (this.#revision !== this.session.snapshot().revision || !this.session.api)
       throw clientError('inferenceValidationRequired', {});
     const epoch = this.#epoch;
     const request = this.#request;
     const key = this.#key;
+
     const plan = await this.session.perform((api, scoped) => api.plan(request, key, scoped), {
       signal,
     });
+
     if (epoch !== this.#epoch) throw clientError('draftChangedPreviewAgain', {});
     this.#revision = this.session.snapshot().revision;
     this.#plan = plan;
+
     return plan;
   }
   async submit(signal?: AbortSignal): Promise<RunView> {
     const plan = this.approved;
+
     if (!plan) throw clientError('inferencePreviewRequired', {});
+
     return this.session.perform((api, scoped) => api.submit(plan, scoped), { signal });
   }
   async status(signal?: AbortSignal): Promise<RunView> {
     const plan = this.approved;
+
     if (!plan) throw clientError('previewFirst', {});
+
     return this.session.perform(
       async (api, scoped) => {
         const view = await api.getRun(plan.run_id, scoped);
+
         if (view.plan_id !== plan.plan_id || view.request_id !== plan.request_id)
           throw DaemonApiError.fromKey('identity', 'inferencePlanMismatch');
+
         return view;
       },
       { signal },

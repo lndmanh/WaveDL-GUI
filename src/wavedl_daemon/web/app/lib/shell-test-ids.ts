@@ -9,6 +9,7 @@ export const WORKSTATION_SECTIONS = {
 } as const;
 
 export type WorkstationSection = (typeof WORKSTATION_SECTIONS)[keyof typeof WORKSTATION_SECTIONS];
+
 export const WORKSTATION_SECTION_IDS: readonly WorkstationSection[] =
   Object.values(WORKSTATION_SECTIONS);
 

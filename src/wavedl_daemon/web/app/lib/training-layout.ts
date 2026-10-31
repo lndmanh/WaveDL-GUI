@@ -3,6 +3,7 @@ import type { DraftConfig } from '../../shared/schemas/project-draft';
 import { trainingPresets } from './training-presets';
 
 export type TrainingFieldName = keyof DraftConfig;
+
 export type TrainingSectionId =
   | 'optimizer'
   | 'schedule'
@@ -62,17 +63,20 @@ export const trainingSections: readonly {
 ];
 
 const adamFamily: readonly TrainingConfig['optimizer'][] = ['adamw', 'adam', 'nadam', 'radam'];
+
 const decayingSchedulers: readonly TrainingConfig['scheduler'][] = [
   'plateau',
   'step',
   'multistep',
   'exponential',
 ];
+
 const flooredSchedulers: readonly TrainingConfig['scheduler'][] = [
   'plateau',
   'cosine',
   'cosine_restarts',
 ];
+
 const constrained = (config: TrainingConfig) =>
   config.constraint.length > 0 || !!config.constraint_file;
 
@@ -134,13 +138,19 @@ export function matchingPreset(config: TrainingConfig): string | null {
         JSON.stringify(value),
     ),
   );
+
   return recipe?.id ?? null;
 }
 
 /** Compact, locale-independent numbers: 0.0003 → 3e-4, 1000 → 1000. */
 export function compactNumber(value: number): string {
   if (!Number.isFinite(value)) return '—';
+
   if (value !== 0 && (Math.abs(value) < 0.01 || Math.abs(value) >= 1e6))
-    return value.toExponential().replace(/\.?0+e/, 'e').replace('e+', 'e');
+    return value
+      .toExponential()
+      .replace(/\.?0+e/, 'e')
+      .replace('e+', 'e');
+
   return String(Number(value.toPrecision(6)));
 }
