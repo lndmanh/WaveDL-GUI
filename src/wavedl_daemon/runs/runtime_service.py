@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Owned service sessions and async facades for the HTTP control plane."""
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from wavedl_daemon.events.ingestion import (
 from wavedl_daemon.execution.budget import BudgetExhausted, WorkBudget
 from wavedl_daemon.execution.pool import BoundedThreadPool
 from wavedl_daemon.execution.service_host import AsyncRunService, ServiceHost
+from wavedl_daemon.http.services import DaemonServices
 from wavedl_daemon.runs.adoption_service import VerifiedAdoptionService
 from wavedl_daemon.runs.artifacts import ArtifactStore
 from wavedl_daemon.runs.catalog import AsyncCatalogService, CatalogService
@@ -189,6 +191,7 @@ class ServiceSession:
                 self.budget,
                 provenance_store=provenance,
                 collection_store=collections,
+                pool=self.pool,
             )
             stack.callback(self.controller.drain)
             stack.callback(self.controller.close)
@@ -390,7 +393,7 @@ def _unresolved_layout(run_id):
     raise RuntimeError("Artifacts require owner-resolved layout")
 
 
-class HostedServices:
+class HostedServices(DaemonServices):
     """One inert shared facade, started/closed by the app lifespan."""
 
     def __init__(
@@ -401,6 +404,7 @@ class HostedServices:
         backend_factory=None,
         browse_roots=None,
     ):
+        self.daemon_id = ""
         self.broker = EventBroker()
         self.pool = BoundedThreadPool(budget or WorkBudget())
         self.host = ServiceHost(

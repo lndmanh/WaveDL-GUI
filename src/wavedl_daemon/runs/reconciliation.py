@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Bounded fleet polling with retained evidence and explicit retention uncertainty.
 
 ``tick`` is foreground/blocking: event-loop callers must use ``submit_tick`` with
@@ -14,7 +15,7 @@ import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from wavedl.core.scheduler_attempt import SchedulerIdentity
 from wavedl_daemon.backends.contracts import (
@@ -31,7 +32,14 @@ from wavedl_daemon.execution.budget import BudgetExhausted
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from wavedl_daemon.execution.pool import BoundedThreadPool, WorkHandle
+    from wavedl_daemon.execution.pool import CancellationToken, WorkHandle
+
+
+T = TypeVar("T")
+
+
+class WorkSubmitter(Protocol):
+    def submit(self, callback: Callable[[CancellationToken], T]) -> WorkHandle[T]: ...
 
 
 class FleetBackend(Protocol):
@@ -186,9 +194,7 @@ class SchedulerReconciler:
         with self._lock:
             return tuple(entry.update for entry in self._entries.values())
 
-    def submit_tick(
-        self, pool: BoundedThreadPool
-    ) -> WorkHandle[tuple[PollUpdate, ...]]:
+    def submit_tick(self, pool: WorkSubmitter) -> WorkHandle[tuple[PollUpdate, ...]]:
         """Admit polling through the shared bounded executor, never the event loop."""
         return pool.submit(lambda token: self.tick(check=token.check))
 
