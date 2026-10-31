@@ -27,6 +27,7 @@ describe('artifact download provenance', () => {
         artifactDownloadName({ ...artifact, path, generation: 'gen-000002' }),
         artifactDownloadName({ ...artifact, path, runId: '33333333-3333-4333-8333-333333333333' }),
       ]);
+
       expect(new Set(names).size).toBe(3);
       expect(names[0]).toBe(`${artifact.runId}_${artifact.generation}_${path}`);
       expect(names.every((name) => name.endsWith(path))).toBe(true);
@@ -46,6 +47,7 @@ describe('artifact download provenance', () => {
       expect(name).not.toMatch(/[. ]$/u);
       expect(name.startsWith(`${artifact.runId}_${artifact.generation}_`)).toBe(true);
     }
+
     expect(
       (await artifactDownloadName({ ...artifact, path: 'dir/CON.csv' })).endsWith('_CON.csv'),
     ).toBe(true);
@@ -60,6 +62,7 @@ describe('artifact download provenance', () => {
         path,
         generation: `gen-${'9'.repeat(60)}`,
       });
+
       expect(new TextEncoder().encode(name).byteLength).toBeLessThanOrEqual(255);
       expect(name).toContain('.');
       expect(name.endsWith(path.endsWith('.onnx') ? '.onnx' : '.csv')).toBe(true);
@@ -76,6 +79,7 @@ describe('artifact download provenance', () => {
       { ...artifact, path: 'left/a?.csv', sha256: 'a'.repeat(64) },
       { ...artifact, path: 'right/a*.csv', sha256: 'b'.repeat(64) },
     ];
+
     const names = await Promise.all(aliases.map((item) => artifactDownloadName(item, aliases)));
     expect(new Set(names).size).toBe(2);
     expect(names.every((name) => name.endsWith('.csv'))).toBe(true);
@@ -89,6 +93,7 @@ describe('artifact download provenance', () => {
     const aliases = [left, right].map((path) => ({ ...artifact, path }));
     const names = await Promise.all(aliases.map((item) => artifactDownloadName(item, aliases)));
     expect(new Set(names.map((name) => name.toLowerCase())).size).toBe(2);
+
     for (const [index, item] of aliases.entries())
       expect(await artifactDownloadName(item, [...aliases].reverse())).toBe(names[index]);
   });
@@ -100,9 +105,11 @@ describe('artifact download provenance', () => {
   });
   it('disambiguates long paths with a shared truncated prefix and identical bytes', async () => {
     const paths = [`${'a'.repeat(4090)}1.csv`, `${'a'.repeat(4090)}2.csv`];
+
     const names = await Promise.all(
       paths.map((path) => artifactDownloadName({ ...artifact, path })),
     );
+
     expect(new Set(names).size).toBe(2);
     expect(names.every((name) => new TextEncoder().encode(name).byteLength <= 255)).toBe(true);
   });
@@ -119,10 +126,12 @@ describe('artifact download provenance', () => {
     const prefix = `${artifact.runId}_${artifact.generation}_`;
     const long = { ...artifact, path: `${'a'.repeat(300)}.csv` };
     const first = { ...artifact, path: (await artifactDownloadName(long)).slice(prefix.length) };
+
     const second = {
       ...artifact,
       path: (await artifactDownloadName(first, [long, first])).slice(prefix.length),
     };
+
     await expect(artifactDownloadName(first, [long, first, second])).rejects.toThrow('distinct');
     await expect(artifactDownloadName(second, [long, first, second])).rejects.toThrow('distinct');
   });

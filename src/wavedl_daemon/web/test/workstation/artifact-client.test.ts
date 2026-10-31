@@ -7,11 +7,14 @@ import {
   pngPreviewBlob,
 } from '../../app/lib/artifact-client';
 import { ConnectionSession } from './session-fixture';
+
 const run = '22222222-2222-4222-8222-222222222222';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
+
 function json(body: object) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 }
+
 async function setup(
   bytes = new TextEncoder().encode('published'),
   size = bytes.length,
@@ -20,7 +23,9 @@ async function setup(
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
+
   const calls: Array<{ path: string; init?: RequestInit }> = [];
+
   const inventory = {
     generations: [
       {
@@ -31,22 +36,29 @@ async function setup(
       },
     ],
   };
+
   const session = new ConnectionSession({
     origin: 'http://localhost:8765',
     buildId: '1.8.1',
     fetcher: async (url, init) => {
       const path = new URL(String(url)).pathname;
       calls.push({ path, init });
+
       if (path === '/api/health') return json(health);
+
       if (path.endsWith('/artifacts')) return json(inventory);
+
       return new Response(bytes, {
         headers: { 'content-type': 'application/octet-stream', 'content-length': String(size) },
       });
     },
   });
+
   await session.connect('secret-token');
+
   return { session, calls, client: new ArtifactClient(session) };
 }
+
 describe('published artifact authority', () => {
   it('limits raster preview dimensions before handing bytes to the decoder', async () => {
     const bytes = new Uint8Array(33);
@@ -63,16 +75,21 @@ describe('published artifact authority', () => {
   });
   it('discards a late streamed response when the owning session detaches', async () => {
     const bytes = new Uint8Array([1, 2]);
+
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
       byte.toString(16).padStart(2, '0'),
     ).join('');
+
     let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+
     const session = new ConnectionSession({
       origin: 'http://localhost:8765',
       buildId: '1.8.1',
       fetcher: async (input) => {
         const path = new URL(String(input)).pathname;
+
         if (path === '/api/health') return json(health);
+
         if (path.endsWith('/artifacts'))
           return json({
             generations: [
@@ -84,6 +101,7 @@ describe('published artifact authority', () => {
               },
             ],
           });
+
         return new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -94,9 +112,11 @@ describe('published artifact authority', () => {
         );
       },
     });
+
     await session.connect('token');
     const client = new ArtifactClient(session);
     const artifact = (await client.list(run))[0];
+
     if (!artifact) throw new Error('Missing artifact');
     const pending = client.verifiedBlob(artifact);
     const failure = expect(pending).rejects.toThrow();
@@ -133,6 +153,7 @@ describe('published artifact authority', () => {
   it('only publishes exact size/hash bytes and keeps credentials out of URLs', async () => {
     const { client, calls } = await setup();
     const artifact = (await client.list(run))[0];
+
     if (!artifact) throw new Error('Missing artifact');
     expect(await (await client.verifiedBlob(artifact)).text()).toBe('published');
     const download = calls.find((call) => call.path.endsWith('weights.bin'));
@@ -150,7 +171,9 @@ describe('published artifact authority', () => {
         kind === 'truncated' ? 3 : 2,
         kind === 'checksum',
       );
+
       const artifact = (await client.list(run))[0];
+
       if (!artifact) throw new Error('Missing artifact');
       await expect(client.verifiedBlob(artifact)).rejects.toThrow();
     }
@@ -158,6 +181,7 @@ describe('published artifact authority', () => {
   it('refuses oversized allocation before issuing download and invalidates detached grants', async () => {
     const { client, calls, session } = await setup(new Uint8Array([1]), BLOB_BUDGET + 1);
     const artifact = (await client.list(run))[0];
+
     if (!artifact) throw new Error('Missing artifact');
     await expect(client.verifiedBlob(artifact)).rejects.toThrow(
       'This artifact exceeds the 64 MiB browser memory budget. Use the CLI to export it.',

@@ -5,31 +5,40 @@ import { ArtifactClient } from '../../app/lib/artifact-client';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
 import { createResultOperationDefaults } from '../../app/lib/result-operation-defaults';
+
 const sourceRun = '11111111-1111-4111-8111-111111111111';
+
 const ids = {
   run_id: '22222222-2222-4222-8222-222222222222',
   plan_id: '33333333-3333-4333-8333-333333333333',
   request_id: '44444444-4444-4444-8444-444444444444',
 };
+
 function json(body: object) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 }
+
 async function setup(kind = 'best', fold?: number) {
   const bytes = new TextEncoder().encode(
     JSON.stringify({ schema_version: 1, kind, ...(fold === undefined ? {} : { fold }) }),
   );
+
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
+
   const keys: Array<string | null> = [];
   const bodies: string[] = [];
+
   const session = new ConnectionSession({
     origin: 'http://localhost:8765',
     buildId: '1.8.1',
     fetcher: async (input, init) => {
       const path = new URL(String(input)).pathname;
+
       if (path === '/api/health')
         return json({ daemon_id: 'd', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 });
+
       if (path === '/api/browse/resolve')
         return json({
           root: 'data',
@@ -37,6 +46,7 @@ async function setup(kind = 'best', fold?: number) {
           kind: 'file',
           path: '/data/test.npz',
         });
+
       if (path.endsWith('/artifacts'))
         return json({
           generations: [
@@ -48,6 +58,7 @@ async function setup(kind = 'best', fold?: number) {
             },
           ],
         });
+
       if (path.endsWith('checkpoint_selection.json'))
         return new Response(bytes, {
           headers: {
@@ -55,11 +66,14 @@ async function setup(kind = 'best', fold?: number) {
             'content-length': String(bytes.length),
           },
         });
+
       if (path === '/api/runs/plan') {
         keys.push(new Headers(init?.headers).get('Idempotency-Key'));
         bodies.push(String(init?.body));
+
         return json({ ...ids, preview: {} });
       }
+
       return json({
         ...ids,
         backend: 'local',
@@ -73,10 +87,13 @@ async function setup(kind = 'best', fold?: number) {
       });
     },
   });
+
   await session.connect('token');
   const data = await new CatalogApi(session).resolve('data', 'test.npz');
   const metadata = (await new ArtifactClient(session).list(sourceRun))[0];
+
   if (!metadata) throw new Error('Missing metadata');
+
   const draft = resultRequestSchema.parse({
     backend: 'local',
     operation: 'test',
@@ -85,8 +102,10 @@ async function setup(kind = 'best', fold?: number) {
     runtime: { python: '/usr/bin/python3', mode: 'existing', device: 'cpu', environment: {} },
     topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
   });
+
   return { session, data, metadata, draft, keys, bodies, workflow: new ResultOperations(session) };
 }
+
 describe('explicit published inference workflow', () => {
   it('keeps nested draft defaults isolated across instances', () => {
     const first = createResultOperationDefaults();
@@ -100,13 +119,16 @@ describe('explicit published inference workflow', () => {
   });
   it('mount defaults carry a valid local CPU backend for planning', () => {
     const resultOperationDefaults = createResultOperationDefaults();
+
     const draft = resultRequestSchema.safeParse({
       ...resultOperationDefaults,
       config: { ...resultOperationDefaults.config, data_path: '/data/test.npz' },
       checkpoint_source: { run_id: sourceRun, generation: 'gen-000001' },
       runtime: { ...resultOperationDefaults.runtime, python: '/usr/bin/python3' },
     });
+
     expect(draft.success).toBe(true);
+
     if (draft.success) expect(draft.data.backend).toBe('local');
   });
   it('plans exact source and freezes approval, reusing unchanged retry key', async () => {
@@ -130,6 +152,7 @@ describe('explicit published inference workflow', () => {
       const { workflow, draft, data, metadata } = await setup(kind);
       await expect(workflow.prepare(draft, data, metadata)).rejects.toThrow('CV');
     }
+
     const { workflow, draft, data, metadata } = await setup('cross_validation_fold', 2);
     await workflow.prepare(draft, data, metadata);
     await workflow.preview();
@@ -179,6 +202,7 @@ describe('explicit published inference workflow', () => {
 
     const currentData = await new CatalogApi(session).resolve('data', 'test.npz');
     const currentMetadata = (await new ArtifactClient(session).list(sourceRun))[0];
+
     if (!currentMetadata) throw new Error('Missing current metadata');
     await workflow.prepare(draft, currentData, currentMetadata);
     await workflow.preview();

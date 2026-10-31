@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canRequestCancellation, RunMonitor, type RunTransport } from '../../app/lib/run-monitor';
 import { DaemonApiError, type RunView } from '../../app/lib/daemon-api';
 import { CursorStore } from '../../app/lib/event-stream';
+
 const id = '11111111-1111-1111-1111-111111111111';
+
 function view(patch: Partial<RunView> = {}): RunView {
   return {
     plan_id: id,
@@ -19,14 +21,17 @@ function view(patch: Partial<RunView> = {}): RunView {
     ...patch,
   };
 }
+
 function frame(seq: number, type = 'log', attempt = 1): Uint8Array {
   return new TextEncoder().encode(
     `id: ${attempt}:${seq}\ndata: ${JSON.stringify({ protocol: 'wavedl-jsonl', version: 1, run_id: id, attempt, seq, type, ts: '2026-10-07T00:00:00Z', payload: { message: '<script>never HTML</script>' } })}\n\n`,
   );
 }
+
 function harness(initial = view(), store: CursorStore | null = null) {
   let current = initial;
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
+
   const transport: RunTransport = {
     getRun: vi.fn(async () => current),
     cancelRun: vi.fn(async () => view({ cancellation_requested: true, state: 'stopping' })),
@@ -52,8 +57,10 @@ function harness(initial = view(), store: CursorStore | null = null) {
         ),
     ),
   };
+
   const reportFailure = vi.fn();
   const monitor = new RunMonitor(id, transport, 100, reportFailure, store);
+
   return {
     monitor,
     reportFailure,
@@ -67,6 +74,7 @@ function harness(initial = view(), store: CursorStore | null = null) {
     sendCombined: () => {
       const first = frame(0),
         second = frame(1);
+
       const combined = new Uint8Array(first.length + second.length);
       combined.set(first);
       combined.set(second, first.length);
@@ -75,17 +83,21 @@ function harness(initial = view(), store: CursorStore | null = null) {
     end: () => channel?.close(),
   };
 }
+
 async function flush() {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 }
+
 afterEach(() => {
   vi.useRealTimers();
 });
+
 describe('run monitoring', () => {
   it.each([{ restart_count: 0 }, { owner: 'other' }, { job_id: '13' }, { cluster: 'other' }])(
     'rejects changed native ownership or generation %j',
     async (patch) => {
       vi.useFakeTimers();
+
       const identity = {
         run_id: id,
         request_id: id,
@@ -94,6 +106,7 @@ describe('run monitoring', () => {
         owner: 'tester',
         restart_count: 1,
       };
+
       const h = harness(view({ evidence: { native_pending: true, native_identity: identity } }));
       const task = h.monitor.start();
       await flush();
@@ -189,7 +202,9 @@ describe('run monitoring', () => {
     const h = harness();
     const task = h.monitor.start();
     await flush();
+
     for (let seq = 0; seq < 1010; seq++) h.send(seq);
+
     for (let i = 0; i < 10000 && h.monitor.snapshot().events.at(-1)?.seq !== 1009; i++)
       await Promise.resolve();
     expect(h.monitor.snapshot().events).toHaveLength(1000);
@@ -346,6 +361,7 @@ describe('run monitoring', () => {
       h.set(view({ attempt: 2, cancellation_requested: true, state: 'stopping' }));
       await vi.advanceTimersByTimeAsync(100);
       expect(h.monitor.snapshot().cancellation).toBe('requested');
+
       if (outcome === 'reject') reject(new Error('lost acknowledgement'));
       else resolve(view({ cancellation_requested: outcome === 'older-true' }));
       await cancellation;
@@ -394,6 +410,7 @@ describe('run monitoring', () => {
     'rejects a deferred foreign native %s cancellation response after a newer poll',
     async (field) => {
       vi.useFakeTimers();
+
       const identity = {
         run_id: id,
         request_id: id,
@@ -402,6 +419,7 @@ describe('run monitoring', () => {
         owner: 'tester',
         restart_count: 0,
       };
+
       const h = harness(view({ evidence: { native_identity: identity } }));
       const task = h.monitor.start();
       await flush();
@@ -413,10 +431,12 @@ describe('run monitoring', () => {
           }),
       );
       const cancellation = h.monitor.cancel();
+
       const newer = view({
         attempt: 2,
         evidence: { native_identity: { ...identity, restart_count: 1 } },
       });
+
       h.set(newer);
       await vi.advanceTimersByTimeAsync(100);
       expect(h.monitor.snapshot().run).toEqual(newer);
@@ -441,6 +461,7 @@ describe('run monitoring', () => {
     'accepts a deferred %s cancellation acknowledgement without replacing a newer native head',
     async (outcome) => {
       vi.useFakeTimers();
+
       const identity = {
         run_id: id,
         request_id: id,
@@ -449,6 +470,7 @@ describe('run monitoring', () => {
         owner: 'tester',
         restart_count: 0,
       };
+
       const olderEvidence = outcome === 'older-generation' ? { native_identity: identity } : null;
       const h = harness(view({ evidence: olderEvidence }));
       const task = h.monitor.start();
@@ -461,10 +483,12 @@ describe('run monitoring', () => {
           }),
       );
       const cancellation = h.monitor.cancel();
+
       const newer = view({
         attempt: 2,
         evidence: { native_identity: { ...identity, restart_count: 1 } },
       });
+
       h.set(newer);
       await vi.advanceTimersByTimeAsync(100);
       expect(h.monitor.snapshot().run).toEqual(newer);
@@ -494,6 +518,7 @@ describe('run monitoring', () => {
   });
   it('does not resurrect a monitor when a deferred stream opens after stop', async () => {
     let resolveOpen: ((response: Response) => void) | undefined;
+
     const transport: RunTransport = {
       getRun: vi.fn(async () => view()),
       cancelRun: vi.fn(async () => view()),
@@ -504,15 +529,18 @@ describe('run monitoring', () => {
           }),
       ),
     };
+
     const monitor = new RunMonitor(id, transport);
     const task = monitor.start();
     await flush();
     monitor.stop();
+
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.close();
       },
     });
+
     resolveOpen?.(new Response(body));
     await task;
     expect(monitor.snapshot().stream).toBe('stopped');
@@ -542,10 +570,12 @@ describe('run monitoring', () => {
   it('replays from zero while consuming and verifying the persisted watermark', async () => {
     vi.useFakeTimers();
     const values = new Map<string, string>();
+
     const store = new CursorStore(id, id, {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => values.set(key, value),
     });
+
     store.save({ attempt: 1, seq: 0 });
     const h = harness(view(), store);
     const task = h.monitor.start();
@@ -566,25 +596,30 @@ describe('run monitoring', () => {
   it('reconstructs checkpoint supersession and logs before verifying a cold watermark', async () => {
     vi.useFakeTimers();
     let saved = JSON.stringify({ attempt: 2, seq: 1 });
+
     const store = new CursorStore('daemon-a', id, {
       getItem: () => saved,
       setItem: (_key, value) => {
         saved = value;
       },
     });
+
     const h = harness(view({ attempt: 2 }), store);
     const task = h.monitor.start();
     await flush();
+
     const send = (attempt: number, seq: number, type: string, payload: object) => {
       h.raw(
         `id: ${attempt}:${seq}\ndata: ${JSON.stringify({ protocol: 'wavedl-jsonl', version: 1, run_id: id, attempt, seq, type, ts: '2026-10-07T00:00:00Z', payload })}\n\n`,
       );
     };
+
     send(1, 0, 'hello', {});
     send(1, 1, 'metric', { name: 'loss', value: 4, step: 1 });
     send(1, 2, 'metric', { name: 'loss', value: 2, step: 2 });
     send(2, 0, 'supersede', { source_attempt: 1, step: 1, generation: 'checkpoint-a' });
     send(2, 1, 'metric', { name: 'loss', value: 3, step: 2 });
+
     for (let i = 0; i < 20; i++) await flush();
     expect(h.monitor.replayTargetStatus()).toBe('verified');
     expect(h.monitor.snapshot().metrics.map((record) => record.value)).toEqual([4, 3]);
@@ -603,6 +638,7 @@ describe('run monitoring', () => {
       getItem: () => JSON.stringify({ attempt: 1, seq: 0 }),
       setItem: () => undefined,
     });
+
     const h = harness(view({ attempt: 2 }), store);
     const task = h.monitor.start();
     await flush();
@@ -627,6 +663,7 @@ describe('run monitoring', () => {
         getItem: () => raw,
         setItem: () => undefined,
       });
+
       const h = harness(view(), store);
       const task = h.monitor.start();
       await flush();
@@ -669,6 +706,7 @@ describe('run monitoring', () => {
         throw new Error('private storage body');
       },
     });
+
     const h = harness(view(), store);
     const task = h.monitor.start();
     await flush();

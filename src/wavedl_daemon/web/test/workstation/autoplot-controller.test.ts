@@ -19,6 +19,7 @@ const train: RunView = {
   cancellation_requested: false,
   evidence: null,
 };
+
 const plot: RunView = {
   ...train,
   run_id: '44444444-4444-4444-8444-444444444444',
@@ -28,6 +29,7 @@ const plot: RunView = {
   state: 'submitted',
   attempt: null,
 };
+
 function approved(cv = 0): PlanView {
   return {
     run_id: train.run_id,
@@ -58,9 +60,11 @@ function approved(cv = 0): PlanView {
     },
   };
 }
+
 function json(body: object) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 }
+
 async function setup(
   options: {
     deadlineMs?: number;
@@ -70,43 +74,53 @@ async function setup(
   } = {},
 ) {
   const bestBytes = new TextEncoder().encode(JSON.stringify({ schema_version: 1, kind: 'best' }));
+
   const periodicBytes = new TextEncoder().encode(
     JSON.stringify({ schema_version: 1, kind: 'periodic' }),
   );
+
   const sourceBytes = new TextEncoder().encode('published-inference-state');
   const malformedBytes = new TextEncoder().encode('{malformed');
+
   async function hash(bytes: Uint8Array<ArrayBuffer>) {
     return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
       byte.toString(16).padStart(2, '0'),
     ).join('');
   }
+
   const bestHash = await hash(bestBytes),
     periodicHash = await hash(periodicBytes),
     sourceHash = await hash(sourceBytes),
     malformedHash = await hash(malformedBytes);
+
   const sourceFiles = {
     'model_weights.pth': { size: sourceBytes.length, sha256: sourceHash },
     'training_meta.pkl': { size: sourceBytes.length, sha256: sourceHash },
     'scaler.pkl': { size: sourceBytes.length, sha256: sourceHash },
   };
+
   const keys: string[] = [],
     bodies: string[] = [],
     routes: string[] = [];
+
   let lost = false,
     plotSubmitted = false,
     losePlan = false,
     rejectPlotPolicy = false;
+
   let current = train;
   let metadataStarted = false;
   let inventoryGate = Promise.resolve();
   let trainingPlan = approved();
   let alteredPlot: 'data' | 'runtime' | 'map' | 'digest' | 'topology' | 'imports' | null = null;
+
   const session = new ConnectionSession({
     origin: 'http://localhost:8765',
     buildId: '1.8.1',
     fetcher: async (input, init) => {
       const path = new URL(String(input)).pathname;
       routes.push(`${init?.method ?? 'GET'} ${path}`);
+
       if (path === '/api/health')
         return json({
           daemon_id: metadataStarted && options.metadataFault === 'identity' ? 'other' : 'daemon',
@@ -114,9 +128,12 @@ async function setup(
           protocol_min: metadataStarted && options.metadataFault === 'protocol' ? 2 : 1,
           protocol_max: metadataStarted && options.metadataFault === 'protocol' ? 2 : 1,
         });
+
       if (path === `/api/runs/${train.run_id}`) return json(current);
+
       if (path.endsWith('/artifacts')) {
         await inventoryGate;
+
         return json({
           generations: [1, 2, 3, 4, 5, 6].map((generation) => ({
             generation: `gen-${String(generation).padStart(6, '0')}`,
@@ -144,11 +161,14 @@ async function setup(
           })),
         });
       }
+
       if (path.endsWith('checkpoint_selection.json')) {
         metadataStarted = true;
         const generation = Number(path.match(/gen-(\d+)/)?.[1] ?? 0);
+
         if (generation === 5 && options.metadataFault === 'authentication')
           return new Response('', { status: 401 });
+
         const bytes =
           generation === options.malformedGeneration
             ? malformedBytes
@@ -157,6 +177,7 @@ async function setup(
               : path.includes('gen-000006')
                 ? periodicBytes
                 : bestBytes;
+
         return new Response(bytes, {
           headers: {
             'content-type': 'application/octet-stream',
@@ -164,16 +185,21 @@ async function setup(
           },
         });
       }
+
       if (path === '/api/runs/plan') {
         const request = JSON.parse(String(init?.body));
+
         if (request.operation === 'train') return json(trainingPlan);
         keys.push(new Headers(init?.headers).get('Idempotency-Key') ?? '');
         bodies.push(String(init?.body));
+
         if (losePlan) return new Response('Upstream acknowledgment lost', { status: 503 });
+
         if (rejectPlotPolicy)
           return new Response('GPU allocation must equal processes_per_machine', { status: 422 });
         const source = JSON.parse(String(trainingPlan.preview.manifest_json));
         const generation = request.checkpoint_source.generation;
+
         const manifest = {
           schema_version: 1,
           run_id: plot.run_id,
@@ -200,13 +226,19 @@ async function setup(
             selection: { schema_version: 1, kind: 'best' },
           },
         };
+
         if (alteredPlot === 'data') manifest.resolved_config.data_path = '/changed/train.npz';
+
         if (alteredPlot === 'runtime') manifest.runtime.python = '/changed/python';
+
         if (alteredPlot === 'map')
           manifest.storage_map = [{ host_root: '/approved', execution_root: '/changed' }];
+
         if (alteredPlot === 'digest') manifest.checkpoint_source.manifest_sha256 = 'b'.repeat(64);
+
         if (alteredPlot === 'imports')
           manifest.resolved_config.import_modules = ['unapproved.module'];
+
         return json({
           run_id: plot.run_id,
           plan_id: plot.plan_id,
@@ -218,18 +250,24 @@ async function setup(
           },
         });
       }
+
       if (path === '/api/runs') {
         plotSubmitted = true;
+
         if (lost) return new Response('Upstream acknowledgment lost', { status: 503 });
+
         return json({ ...plot, backend: current.backend });
       }
+
       if (path === `/api/runs/${plot.run_id}`)
         return json({ ...plot, backend: current.backend, submission_requested: plotSubmitted });
       throw new Error(`Unexpected ${path}`);
     },
   });
+
   await session.connect('token');
   const controller = new AutoPlotController(session, { pollMs: 60000, ...options });
+
   return {
     session,
     controller,
@@ -263,6 +301,7 @@ async function setup(
       sourceManifest.resolved_config.model = model;
       trainingPlan.preview.manifest_json = JSON.stringify(sourceManifest);
       trainingPlan.preview.target = backend;
+
       const request = trainingRequestSchema.parse({
         backend,
         operation: 'train',
@@ -277,6 +316,7 @@ async function setup(
         topology: trainingPlan.preview.topology,
         ...(mappings === undefined ? {} : { storage_map: mappings }),
       });
+
       if (mappings) {
         const manifest = JSON.parse(String(trainingPlan.preview.manifest_json));
         manifest.storage_map = mappings;
@@ -287,17 +327,22 @@ async function setup(
         );
         trainingPlan.preview.manifest_json = JSON.stringify(manifest);
       }
+
       const result = await session.perform((api, signal) =>
         api.plan(request, 'training-key', signal),
       );
+
       routes.length = 0;
+
       return result;
     },
     holdArtifacts: () => {
       let release = () => {};
+
       inventoryGate = new Promise<void>((resolve) => {
         release = resolve;
       });
+
       return () => release();
     },
     loseSubmit: () => {
@@ -314,11 +359,14 @@ async function setup(
     },
   };
 }
+
 describe('actual captured automatic plot coordinator', () => {
   it('isolates captured imports and run identity and reconstructs the same durable plot key', async () => {
     const keys: string[] = [];
+
     for (let reconstruction = 0; reconstruction < 2; reconstruction++) {
       const owner = await setup();
+
       try {
         const imports = ['custom_models.registration', 'custom_losses'];
         const plan = await owner.approve(0, 'local', undefined, train, 1, imports, 'custom_model');
@@ -351,6 +399,7 @@ describe('actual captured automatic plot coordinator', () => {
         owner.session.detach();
       }
     }
+
     expect(keys[0]).toBe(`web-autoplot-v1:${train.run_id}:${train.request_id}:gen-000005`);
     expect(keys[1]).toBe(keys[0]);
   });
@@ -365,6 +414,7 @@ describe('actual captured automatic plot coordinator', () => {
     { attempt: 2 },
   ])('does not plan from ineligible fresh evidence %j', async (update) => {
     const owner = await setup();
+
     try {
       owner.controller.capture(train, await owner.approve());
       await owner.controller.observeFresh({ ...train, ...update });
@@ -377,6 +427,7 @@ describe('actual captured automatic plot coordinator', () => {
   });
   it('does not submit or rewrite resource authority when the daemon cannot express the plot plan', async () => {
     const owner = await setup();
+
     try {
       const plan = await owner.approve(0, 'local', undefined, train, 4);
       owner.rejectPlotPolicy();
@@ -399,8 +450,10 @@ describe('actual captured automatic plot coordinator', () => {
     'attests the derived singleprocess plot topology after distributed training (tampered=%s)',
     async (tampered) => {
       const owner = await setup();
+
       try {
         const plan = await owner.approve(0, 'local', undefined, train, 4);
+
         if (tampered) owner.alterPlot('topology');
         owner.controller.capture(train, plan);
         await owner.controller.observeFresh(train);
@@ -431,13 +484,17 @@ describe('actual captured automatic plot coordinator', () => {
       const plan = await owner.approve();
       const originalDigest = crypto.subtle.digest.bind(crypto.subtle);
       let release = () => {};
+
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
+
       let sourceDigests = 0;
       let held = false;
+
       const spy = vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
         const result = await originalDigest(algorithm, data);
+
         if (
           new TextDecoder().decode(data) === `${plan.preview.manifest_json}\n` &&
           ++sourceDigests === 2
@@ -445,12 +502,15 @@ describe('actual captured automatic plot coordinator', () => {
           held = true;
           await gate;
         }
+
         return result;
       });
+
       try {
         owner.controller.capture(train, plan);
         const work = owner.controller.observeFresh(train);
         await vi.waitFor(() => expect(held).toBe(true));
+
         if (change === 'capture') {
           const next: RunView = {
             ...train,
@@ -458,6 +518,7 @@ describe('actual captured automatic plot coordinator', () => {
             plan_id: '88888888-8888-4888-8888-888888888888',
             request_id: '99999999-9999-4999-8999-999999999999',
           };
+
           owner.controller.capture(next, await owner.approve(0, 'local', undefined, next));
           expect(owner.controller.state.value.status).toBe('armed');
         } else owner.session.detach();
@@ -482,7 +543,9 @@ describe('actual captured automatic plot coordinator', () => {
       const plan = await owner.approve();
       owner.controller.capture(train, plan);
       const api = owner.session.api;
+
       if (!api) throw new Error('Missing connected API');
+
       if (change === 'replace') api.setToken('replacement-token');
       else api.clearToken();
       await owner.controller.observeFresh(train);
@@ -497,6 +560,7 @@ describe('actual captured automatic plot coordinator', () => {
       owner.session.detach();
     },
   );
+
   const alterations: Array<'data' | 'runtime' | 'map' | 'digest' | 'imports'> = [
     'data',
     'runtime',
@@ -504,13 +568,16 @@ describe('actual captured automatic plot coordinator', () => {
     'digest',
     'imports',
   ];
+
   it.each(alterations)(
     'does not submit plot preview that changes approved %s authority',
     async (alteration) => {
       const owner = await setup();
+
       const plan = await owner.approve(0, 'local', [
         { host_root: '/approved', execution_root: '/execution' },
       ]);
+
       owner.alterPlot(alteration);
       owner.controller.capture(train, plan);
       await owner.controller.observeFresh(train);
@@ -525,6 +592,7 @@ describe('actual captured automatic plot coordinator', () => {
   );
   it('retains mapped Slurm source/native scope and disarms on native requeue before retry', async () => {
     const owner = await setup();
+
     const source: RunView = {
       ...train,
       backend: 'slurm',
@@ -539,10 +607,13 @@ describe('actual captured automatic plot coordinator', () => {
         },
       },
     };
+
     owner.current(source);
+
     const plan = await owner.approve(0, 'slurm', [
       { host_root: '/approved', execution_root: '/execution' },
     ]);
+
     owner.losePlan(true);
     owner.controller.capture(source, plan);
     await owner.controller.observeFresh(source);
@@ -561,11 +632,13 @@ describe('actual captured automatic plot coordinator', () => {
   });
   it('uses exact host paths and map with a stable best pin/body on mapped retries', async () => {
     const owner = await setup();
+
     const mappings = [
       { host_root: '/approved', execution_root: '/execution' },
       { host_root: '/another-host', execution_root: '/execution' },
       { host_root: '/execution', execution_root: '/wrong-double-map' },
     ];
+
     const plan = await owner.approve(0, 'local', mappings);
     owner.losePlan(true);
     owner.controller.capture(train, plan);
@@ -586,11 +659,13 @@ describe('actual captured automatic plot coordinator', () => {
   });
   it('attests normalized registration imports after mapping host inputs into a derived plot plan', async () => {
     const owner = await setup();
+
     try {
       const mappings = [
         { host_root: '/approved', execution_root: '/execution' },
         { host_root: '/execution', execution_root: '/wrong-double-map' },
       ];
+
       const imports = ['registered.module', '/approved/custom model.py'];
       const plan = await owner.approve(0, 'local', mappings, train, 1, imports);
       owner.controller.capture(train, plan);
@@ -608,6 +683,7 @@ describe('actual captured automatic plot coordinator', () => {
   it('does not arm manufactured, foreign or revoked plan approvals', async () => {
     const foreign = await setup();
     const foreignPlan = await foreign.approve();
+
     for (const plan of [approved(), { ...foreignPlan }, foreignPlan]) {
       const owner = await setup();
       owner.controller.capture(train, plan);
@@ -616,6 +692,7 @@ describe('actual captured automatic plot coordinator', () => {
       owner.controller.dispose();
       owner.session.detach();
     }
+
     foreign.session.detach();
     await foreign.session.connect('token');
     foreign.controller.capture(train, foreignPlan);
@@ -666,6 +743,7 @@ describe('actual captured automatic plot coordinator', () => {
   });
   it('disarms when observed native ownership or runtime attempt regresses', async () => {
     const owner = await setup();
+
     const native = {
       run_id: train.run_id,
       request_id: train.request_id,
@@ -674,6 +752,7 @@ describe('actual captured automatic plot coordinator', () => {
       job_id: '123',
       restart_count: 2,
     };
+
     owner.controller.capture(
       { ...train, state: 'running', attempt: 2, evidence: { native_identity: native } },
       await owner.approve(),
@@ -751,6 +830,7 @@ describe('actual captured automatic plot coordinator', () => {
   });
   it('refuses partial publications without planning, submitting or cancelling any plot', async () => {
     const owner = await setup({ partialGeneration: 'all' });
+
     try {
       owner.controller.capture(train, await owner.approve());
       await owner.controller.observeFresh(train);
@@ -772,6 +852,7 @@ describe('actual captured automatic plot coordinator', () => {
     'revokes automatic plotting instead of falling back after a metadata %s fault',
     async (metadataFault) => {
       const owner = await setup({ metadataFault });
+
       try {
         owner.controller.capture(train, await owner.approve());
         await owner.controller.observeFresh(train);
@@ -852,14 +933,17 @@ describe('actual captured automatic plot coordinator', () => {
   it('refuses mapped execution-path inputs and lexical/symlink mismatches, retaining venv python spelling', () => {
     const plan = approved();
     const manifest = JSON.parse(String(plan.preview.manifest_json));
+
     const map = [
       { host_root: '/approved', execution_root: '/execution' },
       { host_root: '/execution', execution_root: '/double-mapped' },
     ];
+
     manifest.storage_map = map;
     manifest.resolved_config.data_path = '/execution/train.npz';
     manifest.runtime.python = '/execution/venv/bin/python';
     plan.preview.manifest_json = JSON.stringify(manifest);
+
     const original = trainingRequestSchema.parse({
       backend: 'local',
       operation: 'train',
@@ -873,6 +957,7 @@ describe('actual captured automatic plot coordinator', () => {
       },
       topology: plan.preview.topology,
     });
+
     const request = automaticPlotRequest(train, plan, original);
     expect(request.config.data_path).toBe('/approved/train.npz');
     expect(request.config.model).toBe('cnn');
@@ -897,15 +982,18 @@ describe('actual captured automatic plot coordinator', () => {
   it('restores approved host registration paths for exactly one forward mapping', () => {
     const plan = approved();
     const manifest = JSON.parse(String(plan.preview.manifest_json));
+
     const mappings = [
       { host_root: '/approved', execution_root: '/execution' },
       { host_root: '/execution', execution_root: '/double-mapped' },
     ];
+
     manifest.storage_map = mappings;
     manifest.resolved_config.data_path = '/execution/train.npz';
     manifest.runtime.python = '/execution/python';
     manifest.resolved_config.import_modules = ['registered.module', '/execution/custom model.py'];
     plan.preview.manifest_json = JSON.stringify(manifest);
+
     const original = trainingRequestSchema.parse({
       backend: 'local',
       operation: 'train',
@@ -918,9 +1006,11 @@ describe('actual captured automatic plot coordinator', () => {
       runtime: { python: '/approved/python', mode: 'existing', device: 'cpu', environment: {} },
       topology: plan.preview.topology,
     });
+
     const request = automaticPlotRequest(train, plan, original);
     expect(request.config.import_modules).toEqual(original.config.import_modules);
     expect(JSON.parse(String(plan.preview.manifest_json))).toEqual(manifest);
+
     for (const imports of [
       ['registered.module', '/execution/custom model.py'],
       ['registered.module', 'custom model.py'],

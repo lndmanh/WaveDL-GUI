@@ -11,12 +11,16 @@ export class ConnectionSession extends BrowserConnectionSession {
     const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
     let daemonId: string | undefined = 'daemon';
     let generation = 0;
+
     const sessionFetch: typeof fetch = async (input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
+
       if (url.pathname === '/api/session') {
         if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+
         if (!daemonId) throw new Error('Session fixture requires a health handshake first.');
         generation += 1;
+
         return new Response(
           JSON.stringify({
             access_token: `session${generation.toString().padStart(36, '0')}`,
@@ -27,9 +31,12 @@ export class ConnectionSession extends BrowserConnectionSession {
           { headers: { 'content-type': 'application/json' } },
         );
       }
+
       const response = await fetcher(input, init);
+
       if (url.pathname === '/api/health' && response.ok) {
         const body: unknown = await response.clone().json();
+
         if (
           typeof body === 'object' &&
           body !== null &&
@@ -38,8 +45,10 @@ export class ConnectionSession extends BrowserConnectionSession {
         )
           daemonId = body.daemon_id;
       }
+
       return response;
     };
+
     super({ ...options, fetcher: sessionFetch });
   }
 }

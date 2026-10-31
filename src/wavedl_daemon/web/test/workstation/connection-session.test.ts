@@ -4,16 +4,20 @@ import { DaemonApi, DaemonApiError } from '../../app/lib/daemon-api';
 
 const origin = 'http://localhost:8765';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
+
 function json(body: object, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
   });
 }
+
 function session(fetcher: typeof fetch, online = true) {
   let daemonId = health.daemon_id;
+
   const wrapped: typeof fetch = async (input, init) => {
     const url = String(input);
+
     if (url.endsWith('/api/session') && init?.method === 'POST')
       return json({
         access_token: `session-${'x'.repeat(35)}`,
@@ -22,16 +26,20 @@ function session(fetcher: typeof fetch, online = true) {
         daemon_id: daemonId,
       });
     const response = await fetcher(input, init);
+
     if (url.endsWith('/api/health') && response.ok) {
       try {
         const body = (await response.clone().json()) as { daemon_id?: string };
+
         if (typeof body.daemon_id === 'string') daemonId = body.daemon_id;
       } catch {
         // The session under test owns malformed-response assertions.
       }
     }
+
     return response;
   };
+
   return new ConnectionSession({
     origin,
     buildId: '1.8.1',
@@ -40,6 +48,7 @@ function session(fetcher: typeof fetch, online = true) {
     timeoutMs: 1000,
   });
 }
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -50,6 +59,7 @@ describe('browser connection authority', () => {
     const failure = ConnectionSessionError.fromKey('identity', 'daemonReplaced', {
       status: 409,
     });
+
     expect(failure).toBeInstanceOf(ConnectionSessionError);
     expect(failure).toMatchObject({
       code: 'identity',
@@ -67,12 +77,15 @@ describe('browser connection authority', () => {
           ? json(health)
           : json({ detail: 'secret /private/path credential' }, status),
       );
+
       expect(await owner.connect('credential')).toBe(true);
+
       try {
         await owner.perform((api, signal) => api.read('/api/models', signal));
         throw new Error('Expected HTTP failure');
       } catch (error) {
         expect(error).toBeInstanceOf(ConnectionSessionError);
+
         if (!(error instanceof ConnectionSessionError)) throw error;
         expect(error.code).toBe('request');
         expect(error.status).toBe(status);
@@ -82,6 +95,7 @@ describe('browser connection authority', () => {
         expect(String(error)).not.toContain('/private/path');
         expect(String(error)).not.toContain('secret');
       }
+
       expect(owner.snapshot().status).toBe('connected');
       owner.detach();
     },
@@ -96,6 +110,7 @@ describe('browser connection authority', () => {
   ])('does not attach HTTP status to invalid or non-HTTP errors', async (failure) => {
     const owner = session(async () => json(health));
     expect(await owner.connect('credential')).toBe(true);
+
     try {
       await owner.perform(async () => {
         throw failure;
@@ -106,11 +121,13 @@ describe('browser connection authority', () => {
       expect(error.status).toBeUndefined();
       expect(error.message).not.toContain('secret');
     }
+
     owner.detach();
   });
   it('binds the default browser fetch receiver for bootstrap and bearer connect', async () => {
     const receiverSensitive = vi.fn(function (this: typeof globalThis, input: RequestInfo | URL) {
       expect(this).toBe(globalThis);
+
       const body = String(input).endsWith('/api/bootstrap')
         ? {
             token_type: 'Bearer',
@@ -126,8 +143,10 @@ describe('browser connection authority', () => {
               daemon_id: health.daemon_id,
             }
           : health;
+
       return Promise.resolve(json(body));
     });
+
     vi.stubGlobal('fetch', receiverSensitive);
     const bootstrapped = new ConnectionSession({ origin, buildId: '1.8.1' });
     expect(await bootstrapped.bootstrap(`${origin}/?bootstrap=secret`, () => undefined)).toBe(true);
@@ -142,10 +161,12 @@ describe('browser connection authority', () => {
   });
   it('removes every bootstrap URL secret before the first request and verifies build', async () => {
     let clean = '';
+
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {
       expect(clean).toBe(`${origin}/?view=runs`);
       expect(init?.credentials).toBe('omit');
       expect(init?.referrerPolicy).toBe('no-referrer');
+
       return String(input).endsWith('/api/bootstrap')
         ? json({
             token_type: 'Bearer',
@@ -155,6 +176,7 @@ describe('browser connection authority', () => {
           })
         : json(health);
     });
+
     const owner = session(fetcher);
     expect(
       await owner.bootstrap(`${origin}/?bootstrap=secret&token=secret&view=runs#private`, (url) => {
@@ -215,6 +237,7 @@ describe('browser connection authority', () => {
     const protocolMismatch = session(async () =>
       json({ ...health, protocol_min: 2, protocol_max: 2 }),
     );
+
     expect(await protocolMismatch.connect('credential')).toBe(false);
     expect(protocolMismatch.snapshot()).toMatchObject({ status: 'skew', buildMismatch: false });
   });
@@ -234,13 +257,16 @@ describe('browser connection authority', () => {
     const owner = session(async () => (unauthorized ? json({}, 401) : json(health)));
     await owner.connect('credential');
     let activeSignal: AbortSignal | undefined;
+
     const active = owner.perform(
       (_api, signal) => {
         activeSignal = signal;
+
         return new Promise<string>(() => undefined);
       },
       { timeoutMs: 0 },
     );
+
     const rejection = expect(active).rejects.toMatchObject({ code: 'stale' });
     unauthorized = true;
     await expect(owner.perform((api, signal) => api.health(signal))).rejects.toMatchObject({
@@ -270,12 +296,14 @@ describe('browser connection authority', () => {
     const owner = session(fetcher);
     await owner.connect('credential');
     let resolve: ((value: string) => void) | undefined;
+
     const work = owner.perform(
       () =>
         new Promise<string>((done) => {
           resolve = done;
         }),
     );
+
     const rejected = expect(work).rejects.toBeInstanceOf(ConnectionSessionError);
     owner.detach();
     resolve?.('stale');
@@ -286,15 +314,19 @@ describe('browser connection authority', () => {
   it('ignores a stale connect completing after detach or a newer connect', async () => {
     let resolve: ((response: Response) => void) | undefined;
     let first = true;
+
     const owner = session(async () => {
       if (first) {
         first = false;
+
         return new Promise<Response>((done) => {
           resolve = done;
         });
       }
+
       return json(health);
     });
+
     const stale = owner.connect('old-token');
     expect(await owner.connect('new-token')).toBe(true);
     resolve?.(json({ ...health, daemon_id: 'stale-daemon' }));
@@ -317,10 +349,13 @@ describe('browser connection authority', () => {
   it('connect deadline aborts the underlying bootstrap request', async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | null | undefined;
+
     const owner = session(async (_input, init) => {
       signal = init?.signal;
+
       return new Promise<Response>(() => undefined);
     });
+
     const pending = owner.bootstrap(`${origin}/?bootstrap=secret`, () => undefined);
     await vi.advanceTimersByTimeAsync(1001);
     expect(await pending).toBe(false);
@@ -331,6 +366,7 @@ describe('browser connection authority', () => {
     const owner = session(async () => {
       throw new Error('private URL/token leaked by transport');
     });
+
     expect(await owner.connect('credential')).toBe(false);
     expect(owner.snapshot().message).not.toContain('private');
     const live = session(async () => json(health));
@@ -346,10 +382,12 @@ describe('browser connection authority', () => {
     const owner = session(async () => json(health));
     await owner.connect('credential');
     const external = new AbortController();
+
     const work = owner.perform(() => new Promise<void>(() => undefined), {
       signal: external.signal,
       timeoutMs: 0,
     });
+
     const rejection = expect(work).rejects.toMatchObject({ code: 'stale' });
     external.abort();
     await rejection;
@@ -360,6 +398,7 @@ describe('browser connection authority', () => {
     await owner.connect('credential');
     vi.spyOn(owner, 'perform').mockImplementation(async () => {
       queueMicrotask(() => owner.detach());
+
       return health;
     });
     expect(await owner.refresh()).toBe(false);
@@ -380,6 +419,7 @@ describe('browser connection authority', () => {
       buildId: '1.8.1',
       fetcher: async () => json({ ...health, build_id: '2.0.0' }),
     };
+
     const owner = new ConnectionSession(options);
     options.buildId = '2.0.0';
     expect(await owner.connect('credential')).toBe(false);
@@ -407,9 +447,11 @@ describe('browser connection authority', () => {
   it('synchronous detach on a connecting notification prevents any request', async () => {
     const fetcher = vi.fn<typeof fetch>(async () => json(health));
     const owner = session(fetcher);
+
     const unsubscribe = owner.subscribe((state) => {
       if (state.status === 'connecting') owner.detach();
     });
+
     expect(await owner.connect('credential')).toBe(false);
     expect(fetcher).not.toHaveBeenCalled();
     unsubscribe();

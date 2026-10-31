@@ -17,22 +17,27 @@ const adopted = {
   backend_status: 'unknown',
   adopted: true,
 };
+
 function json(body: object, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
   });
 }
+
 async function setup(reply: () => Promise<Response> = async () => json(adopted)) {
   const calls: { path: string; body: string; key: string | null }[] = [];
   let daemonId = 'daemon';
+
   const session = new ConnectionSession({
     origin: 'http://localhost:8765',
     buildId: '1.8.1',
     fetcher: async (url, init) => {
       const path = new URL(String(url)).pathname;
+
       if (path === '/api/health')
         return json({ daemon_id: daemonId, build_id: '1.8.1', protocol_min: 1, protocol_max: 1 });
+
       if (path === '/api/browse/resolve')
         return json({
           root: 'runs',
@@ -45,12 +50,15 @@ async function setup(reply: () => Promise<Response> = async () => json(adopted))
         body: String(init?.body),
         key: new Headers(init?.headers).get('Idempotency-Key'),
       });
+
       return reply();
     },
   });
+
   await session.connect('token');
   const directory = await new CatalogApi(session).resolve('runs', 'standalone');
   const workflow = new AdoptionWorkflow(session, () => 'fixed-key');
+
   return {
     session,
     directory,
@@ -61,6 +69,7 @@ async function setup(reply: () => Promise<Response> = async () => json(adopted))
     },
   };
 }
+
 describe('explicit standalone run adoption', () => {
   it('registers only on explicit confirmation and validates exact uncertainty contract', async () => {
     const { workflow, directory, calls } = await setup();
@@ -108,10 +117,13 @@ describe('explicit standalone run adoption', () => {
   });
   it('retains frozen request and key after lost ack and requires fresh browse revalidation', async () => {
     let fail = true;
+
     const { workflow, directory, session, calls } = await setup(async () => {
       if (fail) throw new Error('lost acknowledgement');
+
       return json(adopted);
     });
+
     workflow.prepare(directory, 2);
     const frozen = workflow.request;
     await expect(workflow.adopt()).rejects.toThrow('unknown');
@@ -131,6 +143,7 @@ describe('explicit standalone run adoption', () => {
     const { workflow, directory, session, changeDaemon, calls } = await setup(async () => {
       throw new Error('lost');
     });
+
     workflow.prepare(directory, 2);
     await expect(workflow.adopt()).rejects.toThrow();
     session.detach();
@@ -144,10 +157,12 @@ describe('explicit standalone run adoption', () => {
     const { workflow, directory, session } = await setup(async () =>
       json({ detail: 'private filesystem path' }, status),
     );
+
     workflow.prepare(directory, 2);
     await expect(workflow.adopt()).rejects.toMatchObject({ status });
     expect(workflow.status).toBe(status < 500 ? 'rejected' : 'acknowledgement_unknown');
     expect(workflow.result).toBeNull();
+
     if (status < 500) expect(session.snapshot().status).toBe('connected');
   });
   it.each([
@@ -170,12 +185,14 @@ describe('explicit standalone run adoption', () => {
   });
   it('prevents repeat POST while waiting and does not cancel a process when detached', async () => {
     let finish: ((response: Response) => void) | undefined;
+
     const { workflow, directory, session, calls } = await setup(
       () =>
         new Promise((resolve) => {
           finish = resolve;
         }),
     );
+
     workflow.prepare(directory, 2);
     const pending = workflow.adopt();
     const settled = pending.catch(() => null);

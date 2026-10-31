@@ -3,6 +3,7 @@ import { RunMonitor, type RunMonitorSnapshot, type RunTransport } from '../../ap
 import type { JsonObject, RunView } from '../../app/lib/daemon-api';
 
 const id = '11111111-1111-1111-1111-111111111111';
+
 function view(patch: Partial<RunView> = {}): RunView {
   return {
     plan_id: id,
@@ -19,6 +20,7 @@ function view(patch: Partial<RunView> = {}): RunView {
     ...patch,
   };
 }
+
 function frame(
   seq: number,
   type = 'metric',
@@ -32,15 +34,18 @@ function frame(
 ) {
   return `id: ${attempt}:${seq}\ndata: ${JSON.stringify({ protocol: 'wavedl-jsonl', version: 1, run_id: id, attempt, seq, type, ts: '2026-10-07T00:00:00Z', payload })}\n\n`;
 }
+
 async function flush() {
   for (let i = 0; i < 40; i++) await Promise.resolve();
 }
+
 afterEach(() => vi.useRealTimers());
 
 it('same-authority refresh retains buffered live events and pending scope clears them', async () => {
   vi.useFakeTimers();
   let current = view();
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
+
   const transport: RunTransport = {
     getRun: async () => current,
     cancelRun: async () => view(),
@@ -54,6 +59,7 @@ it('same-authority refresh retains buffered live events and pending scope clears
         }),
       ),
   };
+
   const monitor = new RunMonitor(id, transport, 100);
   const task = monitor.start();
   await flush();
@@ -91,6 +97,7 @@ it('same-authority refresh retains buffered live events and pending scope clears
 it('trailing publication stays bounded after wall-clock rollback', async () => {
   vi.useFakeTimers();
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
+
   const transport: RunTransport = {
     getRun: async () => view(),
     cancelRun: async () => view(),
@@ -104,6 +111,7 @@ it('trailing publication stays bounded after wall-clock rollback', async () => {
         }),
       ),
   };
+
   const monitor = new RunMonitor(id, transport, 10000);
   const seen: RunMonitorSnapshot[] = [];
   monitor.subscribe((s) => seen.push(s));
@@ -126,15 +134,19 @@ it('trailing publication stays bounded after wall-clock rollback', async () => {
 
 it('commits all 100k frames and exact final cursor while coalescing subscriber work', async () => {
   vi.useFakeTimers();
+
   const source = new TextEncoder().encode(
     Array.from({ length: 100000 }, (_, i) => frame(i + 1)).join(''),
   );
+
   let calls = 0;
+
   const transport: RunTransport = {
     getRun: async () => view({ state: calls++ ? 'completed' : 'running' }),
     openEvents: async () => new Response(source),
     cancelRun: async () => view(),
   };
+
   const monitor = new RunMonitor(id, transport, 2000);
   let published = 0;
   let last: RunMonitorSnapshot | null = null;
@@ -160,6 +172,7 @@ it('commits all 100k frames and exact final cursor while coalescing subscriber w
 it('publishes supersession immediately and never revives a queued metric after stop', async () => {
   vi.useFakeTimers();
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
+
   const transport: RunTransport = {
     getRun: async () => view(),
     cancelRun: async () => view(),
@@ -173,6 +186,7 @@ it('publishes supersession immediately and never revives a queued metric after s
         }),
       ),
   };
+
   const monitor = new RunMonitor(id, transport);
   const seen: RunMonitorSnapshot[] = [];
   monitor.subscribe((s) => seen.push(s));

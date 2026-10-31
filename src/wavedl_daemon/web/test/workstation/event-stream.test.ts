@@ -10,6 +10,7 @@ import { DaemonApi } from '../../app/lib/daemon-api';
 
 const run = '11111111-1111-1111-1111-111111111111';
 const encoder = new TextEncoder();
+
 function event(attempt = 1, seq = 0, overrides: Record<string, unknown> = {}) {
   return {
     protocol: 'wavedl-jsonl',
@@ -23,6 +24,7 @@ function event(attempt = 1, seq = 0, overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
 function frame(attempt = 1, seq = 0, overrides: Record<string, unknown> = {}) {
   return `id: ${attempt}:${seq}\ndata: ${JSON.stringify(event(attempt, seq, overrides))}\n\n`;
 }
@@ -31,6 +33,7 @@ describe('attempt aware fetch stream', () => {
   it('does not persist a callback revoked while its commit was pending', async () => {
     const abort = new AbortController();
     const saved: unknown[] = [];
+
     const parser = new EventStreamParser(
       run,
       INITIAL_CURSOR,
@@ -44,6 +47,7 @@ describe('attempt aware fetch stream', () => {
       undefined,
       abort.signal,
     );
+
     await expect(parser.push(encoder.encode(frame()))).rejects.toThrow();
     expect(saved).toEqual([]);
     expect(parser.cursor).toEqual(INITIAL_CURSOR);
@@ -52,19 +56,24 @@ describe('attempt aware fetch stream', () => {
     const parser = new EventStreamParser(run, INITIAL_CURSOR, () => undefined);
     const text = frame().replace('"attempt":1', '"attempt":2,"attempt":1');
     await expect(parser.push(encoder.encode(text))).rejects.toMatchObject({ code: 'protocol' });
+
     const store = new CursorStore('daemon-a', run, {
       getItem: () => '{"attempt":2,"attempt":1,"seq":0}',
       setItem: () => undefined,
     });
+
     expect(store.load()).toEqual(INITIAL_CURSOR);
   });
   it('decodes every UTF-8/newline split, including CRLF', async () => {
     const bytes = encoder.encode(frame().replaceAll('\n', '\r\n'));
+
     for (let split = 0; split <= bytes.length; split++) {
       const received: RunEvent[] = [];
+
       const parser = new EventStreamParser(run, INITIAL_CURSOR, (value) => {
         received.push(value);
       });
+
       await parser.push(bytes.slice(0, split));
       await parser.push(bytes.slice(split));
       await parser.finish();
@@ -75,9 +84,11 @@ describe('attempt aware fetch stream', () => {
   });
   it('deduplicates replay and accepts requeue seq zero', async () => {
     const received: RunEvent[] = [];
+
     const parser = new EventStreamParser(run, INITIAL_CURSOR, (value) => {
       received.push(value);
     });
+
     await parser.push(encoder.encode(frame() + frame() + frame(1, 1) + frame(2, 0) + frame(1, 1)));
     expect(received.map((value) => [value.attempt, value.seq])).toEqual([
       [1, 0],
@@ -88,6 +99,7 @@ describe('attempt aware fetch stream', () => {
   });
   it('commits callback before cursor persistence', async () => {
     const order: string[] = [];
+
     const parser = new EventStreamParser(
       run,
       INITIAL_CURSOR,
@@ -98,16 +110,20 @@ describe('attempt aware fetch stream', () => {
         order.push('cursor');
       },
     );
+
     await parser.push(encoder.encode(frame()));
     expect(order).toEqual(['commit', 'cursor']);
+
     const rejected = new EventStreamParser(run, INITIAL_CURSOR, () => {
       throw new Error('cannot commit');
     });
+
     await expect(rejected.push(encoder.encode(frame()))).rejects.toThrow('cannot commit');
     expect(rejected.cursor).toEqual(INITIAL_CURSOR);
   });
   it('controls and comments never advance the cursor', async () => {
     const controls: string[] = [];
+
     const parser = new EventStreamParser(
       run,
       { attempt: 1, seq: 4 },
@@ -119,6 +135,7 @@ describe('attempt aware fetch stream', () => {
         controls.push(value.type);
       },
     );
+
     await parser.push(
       encoder.encode(
         ': heartbeat\n\nevent: overflow\ndata: {"resumePosition":{"attempt":1,"seq":4}}\n\nevent: error\ndata: {"resumePosition":{"attempt":1,"seq":4}}\n\n',
@@ -141,9 +158,11 @@ describe('attempt aware fetch stream', () => {
   });
   it('accepts sparse durable sequence numbers and attempts', async () => {
     const received: RunEvent[] = [];
+
     const parser = new EventStreamParser(run, INITIAL_CURSOR, (value) => {
       received.push(value);
     });
+
     await parser.push(encoder.encode(frame(1, 5) + frame(1, 19) + frame(4, 3)));
     expect(received.map((value) => [value.attempt, value.seq])).toEqual([
       [1, 5],
@@ -154,9 +173,11 @@ describe('attempt aware fetch stream', () => {
   });
   it('accepts large finite metrics but never unsafe integer cursor fields', async () => {
     const received: RunEvent[] = [];
+
     const parser = new EventStreamParser(run, INITIAL_CURSOR, (value) => {
       received.push(value);
     });
+
     await parser.push(encoder.encode(frame(1, 0, { payload: { metric: 1e100 } })));
     expect(received[0]?.payload.metric).toBe(1e100);
     await expect(
@@ -188,21 +209,25 @@ describe('attempt aware fetch stream', () => {
   });
   it('does not dispatch incomplete final frame', async () => {
     const received: RunEvent[] = [];
+
     const parser = new EventStreamParser(run, INITIAL_CURSOR, (value) => {
       received.push(value);
     });
+
     await parser.push(encoder.encode(frame().slice(0, -1)));
     await parser.finish();
     expect(received).toEqual([]);
   });
   it('persists only exact cursor coordinates per daemon and run', () => {
     const map = new Map<string, string>();
+
     const storage = {
       getItem: (key: string) => map.get(key) ?? null,
       setItem: (key: string, value: string) => {
         map.set(key, value);
       },
     };
+
     const a = new CursorStore('daemon-a', run, storage);
     a.save({ attempt: 2, seq: 0 });
     expect(a.load()).toEqual({ attempt: 2, seq: 0 });
@@ -214,6 +239,7 @@ describe('attempt aware fetch stream', () => {
   it('reads a real fetch body with committed cursor and releases on callback failure', async () => {
     let cancelled = false;
     let pulls = 0;
+
     const body = new ReadableStream<Uint8Array>({
       pull(controller) {
         if (pulls++ === 0) controller.enqueue(encoder.encode(frame()));
@@ -222,6 +248,7 @@ describe('attempt aware fetch stream', () => {
         cancelled = true;
       },
     });
+
     const api = new DaemonApi('http://127.0.0.1:8765', {}, async (url) => {
       if (String(url).endsWith('/health'))
         return new Response(
@@ -233,15 +260,19 @@ describe('attempt aware fetch stream', () => {
           }),
           { headers: { 'Content-Type': 'application/json' } },
         );
+
       return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
     });
+
     api.setToken('token');
+
     const store = new CursorStore('daemon-a', run, {
       getItem: () => null,
       setItem: () => {
         throw new Error('should not persist');
       },
     });
+
     await expect(
       streamRun(api, run, store, () => {
         throw new Error('commit failed');
@@ -258,6 +289,7 @@ describe('attempt aware fetch stream', () => {
         controller.close();
       },
     });
+
     const api = new DaemonApi('http://127.0.0.1:8765', {}, async (url) => {
       if (String(url).endsWith('/health'))
         return new Response(
@@ -269,14 +301,18 @@ describe('attempt aware fetch stream', () => {
           }),
           { headers: { 'Content-Type': 'application/json' } },
         );
+
       return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
     });
+
     api.setToken('token');
     const saved: string[] = [];
+
     const storage = {
       getItem: () => null,
       setItem: (_key: string, value: string) => saved.push(value),
     };
+
     await expect(
       streamRun(api, run, new CursorStore('daemon-a', run, storage), () => undefined),
     ).rejects.toMatchObject({ code: 'protocol', message: 'Stream requires replay' });
@@ -291,8 +327,10 @@ describe('attempt aware fetch stream', () => {
   });
   it('refuses cursor stores scoped to a different daemon or run', async () => {
     const urls: string[] = [];
+
     const api = new DaemonApi('http://127.0.0.1:8765', {}, async (url) => {
       urls.push(String(url));
+
       return new Response(
         JSON.stringify({
           daemon_id: 'daemon-a',
@@ -303,6 +341,7 @@ describe('attempt aware fetch stream', () => {
         { headers: { 'Content-Type': 'application/json' } },
       );
     });
+
     api.setToken('token');
     const storage = { getItem: () => null, setItem: () => undefined };
     await expect(

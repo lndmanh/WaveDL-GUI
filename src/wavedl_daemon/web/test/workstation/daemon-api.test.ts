@@ -6,16 +6,19 @@ import { translateClientDiagnostic } from '../../app/i18n/client-messages';
 const token = 'a'.repeat(64);
 const origin = 'http://127.0.0.1:8765';
 const health = { daemon_id: 'daemon-a', build_id: 'build-a', protocol_min: 1, protocol_max: 1 };
+
 const grant = (daemonId = health.daemon_id, suffix = 'g') => ({
   access_token: `session-${suffix.repeat(35)}`,
   token_type: 'Bearer',
   expires_at: Date.now() + 86_400_000,
   daemon_id: daemonId,
 });
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const matrixId = '11111111-1111-1111-1111-111111111111';
+
 const matrixRun = {
   plan_id: matrixId,
   run_id: matrixId,
@@ -29,7 +32,9 @@ const matrixRun = {
   cancellation_requested: false,
   evidence: null,
 };
+
 const matrixPlan = { plan_id: matrixId, run_id: matrixId, request_id: matrixId, preview: {} };
+
 const negativeResponses = [
   ...[
     null,
@@ -196,7 +201,9 @@ describe('malformed response diagnostic compatibility matrix', () => {
     const api = new DaemonApi(origin, {}, async (url) =>
       json(method === 'health' || !String(url).endsWith('/health') ? body : health),
     );
+
     api.setToken(token);
+
     const operation =
       method === 'health'
         ? api.health()
@@ -209,6 +216,7 @@ describe('malformed response diagnostic compatibility matrix', () => {
               : method === 'session'
                 ? api.rotateSession()
                 : api.getRun(matrixId);
+
     await expect(operation).rejects.toMatchObject({
       code,
       clientMessageKey: key,
@@ -218,11 +226,35 @@ describe('malformed response diagnostic compatibility matrix', () => {
 });
 
 describe('daemon transport', () => {
+  it.each(['/api/datasets/inspect', '/api/datasets/preview'])(
+    'keeps a dataset refusal on %s a sanitized request error without retiring the session',
+    async (path) => {
+      const api = new DaemonApi(origin, {}, async (url) =>
+        json(
+          String(url).endsWith('/health') ? health : { error: 'Bad request' },
+          String(url).endsWith('/health') ? 200 : 400,
+        ),
+      );
+
+      api.setToken(token);
+      const selection = { root: 'data', path: 'data.npz' };
+      const body = path.endsWith('/preview') ? { ...selection, view: 'all' } : selection;
+      await expect(api.mutate(path, body)).rejects.toMatchObject({
+        code: 'http',
+        status: 400,
+        clientMessageKey: 'daemonRequestFailed',
+        daemonIdentityChanged: false,
+      });
+      await expect(api.health()).resolves.toEqual(health);
+    },
+  );
+
   it('builds API errors from catalog keys while preserving classification metadata', () => {
     const failure = DaemonApiError.fromKey('http', 'daemonRequestFailed', {
       status: 503,
       params: { status: 503 },
     });
+
     expect(failure).toBeInstanceOf(DaemonApiError);
     expect(failure).toMatchObject({
       code: 'http',
@@ -237,6 +269,7 @@ describe('daemon transport', () => {
     const mismatch = DaemonApiError.fromKey('identity', 'daemonPinsChanged', {
       buildMismatch: true,
     });
+
     expect(mismatch).toMatchObject({ code: 'identity', buildMismatch: true });
   });
 
@@ -244,22 +277,28 @@ describe('daemon transport', () => {
     const api = new DaemonApi(origin, {}, async () => json({}, 401));
     api.setToken(token);
     let failure: unknown;
+
     try {
       await api.health();
     } catch (error) {
       failure = error;
     }
+
     expect(failure).toBeInstanceOf(DaemonApiError);
+
     if (!(failure instanceof DaemonApiError)) throw new Error('Missing authentication failure');
     expect(failure.status).toBe(401);
     expect('credentialToken' in failure).toBe(false);
     let prototype: object | null = failure;
+
     while (prototype !== null) {
       for (const key of Reflect.ownKeys(prototype)) {
         expect(Reflect.get(failure, key)).not.toBe(token);
       }
+
       prototype = Object.getPrototypeOf(prototype);
     }
+
     expect(JSON.stringify(failure)).not.toContain(token);
   });
 
@@ -298,6 +337,7 @@ describe('daemon transport', () => {
     },
   ])('rejects malformed known native/runtime evidence %j', async (evidence) => {
     const run = '11111111-1111-1111-1111-111111111111';
+
     const api = new DaemonApi(origin, {}, async (url) =>
       json(
         String(url).endsWith('/health')
@@ -317,11 +357,13 @@ describe('daemon transport', () => {
             },
       ),
     );
+
     api.setToken(token);
     await expect(api.getRun(run)).rejects.toMatchObject({ code: 'response' });
   });
   it('preserves valid native pending history and additive evidence', async () => {
     const run = '11111111-1111-1111-1111-111111111111';
+
     const evidence = {
       native_pending: true,
       current_runtime_attempt: null,
@@ -338,6 +380,7 @@ describe('daemon transport', () => {
         restart_count: 2,
       },
     };
+
     const api = new DaemonApi(origin, {}, async (url) =>
       json(
         String(url).endsWith('/health')
@@ -357,11 +400,13 @@ describe('daemon transport', () => {
             },
       ),
     );
+
     api.setToken(token);
     expect((await api.getRun(run)).evidence).toEqual(evidence);
   });
   it('does not let stale unauthorized responses revoke a replacement credential', async () => {
     let respond: ((response: Response) => void) | undefined;
+
     const api = new DaemonApi(
       origin,
       {},
@@ -370,6 +415,7 @@ describe('daemon transport', () => {
           respond = resolve;
         }),
     );
+
     api.setToken(token);
     const pending = expect(api.health()).rejects.toThrow('Connection credential changed');
     api.setToken('replacement');
@@ -382,21 +428,29 @@ describe('daemon transport', () => {
     let finishRead: ((response: Response) => void) | undefined;
     let rotationStarted = false;
     const replacement = grant(health.daemon_id, 'r');
+
     const api = new DaemonApi(origin, {}, async (url) => {
       const path = new URL(String(url)).pathname;
+
       if (path === '/api/health') return json(health);
+
       if (path === '/api/models') {
         readStarted = true;
+
         return new Promise<Response>((resolve) => {
           finishRead = resolve;
         });
       }
+
       if (path === '/api/session') {
         rotationStarted = true;
+
         return json(replacement);
       }
+
       throw new Error('Unexpected API route');
     });
+
     api.setToken(token);
     const reading = api.read('/api/models');
     await vi.waitFor(() => expect(readStarted).toBe(true));
@@ -411,19 +465,23 @@ describe('daemon transport', () => {
   });
   it('does not restore credentials from a revoked bootstrap body', async () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+
     const body = new ReadableStream<Uint8Array>({
       start(value) {
         controller = value;
       },
     });
+
     const api = new DaemonApi(
       origin,
       {},
       async () => new Response(body, { headers: { 'Content-Type': 'application/json' } }),
     );
+
     const pending = expect(
       api.bootstrap(`${origin}/?bootstrap=once`, () => undefined),
     ).rejects.toThrow('Connection credential changed');
+
     // Let the response reader begin before revoking its connection scope.
     await Promise.resolve();
     await Promise.resolve();
@@ -438,17 +496,20 @@ describe('daemon transport', () => {
   it('bounds stalled JSON bodies and releases the reader', async () => {
     vi.useFakeTimers();
     let cancelled = false;
+
     try {
       const body = new ReadableStream<Uint8Array>({
         cancel() {
           cancelled = true;
         },
       });
+
       const api = new DaemonApi(
         origin,
         {},
         async () => new Response(body, { headers: { 'Content-Type': 'application/json' } }),
       );
+
       api.setToken(token);
       const pending = expect(api.health()).rejects.toThrow('Daemon response timed out');
       await vi.advanceTimersByTimeAsync(30001);
@@ -460,6 +521,7 @@ describe('daemon transport', () => {
   });
   it('bounds stalled response headers without replacing caller cancellation', async () => {
     vi.useFakeTimers();
+
     try {
       const api = new DaemonApi(
         origin,
@@ -471,6 +533,7 @@ describe('daemon transport', () => {
             });
           }),
       );
+
       api.setToken(token);
       const pending = expect(api.health()).rejects.toThrow('Daemon request timed out');
       await vi.advanceTimersByTimeAsync(15001);
@@ -504,6 +567,7 @@ describe('daemon transport', () => {
   });
   it('strips bootstrap and pasted secrets before exchange and keeps bearer only in memory', async () => {
     const order: string[] = [];
+
     const fetcher = vi.fn<typeof fetch>(async (url, init) => {
       order.push('fetch');
       expect(init).toMatchObject({
@@ -512,15 +576,20 @@ describe('daemon transport', () => {
         cache: 'no-store',
         referrerPolicy: 'no-referrer',
       });
+
       if (String(url).endsWith('/bootstrap')) {
         expect(new Headers(init?.headers).has('Authorization')).toBe(false);
         expect(init?.body).toBe('{"code":"once"}');
+
         return json(grant());
       }
+
       if (String(url).endsWith('/session')) return json(grant());
       expect(new Headers(init?.headers).get('Authorization')).toBe(`Bearer ${token}`);
+
       return json(health);
     });
+
     const api = new DaemonApi(origin, {}, fetcher);
     await api.bootstrap(`${origin}/?bootstrap=once&token=secret&tab=runs#secret`, (url) => {
       order.push('strip');
@@ -549,6 +618,7 @@ describe('daemon transport', () => {
       {},
       vi.fn<typeof fetch>(async () => json({}, 401)),
     );
+
     api.setToken(token);
     await expect(api.health()).rejects.toMatchObject({ code: 'authentication', status: 401 });
     expect(api.authenticated).toBe(false);
@@ -556,9 +626,12 @@ describe('daemon transport', () => {
   it('keeps a verified session after a domain conflict without retrying mutation', async () => {
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       if (String(url).endsWith('/api/health')) return json(health);
+
       if (String(url).endsWith('/api/session')) return json(grant());
+
       return json({ error: 'Conflict' }, 409);
     });
+
     const session = new ConnectionSession({ origin, buildId: 'build-a', fetcher });
     expect(await session.connect(token)).toBe(true);
     const revision = session.snapshot().revision;
@@ -579,7 +652,9 @@ describe('daemon transport', () => {
   it('retires authority when a domain route labels a daemon identity fence', async () => {
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       if (String(url).endsWith('/api/health')) return json(health);
+
       if (String(url).endsWith('/api/session')) return json(grant());
+
       return new Response(JSON.stringify({ detail: 'ignored' }), {
         status: 409,
         headers: {
@@ -588,6 +663,7 @@ describe('daemon transport', () => {
         },
       });
     });
+
     const owner = new ConnectionSession({ origin, buildId: 'build-a', fetcher });
     expect(await owner.connect(token)).toBe(true);
     await expect(
@@ -595,6 +671,7 @@ describe('daemon transport', () => {
     ).rejects.toMatchObject({ code: 'identity' });
     expect(owner.snapshot().status).toBe('skew');
     const message = owner.snapshot().message;
+
     if (message === null) throw new Error('Expected a coded connection notice');
     expect(translateClientDiagnostic('en', message)).toBe(
       'WaveDL was restarted or replaced. Sign in again.',
@@ -604,10 +681,13 @@ describe('daemon transport', () => {
   });
   it('revokes the session when health conflicts with pinned daemon identity', async () => {
     let replaced = false;
+
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       if (String(url).endsWith('/api/session')) return json(grant());
+
       return replaced ? json({ error: 'Conflict' }, 409) : json(health);
     });
+
     const session = new ConnectionSession({ origin, buildId: 'build-a', fetcher });
     expect(await session.connect(token)).toBe(true);
     const api = session.api;
@@ -638,8 +718,10 @@ describe('daemon transport', () => {
       if (String(url).endsWith('/health')) return json(health);
       expect(new Headers(init?.headers).get('X-WaveDL-Daemon-ID')).toBe('daemon-a');
       expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('stable-request');
+
       return json({ plan_id: 'p' });
     });
+
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
     await api.mutate('/api/runs/plan', {}, { idempotencyKey: 'stable-request' });
@@ -662,11 +744,13 @@ describe('daemon transport', () => {
         json(String(url).endsWith('/health') ? health : { metric: 1e100 }),
       ),
     );
+
     api.setToken(token);
     await expect(api.read('/api/runs')).resolves.toEqual({ metric: 1e100 });
   });
   it('runtime validates lifecycle state and run ownership', async () => {
     const run = '11111111-1111-1111-1111-111111111111';
+
     const view = {
       plan_id: run,
       run_id: run,
@@ -680,12 +764,15 @@ describe('daemon transport', () => {
       cancellation_requested: false,
       evidence: null,
     };
+
     let response = view;
+
     const api = new DaemonApi(
       origin,
       {},
       vi.fn<typeof fetch>(async (url) => json(String(url).endsWith('/health') ? health : response)),
     );
+
     api.setToken('short');
     await expect(api.getRun(run)).resolves.toEqual(view);
     response = { ...view, run_id: '22222222-2222-2222-2222-222222222222' };
@@ -695,6 +782,7 @@ describe('daemon transport', () => {
   });
   it('rejects unsafe attempt coordinates while retaining pending native null attempts', async () => {
     const run = '11111111-1111-1111-1111-111111111111';
+
     const body = {
       plan_id: run,
       run_id: run,
@@ -708,16 +796,19 @@ describe('daemon transport', () => {
       cancellation_requested: false,
       evidence: {},
     };
+
     const api = new DaemonApi(
       origin,
       {},
       vi.fn<typeof fetch>(async (url) => json(String(url).endsWith('/health') ? health : body)),
     );
+
     api.setToken(token);
     await expect(api.getRun(run)).rejects.toMatchObject({ code: 'response' });
   });
   it('rejects browser origin mismatch without sending a credential', () => {
     vi.stubGlobal('location', { origin: 'http://localhost:8765' });
+
     try {
       expect(() => new DaemonApi(origin)).toThrow('current browser origin');
     } finally {
@@ -730,12 +821,14 @@ describe('daemon transport', () => {
       {},
       vi.fn<typeof fetch>(async () => json({ ...health, daemon_id: 'bad\r\nid' })),
     );
+
     api.setToken(token);
     await expect(api.health()).rejects.toMatchObject({ code: 'response' });
   });
   it('submits only immutable plans approved on this connection and permits retry', async () => {
     const run = '11111111-1111-1111-1111-111111111111';
     const planned = { plan_id: run, run_id: run, request_id: run, preview: { argv: ['train'] } };
+
     const submitted = {
       plan_id: run,
       run_id: run,
@@ -749,6 +842,7 @@ describe('daemon transport', () => {
       cancellation_requested: false,
       evidence: null,
     };
+
     const api = new DaemonApi(origin, {}, async (url) =>
       json(
         String(url).endsWith('/health')
@@ -758,6 +852,7 @@ describe('daemon transport', () => {
             : submitted,
       ),
     );
+
     api.setToken(token);
     const plan = await api.plan({}, 'stable-key');
     expect(api.approvedRequest(plan)).toEqual({});
@@ -780,28 +875,38 @@ describe('daemon transport', () => {
     const run = '11111111-1111-1111-1111-111111111111';
     let releaseHealth = () => {};
     let releasePost = () => {};
+
     const healthGate = new Promise<void>((resolve) => {
       releaseHealth = resolve;
     });
+
     const postGate = new Promise<void>((resolve) => {
       releasePost = resolve;
     });
+
     const bodies: string[] = [];
+
     const api = new DaemonApi(origin, {}, async (url, init) => {
       if (String(url).endsWith('/health')) {
         await healthGate;
+
         return json(health);
       }
+
       bodies.push(String(init?.body));
       await postGate;
+
       return json({ plan_id: run, run_id: run, request_id: run, preview: {} });
     });
+
     api.setToken(token);
+
     const request = {
       config: { data_path: '/host/train.npz' },
       runtime: { python: '/host/venv/bin/python' },
       storage_map: [{ host_root: '/host', execution_root: '/exec' }],
     };
+
     const original = structuredClone(request);
     const work = api.plan(request, 'stable-key');
     request.config.data_path = '/mutated';

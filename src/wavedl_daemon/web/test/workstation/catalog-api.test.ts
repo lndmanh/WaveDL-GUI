@@ -3,6 +3,7 @@ import { ConnectionSession } from './session-fixture';
 import { CatalogApi, relativePath } from '../../app/lib/catalog-api';
 
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
+
 const catalogue = {
   source: 'bundled_metadata',
   runtime_verified: false,
@@ -28,16 +29,21 @@ const catalogue = {
     },
   ],
 };
+
 function json(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 }
+
 async function setup(body: unknown, origin = 'http://localhost:8765') {
   let observedHealth = health;
+
   const fetcher = vi.fn<typeof fetch>(async (url) =>
     json(String(url).endsWith('/api/health') ? observedHealth : body),
   );
+
   const session = new ConnectionSession({ origin, buildId: '1.8.1', fetcher });
   expect(await session.connect('token')).toBe(true);
+
   return {
     session,
     api: new CatalogApi(session),
@@ -47,6 +53,7 @@ async function setup(body: unknown, origin = 'http://localhost:8765') {
     },
   };
 }
+
 describe('scoped daemon catalogues', () => {
   it('scopes explicit custom model declarations without inventing metadata certification', async () => {
     const { api, session, fetcher } = await setup({});
@@ -126,6 +133,7 @@ describe('scoped daemon catalogues', () => {
       offset: 0,
       limit: 100,
     };
+
     const { api } = await setup(body);
     expect((await api.browse('data', 'nested')).entries[0]?.name).toBe('wave.npz');
     const wrong = await setup({ ...body, path: '' });
@@ -163,6 +171,7 @@ describe('scoped daemon catalogues', () => {
       path,
       kind: 'file',
     });
+
     const selected = await api.resolve('data', 'original name.npz');
     expect(selected.path).toBe(path);
     expect(Object.isFrozen(selected)).toBe(true);
@@ -191,6 +200,7 @@ describe('scoped daemon catalogues', () => {
     const { api, session } = await setup(catalogue);
     const models = await api.models();
     const model = models[0];
+
     if (!model) throw new Error('missing fixture');
     const selected = api.selectModel(model, models);
     expect(selected.model).toBe('cnn');
@@ -250,6 +260,7 @@ describe('scoped daemon catalogues', () => {
   });
   it('discards asynchronous work after scope changes even when transport ignores abort', async () => {
     let finish: ((response: Response) => void) | undefined;
+
     const session = new ConnectionSession({
       origin: 'http://localhost:8765',
       buildId: '1.8.1',
@@ -260,6 +271,7 @@ describe('scoped daemon catalogues', () => {
               finish = resolve;
             }),
     });
+
     await session.connect('token');
     const work = new CatalogApi(session).roots();
     await vi.waitFor(() => expect(finish).toBeDefined());
