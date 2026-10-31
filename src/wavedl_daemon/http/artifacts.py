@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Authenticated-app artifact routes with bounded off-loop filesystem work."""
 
 from __future__ import annotations
@@ -9,12 +10,16 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote, unquote_to_bytes
 from uuid import UUID
 
+from fastapi import APIRouter
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
-from starlette.responses import JSONResponse, StreamingResponse
-from starlette.routing import Route
+from starlette.requests import Request
+from starlette.responses import Response, StreamingResponse
 
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
+from wavedl_daemon.http.schemas.artifacts import ArtifactListing
+from wavedl_daemon.http.schemas.common import API_ERRORS, NO_STORE, ErrorResponse
 from wavedl_daemon.runs.artifacts import ArtifactNotFound, UnsafeArtifactPath
 
 
@@ -109,7 +114,7 @@ def _validate_url_path(request):
 
 def artifact_routes(
     store: ArtifactStore, pool: BoundedThreadPool, *, resolve_layout=None
-) -> list[Route]:
+) -> list[APIRoute]:
     """Mount only inside the bearer/Host/Origin-protected daemon app."""
 
     async def resolve(request):
@@ -129,7 +134,7 @@ def artifact_routes(
             raise ValueError("Resolved layout identity mismatch")
         return layout
 
-    async def listing(request):
+    async def listing(run_id: str, request: Request, response: Response):
         try:
             layout = await resolve(request)
             records = await pool.submit(
@@ -148,25 +153,23 @@ def artifact_routes(
             StorageWorkError,
         ) as error:
             raise _artifact_error(error) from None
-        return JSONResponse(
-            {
-                "generations": [
-                    {
-                        "generation": item.generation,
-                        "attempt": item.attempt,
-                        "step": item.step,
-                        "files": {
-                            name: {"size": record.size, "sha256": record.sha256}
-                            for name, record in item.files.items()
-                        },
-                    }
-                    for item in records
-                ]
-            },
-            headers={"Cache-Control": "no-store"},
-        )
+        response.headers.update(NO_STORE)
+        return {
+            "generations": [
+                {
+                    "generation": item.generation,
+                    "attempt": item.attempt,
+                    "step": item.step,
+                    "files": {
+                        name: {"size": record.size, "sha256": record.sha256}
+                        for name, record in item.files.items()
+                    },
+                }
+                for item in records
+            ]
+        }
 
-    async def download(request):
+    async def download(run_id: str, generation: str, path: str, request: Request):
         _validate_url_path(request)
         owner = _DownloadOwner()
         layout = None
@@ -222,14 +225,26 @@ def artifact_routes(
         )
         return response
 
-    return [
-        Route("/api/runs/{run_id}/artifacts", listing, methods=["GET"]),
-        Route(
-            "/api/runs/{run_id}/artifacts/{generation}/{path:path}",
-            download,
-            methods=["GET"],
-        ),
-    ]
+    router = APIRouter()
+    errors = API_ERRORS | {403: {"model": ErrorResponse}}
+    router.add_api_route(
+        "/api/runs/{run_id}/artifacts",
+        listing,
+        operation_id="list_artifacts",
+        responses=errors,
+        methods=["GET", "HEAD"],
+        response_model=ArtifactListing,
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}/artifacts/{generation}/{path:path}",
+        download,
+        operation_id="download_artifact",
+        responses=errors,
+        methods=["GET", "HEAD"],
+        response_class=StreamingResponse,
+        response_model=None,
+    )
+    return [route for route in router.routes if isinstance(route, APIRoute)]
 
 
 class _OwnedStreamingResponse(StreamingResponse):

@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Strict authenticated-app adoption endpoint, with no filesystem disclosures."""
 
 from __future__ import annotations
@@ -5,14 +6,19 @@ from __future__ import annotations
 import inspect
 import sqlite3
 
+from fastapi import APIRouter
+from fastapi.routing import APIRoute
+from pydantic import MISSING
 from starlette.exceptions import HTTPException
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+from starlette.requests import Request
+from starlette.responses import Response
 
 from wavedl.core.safe_files import UnsafeOwnership
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
-from wavedl_daemon.http.app import read_json
+from wavedl_daemon.http.app import strict_json_route
+from wavedl_daemon.http.schemas.adoption import AdoptionResponse, AdoptRequest
+from wavedl_daemon.http.schemas.common import JSON_BODY_ERRORS, NO_STORE, ErrorResponse
 from wavedl_daemon.storage.ownership import DispatchRequired
 from wavedl_daemon.storage.plans import IdempotencyConflict, PlanRecoveryRequired
 
@@ -20,23 +26,13 @@ from wavedl_daemon.storage.plans import IdempotencyConflict, PlanRecoveryRequire
 def adoption_routes(service):
     """Enclosing SecurityBoundary must authenticate this explicit operation."""
 
-    async def adopt(request):
-        body = await read_json(request, max_bytes=8192)
-        if (
-            set(body) - {"path", "attempt"}
-            or "path" not in body
-            or type(body["path"]) is not str
-            or (
-                "attempt" in body
-                and (type(body["attempt"]) is not int or body["attempt"] < 1)
-            )
-            or len(request.headers.getlist("idempotency-key")) != 1
-        ):
+    async def adopt(body: AdoptRequest, request: Request, response: Response):
+        if len(request.headers.getlist("idempotency-key")) != 1:
             raise HTTPException(400, "Invalid adoption request")
         try:
             result = service.adopt(
-                body["path"],
-                attempt=body.get("attempt"),
+                body.path,
+                attempt=None if body.attempt is MISSING else body.attempt,
                 idempotency_key=request.headers["idempotency-key"],
             )
             if inspect.isawaitable(result):
@@ -59,6 +55,17 @@ def adoption_routes(service):
             raise HTTPException(503, "Adoption service unavailable") from None
         except (ValueError, TypeError, KeyError):
             raise HTTPException(400, "Invalid adoption request") from None
-        return JSONResponse(result.to_dict(), headers={"Cache-Control": "no-store"})
+        response.headers.update(NO_STORE)
+        return result.to_dict()
 
-    return [Route("/api/runs/adopt", adopt, methods=["POST"])]
+    router = APIRouter()
+    router.add_api_route(
+        "/api/runs/adopt",
+        adopt,
+        operation_id="adopt_run",
+        responses=JSON_BODY_ERRORS | {403: {"model": ErrorResponse}},
+        methods=["POST"],
+        response_model=AdoptionResponse,
+        route_class_override=strict_json_route(8192),
+    )
+    return [route for route in router.routes if isinstance(route, APIRoute)]

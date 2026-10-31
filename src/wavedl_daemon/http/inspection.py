@@ -1,36 +1,35 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Inspection routes live inside the app's existing authentication boundary."""
 
 from __future__ import annotations
 
 import asyncio
 
+from fastapi import APIRouter
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+from starlette.requests import Request
+from starlette.responses import Response
 
 from wavedl.core.dataset_headers import InspectionRefused
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
-from wavedl_daemon.http.app import read_json
+from wavedl_daemon.http.app import strict_json_route
+from wavedl_daemon.http.schemas.common import JSON_BODY_ERRORS, NO_STORE
+from wavedl_daemon.http.schemas.datasets import InspectionResponse, InspectRequest
 
 
 def inspection_routes(inspector):
-    async def inspect_dataset(request):
-        body = await read_json(request, max_bytes=16384)
-        if (
-            set(body) != {"root", "path"}
-            or type(body["root"]) is not str
-            or type(body["path"]) is not str
-        ):
-            raise HTTPException(400, "Invalid inspection request")
-
+    async def inspect_dataset(
+        body: InspectRequest, request: Request, response: Response
+    ):
         async def disconnected():
             while True:
                 message = await request.receive()
                 if message["type"] == "http.disconnect":
                     return
 
-        operation = asyncio.create_task(inspector.inspect(body["root"], body["path"]))
+        operation = asyncio.create_task(inspector.inspect(body.root, body.path))
         disconnect = asyncio.create_task(disconnected())
         try:
             done, _ = await asyncio.wait(
@@ -45,7 +44,7 @@ def inspection_routes(inspector):
                 raise HTTPException(503, "Dataset inspection unavailable")
             result = await operation
         except InspectionRefused:
-            raise HTTPException(422, "Dataset inspection refused") from None
+            raise HTTPException(400, "Dataset inspection refused") from None
         except (BudgetExhausted, StorageWorkError, WorkCancelled, OSError):
             raise HTTPException(503, "Dataset inspection unavailable") from None
         finally:
@@ -53,6 +52,17 @@ def inspection_routes(inspector):
             if not operation.done():
                 operation.cancel()
             await asyncio.gather(disconnect, operation, return_exceptions=True)
-        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+        response.headers.update(NO_STORE)
+        return result
 
-    return [Route("/api/datasets/inspect", inspect_dataset, methods=["POST"])]
+    router = APIRouter()
+    router.add_api_route(
+        "/api/datasets/inspect",
+        inspect_dataset,
+        operation_id="inspect_dataset",
+        responses=JSON_BODY_ERRORS,
+        methods=["POST"],
+        response_model=InspectionResponse,
+        route_class_override=strict_json_route(16384),
+    )
+    return [route for route in router.routes if isinstance(route, APIRoute)]

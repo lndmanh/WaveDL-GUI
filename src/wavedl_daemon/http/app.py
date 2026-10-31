@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Construct an inert, authenticated ASGI app from explicitly owned services."""
 
 from __future__ import annotations
@@ -14,8 +15,7 @@ from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.requests import ClientDisconnect, Request
-from starlette.responses import JSONResponse, Response
-from starlette.routing import Route
+from starlette.responses import JSONResponse
 
 from wavedl_daemon.http.auth import (
     DEFAULT_ALLOWED_HOSTS,
@@ -26,11 +26,10 @@ from wavedl_daemon.http.auth import (
     validate_origin_host,
 )
 from wavedl_daemon.http.bootstrap import (
-    BootstrapCapacityError,
     BootstrapCredentials,
-    BootstrapExchangeError,
     install_access_log_redaction,
 )
+from wavedl_daemon.http.services import DaemonServices, require_services
 
 
 MAX_JSON_BODY = 1024 * 1024
@@ -264,12 +263,14 @@ def create_app(
     token: str,
     daemon_id: str,
     build_id: str,
-    services=None,
+    services: DaemonServices | None = None,
     allowed_hosts: tuple[str, ...] = DEFAULT_ALLOWED_HOSTS,
     bootstrap_credentials=None,
     web_assets=None,
 ) -> FastAPI:
     """No disk access, credentials generation, background work, or listener binding."""
+    if services is not None:
+        require_services(services)
     credential = credential_bytes(token)
     bootstrap_enabled = bootstrap_credentials is not None
     credential_pool = bootstrap_credentials or BootstrapCredentials(token)
@@ -286,96 +287,31 @@ def create_app(
     ):
         raise ValueError("Invalid daemon identity")
 
-    async def health(request):
-        status = {}
-        if services is not None and hasattr(services, "health"):
-            from wavedl_daemon.http.runs import _call
+    from wavedl_daemon.http.session import session_routes
 
-            status = await _call(services.health)
-        return JSONResponse(
-            {
-                **status,
-                "daemon_id": request.app.state.daemon_id,
-                "build_id": build_id,
-                "protocol_min": 1,
-                "protocol_max": 1,
-            },
-            headers={"Cache-Control": "no-store"},
-        )
-
-    async def bootstrap_exchange(request):
-        body = await read_json(request, max_bytes=4096)
-        if set(body) != {"code"}:
-            raise HTTPException(400, "Invalid bootstrap request")
-        try:
-            exchanged = credential_pool.exchange(body["code"])
-        except BootstrapExchangeError:
-            raise HTTPException(401, "Unauthorized") from None
-        except BootstrapCapacityError:
-            raise HTTPException(503, "Session capacity reached") from None
-        return JSONResponse(
-            {
-                "access_token": exchanged.token,
-                "token_type": "Bearer",
-                "expires_at": exchanged.expires_at,
-                "daemon_id": request.app.state.daemon_id,
-            },
-            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
-        )
-
-    async def rotate_session(request):
-        token = request.scope.get("wavedl.auth_token")
-        try:
-            exchanged = credential_pool.rotate(token)
-        except BootstrapExchangeError:
-            raise HTTPException(401, "Unauthorized") from None
-        except BootstrapCapacityError:
-            raise HTTPException(503, "Session capacity reached") from None
-        return JSONResponse(
-            {
-                "access_token": exchanged.token,
-                "token_type": "Bearer",
-                "expires_at": exchanged.expires_at,
-                "daemon_id": request.app.state.daemon_id,
-            },
-            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
-        )
-
-    async def revoke_session(request):
-        credential_pool.revoke(request.scope.get("wavedl.auth_token"))
-        return Response(status_code=204)
-
-    routes = [Route("/api/health", health, methods=["GET"])]
-    if bootstrap_enabled:
-        routes.append(Route("/api/bootstrap", bootstrap_exchange, methods=["POST"]))
-    routes.extend(
-        (
-            Route("/api/session", rotate_session, methods=["POST"]),
-            Route("/api/session", revoke_session, methods=["DELETE"]),
-        )
+    routes = session_routes(
+        credential_pool,
+        services,
+        bootstrap_enabled=bootstrap_enabled,
+        build_id=build_id,
     )
 
-    if services is not None and hasattr(services, "run_service"):
+    if services is not None:
         from wavedl_daemon.http.adoption import adoption_routes
         from wavedl_daemon.http.artifacts import artifact_routes
         from wavedl_daemon.http.catalog import catalog_routes
         from wavedl_daemon.http.events import event_routes
+        from wavedl_daemon.http.host import host_routes
         from wavedl_daemon.http.inspection import inspection_routes
+        from wavedl_daemon.http.preview import preview_routes
         from wavedl_daemon.http.runs import lifecycle_routes
 
         routes.extend(adoption_routes(services))
         routes.extend(inspection_routes(services))
-        if hasattr(services, "preview"):
-            from wavedl_daemon.http.preview import preview_routes
-
-            routes.extend(preview_routes(services))
-        if hasattr(services, "host_profile"):
-            from wavedl_daemon.http.host import host_routes
-
-            routes.extend(host_routes(services))
+        routes.extend(preview_routes(services))
+        routes.extend(host_routes(services))
         routes.extend(lifecycle_routes(services.run_service))
-        if hasattr(services, "catalog"):
-            routes.extend(catalog_routes(services.catalog))
+        routes.extend(catalog_routes(services.catalog))
         routes.extend(
             event_routes(
                 ingestor=services.ingestor,
@@ -412,17 +348,16 @@ def create_app(
                         ),
                     )
                 )
-            if services is not None and hasattr(services, "start"):
+            if services is not None:
                 await services.start()
-                if hasattr(services, "daemon_id"):
-                    identity = services.daemon_id
-                    if not isinstance(identity, str) or not 1 <= len(identity) <= 256:
-                        raise ValueError("Invalid owned daemon identity")
-                    app.state.daemon_id = identity
+                identity = services.daemon_id
+                if not isinstance(identity, str) or not 1 <= len(identity) <= 256:
+                    raise ValueError("Invalid owned daemon identity")
+                app.state.daemon_id = identity
             yield
         finally:
             try:
-                if services is not None and hasattr(services, "close"):
+                if services is not None:
                     await services.close()
             finally:
                 for logger, redactor in filters:

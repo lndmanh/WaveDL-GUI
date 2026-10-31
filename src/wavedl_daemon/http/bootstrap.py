@@ -1,7 +1,9 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Ephemeral browser credentials and credential-safe access logging.
 
 Bootstrap codes and session tokens are 256-bit random capabilities retained
-only as digests. Bootstrap codes are single-use; sessions have sliding and
+only as digests. Short-lived bootstrap codes are single-use; the process launch
+code is reusable until shutdown. Sessions have sliding and
 absolute expirations. Access-log filtering is explicit opt-in.
 """
 
@@ -121,7 +123,24 @@ class BootstrapCredentials:
         self._wall_clock = wall_clock
         self._lock = threading.Lock()
         self._pending: dict[bytes, float] = {}
+        self._launch_digest: bytes | None = None
         self._sessions: OrderedDict[bytes, tuple[float, float]] = OrderedDict()
+
+    def mint_launch(self) -> str:
+        """Mint the sole process-lifetime launch capability, retaining its digest."""
+        with self._lock:
+            if self._launch_digest is not None:
+                raise BootstrapCapacityError("Launch code already minted")
+            code = secrets.token_urlsafe(32)
+            digest = hashlib.sha256(code.encode("ascii")).digest()
+            if (
+                self._contains_digest(digest, self._pending)
+                or self._contains_digest(digest, self._sessions)
+                or hmac.compare_digest(digest, self._master_digest)
+            ):
+                raise BootstrapCapacityError("Bootstrap unavailable")
+            self._launch_digest = digest
+            return code
 
     def mint(self) -> str:
         """Return a fresh short-lived code; never retain its plaintext."""
@@ -148,7 +167,7 @@ class BootstrapCredentials:
             return code
 
     def exchange(self, code: object) -> SessionGrant:
-        """Consume a valid code and atomically mint its browser session."""
+        """Exchange a valid code and atomically mint its browser session."""
         if not isinstance(code, str) or not _CODE.fullmatch(code):
             raise BootstrapExchangeError("Invalid or expired bootstrap code")
         candidate = hashlib.sha256(code.encode("ascii")).digest()
@@ -161,10 +180,14 @@ class BootstrapCredentials:
             for digest in self._pending:
                 if hmac.compare_digest(candidate, digest):
                     matched = digest
-            if matched is None:
+            launch = self._launch_digest is not None and hmac.compare_digest(
+                candidate, self._launch_digest
+            )
+            if matched is None and not launch:
                 raise BootstrapExchangeError("Invalid or expired bootstrap code")
             grant, session_digest = self._new_session_locked(now)
-            del self._pending[matched]
+            if matched is not None:
+                del self._pending[matched]
             if len(self._sessions) >= self._max_sessions:
                 self._evict_lru_locked()
             self._sessions[session_digest] = (
@@ -177,7 +200,9 @@ class BootstrapCredentials:
             return grant
 
     def _contains_digest(self, candidate: bytes, values: dict) -> bool:
-        found = False
+        found = self._launch_digest is not None and hmac.compare_digest(
+            candidate, self._launch_digest
+        )
         for digest in values:
             found = hmac.compare_digest(candidate, digest) or found
         return found

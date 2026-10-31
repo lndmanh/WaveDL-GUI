@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Authenticated lifecycle route assembly; no stores, threads, or listeners."""
 
 from __future__ import annotations
@@ -9,8 +10,8 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
-from starlette.requests import Request  # noqa: TC002 - FastAPI resolves it at runtime
-from starlette.responses import Response  # noqa: TC002 - FastAPI resolves it at runtime
+from starlette.requests import Request
+from starlette.responses import Response
 
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled

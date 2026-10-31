@@ -1,3 +1,4 @@
+# Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """Attempt-aware event routes; outer app supplies the authentication boundary."""
 
 from __future__ import annotations
@@ -7,12 +8,21 @@ import json
 import re
 from uuid import UUID
 
+from fastapi import APIRouter
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
-from starlette.responses import JSONResponse, StreamingResponse
-from starlette.routing import Route
+from starlette.requests import Request
+from starlette.responses import StreamingResponse
 
 from wavedl.core.protocol import ProtocolError, decode
 from wavedl_daemon.events.streaming import EVENT_SERVICE_ERRORS, stream_events
+from wavedl_daemon.http.app import strict_json_route
+from wavedl_daemon.http.schemas.common import (
+    API_ERRORS,
+    JSON_BODY_ERRORS,
+    ErrorResponse,
+)
+from wavedl_daemon.http.schemas.events import EventAck, EventPushRequest
 from wavedl_daemon.storage.event_log import validate_cursor
 
 
@@ -25,6 +35,19 @@ def _identity(request):
     if canonical != run_id:
         raise HTTPException(400, "Invalid run identity")
     return run_id
+
+
+class _EventPushRoute(strict_json_route(1024 * 1024)):
+    """Retain identity refusal before body reading on the frozen producer route."""
+
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
+
+        async def check_identity(request: Request):
+            _identity(request)
+            return await original_handler(request)
+
+        return check_identity
 
 
 def _number(value, minimum):
@@ -52,19 +75,13 @@ class _OwnedStreamingResponse(StreamingResponse):
 
 def event_routes(*, ingestor, event_log, broker, resolve_plan):
     """resolve_plan(run_id) supplies the daemon-approved active plan identity."""
-    from wavedl_daemon.http.app import read_json
 
     async def resolve(value):
         return await value if inspect.isawaitable(value) else value
 
-    async def push(request):
+    async def push(run_id: str, body: EventPushRequest, request: Request):
         run_id = _identity(request)
-        body = await read_json(request, max_bytes=1024 * 1024)
-        attempt, values = body.get("attempt"), body.get("events")
-        if type(attempt) is not int or not 1 <= attempt <= 2**63 - 1:
-            raise HTTPException(400, "Invalid attempt")
-        if not isinstance(values, list) or not 1 <= len(values) <= 1024:
-            raise HTTPException(400, "Invalid event batch")
+        attempt, values = body.attempt, body.events
         try:
             plan_id = await resolve(resolve_plan(run_id))
             try:
@@ -81,9 +98,9 @@ def event_routes(*, ingestor, event_log, broker, resolve_plan):
             raise HTTPException(409, "Runtime events rejected") from None
         except EVENT_SERVICE_ERRORS:
             raise HTTPException(503, "Event service unavailable") from None
-        return JSONResponse({"attempt": attempt, "seq": position})
+        return {"attempt": attempt, "seq": position}
 
-    async def events(request):
+    async def events(run_id: str, request: Request):
         run_id = _identity(request)
         try:
             await resolve(resolve_plan(run_id))
@@ -142,7 +159,23 @@ def event_routes(*, ingestor, event_log, broker, resolve_plan):
                 broker.unsubscribe(subscription)
             raise
 
-    return [
-        Route("/api/runs/{run_id}/events", push, methods=["POST"]),
-        Route("/api/runs/{run_id}/events", events, methods=["GET"]),
-    ]
+    router = APIRouter()
+    router.add_api_route(
+        "/api/runs/{run_id}/events",
+        push,
+        operation_id="push_events",
+        responses=JSON_BODY_ERRORS | {403: {"model": ErrorResponse}},
+        methods=["POST"],
+        response_model=EventAck,
+        route_class_override=_EventPushRoute,
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}/events",
+        events,
+        operation_id="stream_events",
+        responses=API_ERRORS,
+        methods=["GET", "HEAD"],
+        response_class=StreamingResponse,
+        response_model=None,
+    )
+    return [route for route in router.routes if isinstance(route, APIRoute)]
