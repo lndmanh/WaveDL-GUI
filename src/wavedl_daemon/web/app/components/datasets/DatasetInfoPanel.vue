@@ -1,9 +1,4 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { onBeforeUnmount, shallowRef, toRaw, watch } from 'vue';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import InfoChip from '../common/InfoChip.vue';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { DataSelection } from '../../lib/catalog-api';
 import { DatasetInspectionApi, type DatasetInspection } from '../../lib/dataset-inspection';
@@ -11,18 +6,23 @@ import { DatasetInspectionApi, type DatasetInspection } from '../../lib/dataset-
 const { t } = useI18n({ useScope: 'global' });
 
 const props = defineProps<{ session: ConnectionSession; selection: DataSelection | null }>();
+
 const emit = defineEmits<{
   inspected: [inspection: DatasetInspection | null, selection: DataSelection | null];
 }>();
+
 const info = shallowRef<DatasetInspection | null>(null);
 const busy = shallowRef(false);
 const connected = shallowRef(false);
+
 const message = shallowRef<'' | 'datasets.inspectionReconnect' | 'datasets.inspectionUnavailable'>(
   '',
 );
+
 let controller: AbortController | null = null;
 let sequence = 0;
 let unsubscribe: (() => void) | undefined;
+
 function clear() {
   sequence++;
   controller?.abort();
@@ -31,24 +31,31 @@ function clear() {
   emit('inspected', null, props.selection ? toRaw(props.selection) : null);
   busy.value = false;
 }
+
 async function load() {
   clear();
   message.value = '';
   const selection = props.selection ? toRaw(props.selection) : null;
+
   if (!selection) return;
+
   if (!connected.value) {
     message.value = 'datasets.inspectionReconnect';
+
     return;
   }
+
   const current = sequence;
   const request = new AbortController();
   controller = request;
   busy.value = true;
+
   try {
     const result = await new DatasetInspectionApi(toRaw(props.session)).inspect(
       selection,
       request.signal,
     );
+
     if (current === sequence && !request.signal.aborted) {
       info.value = result;
       emit('inspected', result, selection);
@@ -63,6 +70,7 @@ async function load() {
     }
   }
 }
+
 watch(
   () => props.session,
   (session) => {
@@ -71,6 +79,7 @@ watch(
     let revision = toRaw(session).snapshot().revision;
     unsubscribe = toRaw(session).subscribe((state) => {
       connected.value = state.status === 'connected';
+
       if (state.revision !== revision || !connected.value) {
         revision = state.revision;
         clear();
@@ -80,7 +89,9 @@ watch(
   },
   { immediate: true },
 );
+
 watch(() => [props.selection, props.session], load, { immediate: true });
+
 onBeforeUnmount(() => {
   unsubscribe?.();
   clear();

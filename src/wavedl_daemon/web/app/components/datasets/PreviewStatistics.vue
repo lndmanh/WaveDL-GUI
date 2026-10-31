@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { Badge } from '@/components/ui/badge';
 import type { DatasetPreview } from '../../lib/dataset-preview';
-import PreviewPlot from './PreviewPlot.vue';
+
 const { t } = useI18n({ useScope: 'global' });
 
 defineProps<{ statistics: DatasetPreview['input_statistics'] }>();

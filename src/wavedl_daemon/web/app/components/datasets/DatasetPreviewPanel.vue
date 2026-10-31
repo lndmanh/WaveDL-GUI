@@ -1,23 +1,14 @@
 <script setup lang="ts">
-import { useClientMessages } from '../../composables/useClientMessages';
-import { useI18n } from 'vue-i18n';
-import { computed, onBeforeUnmount, shallowRef, toRaw, watch } from 'vue';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import type { DataSelection } from '../../lib/catalog-api';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { DatasetPreviewApi, sampleMatrix, type DatasetPreview } from '../../lib/dataset-preview';
 import { datasetPreviewMessageKeys, datasetPreviewTabMessageKeys } from '../../i18n/dynamic-keys';
-import PreviewPlot from './PreviewPlot.vue';
-import PreviewHeatmap from './PreviewHeatmap.vue';
-import PreviewStatistics from './PreviewStatistics.vue';
-import InfoChip from '../common/InfoChip.vue';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 
 const props = defineProps<{ session: ConnectionSession; selection: DataSelection | null }>();
+
 const tabs = [
   ['input', datasetPreviewTabMessageKeys.input],
   ['output', datasetPreviewTabMessageKeys.output],
@@ -26,8 +17,11 @@ const tabs = [
   ['statistics', datasetPreviewTabMessageKeys.statistics],
   ['scatter', datasetPreviewTabMessageKeys.scatter],
 ] as const;
+
 type Tab = (typeof tabs)[number][0];
+
 type PreviewMessage = { kind: 'key'; key: string } | { kind: 'error'; value: Error };
+
 const activeTab = shallowRef<Tab>('input');
 const data = shallowRef<DatasetPreview | null>(null);
 const loading = shallowRef(false);
@@ -36,6 +30,7 @@ const message = shallowRef<PreviewMessage | null>(null);
 let request: AbortController | null = null;
 let sequence = 0;
 let unsubscribe: (() => void) | null = null;
+
 function revoke() {
   sequence++;
   request?.abort();
@@ -43,30 +38,38 @@ function revoke() {
   data.value = null;
   loading.value = false;
 }
+
 function stop() {
   if (!loading.value) return;
   revoke();
   message.value = { kind: 'key', key: 'datasets.previewStopped' };
 }
+
 async function load() {
   revoke();
   message.value = null;
   const selection = props.selection ? toRaw(props.selection) : null;
+
   if (!selection) return;
+
   if (!available.value) {
     message.value = { kind: 'key', key: 'datasets.previewReconnect' };
+
     return;
   }
+
   const controller = new AbortController();
   request = controller;
   const current = sequence;
   loading.value = true;
+
   try {
     const result = await new DatasetPreviewApi(toRaw(props.session)).preview(
       selection,
       'all',
       controller.signal,
     );
+
     if (current === sequence && !controller.signal.aborted) data.value = result;
   } catch (error) {
     if (current === sequence && !controller.signal.aborted)
@@ -81,6 +84,7 @@ async function load() {
     }
   }
 }
+
 watch(
   () => props.session,
   (session) => {
@@ -90,6 +94,7 @@ watch(
     let revision = connection.snapshot().revision;
     unsubscribe = connection.subscribe((state) => {
       available.value = state.status === 'connected';
+
       if (state.revision !== revision || state.status !== 'connected') {
         revision = state.revision;
         revoke();
@@ -99,20 +104,26 @@ watch(
   },
   { immediate: true },
 );
+
 watch(() => [props.selection, props.session], load, { immediate: true });
+
 onBeforeUnmount(() => {
   unsubscribe?.();
   revoke();
 });
+
 function selectTab(value: string | number) {
   const tab = tabs.find(([key]) => key === value);
+
   if (tab) activeTab.value = tab[0];
 }
+
 const histograms = computed(() =>
   activeTab.value === 'input'
     ? (data.value?.input_histograms ?? [])
     : (data.value?.output_histograms ?? []),
 );
+
 const plots = computed(() =>
   histograms.value.map((histogram) => ({
     id: histogram.feature_index,
@@ -123,17 +134,22 @@ const plots = computed(() =>
     y: histogram.counts,
   })),
 );
+
 const scatterPlots = computed(() => {
   const scatter = data.value?.scatter;
+
   if (!scatter) return [];
+
   return scatter.feature_indices.map((feature, column) => {
     const points = scatter.x
       .flatMap((row, index) => {
         const x = row[column];
         const y = scatter.y[index];
+
         return x == null || y == null ? [] : [{ x, y }];
       })
       .sort((a, b) => a.x - b.x);
+
     return {
       id: feature,
       feature,
@@ -142,17 +158,19 @@ const scatterPlots = computed(() => {
     };
   });
 });
+
 const matrices = computed(
   () =>
     data.value?.samples.map((sample) => {
       const matrix = sampleMatrix(sample);
+
       return { sample, matrix, x: matrix[0]?.map((_, index) => index) ?? [], y: matrix[0] ?? [] };
     }) ?? [],
 );
 </script>
 
 <template>
-  <section class="dataset-preview" :aria-label="t('datasets.previewTitle')">
+  <section class="min-w-0 my-6" :aria-label="t('datasets.previewTitle')">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h3>{{ t('datasets.previewTitle') }}</h3>
       <Button
@@ -202,7 +220,10 @@ const matrices = computed(
           }}</TabsTrigger>
         </TabsList>
         <TabsContent :key="activeTab" :value="activeTab">
-          <div v-if="activeTab === 'input' || activeTab === 'output'" class="preview-grid">
+          <div
+            v-if="activeTab === 'input' || activeTab === 'output'"
+            class="grid grid-cols-[repeat(auto-fit,_minmax(min(100%,_320px),_1fr))] gap-6"
+          >
             <PreviewPlot
               v-for="plot in plots"
               :key="plot.id"
@@ -264,7 +285,10 @@ const matrices = computed(
             v-else-if="activeTab === 'statistics'"
             :statistics="data.input_statistics"
           />
-          <div v-else class="preview-grid">
+          <div
+            v-else
+            class="grid grid-cols-[repeat(auto-fit,_minmax(min(100%,_320px),_1fr))] gap-6"
+          >
             <PreviewPlot
               v-for="plot in scatterPlots"
               :key="plot.id"
@@ -279,15 +303,3 @@ const matrices = computed(
     </template>
   </section>
 </template>
-
-<style scoped>
-.dataset-preview {
-  min-width: 0;
-  margin-block: 1.5rem;
-}
-.preview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 1.5rem;
-}
-</style>

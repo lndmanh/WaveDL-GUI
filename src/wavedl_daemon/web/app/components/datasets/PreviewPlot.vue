@@ -1,12 +1,6 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { usePreviewExport } from '../../composables/usePreviewExport';
-import { shallowRef, useTemplateRef, watch } from 'vue';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { Button } from '@/components/ui/button';
-import InfoChip from '../common/InfoChip.vue';
-import { usePageActive } from '../../composables/usePageActive';
 
 const { t, locale } = useI18n({ useScope: 'global' });
 
@@ -17,23 +11,28 @@ const props = defineProps<{
   scatter?: boolean;
   histogram?: boolean;
 }>();
+
 const host = useTemplateRef<HTMLDivElement>('host');
 const plot = shallowRef<uPlot | null>(null);
 const message = shallowRef('');
+
 const {
   exportMessage,
   exporting,
   exportPng: requestPng,
   resetExport,
 } = usePreviewExport('dataset-preview.png');
+
 let observer: ResizeObserver | null = null;
 const { isActive } = usePageActive(resumePlot, pausePlot);
 let retainedScales: { key: string; min: number; max: number }[] = [];
 let pan: { clientX: number; min: number; max: number } | null = null;
+
 function dispose() {
   plot.value?.destroy();
   plot.value = null;
 }
+
 function render(preserveView = false) {
   const savedScales =
     preserveView && plot.value
@@ -43,11 +42,14 @@ function render(preserveView = false) {
             : [],
         )
       : retainedScales;
+
   if (!isActive.value || !host.value) return;
   resetExport();
   dispose();
   const width = Math.floor(host.value.getBoundingClientRect().width);
+
   if (!width) return;
+
   try {
     plot.value = new uPlot(
       {
@@ -74,6 +76,7 @@ function render(preserveView = false) {
       [[...props.x], [...props.y]],
       host.value,
     );
+
     for (const scale of savedScales)
       plot.value.setScale(scale.key, { min: scale.min, max: scale.max });
     retainedScales = [];
@@ -82,30 +85,38 @@ function render(preserveView = false) {
     message.value = 'Chart unavailable in this browser.';
   }
 }
+
 function reset() {
   plot.value?.setData([[...props.x], [...props.y]]);
 }
+
 function startPan(event: PointerEvent) {
   const scale = plot.value?.scales.x;
+
   if (!event.shiftKey || scale?.min === undefined || scale.max === undefined) return;
   event.preventDefault();
   event.stopPropagation();
   pan = { clientX: event.clientX, min: scale.min, max: scale.max };
   host.value?.setPointerCapture(event.pointerId);
 }
+
 function movePan(event: PointerEvent) {
   if (!pan || !plot.value) return;
   const width = plot.value.bbox.width / window.devicePixelRatio;
   const offset = ((event.clientX - pan.clientX) / width) * (pan.max - pan.min);
+
   if (Number.isFinite(offset))
     plot.value.setScale('x', { min: pan.min - offset, max: pan.max - offset });
 }
+
 function endPan() {
   pan = null;
 }
+
 function exportPng() {
   requestPng(host.value?.querySelector('canvas'));
 }
+
 watch(
   () => [props.x, props.y, props.scatter, props.histogram],
   () => {
@@ -113,34 +124,39 @@ watch(
   },
   { flush: 'post' },
 );
+
 watch(
   () => [locale.value, props.title],
   () => render(true),
   { flush: 'post' },
 );
+
 function resumePlot() {
   observer = new ResizeObserver(() => render());
+
   if (host.value) observer.observe(host.value);
   render();
 }
+
 function pausePlot() {
   pan = null;
   observer?.disconnect();
   observer = null;
   retainedScales = Object.entries(plot.value?.scales ?? {}).flatMap(([key, scale]) =>
     scale.min !== undefined && scale.max !== undefined
-      ? [{ key, min: scale.min, max: scale.max }] : [],
+      ? [{ key, min: scale.min, max: scale.max }]
+      : [],
   );
   dispose();
 }
 </script>
 
 <template>
-  <figure class="preview-plot">
+  <figure class="min-w-0 m-0">
     <figcaption>{{ title }}</figcaption>
     <div
       ref="host"
-      class="plot-host"
+      class="min-w-0 min-h-72.5"
       @pointerdown.capture="startPan"
       @pointermove="movePan"
       @pointerup="endPan"
@@ -168,14 +184,3 @@ function pausePlot() {
     <InfoChip :label="t('datasets.plotDetails')" :text="t('datasets.plotHelp')" />
   </figure>
 </template>
-
-<style scoped>
-.preview-plot {
-  min-width: 0;
-  margin: 0;
-}
-.plot-host {
-  min-width: 0;
-  min-height: 290px;
-}
-</style>
