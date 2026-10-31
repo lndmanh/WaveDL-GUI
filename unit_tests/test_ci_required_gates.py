@@ -10,20 +10,17 @@ ROOT = Path(__file__).resolve().parents[1]
 # These are the jobs branch protection and release automation depend on.  Keep this
 # list explicit: adding a workflow without a gate should be a deliberate change.
 REQUIRED_JOBS = {
-    ".github/workflows/daemon-browser-integration.yml": {"chromium-cpu"},
     ".github/workflows/daemon-foundations.yml": {"storage-enospc", "foundations"},
-    ".github/workflows/installed-browser-acceptance.yml": {"installed-browser"},
     ".github/workflows/lint.yml": {"lint"},
     ".github/workflows/release.yml": {
         "test",
         "package",
         "foundations",
-        "browser",
         "web-client",
         "release",
         "publish",
     },
-    ".github/workflows/test.yml": {"test"},
+    ".github/workflows/test.yml": {"test", "scientific-cpu"},
     ".github/workflows/web-client.yml": {"static-client"},
     ".github/workflows/windows-cpu-acceptance.yml": {"installed-cpu"},
 }

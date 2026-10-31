@@ -21,10 +21,9 @@ def test_release_waits_for_reusable_acceptance_and_exact_package():
         "test",
         "package",
         "foundations",
-        "browser",
         "web-client",
     }
-    for gate in ("foundations", "browser", "web-client"):
+    for gate in ("foundations", "web-client"):
         called = jobs[gate]["uses"].removeprefix("./.github/workflows/")
         # PyYAML uses YAML 1.1, where unquoted GitHub's `on` parses as True.
         assert "workflow_call" in workflow(called)[True]
@@ -39,20 +38,56 @@ def test_release_static_client_gate_requires_complete_quality_checks():
     assert static["defaults"]["run"]["working-directory"] == "src/wavedl_daemon/web"
     commands = [step["run"] for step in static["steps"] if "run" in step]
     required = [
-        "npm ci",
-        "npm run lint",
-        "npm run format:check",
-        "npm run typecheck",
-        "npm test",
-        "npm run generate",
+        "pnpm install --frozen-lockfile",
+        "pnpm run lint",
+        "pnpm run format:check",
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run generate",
         "python ../../../tools/vendor_web_assets.py",
-        "npm run test:generated",
     ]
     assert all(command in commands for command in required)
     assert [commands.index(command) for command in required] == sorted(
         commands.index(command) for command in required
     )
     assert all("if" not in step for step in static["steps"])
+
+
+@pytest.mark.parametrize(
+    ("filename", "job"),
+    [
+        ("web-client.yml", "static-client"),
+        ("test.yml", "test"),
+        ("release.yml", "test"),
+        ("release.yml", "package"),
+        ("windows-cpu-acceptance.yml", "installed-cpu"),
+    ],
+)
+def test_web_build_jobs_set_up_pinned_pnpm_before_node_cache(filename, job):
+    steps = workflow(filename)["jobs"][job]["steps"]
+    setup = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("pnpm/action-setup@")
+    )
+    node = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("actions/setup-node@")
+    )
+    assert setup < node
+    assert steps[setup]["with"] == {
+        "package_json_file": "src/wavedl_daemon/web/package.json"
+    }
+    options = steps[node]["with"]
+    if "cache" in options:
+        assert options["cache"] == "pnpm"
+        assert options["cache-dependency-path"] == (
+            "src/wavedl_daemon/web/pnpm-lock.yaml"
+        )
+    commands = "\n".join(step.get("run", "") for step in steps)
+    assert "pnpm install --frozen-lockfile" in commands
+    assert "npm ci" not in commands
 
 
 def test_release_rejects_web_source_in_distributions():
@@ -73,7 +108,7 @@ def test_release_is_headless_without_reducing_shipped_test_gates():
     test = jobs["test"]
     assert test["strategy"]["matrix"]["python-version"] == ["3.11", "3.12", "3.13"]
     commands = "\n".join(step.get("run", "") for step in test["steps"])
-    assert 'python -m pip install -e ".[dev,daemon]"' in commands
+    assert 'python -m pip install -e ".[dev]"' in commands
     assert 'python -m pytest unit_tests -v -m "not slow and not gpu"' in commands
     assert "python -m pip check" in commands
     assert "QT_QPA_PLATFORM" not in test["env"]
@@ -234,10 +269,10 @@ def test_push_test_matrix_generates_and_vendors_browser_before_wheel_acceptance(
     )
     commands = [step["run"] for step in steps if "run" in step]
     required = [
-        "npm ci",
-        "npm run generate",
+        "pnpm install --frozen-lockfile",
+        "pnpm run generate",
         "python tools/vendor_web_assets.py",
-        'python -m pip wheel ".[daemon]"',
+        'python -m pip wheel "."',
         "python -m pytest unit_tests/daemon/test_installed_cli.py",
     ]
     assert all(command in "\n".join(commands) for command in required)
@@ -251,16 +286,18 @@ def test_push_test_matrix_generates_and_vendors_browser_before_wheel_acceptance(
     step_indices = [names.index(name) for name in required_names]
     assert step_indices == sorted(step_indices)
     install = steps[names.index("Install dependencies")]
-    assert 'python -m pip install -e ".[dev,daemon]"' in install["run"]
+    assert 'python -m pip install -e ".[dev]"' in install["run"]
     assert (
         "python -m pip check"
         in steps[names.index("Verify installed dependency contracts")]["run"]
     )
-    npm_steps = [
-        step for step in steps if step.get("run") in {"npm ci", "npm run generate"}
+    pnpm_steps = [
+        step
+        for step in steps
+        if step.get("run") in {"pnpm install --frozen-lockfile", "pnpm run generate"}
     ]
     assert all(
-        step["working-directory"] == "src/wavedl_daemon/web" for step in npm_steps
+        step["working-directory"] == "src/wavedl_daemon/web" for step in pnpm_steps
     )
 
 

@@ -1,4 +1,4 @@
-"""Keep the CPU CV cohort complete, successful, and mandatory in browser CI."""
+"""Keep the CPU CV cohort complete, successful, and mandatory in scientific CPU CI."""
 
 import ast
 import os
@@ -13,7 +13,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github/workflows/daemon-browser-integration.yml"
+WORKFLOW = ROOT / ".github/workflows/test.yml"
 FAMILY_COUNTS = {
     "unit_tests.test_cv_deterministic": 6,
     "unit_tests.test_cv_workers": 7,
@@ -41,7 +41,7 @@ def workflow():
 def _cohort_step(workflow):
     return next(
         step
-        for step in workflow["jobs"]["chromium-cpu"]["steps"]
+        for step in workflow["jobs"]["scientific-cpu"]["steps"]
         if "python -m pytest unit_tests/test_cv_option_fidelity.py"
         in step.get("run", "")
     )
@@ -50,7 +50,7 @@ def _cohort_step(workflow):
 def _guard_step(workflow):
     return next(
         step
-        for step in workflow["jobs"]["chromium-cpu"]["steps"]
+        for step in workflow["jobs"]["scientific-cpu"]["steps"]
         if step.get("name") == "Require all CV semantics cases with zero skips"
     )
 
@@ -103,9 +103,9 @@ def test_cv_cohort_and_contract_trigger_paths_are_explicit(workflow, event):
     required = COHORT_PATHS | {
         "src/wavedl/utils/cv_components.py",
         "unit_tests/test_cv_workflow.py",
-        ".github/workflows/daemon-browser-integration.yml",
+        ".github/workflows/test.yml",
     }
-    assert required.issubset(triggers[event]["paths"])
+    assert "paths" not in triggers[event] or required.issubset(triggers[event]["paths"])
 
 
 def test_cv_command_runs_all_six_files_without_skip_or_failure_escape(workflow):
@@ -121,7 +121,7 @@ def test_cv_command_runs_all_six_files_without_skip_or_failure_escape(workflow):
 
 
 def test_cv_guard_and_workflow_contract_tests_are_mandatory(workflow):
-    steps = workflow["jobs"]["chromium-cpu"]["steps"]
+    steps = workflow["jobs"]["scientific-cpu"]["steps"]
     guard = _guard_step(workflow)
     assert guard["if"] == "always()"
     assert not guard.get("continue-on-error", False)
@@ -142,8 +142,8 @@ def test_onecycle_update_and_resume_acceptance_is_mandatory(workflow):
     path = "unit_tests/test_training_onecycle_accumulation.py"
     triggers = workflow.get("on", workflow.get(True))
     for event in ("push", "pull_request"):
-        assert path in triggers[event]["paths"]
-    steps = workflow["jobs"]["chromium-cpu"]["steps"]
+        assert "paths" not in triggers[event] or path in triggers[event]["paths"]
+    steps = workflow["jobs"]["scientific-cpu"]["steps"]
     test = next(step for step in steps if f"pytest {path}" in step.get("run", ""))
     assert shlex.split(test["run"]) == [
         "python",

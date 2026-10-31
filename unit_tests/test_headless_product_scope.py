@@ -1,6 +1,7 @@
 """The supported product ships the daemon/browser app, not the retired Qt client."""
 
 import ast
+import json
 import subprocess
 import sys
 import tomllib
@@ -8,6 +9,35 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_web_validation_keeps_only_daemon_client_logic():
+    web = ROOT / "src/wavedl_daemon/web"
+    scripts = json.loads((web / "package.json").read_text())["scripts"]
+    assert "typecheck" in scripts
+    assert set(scripts).isdisjoint({"test:browser", "test:generated"})
+    tests = {
+        path.name.removesuffix(".test.ts")
+        for path in (web / "test/workstation").glob("*.test.ts")
+    }
+    assert tests == {
+        "daemon-api",
+        "catalog-api",
+        "catalog-locate",
+        "event-stream",
+        "artifact-client",
+        "artifact-download",
+        "connection-session",
+        "session-credential",
+        "session-resume",
+        "auth-routing",
+        "run-monitor",
+        "run-monitor-publication",
+        "autoplot-controller",
+        "adoption",
+        "result-operations",
+    }
+    assert not list((web / "test/generated").glob("*.test.mjs"))
 
 
 def test_distribution_declares_only_supported_packages_and_entrypoints():
@@ -21,7 +51,11 @@ def test_distribution_declares_only_supported_packages_and_entrypoints():
     assert "gui" not in config["project"]["optional-dependencies"]
     scripts = config["project"]["scripts"]
     assert "wavedl-gui" not in scripts
-    assert scripts["wavedl-daemon"] == "wavedl_daemon.cli:main"
+    assert "wavedl-daemon" not in scripts
+    assert "daemon" not in config["project"]["optional-dependencies"]
+    dependencies = config["project"]["dependencies"]
+    for name in ("fastapi", "pydantic", "starlette", "uvicorn", "h11"):
+        assert any(item.startswith(name + ">=") for item in dependencies)
     assert scripts["wavedl"] == "wavedl.client:main"
 
 
