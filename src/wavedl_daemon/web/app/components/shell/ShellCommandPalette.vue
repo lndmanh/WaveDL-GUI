@@ -1,16 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, shallowRef, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
 import { X } from '@lucide/vue';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   SHELL_ACTION_NAVIGATION,
   SHELL_PRIMARY_NAVIGATION,
@@ -24,22 +13,29 @@ const { t } = useI18n({ useScope: 'global' });
 const query = shallowRef('');
 const selected = shallowRef(0);
 let opener: HTMLElement | null = null;
+
 const allItems: readonly ShellNavigationDescriptor[] = [
   ...SHELL_PRIMARY_NAVIGATION,
   ...SHELL_ACTION_NAVIGATION,
 ];
+
 const filtered = computed(() => {
   const term = query.value.trim().toLocaleLowerCase();
+
   if (!term) return allItems;
+
   return allItems.filter((item) => t(item.labelKey).toLocaleLowerCase().includes(term));
 });
+
 const activeOptionId = computed(() => {
   const item = filtered.value[selected.value];
+
   return item ? `shell-command-option-${item.id}` : undefined;
 });
 
 function choose(): void {
   const item = filtered.value[selected.value];
+
   if (!item) return;
   emit('navigate', item.id);
   open.value = false;
@@ -48,8 +44,10 @@ function choose(): void {
 function keydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     open.value = false;
+
     return;
   }
+
   if (event.key === 'ArrowDown') {
     event.preventDefault();
     selected.value = Math.min(selected.value + 1, Math.max(0, filtered.value.length - 1));
@@ -65,6 +63,7 @@ function keydown(event: KeyboardEvent): void {
 watch(filtered, () => {
   selected.value = Math.min(selected.value, Math.max(0, filtered.value.length - 1));
 });
+
 watch(open, (value) => {
   if (value) {
     opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -73,8 +72,10 @@ watch(open, (value) => {
     void nextTick(() => document.getElementById('shell-command-input')?.focus());
   }
 });
+
 function restoreFocus(event: Event) {
   event.preventDefault();
+
   if (
     opener?.isConnected &&
     !document.querySelector('[role="dialog"]:not([data-testid="shell-command-palette"])')

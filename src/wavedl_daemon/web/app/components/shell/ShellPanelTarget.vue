@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { onMounted, onScopeDispose, shallowRef, useTemplateRef } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from '@/components/ui/empty';
 import { shellPanelTabTargetId, type ShellPanelTabDefinition } from '../../shell/constants';
 
 const props = defineProps<{ tab: ShellPanelTabDefinition }>();
@@ -9,6 +6,7 @@ const { t } = useI18n({ useScope: 'global' });
 const target = useTemplateRef<HTMLElement>('target');
 const empty = shallowRef(true);
 let observer: MutationObserver | null = null;
+
 function refresh() {
   empty.value =
     !target.value ||
@@ -16,11 +14,14 @@ function refresh() {
       (node) => node.nodeType === 1 || (node.nodeType === 3 && !!node.textContent?.trim()),
     );
 }
+
 onMounted(() => {
   refresh();
   observer = new MutationObserver(refresh);
+
   if (target.value) observer.observe(target.value, { childList: true, characterData: true });
 });
+
 onScopeDispose(() => observer?.disconnect());
 </script>
 

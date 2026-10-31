@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { Info } from '@lucide/vue';
-import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 defineProps<{ label: string; text?: string }>();
 </script>

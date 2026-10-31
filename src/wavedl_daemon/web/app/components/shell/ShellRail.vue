@@ -1,76 +1,79 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import type { WorkstationSection } from '../../lib/shell-test-ids';
-import { computed } from 'vue';
-import { useMotionValue, useReducedMotion } from 'motion-v';
-import { Activity, Search, Settings2 } from '@lucide/vue';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { motion } from 'motion-v';
+import { Activity, Search, Settings2, Unplug } from '@lucide/vue';
+import { SHELL_PRIMARY_NAVIGATION, type WorkstationSection } from '../../shell/sections';
 import type { ConnectionStatus } from '../../lib/connection-session';
-import { SHELL_PRIMARY_NAVIGATION } from '../../shell/sections';
-import {
-  WORKSTATION_SECTIONS,
-  WORKSTATION_SHELL_TEST_IDS,
-  workstationNavTestId,
-} from '../../lib/shell-test-ids';
-import ShellRailItem from './ShellRailItem.vue';
+import { connectionStatusKey } from '../../constants/shellConnection';
 
-const props = defineProps<{
-  section: WorkstationSection;
-  status: ConnectionStatus;
-}>();
-
-const emit = defineEmits<{
-  navigate: [section: WorkstationSection];
-  command: [];
-}>();
-
-const reducedMotion = useReducedMotion();
-const pointerY = useMotionValue(Number.POSITIVE_INFINITY);
+const props = defineProps<{ section: WorkstationSection; status: ConnectionStatus }>();
+const emit = defineEmits<{ navigate: [section: WorkstationSection]; command: [] }>();
 const { t } = useI18n({ useScope: 'global' });
+const { connection } = useWorkstation();
+const reducedMotion = useReducedMotion();
+const collisionPadding = useSafeAreaCollisionPadding();
+const statusLabel = computed(() => t(connectionStatusKey[props.status]));
+const DOCK_BASE_SIZE = 36; // `size-9`, the size every rail control rests at
+const DOCK_MAGNIFIED_SIZE = 64;
+const DOCK_FALLOFF = 120; // How far along the rail the swell reaches from the cursor
 
-const statusKey: Record<ConnectionStatus, string> = {
-  connected: 'shell.connected',
-  connecting: 'shell.connecting',
-  disconnected: 'shell.notConnected',
-  authentication: 'shell.notConnected',
-  skew: 'shell.notConnected',
-  offline: 'shell.offline',
-  error: 'shell.notConnected',
-};
+/**
+ * Doing two jobs at once: it is the icons' resting inset from the pill's left
+ * edge — which is what anchors them there — and the slack their hover glow needs
+ * to spill into before the track clips it.
+ */
+const DOCK_PADDING = 10;
 
-const statusLabel = computed(() => t(statusKey[props.status]));
+/**
+ * The scrolling track is sized for the largest icon and pinned to the pill's left
+ * edge, so it hangs off the right only. It is the one box in the rail that clips
+ * — an `overflow-y` of anything but `visible` clips X too — so a track cut to the
+ * pill's width would shear the flank off every magnified icon.
+ */
+const DOCK_TRACK_WIDTH = DOCK_MAGNIFIED_SIZE + DOCK_PADDING * 2;
+const DOCK_SPRING = { mass: 0.1, stiffness: 150, damping: 12 };
 
-function trackPointer(event: PointerEvent): void {
+const pointerY = useMotionValue(Number.POSITIVE_INFINITY);
+
+/**
+ * Mouse only: a touch "hover" has no matching leave, so the dock would stay
+ * swollen after the tap. Reduced-motion users keep the flat rail they asked for.
+ */
+function trackDockPointer(event: PointerEvent) {
   if (reducedMotion.value || event.pointerType !== 'mouse') return;
+
   pointerY.set(event.clientY);
 }
 
-function trackFocus(event: FocusEvent): void {
+/**
+ * Keyboard focus gets the same swell as the cursor, so tabbing through the rail
+ * reads as the same control and not as a dock that only exists for mouse users.
+ */
+function trackDockFocus(event: FocusEvent) {
   if (reducedMotion.value || !(event.target instanceof HTMLElement)) return;
+
   const rect = event.target.getBoundingClientRect();
   pointerY.set(rect.y + rect.height / 2);
 }
 
-function releasePointer(): void {
+function releaseDock() {
   pointerY.set(Number.POSITIVE_INFINITY);
-}
-
-function activate(section: WorkstationSection): void {
-  emit('navigate', section);
 }
 
 function onNavigationKeydown(event: KeyboardEvent): void {
   if (!(event.currentTarget instanceof HTMLElement)) return;
+
   if (!(document.activeElement instanceof HTMLElement)) return;
 
   const controls = Array.from(
     event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-testid^="nav-"]'),
   );
+
   const currentIndex = controls.findIndex((control) => control === document.activeElement);
+
   if (currentIndex < 0 || controls.length === 0) return;
 
   let nextIndex: number;
+
   if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % controls.length;
   else if (event.key === 'ArrowUp')
     nextIndex = (currentIndex - 1 + controls.length) % controls.length;
@@ -82,21 +85,39 @@ function onNavigationKeydown(event: KeyboardEvent): void {
   controls[nextIndex]?.focus();
 }
 </script>
-
 <template>
   <TooltipProvider :delay-duration="280">
     <nav
-      class="shell-rail flex h-full min-h-0 w-16 shrink-0 flex-col items-center gap-3 py-3"
+      class="shell-rail flex h-full shrink-0 flex-col gap-3 py-0.5 w-14"
+      data-shell-rail-mode="dock"
       :aria-label="t('shell.sections')"
-      :data-testid="WORKSTATION_SHELL_TEST_IDS.navigation"
-      @pointermove="trackPointer"
-      @pointerleave="releasePointer"
-      @focusin="trackFocus"
-      @focusout="releasePointer"
+      data-testid="workstation-nav"
       @keydown="onNavigationKeydown"
     >
-      <div class="shell-rail-island flex shrink-0 flex-col items-center gap-1 p-2">
-        <div class="shell-rail-mark" aria-hidden="true">W</div>
+      <motion.div
+        class="shell-rail-island flex shrink-0 flex-col items-center gap-0.5 py-2"
+        role="group"
+        :aria-label="t('shell.utilities')"
+        :initial="{ opacity: 0, y: reducedMotion ? 0 : -8 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: reducedMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }"
+      >
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="shell-rail-control rounded-full"
+              :aria-label="t('shell.workstation')"
+              @click="emit('navigate', 'experiments')"
+              ><img src="/favicon.svg" alt="" class="size-7 rounded-[0.5rem]"
+            /></Button>
+          </TooltipTrigger>
+          <TooltipContent side="right" :side-offset="10">{{
+            t('shell.workstation')
+          }}</TooltipContent>
+        </Tooltip>
+
         <Tooltip>
           <TooltipTrigger as-child>
             <Button
@@ -105,73 +126,115 @@ function onNavigationKeydown(event: KeyboardEvent): void {
               size="icon"
               class="shell-rail-control rounded-full"
               :aria-label="t('shell.commandPalette')"
-              :title="t('shell.commandPalette')"
               @click="emit('command')"
             >
-              <Search class="size-4" aria-hidden="true" />
+              <Search />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" :side-offset="10">
-            {{ t('shell.commandPalette') }}
-          </TooltipContent>
+          <TooltipContent side="right" :side-offset="10">{{
+            t('shell.commandPalette')
+          }}</TooltipContent>
         </Tooltip>
+      </motion.div>
+
+      <div class="flex min-h-0 flex-1 items-center">
+        <motion.div
+          class="shell-rail-island flex max-h-full w-full flex-col items-start py-2"
+          role="group"
+          :aria-label="t('shell.sections')"
+          :initial="{ opacity: 0, y: reducedMotion ? 0 : 8 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{
+            duration: reducedMotion ? 0 : 0.24,
+            delay: reducedMotion ? 0 : 0.04,
+            ease: [0.16, 1, 0.3, 1],
+          }"
+          @pointermove="trackDockPointer"
+          @pointerleave="releaseDock"
+          @focusin="trackDockFocus"
+          @focusout="releaseDock"
+        >
+          <!--
+            Wider than the pill but flush with its left edge, so the overhang is
+            all on the right. `items-start` then pins every icon to its resting
+            inset: a magnified one keeps its left edge exactly where it sat and
+            grows out over the gutter, the way icons lift off a Dock pinned to
+            the left of the screen rather than swelling around their own centre.
+          -->
+          <div
+            class="shell-hide-scrollbar flex max-h-full flex-col items-start overflow-y-auto px-2.5"
+            :style="{ width: `${DOCK_TRACK_WIDTH}px` }"
+          >
+            <div class="flex w-full flex-col items-start gap-0.5">
+              <ShellRailDockItem
+                v-for="item in SHELL_PRIMARY_NAVIGATION"
+                :key="item.id"
+                :item="item"
+                :active="props.section === item.id"
+                :pointer-y="pointerY"
+                :base-size="DOCK_BASE_SIZE"
+                :magnified-size="reducedMotion ? DOCK_BASE_SIZE : DOCK_MAGNIFIED_SIZE"
+                :falloff="DOCK_FALLOFF"
+                :spring="DOCK_SPRING"
+                @select="emit('navigate', $event.id)"
+              />
+            </div>
+          </div>
+        </motion.div>
       </div>
 
-      <div class="shell-rail-island flex min-h-0 w-full flex-1 flex-col items-center gap-1 p-2">
-        <ShellRailItem
-          v-for="item in SHELL_PRIMARY_NAVIGATION"
-          :key="item.id"
-          :item="item"
-          :label="t(item.labelKey)"
-          :active="props.section === item.id"
-          :pointer-y="pointerY"
-          @select="emit('navigate', $event.id)"
-        />
-      </div>
-
-      <div class="shell-rail-island flex shrink-0 flex-col items-center gap-1 p-2">
-        <Tooltip>
-          <TooltipTrigger as-child>
+      <motion.div
+        class="shell-rail-island flex shrink-0 flex-col items-center gap-0.5 py-2"
+        role="group"
+        :aria-label="t('shell.connection')"
+        :initial="{ opacity: 0, y: reducedMotion ? 0 : 8 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{
+          duration: reducedMotion ? 0 : 0.24,
+          delay: reducedMotion ? 0 : 0.08,
+          ease: [0.16, 1, 0.3, 1],
+        }"
+      >
+        <!--
+          No tooltip on this one: the menu it opens already names the account,
+          and a tooltip and a dropdown sharing one trigger fight over focus.
+        -->
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
             <Button
               type="button"
+              class="shell-rail-account rounded-full"
               variant="ghost"
               size="icon"
-              class="shell-rail-control rounded-full"
-              :data-testid="workstationNavTestId('connection')"
-              :aria-current="props.section === 'connection' ? 'page' : undefined"
-              :aria-label="t('shell.connection')"
-              :title="t('shell.connection')"
-              @click="activate(WORKSTATION_SECTIONS.connection)"
+              :aria-label="`${t('shell.connectionStatus')}: ${statusLabel}`"
             >
               <span class="shell-status-dot" :data-status="props.status" aria-hidden="true" />
-              <span class="sr-only">{{ statusLabel }}</span>
             </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right" :side-offset="10">
-            <span class="flex items-center gap-2">
-              <Activity class="size-3.5" aria-hidden="true" />{{ statusLabel }}
-            </span>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              class="shell-rail-control rounded-full"
-              :data-testid="workstationNavTestId('settings')"
-              :aria-current="props.section === 'settings' ? 'page' : undefined"
-              :aria-label="t('shell.settings')"
-              :title="t('shell.settings')"
-              @click="activate(WORKSTATION_SECTIONS.settings)"
-            >
-              <Settings2 class="size-4" aria-hidden="true" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right" :side-offset="10">{{ t('shell.settings') }}</TooltipContent>
-        </Tooltip>
-      </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            class="min-w-56 rounded-lg"
+            side="right"
+            align="end"
+            :side-offset="12"
+            :collision-padding="collisionPadding"
+          >
+            <DropdownMenuLabel>{{ statusLabel }}</DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuItem @select="emit('navigate', 'connection')"
+                ><Activity aria-hidden="true" />{{ t('shell.connection') }}</DropdownMenuItem
+              >
+              <DropdownMenuItem @select="emit('navigate', 'settings')"
+                ><Settings2 aria-hidden="true" />{{ t('shell.settings') }}</DropdownMenuItem
+              >
+              <DropdownMenuItem
+                :disabled="props.status === 'disconnected'"
+                @select="connection.detach()"
+                ><Unplug aria-hidden="true" />{{ t('shell.signOut') }}</DropdownMenuItem
+              >
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </motion.div>
     </nav>
   </TooltipProvider>
 </template>

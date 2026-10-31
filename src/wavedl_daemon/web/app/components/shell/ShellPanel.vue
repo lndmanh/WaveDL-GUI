@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue';
-import { useI18n } from 'vue-i18n';
 import { PanelRightClose } from '@lucide/vue';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   SHELL_PANEL_DEFAULT_WIDTH,
+  SHELL_PANEL_TABS,
   SHELL_PANEL_MAX_WIDTH,
   SHELL_PANEL_MIN_WIDTH,
   type ShellPanelTabDefinition,
@@ -29,10 +26,20 @@ const isResizing = shallowRef(false);
 let startX = 0;
 let startWidth = 0;
 
-const activeTabValue = computed({
-  get: () => props.activeTab,
-  set: (value: string) => {
-    const tab = props.tabs.find((candidate) => candidate.id === value);
+const expandableTabs = computed(() =>
+  props.tabs.map((tab) => ({ id: tab.id, title: t(tab.labelKey), icon: tab.icon })),
+);
+
+const activeTabIndex = computed<number | null>({
+  get: () => {
+    const index = props.tabs.findIndex((tab) => tab.id === props.activeTab);
+
+    return index < 0 ? null : index;
+  },
+  set: (index) => {
+    if (index === null) return;
+    const tab = props.tabs[index];
+
     if (tab) emit('update:activeTab', tab.id);
   },
 });
@@ -42,6 +49,7 @@ function onResizeStart(event: PointerEvent): void {
   isResizing.value = true;
   startX = event.clientX;
   startWidth = props.width;
+
   if (typeof event.currentTarget.setPointerCapture === 'function') {
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -54,6 +62,7 @@ function onResizeMove(event: PointerEvent): void {
 function onResizeEnd(event: PointerEvent): void {
   if (!isResizing.value) return;
   isResizing.value = false;
+
   if (
     event.currentTarget instanceof HTMLElement &&
     typeof event.currentTarget.hasPointerCapture === 'function' &&
@@ -65,6 +74,7 @@ function onResizeEnd(event: PointerEvent): void {
 
 function onResizeKey(event: KeyboardEvent): void {
   const step = 24;
+
   if (event.key === 'ArrowLeft') emit('resize', props.width + step);
   else if (event.key === 'ArrowRight') emit('resize', props.width - step);
   else if (event.key === 'Home') emit('resize', SHELL_PANEL_DEFAULT_WIDTH);
@@ -75,14 +85,14 @@ function onResizeKey(event: KeyboardEvent): void {
 
 <template>
   <aside
-    class="shell-panel relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+    class="shell-panel relative flex h-full min-h-0 min-w-0 flex-col"
     :style="{ width: `${props.width}px` }"
     :data-testid="'shell-companion'"
     :aria-label="t('shell.companionPanel')"
     @keydown.esc.prevent="emit('collapse')"
   >
     <div
-      class="shell-panel-resize-handle hidden lg:block"
+      class="group absolute -left-1.5 inset-y-0 z-20 hidden w-3 cursor-col-resize touch-none focus-visible:outline-none lg:block"
       role="separator"
       tabindex="0"
       aria-orientation="vertical"
@@ -97,30 +107,26 @@ function onResizeKey(event: KeyboardEvent): void {
       @keydown="onResizeKey"
       @dblclick="emit('resize', SHELL_PANEL_DEFAULT_WIDTH)"
     >
-      <span :class="{ 'shell-panel-resize-line-active': isResizing }" />
+      <span
+        class="absolute inset-y-6 left-1/2 w-px bg-border opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+        :class="{ 'opacity-100 bg-primary': isResizing }"
+      />
     </div>
 
-    <div class="shell-panel-header">
-      <Tabs v-model="activeTabValue" class="min-w-0 flex-1">
-        <TabsList class="shell-panel-tabs">
-          <TabsTrigger
-            v-for="tab in props.tabs"
-            :key="tab.id"
-            :value="tab.id"
-            :id="`shell-panel-tab-trigger-${tab.id}`"
-            :aria-controls="`shell-panel-body-${tab.id}`"
-            class="shell-panel-tab"
-          >
-            <component :is="tab.icon" class="size-3.5" aria-hidden="true" />
-            {{ t(tab.labelKey) }}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+    <div
+      class="flex shrink-0 items-center gap-1 p-2.5 max-lg:pt-[max(0.625rem,env(safe-area-inset-top,0px))]"
+    >
+      <ExpandableTabs
+        v-model="activeTabIndex"
+        :tabs="expandableTabs"
+        :aria-label="t('shell.companionPanel')"
+        class="min-w-0 flex-1"
+      />
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        class="shell-panel-close lg:hidden"
+        class="size-8 shrink-0 rounded-lg lg:hidden"
         :aria-label="t('shell.collapseCompanionPanel')"
         :title="t('shell.collapseCompanionPanel')"
         @click="emit('collapse')"
@@ -130,14 +136,13 @@ function onResizeKey(event: KeyboardEvent): void {
     </div>
 
     <div class="shell-panel-body min-h-0 flex-1 overflow-y-auto overscroll-contain">
-      <template v-for="tab in props.tabs" :key="tab.id">
+      <template v-for="tab in SHELL_PANEL_TABS" :key="tab.id">
         <section
           :id="`shell-panel-body-${tab.id}`"
           v-show="props.activeTab === tab.id"
-          class="shell-panel-tab-body"
+          :class="['h-full', props.activeTab === tab.id ? 'shell-tab-enter' : undefined]"
           role="tabpanel"
           :aria-label="t(tab.labelKey)"
-          :aria-labelledby="`shell-panel-tab-trigger-${tab.id}`"
           :aria-hidden="props.activeTab !== tab.id"
           :inert="props.activeTab !== tab.id"
         >
