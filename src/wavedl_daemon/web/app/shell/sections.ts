@@ -1,4 +1,3 @@
-import type { Component } from 'vue';
 import { isUuid } from '../lib/daemon-api-schemas';
 
 /**
@@ -34,34 +33,33 @@ export interface ShellNavigationDescriptor<
   command?: ShellCommand;
 }
 
-export const SHELL_PRIMARY_NAVIGATION: readonly ShellNavigationDescriptor<
-  PrimaryWorkstationSection
->[] = [
-  {
-    id: WORKSTATION_SECTIONS.experiments,
-    labelKey: 'shell.experiments',
-    icon: Layers,
-    path: '/experiments',
-  },
-  {
-    id: WORKSTATION_SECTIONS.project,
-    labelKey: 'shell.newTrainingRun',
-    icon: Plus,
-    path: '/new',
-  },
-  {
-    id: WORKSTATION_SECTIONS.datasets,
-    labelKey: 'shell.datasets',
-    icon: Database,
-    path: '/datasets',
-  },
-  {
-    id: WORKSTATION_SECTIONS.results,
-    labelKey: 'shell.results',
-    icon: FileChartColumn,
-    path: '/results',
-  },
-];
+export const SHELL_PRIMARY_NAVIGATION: readonly ShellNavigationDescriptor<PrimaryWorkstationSection>[] =
+  [
+    {
+      id: WORKSTATION_SECTIONS.experiments,
+      labelKey: 'shell.experiments',
+      icon: Layers,
+      path: '/experiments',
+    },
+    {
+      id: WORKSTATION_SECTIONS.project,
+      labelKey: 'shell.newTrainingRun',
+      icon: Plus,
+      path: '/new',
+    },
+    {
+      id: WORKSTATION_SECTIONS.datasets,
+      labelKey: 'shell.datasets',
+      icon: Database,
+      path: '/datasets',
+    },
+    {
+      id: WORKSTATION_SECTIONS.results,
+      labelKey: 'shell.results',
+      icon: FileChartColumn,
+      path: '/results',
+    },
+  ];
 
 export const SHELL_ACTION_NAVIGATION: readonly ShellNavigationDescriptor<
   Exclude<WorkstationSection, PrimaryWorkstationSection>
@@ -92,29 +90,35 @@ export const SHELL_ACTION_NAVIGATION: readonly ShellNavigationDescriptor<
 export function sectionPath(section: PrimaryWorkstationSection, runId?: string): string {
   const navigation = SHELL_PRIMARY_NAVIGATION.find((item) => item.id === section);
   const path = navigation?.path ?? '/experiments';
+
   if (!runId || (section !== 'experiments' && section !== 'results')) return path;
+
   return `${path}/${encodeURIComponent(runId)}`;
 }
 
 export function sectionForPath(path: string): WorkstationSection {
   if (path === '/login' || path === '/login/') return 'connection';
+
   if (path === '/settings' || path.startsWith('/settings/')) return 'settings';
+
   return (
-    SHELL_PRIMARY_NAVIGATION.find(
-      (item) => path === item.path || path.startsWith(`${item.path}/`),
-    )?.id ?? WORKSTATION_SECTIONS.experiments
+    SHELL_PRIMARY_NAVIGATION.find((item) => path === item.path || path.startsWith(`${item.path}/`))
+      ?.id ?? WORKSTATION_SECTIONS.experiments
   );
 }
 
 /** The run named by an Experiments or Results URL, if it is a canonical run id. */
 export function runIdForPath(path: string): string | null {
   const [, section, runId, ...rest] = path.split('/');
+
   if (rest.length || (section !== 'experiments' && section !== 'results')) return null;
+
   return isUuid(runId) ? runId : null;
 }
 
 /** Experiments and Results share the current run, as the single-canvas shell did. */
 export function navigationPath(path: string, currentRun: string | null): string {
   if (!currentRun || (path !== '/experiments' && path !== '/results')) return path;
+
   return `${path}/${currentRun}`;
 }

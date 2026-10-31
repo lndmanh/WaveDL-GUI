@@ -1,30 +1,16 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import tailwindcss from '@tailwindcss/vite';
-import type { NuxtModule } from 'nuxt/schema';
-
-// i18n also installs Router v4; resolve the page tooling from Nuxt's own v5 dependency.
-const nuxtRequire = createRequire(import.meta.resolve('nuxt'));
-const nuxtRouterRouteBlockPlugin = nuxtRequire.resolve('vue-router/volar/sfc-route-blocks');
-const fixNuxtRouterVolarResolution: NuxtModule = (_options, nuxt) => {
-  nuxt.hook('modules:done', () => {
-    nuxt.hook('prepare:types', ({ tsConfig }) => {
-      const plugins = tsConfig.vueCompilerOptions?.plugins;
-      if (!plugins) return;
-      tsConfig.vueCompilerOptions.plugins = plugins.map((plugin) =>
-        plugin === 'vue-router/volar/sfc-route-blocks' ? nuxtRouterRouteBlockPlugin : plugin,
-      );
-    });
-  });
-};
 
 // The browser must identify the Python build it was shipped with. Updating the
 // package cannot silently retain a stale hard-coded client build identifier.
 const versionSource = readFileSync(new URL('../../wavedl/__init__.py', import.meta.url), 'utf8');
 const version = versionSource.match(/^__version__ = "([A-Za-z0-9.+_-]+)"$/m)?.[1];
+
 if (!version) throw new Error('Cannot determine the WaveDL package build identity');
+
 const identityPath = new URL('./app/lib/build-identity.ts', import.meta.url);
 const identitySource = `/** Generated from the Python package version by nuxt.config.ts. */\nexport const CLIENT_BUILD_ID = '${version}';\n`;
+
 if (readFileSync(identityPath, 'utf8') !== identitySource)
   writeFileSync(identityPath, identitySource);
 
@@ -32,7 +18,34 @@ if (readFileSync(identityPath, 'utf8') !== identitySource)
 // no Nitro API or backend.
 export default defineNuxtConfig({
   ssr: false,
-  modules: ['@nuxtjs/i18n', fixNuxtRouterVolarResolution],
+  modules: [
+    '@nuxtjs/i18n',
+    'shadcn-nuxt',
+    '@vueuse/nuxt',
+    '@pinia/nuxt',
+    '@nuxt/fonts',
+    'motion-v/nuxt',
+  ],
+  fonts: {
+    defaults: { subsets: ['latin', 'latin-ext', 'vietnamese'] },
+    families: [
+      {
+        name: 'Manrope',
+        provider: 'google',
+        weights: ['200 800'],
+        styles: ['normal'],
+        global: true,
+      },
+      {
+        name: 'Source Serif 4',
+        provider: 'google',
+        weights: ['200 900'],
+        styles: ['normal', 'italic'],
+        global: true,
+      },
+    ],
+  },
+  shadcn: { prefix: '', componentDir: '@/components/ui' },
   i18n: {
     strategy: 'no_prefix',
     detectBrowserLanguage: false,
@@ -48,8 +61,9 @@ export default defineNuxtConfig({
       nitro.handlers = nitro.handlers?.filter((handler) => !handler.route?.startsWith('/_i18n/'));
     },
   },
-  components: false,
-  imports: { scan: false },
+  // Component file names are unique, so register them unprefixed to match their
+  // tag names. shadcn-nuxt claims components/ui first and registers its named exports.
+  components: [{ path: '~/components', pathPrefix: false }],
   css: ['@/assets/css/tailwind.css'],
   devtools: { enabled: false },
   telemetry: false,
@@ -63,6 +77,9 @@ export default defineNuxtConfig({
   },
   app: {
     head: {
+      charset: 'utf-8',
+      viewport:
+        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover',
       title: 'WaveDL Workstation',
       htmlAttrs: { lang: 'en' },
       meta: [{ name: 'description', content: 'A local interface to the WaveDL daemon.' }],
@@ -70,9 +87,17 @@ export default defineNuxtConfig({
     },
   },
   nitro: {
+    compressPublicAssets: true,
+    minify: true,
     preset: 'static',
     prerender: { routes: ['/'], crawlLinks: false },
   },
-  typescript: { strict: true },
+  typescript: {
+    tsConfig: {
+      include: ['../*.d.ts'],
+      exclude: ['**/dist/**', '**/node_modules/**'],
+    },
+    strict: true,
+  },
   vite: { plugins: [tailwindcss()] },
 });

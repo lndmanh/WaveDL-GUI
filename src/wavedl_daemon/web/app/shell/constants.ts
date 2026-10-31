@@ -1,5 +1,4 @@
 import { Package, ScrollText } from '@lucide/vue';
-import type { Component } from 'vue';
 
 export const SHELL_PANEL_MIN_WIDTH = 320;
 export const SHELL_PANEL_DEFAULT_WIDTH = 368;

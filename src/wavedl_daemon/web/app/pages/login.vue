@@ -1,23 +1,24 @@
 <script setup lang="ts">
-import { useWorkstation } from '../composables/useWorkstation';
-import ConnectionPanel from '../components/ConnectionPanel.vue';
-import { watch } from 'vue';
-import { useRoute, useRouter } from '#app';
-import { definePageMeta } from '#imports';
 import { validatedNextPath } from '../lib/auth-routing';
 
 definePageMeta({ keepalive: false });
+
 const { state, connection } = useWorkstation();
 const { keepSignedIn } = connection;
 const route = useRoute();
 const router = useRouter();
-watch(() => state.value.status, (status, prior) => {
-  if (status === 'connected' && prior !== 'connected') {
-    void router.replace(validatedNextPath(route.query.next));
-  } else if (status === 'disconnected' && prior === 'connected') {
-    void router.replace('/login');
-  }
-});
+
+watch(
+  () => state.value.status,
+  (status, prior) => {
+    if (status === 'connected' && prior !== 'connected') {
+      void router.replace(validatedNextPath(route.query.next));
+    } else if (status === 'disconnected' && prior === 'connected') {
+      void router.replace('/login');
+    }
+  },
+);
+
 function disconnect(): void {
   void connection.detach();
   void router.replace('/login');
