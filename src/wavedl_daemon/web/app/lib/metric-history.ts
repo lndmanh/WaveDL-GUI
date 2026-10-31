@@ -351,12 +351,13 @@ export class MetricHistory {
       this.#head = Math.max(this.#head, event.attempt);
     } else if (event.type === 'supersede') {
       const payload = event.payload;
+      const generation = metricGenerationSchema.safeParse(payload.generation);
 
       if (
         !integer(payload.source_attempt, 1) ||
         payload.source_attempt >= event.attempt ||
         !integer(payload.step) ||
-        !metricGenerationSchema.safeParse(payload.generation).success ||
+        !generation.success ||
         (payload.source_seq !== undefined && !integer(payload.source_seq))
       )
         fail('invalidSupersessionBoundary');
@@ -396,7 +397,7 @@ export class MetricHistory {
         }
       }
 
-      this.#generations.set(event.attempt, payload.generation);
+      this.#generations.set(event.attempt, generation.data);
     } else if (event.type === 'hello') {
       this.#known.add(event.attempt);
 

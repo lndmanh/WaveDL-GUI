@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import type { Json, JsonObject } from './json';
-import { jsonObjectSchema } from './json';
 
-export const trainingImportSchema = jsonObjectSchema;
+export const trainingImportSchema = z.record(z.string(), z.unknown());
+
+export type TrainingImportDocument = z.infer<typeof trainingImportSchema>;
 
 export const importedSelectionSchema = z.string().max(8192).refine((value) => value.trim().length > 0);
 
@@ -12,14 +12,12 @@ export const optionPrefixSchema = z.string().startsWith('-');
 const commaSeparated = new Set(['loss_weights', 'betas', 'milestones']);
 const listFields = new Set(['import_modules', 'constraint', 'constraint_weight']);
 
-export function normalizedTrainingValue(name: string, value: Json): Json {
-  if (commaSeparated.has(name) && Array.isArray(value)) return value.join(',');
+export function normalizedTrainingConfig(document: TrainingImportDocument): TrainingImportDocument {
+  return Object.fromEntries(Object.entries(document).map(([name, value]): [string, TrainingImportDocument[string]] => {
+    if (commaSeparated.has(name) && Array.isArray(value)) return [name, value.join(',')];
 
-  if (listFields.has(name) && value !== null && !Array.isArray(value)) return [value];
+    if (listFields.has(name) && value !== null && !Array.isArray(value)) return [name, [value]];
 
-  return value;
-}
-
-export function normalizedTrainingConfig(document: JsonObject): JsonObject {
-  return Object.fromEntries(Object.entries(document).map(([name, value]) => [name, normalizedTrainingValue(name, value)]));
+    return [name, value];
+  }));
 }

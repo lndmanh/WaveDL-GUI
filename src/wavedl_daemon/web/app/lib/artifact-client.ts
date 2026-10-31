@@ -1,7 +1,10 @@
 import { clientError } from '../i18n/client-messages';
 import { ConnectionSession, ConnectionSessionError } from './connection-session';
 import { toRaw } from 'vue';
-import { DaemonApiError, isUuid, object, parseJson } from './daemon-api';
+import { DaemonApiError, isUuid, parseJson, type Json } from './daemon-api';
+
+import { artifactPathSchema, inventorySchema, selectionMetadataSchema } from '../../shared/schemas/artifacts';
+import type { z } from 'zod';
 
 export interface Artifact {
   readonly runId: string;
@@ -47,74 +50,31 @@ const fail = (): never => {
   throw DaemonApiError.fromKey('response', 'invalidArtifactInventory');
 };
 
-function exact(value: Record<string, unknown>, keys: string[]): boolean {
-  return Object.keys(value).sort().join(',') === [...keys].sort().join(',');
-}
-
 export function artifactPath(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length <= 4096 &&
-    !/[\\:%]/.test(value) &&
-    !Array.from(value).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) &&
-    value.split('/').every((part) => part !== '' && part !== '.' && part !== '..')
-  );
+  return artifactPathSchema.safeParse(value).success;
 }
 
-export function parseInventory(value: unknown, runId: string): Artifact[] {
-  if (
-    !isUuid(runId) ||
-    !object(value) ||
-    !exact(value, ['generations']) ||
-    !Array.isArray(value.generations) ||
-    value.generations.length > 4096
-  )
-    return fail();
+export function parseInventory(value: Json, runId: string): Artifact[] {
+  const parsed = inventorySchema.safeParse(value);
+
+  if (!isUuid(runId) || !parsed.success) return fail();
   const result: Artifact[] = [];
   const seen = new Set<string>();
 
-  for (const item of value.generations) {
-    if (
-      !object(item) ||
-      !exact(item, ['generation', 'attempt', 'step', 'files']) ||
-      typeof item.generation !== 'string' ||
-      !/^gen-\d{6,}$/.test(item.generation) ||
-      seen.has(item.generation) ||
-      typeof item.attempt !== 'number' ||
-      !Number.isSafeInteger(item.attempt) ||
-      item.attempt < 1 ||
-      typeof item.step !== 'number' ||
-      !Number.isSafeInteger(item.step) ||
-      item.step < 0 ||
-      !object(item.files)
-    )
-      return fail();
+  for (const item of parsed.data.generations) {
+    if (seen.has(item.generation)) return fail();
     seen.add(item.generation);
 
     for (const [path, record] of Object.entries(item.files)) {
-      if (
-        !artifactPath(path) ||
-        !object(record) ||
-        !exact(record, ['size', 'sha256']) ||
-        typeof record.size !== 'number' ||
-        !Number.isSafeInteger(record.size) ||
-        record.size < 0 ||
-        typeof record.sha256 !== 'string' ||
-        !/^[a-f0-9]{64}$/.test(record.sha256) ||
-        result.length >= 16384
-      )
-        return fail();
-      result.push(
-        Object.freeze({
-          runId,
-          generation: item.generation,
-          attempt: item.attempt,
-          step: item.step,
-          path,
-          size: record.size,
-          sha256: record.sha256,
-        }),
-      );
+      if (result.length >= 16384) return fail();
+      result.push(Object.freeze({
+        runId,
+        generation: item.generation,
+        attempt: item.attempt,
+        step: item.step,
+        path,
+        ...record,
+      }));
     }
   }
 
@@ -233,58 +193,17 @@ export class ArtifactClient {
   }
 }
 
-export interface SelectionMetadata {
-  readonly schema_version: 1;
-  readonly kind:
-    | 'best'
-    | 'periodic'
-    | 'interrupted'
-    | 'cross_validation_fold'
-    | 'cross_validation_summary';
-  readonly fold?: number;
-  readonly source_seq?: number;
-}
+export type SelectionMetadata = z.infer<typeof selectionMetadataSchema>;
 
-export function parseSelectionMetadata(value: unknown): SelectionMetadata {
-  if (
-    !object(value) ||
-    Object.keys(value).some(
-      (key) => !['schema_version', 'kind', 'fold', 'source_seq'].includes(key),
-    ) ||
-    value.schema_version !== 1 ||
-    ![
-      'best',
-      'periodic',
-      'interrupted',
-      'cross_validation_fold',
-      'cross_validation_summary',
-    ].includes(String(value.kind)) ||
-    (value.fold !== undefined &&
-      (value.kind !== 'cross_validation_fold' ||
-        typeof value.fold !== 'number' ||
-        !Number.isSafeInteger(value.fold) ||
-        value.fold < 1)) ||
-    (value.source_seq !== undefined &&
-      (typeof value.source_seq !== 'number' ||
-        !Number.isSafeInteger(value.source_seq) ||
-        value.source_seq < 0))
-  )
-    return fail();
-  const kind = value.kind;
+export function parseSelectionMetadata(value: Json): SelectionMetadata {
+  const parsed = selectionMetadataSchema.safeParse(value);
 
-  if (
-    kind !== 'best' &&
-    kind !== 'periodic' &&
-    kind !== 'interrupted' &&
-    kind !== 'cross_validation_fold' &&
-    kind !== 'cross_validation_summary'
-  )
-    return fail();
+  if (!parsed.success) return fail();
+  const result: SelectionMetadata = { schema_version: 1, kind: parsed.data.kind };
 
-  return Object.freeze({
-    schema_version: 1,
-    kind,
-    ...(typeof value.fold === 'number' ? { fold: value.fold } : {}),
-    ...(typeof value.source_seq === 'number' ? { source_seq: value.source_seq } : {}),
-  });
+  if (parsed.data.fold !== undefined) result.fold = parsed.data.fold;
+
+  if (parsed.data.source_seq !== undefined) result.source_seq = parsed.data.source_seq;
+
+  return Object.freeze(result);
 }

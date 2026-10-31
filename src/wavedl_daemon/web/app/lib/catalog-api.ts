@@ -1,6 +1,8 @@
 import { ConnectionSession, ConnectionSessionError } from './connection-session';
 import { DaemonApiError, object } from './daemon-api';
 import { hostProfileSchema, type HostProfile } from '../../shared/schemas/host-profile';
+import { catalogTextSchema, catalogIntegerSchema, catalogNumberSchema, rootIdSchema, modelIdSchema, customModelIdSchema, pretrainedSchema } from '../../shared/schemas/catalog';
+import type { Json } from './daemon-api';
 
 export interface BrowseEntry {
   readonly name: string;
@@ -64,19 +66,19 @@ const fail = (): never => {
   throw DaemonApiError.fromKey('response', 'invalidDaemonCatalogResponse');
 };
 
-function text(value: unknown, max = 8192): value is string {
-  return typeof value === 'string' && value.length <= max && !value.includes('\0');
+function text(value: Json | undefined, max = 8192): value is string {
+  return catalogTextSchema(max).safeParse(value).success;
 }
 
-function nonEmptyText(value: unknown, max = 8192): value is string {
+function nonEmptyText(value: Json | undefined, max = 8192): value is string {
   return text(value, max) && value.trim().length > 0;
 }
 
-function rootId(value: unknown): value is string {
-  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+function rootId(value: Json | undefined): value is string {
+  return rootIdSchema.safeParse(value).success;
 }
 
-export function relativePath(value: unknown): value is string {
+export function relativePath(value: Json | undefined): value is string {
   return (
     text(value, 4096) &&
     new TextEncoder().encode(value).length <= 4096 &&
@@ -88,15 +90,15 @@ export function relativePath(value: unknown): value is string {
   );
 }
 
-function integer(value: unknown, max: number): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max;
+function integer(value: Json | undefined, max: number): value is number {
+  return catalogIntegerSchema(max).safeParse(value).success;
 }
 
-function finite(value: unknown, max: number): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max;
+function finite(value: Json | undefined, max: number): value is number {
+  return catalogNumberSchema(max).safeParse(value).success;
 }
 
-function textList(value: unknown, maxItems: number, maxLength: number): value is string[] {
+function textList(value: Json | undefined, maxItems: number, maxLength: number): value is string[] {
   return (
     Array.isArray(value) &&
     value.length <= maxItems &&
@@ -108,7 +110,7 @@ function textList(value: unknown, maxItems: number, maxLength: number): value is
 const architectureFamilies = new Set(['CNN', 'Hybrid', 'Transformer', 'SSM', 'Encoder-Decoder']);
 const computeTiers = new Set(['Edge', 'Low', 'Medium', 'High']);
 
-function absolutePath(value: unknown): value is string {
+function absolutePath(value: Json | undefined): value is string {
   if (!text(value, 8192)) return false;
   let parts: string[];
 
@@ -354,7 +356,7 @@ export class CatalogApi {
             return fail();
 
           for (const id of category.models) {
-            if (typeof id !== 'string' || !/^[a-z0-9_]{1,128}$/.test(id) || categories.has(id))
+            if (!text(id, 128) || !modelIdSchema.safeParse(id).success || categories.has(id))
               return fail();
             categories.set(id, name);
           }
@@ -364,8 +366,8 @@ export class CatalogApi {
           if (
             !object(item) ||
             Object.keys(item).length !== 16 ||
-            typeof item.id !== 'string' ||
-            !/^[a-z0-9_]{1,128}$/.test(item.id) ||
+            !text(item.id, 128) ||
+            !modelIdSchema.safeParse(item.id).success ||
             !nonEmptyText(item.display_name, 256) ||
             !nonEmptyText(item.architecture_family, 256) ||
             !architectureFamilies.has(item.architecture_family) ||
@@ -382,7 +384,7 @@ export class CatalogApi {
             !nonEmptyText(item.compute_tier, 64) ||
             !computeTiers.has(item.compute_tier) ||
             !textList(item.tags, 32, 256) ||
-            typeof item.is_pretrained !== 'boolean' ||
+            !pretrainedSchema.safeParse(item.is_pretrained).success ||
             !Array.isArray(item.supported_dims) ||
             item.supported_dims.length < 1 ||
             item.supported_dims.length > 3 ||
@@ -409,7 +411,7 @@ export class CatalogApi {
             tags: Object.freeze([...item.tags]),
             supportedDims: Object.freeze([...item.supported_dims]),
             category: categories.get(item.id) ?? '',
-            pretrained: item.is_pretrained,
+            pretrained: pretrainedSchema.parse(item.is_pretrained),
           });
         });
 
@@ -442,7 +444,7 @@ export class CatalogApi {
   }
   /** Explicit registry identifier only: required imports belong to the run request. */
   selectCustomModel(modelId: string, signal?: AbortSignal): Promise<ModelSelection> {
-    if (typeof modelId !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(modelId))
+    if (!customModelIdSchema.safeParse(modelId).success)
       return Promise.reject(ConnectionSessionError.fromKey('request', 'modelIdInvalid'));
 
     return this.session.perform(

@@ -12,7 +12,7 @@ import type { TrainingRequest } from '../../shared/schemas/training-request';
 import type { RuntimeSetup } from '../../shared/schemas/host-profile';
 import type { DataSelection, ModelSelection } from './catalog-api';
 import { parseJson } from './daemon-api';
-import type { Json } from './daemon-api';
+import type { TrainingImportDocument } from '../../shared/schemas/training-import';
 import { boundedText, browserStorage, type PreferenceStorage } from './preferences';
 
 function draftKey(daemonId: string): string {
@@ -23,7 +23,7 @@ function draftKey(daemonId: string): string {
 }
 
 /** Keeps only individually valid values, so one half-typed field never discards the rest. */
-export function validDraftConfig(config: Readonly<Record<string, Json | undefined>>): DraftConfig {
+export function validDraftConfig(config: TrainingImportDocument): DraftConfig {
   return draftConfigFields.reduce<DraftConfig>((valid, name) => {
     if (config[name] === undefined) return valid;
     const parsed = draftConfigSchema.safeParse({ [name]: config[name] });

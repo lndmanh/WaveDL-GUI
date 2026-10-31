@@ -1,5 +1,6 @@
 import type { ModelDescription } from './catalog-api';
 import { parseJson } from './daemon-api';
+import { recentModelSchema } from '../../shared/schemas/model-recents';
 
 /**
  * One architecture as the user thinks of it. The catalogue lists `x` and
@@ -57,7 +58,11 @@ export function loadRecentModels(storage: Pick<Storage, 'getItem'> | null): stri
     const value = raw ? parseJson(raw) : [];
 
     return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === 'string').slice(0, recentLimit)
+      ? value.flatMap((item) => {
+          const parsed = recentModelSchema.safeParse(item);
+
+          return parsed.success ? [parsed.data] : [];
+        }).slice(0, recentLimit)
       : [];
   } catch {
     return [];

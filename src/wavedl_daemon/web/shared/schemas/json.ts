@@ -11,3 +11,7 @@ export const jsonSchema: z.ZodType<Json> = z.lazy(() =>
 );
 
 export const jsonObjectSchema = z.record(z.string(), jsonSchema);
+
+// Used only while walking a bounded value; children are validated individually
+// so depth/node failures retain their original diagnostic and short-circuiting.
+export const jsonContainerSchema = z.record(z.string(), z.unknown());

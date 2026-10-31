@@ -7,6 +7,8 @@ import {
   type JsonObject,
 } from './daemon-api';
 
+import { cursorSchema, runEventSchema } from '../../shared/schemas/event-stream';
+
 export interface Cursor {
   attempt: number;
   seq: number;
@@ -37,17 +39,13 @@ export const INITIAL_CURSOR: Readonly<Cursor> = Object.freeze({ attempt: 0, seq:
 const MAX_LINE = 1024 * 1024;
 const MAX_FRAME = 2 * 1024 * 1024;
 
-export function validCursor(value: unknown): value is Cursor {
-  return (
-    object(value) &&
-    typeof value.attempt === 'number' &&
-    Number.isSafeInteger(value.attempt) &&
-    value.attempt >= 0 &&
-    typeof value.seq === 'number' &&
-    Number.isSafeInteger(value.seq) &&
-    value.seq >= -1 &&
-    (value.attempt !== 0 || value.seq === -1)
-  );
+export function validCursor(value: Json | Cursor | undefined): value is Cursor {
+  return cursorSchema.safeParse(value).success;
+}
+
+interface CursorRead {
+  cursor: Cursor;
+  status: 'saved' | 'empty' | 'invalid' | 'unavailable';
 }
 
 export class CursorStore {
@@ -69,7 +67,7 @@ export class CursorStore {
   load(): Cursor {
     return this.read().cursor;
   }
-  read(): { cursor: Cursor; status: 'saved' | 'empty' | 'invalid' | 'unavailable' } {
+  read(): CursorRead {
     let raw: string | null;
 
     try {
@@ -79,7 +77,7 @@ export class CursorStore {
     }
 
     try {
-      const value: unknown = raw === null || raw.length > 128 ? null : parseJson(raw);
+      const value = raw === null || raw.length > 128 ? null : parseJson(raw);
 
       return validCursor(value)
         ? { cursor: { attempt: value.attempt, seq: value.seq }, status: 'saved' }
@@ -94,10 +92,6 @@ export class CursorStore {
   }
 }
 
-function jsonObject(value: Json | undefined): value is JsonObject {
-  return object(value);
-}
-
 function envelope(data: string, runId: string, id: string): RunEvent {
   let value;
 
@@ -107,44 +101,29 @@ function envelope(data: string, runId: string, id: string): RunEvent {
     throw DaemonApiError.fromKey('protocol', 'malformedOrUnsafeRunEventJson');
   }
 
-  if (
-    !object(value) ||
-    value.protocol !== 'wavedl-jsonl' ||
-    value.version !== 1 ||
-    value.run_id !== runId ||
-    typeof value.attempt !== 'number' ||
-    !Number.isSafeInteger(value.attempt) ||
-    value.attempt < 1 ||
-    typeof value.seq !== 'number' ||
-    !Number.isSafeInteger(value.seq) ||
-    value.seq < 0 ||
-    typeof value.type !== 'string' ||
-    !value.type ||
-    value.type.length > 256 ||
-    typeof value.ts !== 'string' ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$/.test(value.ts) ||
-    !Number.isFinite(Date.parse(value.ts)) ||
-    !jsonObject(value.payload) ||
-    id !== `${value.attempt}:${value.seq}`
-  ) {
+  const parsed = runEventSchema.safeParse(value);
+
+  if (!parsed.success || parsed.data.run_id !== runId || id !== `${parsed.data.attempt}:${parsed.data.seq}`) {
     throw DaemonApiError.fromKey('protocol', 'invalidEventScope');
   }
 
-  if (new Date(value.ts).toISOString().slice(0, 19) !== value.ts.slice(0, 19)) {
+  const event = parsed.data;
+
+  if (new Date(event.ts).toISOString().slice(0, 19) !== event.ts.slice(0, 19)) {
     throw DaemonApiError.fromKey('protocol', 'invalidEventTimestamp');
   }
 
   // parseJson recursively validated payload's JSON domain before narrowing.
-  const payload = value.payload;
+  const payload = event.payload;
 
   return {
     protocol: 'wavedl-jsonl',
     version: 1,
     run_id: runId,
-    attempt: value.attempt,
-    seq: value.seq,
-    type: value.type,
-    ts: value.ts,
+    attempt: event.attempt,
+    seq: event.seq,
+    type: event.type,
+    ts: event.ts,
     payload,
   };
 }
@@ -273,7 +252,7 @@ export class EventStreamParser {
 
       if (this.#id || !object(value))
         throw DaemonApiError.fromKey('protocol', 'invalidStreamControl');
-      const resume: unknown = value.resumePosition;
+      const resume = value.resumePosition;
 
       if (!validCursor(resume)) throw DaemonApiError.fromKey('protocol', 'invalidStreamControl');
 

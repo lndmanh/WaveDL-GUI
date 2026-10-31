@@ -27,6 +27,8 @@ import {
 import type { ConnectionSession } from './connection-session';
 import { ArtifactClient, type Artifact, type SelectionMetadata } from './artifact-client';
 import { checkpointOptions, type CheckpointOption } from './result-operations';
+import { approvedManifestTextSchema, checkpointDigestSchema } from '../../shared/schemas/autoplot';
+import { monitorNativeIdentitySchema } from '../../shared/schemas/run-monitor';
 
 interface AutoPlotIntent {
   readonly request: ResultRequest;
@@ -39,9 +41,11 @@ export function automaticPlotRequest(
   plan: PlanView,
   originalRequest?: JsonObject,
 ): TrainingRequest {
-  if (typeof plan.preview.manifest_json !== 'string')
+  const manifestText = approvedManifestTextSchema.safeParse(plan.preview.manifest_json);
+
+  if (!manifestText.success)
     throw clientError('missingApprovedManifest', {});
-  const manifest = parseJson(plan.preview.manifest_json);
+  const manifest = parseJson(manifestText.data);
 
   if (
     !object(manifest) ||
@@ -172,8 +176,7 @@ const inferenceWeightNames = new Set([
 function hasInferenceSource(artifacts: readonly Artifact[], generation: string): boolean {
   const paths = new Set(
     artifacts
-      .filter((artifact) => artifact.generation === generation)
-      .map((artifact) => artifact.path),
+      .flatMap((artifact) => artifact.generation === generation ? [artifact.path] : []),
   );
 
   return (
@@ -521,13 +524,11 @@ export class AutoPlotController {
     const source = selected.artifact;
     const config = captured.config;
 
-    return {
-      request: resultRequestSchema.parse({
+    const request = resultRequestSchema.parse({
         backend: captured.backend,
         operation: 'plot',
         runtime: captured.runtime,
         topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
-        ...(captured.storage_map === undefined ? {} : { storage_map: captured.storage_map }),
         checkpoint_source: { run_id: run.run_id, generation: source.generation },
         config: {
           ...inferenceDefaults,
@@ -538,7 +539,12 @@ export class AutoPlotController {
           workers: Math.max(0, config.workers),
           plot: true,
         },
-      }),
+      });
+
+    if (captured.storage_map !== undefined) request.storage_map = captured.storage_map;
+
+    return {
+      request,
       idempotencyKey: `web-autoplot-v1:${sourceRun.run_id}:${sourceRun.request_id}:${source.generation}`,
     };
   }
@@ -639,14 +645,13 @@ export class AutoPlotController {
     try {
       if (!current()) return false;
 
-      if (
-        !sourcePlan ||
-        typeof sourcePlan.preview.manifest_json !== 'string' ||
-        typeof plan.preview.manifest_json !== 'string'
-      )
+      const sourceText = approvedManifestTextSchema.safeParse(sourcePlan?.preview.manifest_json);
+      const plotText = approvedManifestTextSchema.safeParse(plan.preview.manifest_json);
+
+      if (!sourcePlan || !sourceText.success || !plotText.success)
         throw clientError('missingApprovedManifests', {});
-      const source = parseJson(sourcePlan.preview.manifest_json);
-      const plot = parseJson(plan.preview.manifest_json);
+      const source = parseJson(sourceText.data);
+      const plot = parseJson(plotText.data);
 
       if (
         !object(source) ||
@@ -684,8 +689,7 @@ export class AutoPlotController {
         pin.run_id !== intent.request.checkpoint_source.run_id ||
         pin.generation !== intent.request.checkpoint_source.generation ||
         pin.manifest_sha256 !== digest ||
-        typeof pin.complete_sha256 !== 'string' ||
-        !/^[0-9a-f]{64}$/.test(pin.complete_sha256) ||
+        !checkpointDigestSchema.safeParse(pin.complete_sha256).success ||
         canonical(pin.files ?? null) !== canonical(files) ||
         canonical(pin.selection ?? null) !== canonical(selection)
       )
@@ -720,25 +724,15 @@ export class AutoPlotController {
     )
       return false;
     this.#observedAttempt = run.attempt;
-    const identity = run.evidence?.native_identity;
+    const rawIdentity = run.evidence?.native_identity;
 
-    if (identity === undefined || identity === null) return this.#nativeBinding === null;
+    if (rawIdentity === undefined || rawIdentity === null) return this.#nativeBinding === null;
 
-    if (
-      !object(identity) ||
-      identity.run_id !== run.run_id ||
-      identity.request_id !== run.request_id ||
-      typeof identity.cluster !== 'string' ||
-      !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(identity.cluster) ||
-      typeof identity.owner !== 'string' ||
-      !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(identity.owner) ||
-      typeof identity.job_id !== 'string' ||
-      !/^[1-9][0-9]{0,18}$/.test(identity.job_id) ||
-      typeof identity.restart_count !== 'number' ||
-      !Number.isSafeInteger(identity.restart_count) ||
-      identity.restart_count < 0
-    )
+    const parsed = monitorNativeIdentitySchema.safeParse(rawIdentity);
+
+    if (!parsed.success || parsed.data.run_id !== run.run_id || parsed.data.request_id !== run.request_id)
       return false;
+    const identity = parsed.data;
     const prior = this.#nativeBinding;
 
     if (

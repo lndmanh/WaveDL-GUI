@@ -1,6 +1,6 @@
 /** Browser-only, same-origin daemon transport. Browser authority is session-scoped. */
 import { z } from 'zod';
-import { jsonObjectSchema, jsonScalarSchema } from '../../shared/schemas/json';
+import { jsonObjectSchema, jsonScalarSchema, jsonContainerSchema } from '../../shared/schemas/json';
 import {
   RUN_STATES,
   evidenceSchemaFor,
@@ -187,11 +187,11 @@ function runView(value: Json, expectedRunId?: string): RunView {
 }
 
 /** Bound arbitrary JSON, while allowing the server's full finite metric domain. */
-export function validateJson(
-  value: unknown,
+export function validateJson<T>(
+  value: T,
   depth = 0,
   budget = { nodes: 0 },
-): asserts value is Json {
+): asserts value is T & Json {
   if (depth > 32 || ++budget.nodes > 65536)
     throw DaemonApiError.fromKey('response', 'jsonTooComplex');
 
@@ -203,8 +203,10 @@ export function validateJson(
     return;
   }
 
-  if (object(value)) {
-    for (const child of Object.values(value)) validateJson(child, depth + 1, budget);
+  const container = jsonContainerSchema.safeParse(value);
+
+  if (container.success) {
+    for (const child of Object.values(container.data)) validateJson(child, depth + 1, budget);
 
     return;
   }
