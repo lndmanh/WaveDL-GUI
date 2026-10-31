@@ -5,6 +5,54 @@ import { ArtifactClient } from '../../app/lib/artifact-client';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { ConnectionSession } from './session-fixture';
 import { createResultOperationDefaults } from '../../app/lib/result-operation-defaults';
+import { parseCvSummary } from '../../app/lib/cv-summary';
+
+describe('CV summary decoding parity', () => {
+  const config = {
+    model: '', folds: 2, stratify: false, stratify_bins: 1, batch_size: 1,
+    lr: 1e100, epochs: 1, patience: 0, loss: '', optimizer: '', scheduler: '',
+  };
+
+  const fold = {
+    fold: 1, best_val_loss: null, best_epoch: 0, r2: -1e100,
+    mae_normalized: 0, mae_physical: null, epochs_trained: 1,
+    r2_target_0: null, mae_target_0: 1e100,
+  };
+
+  const summary = {
+    config, timestamp: '2026-10-31', folds: 2, r2_mean: -1e100, r2_std: null,
+    mae_mean: 0, mae_std: 0, val_loss_mean: null, val_loss_std: 0,
+    fold_results: [fold, { ...fold, fold: 2 }],
+  };
+
+  it('accepts empty producer labels, finite metrics beyond safe integers and nullable metrics', () => {
+    const parsed = parseCvSummary(summary);
+
+    expect(parsed.r2_mean).toBe(-1e100);
+    expect(parsed.fold_results[0]?.targets).toEqual([{ index: 0, r2: null, mae: 1e100 }]);
+    expect(Object.hasOwn(parsed, 'config')).toBe(false);
+  });
+
+  it('rejects key drift, duplicate folds, missing target pairs and mismatched target counts', () => {
+    for (const value of [
+      { ...summary, extra: true },
+      { ...summary, config: { ...config, extra: true } },
+      { ...summary, config: { ...config, folds: 3 } },
+      { ...summary, fold_results: [fold, fold] },
+      { ...summary, fold_results: [fold, { ...fold, fold: 2, best_epoch: 2 }] },
+      { ...summary, fold_results: [fold, { ...fold, fold: 2, mae_target_0: -1 }] },
+      { ...summary, fold_results: [fold, { ...fold, fold: 2, r2_target_1: 0, mae_target_1: 0 }] },
+      { ...summary, fold_results: [fold, { ...fold, fold: 2, r2_target_01: 0, mae_target_01: 0 }] },
+    ]) {
+      expect(() => parseCvSummary(value)).toThrow();
+    }
+
+    const { mae_target_0: omitted, ...unpaired } = fold;
+
+    expect(omitted).toBe(1e100);
+    expect(() => parseCvSummary({ ...summary, fold_results: [fold, { ...unpaired, fold: 2 }] })).toThrow();
+  });
+});
 
 const sourceRun = '11111111-1111-4111-8111-111111111111';
 

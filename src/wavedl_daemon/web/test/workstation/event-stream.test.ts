@@ -4,6 +4,7 @@ import {
   EventStreamParser,
   INITIAL_CURSOR,
   streamRun,
+  validCursor,
   type RunEvent,
 } from '../../app/lib/event-stream';
 import { DaemonApi } from '../../app/lib/daemon-api';
@@ -30,6 +31,21 @@ function frame(attempt = 1, seq = 0, overrides: Record<string, unknown> = {}) {
 }
 
 describe('attempt aware fetch stream', () => {
+  it('decodes additive cursor fields without weakening the zero-attempt sentinel', () => {
+    expect(validCursor({ attempt: 0, seq: -1, extra: true })).toBe(true);
+    expect(validCursor({ attempt: 1, seq: -1 })).toBe(true);
+    expect(validCursor({ attempt: Number.MAX_SAFE_INTEGER, seq: Number.MAX_SAFE_INTEGER })).toBe(true);
+
+    for (const value of [
+      { attempt: 0, seq: 0 },
+      { attempt: 1, seq: null },
+      { attempt: 1.5, seq: 0 },
+      { attempt: 1, seq: Number.MAX_SAFE_INTEGER + 1 },
+    ]) {
+      expect(validCursor(value)).toBe(false);
+    }
+  });
+
   it('does not persist a callback revoked while its commit was pending', async () => {
     const abort = new AbortController();
     const saved: unknown[] = [];

@@ -60,6 +60,39 @@ async function setup(
 }
 
 describe('published artifact authority', () => {
+  it('preserves strict inventory keys and safe-integer bounds during decoding', () => {
+    const generation = {
+      generation: 'gen-000001',
+      attempt: 1,
+      step: 0,
+      files: { 'weights.bin': { size: Number.MAX_SAFE_INTEGER, sha256: 'a'.repeat(64) } },
+    };
+
+    expect(parseInventory({ generations: [generation] }, run)[0]?.size).toBe(Number.MAX_SAFE_INTEGER);
+
+    for (const value of [
+      { generations: [generation], extra: true },
+      { generations: [{ ...generation, extra: true }] },
+      { generations: [{ ...generation, attempt: 0 }] },
+      { generations: [{ ...generation, step: 0.5 }] },
+      { generations: [generation, generation] },
+      { generations: [{ ...generation, files: { 'weights.bin': { size: 1e100, sha256: 'a'.repeat(64) } } }] },
+      { generations: [{ ...generation, files: { '../weights.bin': { size: 0, sha256: 'a'.repeat(64) } } }] },
+    ]) {
+      expect(() => parseInventory(value, run)).toThrow();
+    }
+  });
+
+  it('keeps absent checkpoint coordinates omitted and rejects explicit nulls', () => {
+    const metadata = parseSelectionMetadata({ schema_version: 1, kind: 'best' });
+
+    expect(Object.keys(metadata)).toEqual(['schema_version', 'kind']);
+    expect(Object.isFrozen(metadata)).toBe(true);
+    expect(() => parseSelectionMetadata({ schema_version: 1, kind: 'best', source_seq: null })).toThrow();
+    expect(() => parseSelectionMetadata({ schema_version: 1, kind: 'best', extra: 0 })).toThrow();
+    expect(parseSelectionMetadata({ schema_version: 1, kind: 'cross_validation_fold' })).toEqual({ schema_version: 1, kind: 'cross_validation_fold' });
+  });
+
   it('limits raster preview dimensions before handing bytes to the decoder', async () => {
     const bytes = new Uint8Array(33);
     bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
