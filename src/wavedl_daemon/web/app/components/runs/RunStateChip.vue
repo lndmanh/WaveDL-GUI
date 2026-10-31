@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, type Component } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { cn } from '@/lib/utils';
 import {
   Ban,
   CircleCheck,
@@ -17,15 +16,30 @@ import {
   Unplug,
   WifiOff,
 } from '@lucide/vue';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { RunState, RunView } from '../../lib/daemon-api';
 import type { MetricSummary } from '../../lib/metric-history';
 import { runStateMessageKeys } from '../../i18n/dynamic-keys';
 
 type StateTone = 'outline' | 'secondary' | 'blue' | 'warning' | 'success' | 'destructive';
+
 type StateProgress = NonNullable<MetricSummary['progress']>;
+
+// Utility bundles keep state and descendant styling beside their component.
+const styles = {
+  runStateChip: cn(
+    'min-h-7 gap-[0.35rem] [transition:opacity_160ms_ease] max-w-full min-w-0 whitespace-normal flex-wrap',
+    'motion-reduce:transition-none',
+  ),
+  runStateChipDashed: cn('border-dashed border-2'),
+  runStateChipDimmed: cn('opacity-[0.58]'),
+  runStateChipBlue: cn(
+    'border-transparent! bg-[rgb(2_132_199)] text-white dark:bg-[rgb(14_116_144)]',
+  ),
+  runStateChipBlueOutline: cn(
+    'border-[rgb(125_211_252)]! bg-[rgb(240_249_255)] text-[rgb(3_105_161)] dark:border-[rgb(7_89_133)]!',
+    'dark:bg-[rgb(8_47_73)] dark:text-[rgb(186_230_253)]',
+  ),
+};
 
 const stateMeta: Readonly<
   Record<RunState, { icon: Component; iconName: string; tone: StateTone; dashed?: boolean }>
@@ -52,32 +66,42 @@ const props = defineProps<{
   progress?: StateProgress | null;
   explanation?: string;
 }>();
+
 const { t } = useI18n({ useScope: 'global' });
 const tooltipOpen = shallowRef(false);
 const metadata = computed(() => stateMeta[props.run.state]);
 const uncertain = computed(() => Boolean(props.run.uncertainty || metadata.value.dashed));
 const label = computed(() => t(runStateMessageKeys[props.run.state]));
+
 const progressPercent = computed(() => {
   const fraction = props.progress?.fraction;
+
   if (typeof fraction !== 'number' || !Number.isFinite(fraction)) return 0;
+
   return Math.min(100, Math.max(0, fraction * 100));
 });
+
 const hasProgress = computed(
   () => props.run.state === 'running' && props.progress !== null && props.progress !== undefined,
 );
+
 const chipClasses = computed(() => ({
-  'run-state-chip': true,
-  'run-state-chip--dashed': uncertain.value,
-  'run-state-chip--dimmed': props.stale,
-  'run-state-chip--blue': metadata.value.tone === 'blue',
-  'run-state-chip--blue-outline': metadata.value.tone === 'blue' && props.run.state !== 'running',
+  [cn('run-state-chip', styles.runStateChip)]: true,
+  [cn(styles.runStateChipDashed)]: uncertain.value,
+  [cn(styles.runStateChipDimmed)]: props.stale,
+  [cn(styles.runStateChipBlue)]: metadata.value.tone === 'blue',
+  [cn(styles.runStateChipBlueOutline)]:
+    metadata.value.tone === 'blue' && props.run.state !== 'running',
 }));
+
 const badgeVariant = computed<'outline' | Exclude<StateTone, 'blue'>>(() =>
   metadata.value.tone === 'blue' ? 'outline' : metadata.value.tone,
 );
+
 const tooltipNeeded = computed(
   () => uncertain.value || props.stale === true || Boolean(props.explanation),
 );
+
 const tooltipNotes = computed(() => [
   ...(uncertain.value || props.stale ? [t('runs.lifecycleNote')] : []),
   ...(props.explanation ? [props.explanation] : []),
@@ -85,7 +109,7 @@ const tooltipNotes = computed(() => [
 </script>
 <template>
   <TooltipProvider>
-    <span class="run-state-container">
+    <span class="inline-flex flex-col items-start gap-1 min-w-0 max-w-full">
       <Tooltip :open="tooltipOpen" @update:open="tooltipOpen = $event">
         <TooltipTrigger as-child>
           <Badge
@@ -135,10 +159,13 @@ const tooltipNotes = computed(() => [
           <p v-for="note in tooltipNotes" :key="note">{{ note }}</p>
         </TooltipContent>
       </Tooltip>
-      <div v-if="hasProgress" class="run-state-progress">
+      <div
+        v-if="hasProgress"
+        class="flex items-center gap-[0.4rem] text-muted-foreground text-[0.7rem]"
+      >
         <Progress
           :model-value="progressPercent"
-          class="run-state-chip__progress"
+          class="w-20 min-w-20"
           :aria-label="t('runs.epochProgress')"
         />
         <span>{{ t('runs.epoch', { epoch: progress?.epoch, total: progress?.totalEpochs }) }}</span>
@@ -146,63 +173,3 @@ const tooltipNotes = computed(() => [
     </span>
   </TooltipProvider>
 </template>
-<style scoped>
-.run-state-container {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.25rem;
-  min-width: 0;
-  max-width: 100%;
-}
-.run-state-chip {
-  min-height: 1.75rem;
-  gap: 0.35rem;
-  transition: opacity 160ms ease;
-  max-width: 100%;
-  min-width: 0;
-  white-space: normal;
-  flex-wrap: wrap;
-}
-.run-state-chip--dashed {
-  border-style: dashed;
-  border-width: 2px;
-}
-.run-state-chip--dimmed {
-  opacity: 0.58;
-}
-.run-state-chip--blue {
-  border-color: transparent;
-  background: rgb(2 132 199);
-  color: white;
-}
-.run-state-chip--blue-outline {
-  border-color: rgb(125 211 252);
-  background: rgb(240 249 255);
-  color: rgb(3 105 161);
-}
-:global(.dark) .run-state-chip--blue {
-  background: rgb(14 116 144);
-}
-:global(.dark) .run-state-chip--blue-outline {
-  border-color: rgb(7 89 133);
-  background: rgb(8 47 73);
-  color: rgb(186 230 253);
-}
-.run-state-chip__progress {
-  width: 5rem;
-  min-width: 5rem;
-}
-.run-state-progress {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--muted-foreground);
-  font-size: 0.7rem;
-}
-@media (prefers-reduced-motion: reduce) {
-  .run-state-chip {
-    transition: none;
-  }
-}
-</style>

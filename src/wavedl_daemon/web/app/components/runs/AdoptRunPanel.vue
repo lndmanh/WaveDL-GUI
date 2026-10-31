@@ -1,27 +1,21 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { useClientMessages } from '../../composables/useClientMessages';
-import { computed, onBeforeUnmount, shallowRef, toRaw, useId, watch } from 'vue';
 import { Field as VeeField, useForm } from 'vee-validate';
-import { Button } from '@/components/ui/button';
-import InfoChip from '../common/InfoChip.vue';
-import { Input } from '@/components/ui/input';
-import { Field, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field';
 import { adoptionFormSchema } from '../../../shared/schemas/adoption-request';
 import { AdoptionError, AdoptionWorkflow, type AdoptionStatus } from '../../lib/adoption';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { DataSelection } from '../../lib/catalog-api';
-import BrowseContainer from '../catalog/BrowseContainer.vue';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 const props = defineProps<{ session: ConnectionSession }>();
 const emit = defineEmits<{ adoptedRunId: [runId: string] }>();
 const attemptId = useId();
+
 const { handleSubmit } = useForm({
   validationSchema: adoptionFormSchema,
   initialValues: { attempt: 1 },
 });
+
 const directory = shallowRef<DataSelection | null>(null);
 const status = shallowRef<AdoptionStatus>('draft');
 const message = shallowRef<string | Error>('');
@@ -33,17 +27,23 @@ const canAdopt = computed(() => connected.value && !!directory.value && !busy.va
 const workflow = shallowRef(new AdoptionWorkflow(props.session));
 let unsubscribe: (() => void) | undefined;
 let alive = true;
+
 function select(value: DataSelection) {
   if (busy.value) return;
+
   if (value.kind !== 'directory') {
     message.value = 'results.chooseDirectory';
+
     return;
   }
+
   directory.value = value;
 }
+
 function submit(event: Event) {
   if (busy.value) return;
   const currentWorkflow = workflow.value;
+
   const validatedSubmit = handleSubmit(async (values) => {
     if (
       !alive ||
@@ -55,12 +55,14 @@ function submit(event: Event) {
       return;
     busy.value = true;
     message.value = '';
+
     try {
       currentWorkflow.prepare(directory.value, values.attempt);
       frozenPath.value = currentWorkflow.request?.path ?? '';
       frozenAttempt.value = currentWorkflow.request?.attempt ?? null;
       status.value = 'pending';
       const result = await currentWorkflow.adopt();
+
       if (
         !alive ||
         workflow.value !== currentWorkflow ||
@@ -87,8 +89,10 @@ function submit(event: Event) {
       }
     }
   });
+
   void validatedSubmit(event);
 }
+
 watch(
   () => toRaw(props.session),
   (session) => {
@@ -103,12 +107,14 @@ watch(
     let revision = -1;
     unsubscribe = session.subscribe((state) => {
       connected.value = state.status === 'connected';
+
       if (revision !== state.revision) directory.value = null;
       revision = state.revision;
     });
   },
   { immediate: true },
 );
+
 onBeforeUnmount(() => {
   alive = false;
   unsubscribe?.();

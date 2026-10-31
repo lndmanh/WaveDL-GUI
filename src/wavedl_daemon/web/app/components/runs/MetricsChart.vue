@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import { computed, shallowRef, useTemplateRef, watch } from 'vue';
+import { cn } from '@/lib/utils';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { ChartLine, Maximize2 } from '@lucide/vue';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MetricRecord } from '../../lib/metric-history';
 import { buildPlotSeries, type PlotChannel, type PlotSeries } from '../../lib/plot-series';
 import { plotMetricMessageKeys } from '../../i18n/dynamic-keys';
-import InfoChip from '../common/InfoChip.vue';
-import { usePageActive } from '../../composables/usePageActive';
+
+// Utility bundles keep state and descendant styling beside their component.
+const styles = {
+  chartHeading: cn(
+    'flex flex-wrap items-center justify-between [gap:0.75rem_1rem] mb-3 [&_h3]:m-0 [&_h3]:text-base',
+    '[&_h3]:font-[650] [&_h3]:tracking-[-0.015em] [&_p]:m-[0.2rem_0_0] [&_p]:text-muted-foreground',
+    '[&_p]:text-[0.78rem] [&_p]:tabular-nums',
+  ),
+  chartState: cn(
+    'flex min-h-48 flex-col items-center justify-center gap-2 rounded-[1rem] text-muted-foreground',
+    'text-[0.85rem] text-center bg-[color-mix(in_srgb,_var(--foreground)_3%,_transparent)]',
+    '[&_svg]:w-[1.4rem] [&_svg]:h-[1.4rem] [&_svg]:opacity-[0.6]',
+  ),
+};
 
 const { t, locale } = useI18n({ useScope: 'global' });
 const props = defineProps<{ records: readonly MetricRecord[]; unavailable?: boolean }>();
@@ -22,6 +31,7 @@ const { isActive } = usePageActive(resumePlot, pausePlot);
 let retainedRange: { min: number; max: number } | null = null;
 let observer: ResizeObserver | null = null;
 let frame: number | null = null;
+
 const projection = computed<{ series: PlotSeries | null; error: string }>(() => {
   try {
     return {
@@ -35,35 +45,49 @@ const projection = computed<{ series: PlotSeries | null; error: string }>(() => 
     };
   }
 });
+
 const message = computed(() => {
   const raw = projection.value.error || renderError.value;
   const capacity = /^Chart capacity exceeded \((\d+) metric records\)\.$/.exec(raw);
+
   return capacity ? t('runs.chartCapacity', { count: capacity[1]! }) : raw;
 });
+
 function selectChannel(value: string | number) {
   if (value === 'loss' || value === 'r2' || value === 'lr') channel.value = value;
 }
+
 function destroyPlot() {
   plot.value?.destroy();
   plot.value = null;
 }
+
 function renderPlot() {
   frame = null;
+
   if (!isActive.value || !host.value) return;
   const series = projection.value.series;
+
   if (!series || series.pointCount === 0 || props.unavailable) {
     destroyPlot();
+
     return;
   }
+
   const width = Math.floor(host.value.getBoundingClientRect().width);
+
   if (width <= 0) return;
+
   try {
     renderError.value = '';
+
     if (plot.value) {
       plot.value.setSize({ width, height: 300 });
       plot.value.setData(series.data);
+
       return;
     }
+
     const colors = getComputedStyle(host.value);
     const primary = colors.getPropertyValue('--primary').trim() || '#007aff';
     const secondary = colors.getPropertyValue('--chart-2').trim() || '#7b6dba';
@@ -97,6 +121,7 @@ function renderPlot() {
       series.data,
       host.value,
     );
+
     if (retainedRange) plot.value.setScale('x', retainedRange);
     retainedRange = null;
   } catch {
@@ -104,25 +129,32 @@ function renderPlot() {
     renderError.value = t('runs.chartRenderError');
   }
 }
+
 /** A soft wash under the primary series; non-hex theme colours simply skip it. */
 function areaFill(chart: uPlot, color: string): CanvasGradient | string {
   if (!/^#[0-9a-f]{6}$/i.test(color)) return 'transparent';
   // The legend asks for its swatch before layout, while the plot box is still empty.
   const { top, height } = chart.bbox;
+
   if (!Number.isFinite(top) || !Number.isFinite(height) || height <= 0) return `${color}2e`;
   const gradient = chart.ctx.createLinearGradient(0, top, 0, top + height);
   gradient.addColorStop(0, `${color}2e`);
   gradient.addColorStop(1, `${color}00`);
+
   return gradient;
 }
+
 function scheduleRender() {
   if (!isActive.value || frame !== null) return;
   frame = requestAnimationFrame(renderPlot);
 }
+
 function resetZoom() {
   const data = projection.value.series?.data;
+
   if (data) plot.value?.setData(data);
 }
+
 watch(
   channel,
   () => {
@@ -131,7 +163,9 @@ watch(
   },
   { flush: 'post' },
 );
+
 watch(projection, scheduleRender, { flush: 'post' });
+
 // Rebuild library-owned text without re-projecting records or losing a user's zoom.
 watch(
   locale,
@@ -139,27 +173,34 @@ watch(
     if (frame !== null) cancelAnimationFrame(frame);
     frame = null;
     const viewport = plot.value?.scales?.x;
+
     const range =
       viewport?.min != null && viewport.max != null
         ? { min: viewport.min, max: viewport.max }
         : null;
+
     destroyPlot();
     renderPlot();
+
     if (range) plot.value?.setScale('x', range);
   },
   { flush: 'post' },
 );
+
 function resumePlot() {
   observer = new ResizeObserver(scheduleRender);
+
   if (host.value) observer.observe(host.value);
   scheduleRender();
 }
+
 function pausePlot() {
   const range = plot.value?.scales.x;
-  retainedRange = range?.min !== undefined && range.max !== undefined
-    ? { min: range.min, max: range.max } : null;
+  retainedRange =
+    range?.min !== undefined && range.max !== undefined ? { min: range.min, max: range.max } : null;
   observer?.disconnect();
   observer = null;
+
   if (frame !== null) cancelAnimationFrame(frame);
   frame = null;
   destroyPlot();
@@ -167,15 +208,18 @@ function pausePlot() {
 </script>
 
 <template>
-  <section class="metrics-chart" :aria-label="t('runs.runtimeHistory')">
+  <section
+    class="flex flex-col gap-3 min-w-0 p-[1.25rem_1.4rem] rounded-[1.25rem] bg-surface batch-r-surface-shadow"
+    :aria-label="t('runs.runtimeHistory')"
+  >
     <Tabs :model-value="channel" @update:model-value="selectChannel">
-      <div class="chart-heading">
+      <div :class="cn(styles.chartHeading)">
         <div class="min-w-0">
           <h3>{{ t('runs.history') }}</h3>
           <p>{{ t('runs.lineage', { count: projection.series?.pointCount ?? 0 }) }}</p>
         </div>
-        <div class="chart-controls">
-          <TabsList class="chart-channels" :aria-label="t('runs.channel')">
+        <div class="flex items-center gap-[0.35rem]">
+          <TabsList class="rounded-[0.65rem]" :aria-label="t('runs.channel')">
             <TabsTrigger value="loss">{{ t('runs.loss') }}</TabsTrigger>
             <TabsTrigger value="r2">{{ t('runs.r2') }}</TabsTrigger>
             <TabsTrigger value="lr">{{ t('runs.lr') }}</TabsTrigger>
@@ -183,7 +227,7 @@ function pausePlot() {
           <Button
             variant="ghost"
             size="icon"
-            class="chart-reset"
+            class="rounded-full text-muted-foreground"
             :disabled="!plot"
             :aria-label="t('runs.resetZoom')"
             :title="t('runs.resetZoom')"
@@ -192,12 +236,12 @@ function pausePlot() {
           /></Button>
         </div>
       </div>
-      <TabsContent :value="channel" force-mount class="chart-body">
-        <p v-if="message" role="status" class="chart-state">{{ message }}</p>
-        <p v-else-if="unavailable" role="status" class="chart-state">
+      <TabsContent :value="channel" force-mount class="min-w-0">
+        <p v-if="message" role="status" :class="cn(styles.chartState)">{{ message }}</p>
+        <p v-else-if="unavailable" role="status" :class="cn(styles.chartState)">
           <InfoChip :label="t('runs.lastKnownRuntime')" :text="t('runs.notLive')" uncertain />
         </p>
-        <p v-else-if="!projection.series?.pointCount" role="status" class="chart-state">
+        <p v-else-if="!projection.series?.pointCount" role="status" :class="cn(styles.chartState)">
           <ChartLine aria-hidden="true" />
           {{
             t('runs.waitingChannel', {
@@ -212,7 +256,7 @@ function pausePlot() {
         </p>
         <div
           ref="host"
-          class="chart-host"
+          class="chart-host w-full min-w-0 min-h-85"
           :hidden="unavailable || !!message || !projection.series?.pointCount"
         />
       </TabsContent>
@@ -222,76 +266,6 @@ function pausePlot() {
 </template>
 
 <style scoped>
-.metrics-chart {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-  padding: 1.25rem 1.4rem;
-  border-radius: 1.25rem;
-  background: var(--surface);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 10%, transparent),
-    0 1px 2px rgb(0 0 0 / 0.04);
-}
-.chart-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
-  margin-bottom: 0.75rem;
-}
-.chart-heading h3 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: -0.015em;
-}
-.chart-heading p {
-  margin: 0.2rem 0 0;
-  color: var(--muted-foreground);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-}
-.chart-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-.chart-channels {
-  border-radius: 0.65rem;
-}
-.chart-reset {
-  border-radius: 999px;
-  color: var(--muted-foreground);
-}
-.chart-body {
-  min-width: 0;
-}
-.chart-state {
-  display: flex;
-  min-height: 12rem;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border-radius: 1rem;
-  color: var(--muted-foreground);
-  font-size: 0.85rem;
-  text-align: center;
-  background: color-mix(in srgb, var(--foreground) 3%, transparent);
-}
-.chart-state svg {
-  width: 1.4rem;
-  height: 1.4rem;
-  opacity: 0.6;
-}
-.chart-host {
-  width: 100%;
-  min-width: 0;
-  min-height: 340px;
-}
 .chart-host :deep(.uplot) {
   font-family: inherit;
 }
