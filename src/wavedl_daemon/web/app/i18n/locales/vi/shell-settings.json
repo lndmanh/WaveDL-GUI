@@ -94,5 +94,19 @@
   "hideAccessKey": "Ẩn khóa truy cập",
   "connectionStateLabel": "Trạng thái",
   "connectionIdLabel": "Mã",
-  "connectionVersionLabel": "Phiên bản"
+  "connectionVersionLabel": "Phiên bản",
+  "back": "Quay lại",
+  "openBreadcrumbs": "Mở đường dẫn điều hướng",
+  "scrollToTop": "Cuộn lên đầu",
+  "enterFocus": "Bật chế độ tập trung",
+  "exitFocus": "Thoát chế độ tập trung",
+  "pinnedDestinations": "Điểm đến đã ghim",
+  "openNavigation": "Mở menu điều hướng",
+  "closeNavigation": "Đóng menu điều hướng",
+  "menu": "Menu",
+  "allDestinations": "Tất cả điểm đến",
+  "navigationDescription": "Mở bất kỳ mục nào mà không mất vị trí hiện tại.",
+  "utilities": "Tiện ích",
+  "signOut": "Đăng xuất",
+  "runBreadcrumb": "Lượt chạy {id}"
 }

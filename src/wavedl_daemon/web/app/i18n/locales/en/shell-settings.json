@@ -94,5 +94,19 @@
   "hideAccessKey": "Hide access key",
   "connectionStateLabel": "Status",
   "connectionIdLabel": "ID",
-  "connectionVersionLabel": "Version"
+  "connectionVersionLabel": "Version",
+  "back": "Back",
+  "openBreadcrumbs": "Open breadcrumbs",
+  "scrollToTop": "Scroll to top",
+  "enterFocus": "Enter focus mode",
+  "exitFocus": "Leave focus mode",
+  "pinnedDestinations": "Pinned destinations",
+  "openNavigation": "Open navigation menu",
+  "closeNavigation": "Close navigation menu",
+  "menu": "Menu",
+  "allDestinations": "All destinations",
+  "navigationDescription": "Open any section without leaving your place.",
+  "utilities": "Utilities",
+  "signOut": "Sign out",
+  "runBreadcrumb": "Run {id}"
 }

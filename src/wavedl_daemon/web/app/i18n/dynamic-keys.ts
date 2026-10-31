@@ -80,10 +80,13 @@ export function trainingChoiceLabel(
   t: (key: string) => string,
 ): string {
   const key = `${field}.${choice}`;
+
   if (Object.hasOwn(trainingChoiceMessageKeys, key)) {
     const messageKey = trainingChoiceMessageKeys[key];
+
     if (messageKey) return t(messageKey);
   }
+
   return Object.hasOwn(technicalChoiceLabels, choice)
     ? (technicalChoiceLabels[choice] ?? choice)
     : choice;
@@ -162,6 +165,7 @@ export const trainingPresetMessageKeys = {
 
 export function trainingPresetMessageKeysFor(presetId: string) {
   if (!Object.hasOwn(trainingPresetMessageKeys, presetId)) return null;
+
   return trainingPresetMessageKeys[presetId as keyof typeof trainingPresetMessageKeys];
 }
 
