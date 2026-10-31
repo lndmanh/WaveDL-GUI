@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, shallowRef, useId, useTemplateRef, watch, type Component } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { usePageActive } from '../../composables/usePageActive';
+import { cn } from '@/lib/utils';
 import { useFormContext } from 'vee-validate';
 import {
   Atom,
@@ -18,9 +16,6 @@ import {
   Target,
   TrendingDown,
 } from '@lucide/vue';
-import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Input } from '@/components/ui/input';
 import type { TrainingRequest } from '../../../shared/schemas/training-request';
 import {
   trainingChoiceLabel,
@@ -39,9 +34,6 @@ import {
   type TrainingFieldName,
   type TrainingSectionId,
 } from '../../lib/training-layout';
-import InspectorPanel from './InspectorPanel.vue';
-import SegmentedControl from './SegmentedControl.vue';
-import TrainingSettingRow from './TrainingSettingRow.vue';
 
 const props = defineProps<{ disabled: boolean; scope?: number }>();
 const emit = defineEmits<{ preset: [id: string]; reset: [] }>();
@@ -51,6 +43,7 @@ const searchId = useId();
 const query = shallowRef('');
 const open = shallowRef<ReadonlySet<TrainingSectionId>>(new Set());
 const confirmReset = shallowRef(false);
+
 // A retired connection scope cancels a pending reset confirmation.
 watch(
   () => props.scope,
@@ -59,38 +52,52 @@ watch(
 
 const config = computed(() => values.config);
 const preset = computed(() => matchingPreset(config.value));
+
 const presetOptions = computed(() => [
   ...trainingRecipes.map((item) => {
     const keys = trainingPresetMessageKeysFor(item.id);
+
     return { value: item.id, label: keys ? t(keys.label) : item.id };
   }),
   ...(preset.value ? [] : [{ value: 'custom', label: t('builder.customRecipe') }]),
 ]);
+
 const presetDescription = computed(() => {
   const keys = preset.value ? trainingPresetMessageKeysFor(preset.value) : null;
+
   return keys ? t(keys.description) : t('builder.customRecipeHelp');
 });
 
 function label(name: TrainingFieldName): string {
   const keys = trainingFieldMessageKeys[name];
+
   return keys ? t(keys.label) : name;
 }
+
 function formatted(name: TrainingFieldName): string {
   const value = config.value[name];
+
   if (typeof value === 'boolean') return t(value ? 'builder.on' : 'builder.off');
+
   if (typeof value === 'number') return compactNumber(value);
+
   if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
+
   if (typeof value === 'string') return trainingChoiceLabel(name, value, t);
+
   return '—';
 }
+
 const essentials = computed(() =>
   essentialTrainingFields.filter((name) => trainingFieldVisible(name, config.value)),
 );
+
 const sections = computed(() =>
   trainingSections
     .map((section) => {
       const fields = section.fields.filter((name) => trainingFieldVisible(name, config.value));
       const changed = fields.filter((name) => changedFromDefault(name, config.value));
+
       return {
         ...section,
         fields,
@@ -101,6 +108,7 @@ const sections = computed(() =>
     })
     .filter((section) => section.fields.length),
 );
+
 const sectionIcons: Record<TrainingSectionId, Component> = {
   optimizer: Settings2,
   schedule: TrendingDown,
@@ -118,6 +126,7 @@ const settingsRoot = useTemplateRef<HTMLElement>('settingsRoot');
 const listId = `${searchId}-results`;
 const searchFocused = shallowRef(false);
 const activeResult = shallowRef(0);
+
 interface SettingResult {
   readonly name: TrainingFieldName;
   readonly label: string;
@@ -125,9 +134,12 @@ interface SettingResult {
   readonly value: string;
   readonly hidden: boolean;
 }
+
 const results = computed<SettingResult[]>(() => {
   const needle = query.value.trim().toLocaleLowerCase();
+
   if (!needle) return [];
+
   // Settings the current choices ignore are still findable, but say why they are hidden.
   const candidates = [
     ...essentials.value.map((name) => ({ name, group: t('project.essentials'), hidden: false })),
@@ -139,13 +151,21 @@ const results = computed<SettingResult[]>(() => {
       })),
     ),
   ];
+
   return candidates
     .map(({ name, group, hidden }) => {
       const keys = trainingFieldMessageKeys[name];
       const title = label(name);
       const haystack = `${title} ${name} ${keys ? t(keys.description) : ''}`.toLocaleLowerCase();
       const lower = title.toLocaleLowerCase();
-      const rank = lower.startsWith(needle) ? 0 : lower.includes(needle) ? 1 : haystack.includes(needle) ? 2 : -1;
+      const rank = lower.startsWith(needle)
+        ? 0
+        : lower.includes(needle)
+          ? 1
+          : haystack.includes(needle)
+            ? 2
+            : -1;
+
       return {
         name,
         label: title,
@@ -159,29 +179,42 @@ const results = computed<SettingResult[]>(() => {
     .sort((a, b) => a.rank - b.rank)
     .slice(0, 8);
 });
+
 const resultsShown = computed(() => searchFocused.value && query.value.trim().length > 0);
+
 watch(query, () => (activeResult.value = 0));
+
 function resultId(index: number): string {
   return `${listId}-${index}`;
 }
+
 async function jump(name: TrainingFieldName) {
   if (!isActive.value) return;
+
   if (!results.value.some((item) => item.name === name && !item.hidden)) return;
   query.value = '';
   searchFocused.value = false;
   const section = sections.value.find((item) => item.fields.includes(name));
+
   if (section) toggle(section.id, true);
   await nextTick();
   const row = settingsRoot.value?.querySelector(`[data-field="${name}"]`);
+
   if (!(row instanceof HTMLElement)) return;
+
   // An opening group unhides its content a frame or two later; land once it is laid out.
   for (let frame = 0; frame < 10 && isActive.value && !row.getClientRects().length; frame++)
     await new Promise((resolve) => requestAnimationFrame(resolve));
+
   if (!isActive.value) return;
   const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   row.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
-  const control = row.querySelector('input, textarea, [role="switch"], [role="combobox"], [role="radio"]');
+  const control = row.querySelector(
+    'input, textarea, [role="switch"], [role="combobox"], [role="radio"]',
+  );
+
   if (control instanceof HTMLElement) control.focus({ preventScroll: true });
+
   if (typeof row.animate === 'function' && !still)
     row.animate(
       [
@@ -191,9 +224,12 @@ async function jump(name: TrainingFieldName) {
       { duration: 1600, easing: 'ease-out' },
     );
 }
+
 const { isActive } = usePageActive();
+
 function searchKeydown(event: KeyboardEvent) {
   const count = results.value.length;
+
   if (event.key === 'ArrowDown' && count) {
     event.preventDefault();
     searchFocused.value = true;
@@ -204,12 +240,14 @@ function searchKeydown(event: KeyboardEvent) {
   } else if (event.key === 'Enter') {
     event.preventDefault();
     const result = results.value[activeResult.value];
+
     if (result) void jump(result.name);
   } else if (event.key === 'Escape') {
     if (query.value) event.preventDefault();
     query.value = '';
   }
 }
+
 const hiddenCount = computed(
   () =>
     trainingSections.flatMap((section) => section.fields).length -
@@ -223,21 +261,66 @@ function isOpen(section: { id: TrainingSectionId; fields: readonly TrainingField
     section.fields.some((name) => Object.hasOwn(errors.value, `config.${name}`))
   );
 }
+
 function toggle(id: TrainingSectionId, value: boolean) {
   const next = new Set(open.value);
+
   if (value) next.add(id);
   else next.delete(id);
   open.value = next;
 }
+
 function choosePreset(id: string) {
   if (id !== 'custom') emit('preset', id);
 }
+
+const projectStyles = {
+  trainingFind: cn('relative w-[min(20rem,_100%)]'),
+  trainingFindIcon: cn(
+    'absolute top-[50%] left-3 size-4 text-muted-foreground pointer-events-none [transform:translateY(-50%)]',
+  ),
+  trainingFindPopover: cn(
+    'absolute top-[calc(100%_+_0.4rem)] right-0 z-30 w-[min(24rem,_calc(100vw_-_2rem))] max-h-88 overflow-y-auto',
+    'p-[0.35rem] rounded-[0.9rem] bg-popover',
+    'shadow-[0_0_0_0.5px_color-mix(in_srgb,_var(--foreground)_14%,_transparent),_0_18px_40px_-16px_rgb(0_0_0_/_0.35)]',
+    '[animation:training-find-in_180ms_cubic-bezier(0.22,_1,_0.36,_1)]',
+  ),
+  trainingFindOption: cn(
+    'flex items-center gap-3 py-2 px-[0.65rem] rounded-[0.6rem] cursor-default',
+    "[&[aria-disabled='true']]:opacity-55",
+    "[&[aria-selected='true']]:[background:color-mix(in_srgb,_var(--primary)_12%,_transparent)]",
+  ),
+  trainingFindValue: cn(
+    "max-w-[40%] overflow-hidden text-muted-foreground [font-family:ui-monospace,_'SF_Mono',_monospace] text-[0.72rem]",
+    'text-ellipsis whitespace-nowrap',
+  ),
+  trainingFindEnter: cn('size-[0.85rem] flex-none text-primary'),
+  trainingSectionIcon: cn(
+    'grid size-7 flex-none place-items-center rounded-sm text-primary',
+    '[background:color-mix(in_srgb,_var(--primary)_10%,_transparent)] [&_svg]:size-[0.95rem]',
+  ),
+  trainingSectionTrigger: cn(
+    'flex w-full items-center gap-3 py-[0.8rem] px-4 [transition:background-color_150ms_ease]',
+    '[&:hover]:[background:color-mix(in_srgb,_var(--foreground)_3%,_transparent)] [&:focus-visible]:[outline-offset:-3px]',
+    "[&[data-state='open']_.training-section-chevron]:[transform:rotate(90deg)]",
+  ),
+  trainingSectionChevron: cn(
+    'size-4 flex-none text-muted-foreground [transition:transform_260ms_cubic-bezier(0.22,_1,_0.36,_1)]',
+  ),
+  trainingSectionCount: cn(
+    'flex-none py-[0.15rem] px-[0.55rem] rounded-full text-primary text-[0.72rem] font-semibold',
+    '[background:color-mix(in_srgb,_var(--primary)_12%,_transparent)]',
+  ),
+};
 </script>
 <template>
-  <InspectorPanel :title="t('builder.trainingTitle')" :description="t('builder.trainingDescription')">
+  <InspectorPanel
+    :title="t('builder.trainingTitle')"
+    :description="t('builder.trainingDescription')"
+  >
     <template #actions>
-      <div class="training-find">
-        <Search class="training-find-icon" aria-hidden="true" />
+      <div :class="projectStyles.trainingFind">
+        <Search :class="projectStyles.trainingFindIcon" aria-hidden="true" />
         <Input
           :id="searchId"
           v-model="query"
@@ -248,7 +331,9 @@ function choosePreset(id: string) {
           aria-autocomplete="list"
           :aria-controls="listId"
           :aria-expanded="resultsShown"
-          :aria-activedescendant="resultsShown && results.length ? resultId(activeResult) : undefined"
+          :aria-activedescendant="
+            resultsShown && results.length ? resultId(activeResult) : undefined
+          "
           :placeholder="t('builder.findSetting')"
           :aria-label="t('project.searchAdvancedLabel')"
           data-testid="training-advanced-search"
@@ -256,7 +341,7 @@ function choosePreset(id: string) {
           @blur="searchFocused = false"
           @keydown="searchKeydown"
         />
-        <div v-if="resultsShown" class="training-find-popover">
+        <div v-if="resultsShown" :class="projectStyles.trainingFindPopover">
           <ul
             v-if="results.length"
             :id="listId"
@@ -268,7 +353,7 @@ function choosePreset(id: string) {
               :id="resultId(index)"
               :key="result.name"
               role="option"
-              class="training-find-option"
+              :class="projectStyles.trainingFindOption"
               :aria-selected="index === activeResult"
               :aria-disabled="result.hidden || undefined"
               @mousedown.prevent
@@ -277,13 +362,24 @@ function choosePreset(id: string) {
             >
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-[0.85rem] font-medium">{{ result.label }}</span>
-                <span class="block truncate text-[0.7rem] text-muted-foreground">{{ result.group }}</span>
+                <span class="block truncate text-[0.7rem] text-muted-foreground">{{
+                  result.group
+                }}</span>
               </span>
-              <span class="training-find-value">{{ result.value }}</span>
-              <CornerDownLeft v-if="index === activeResult" class="training-find-enter" aria-hidden="true" />
+              <span :class="projectStyles.trainingFindValue">{{ result.value }}</span>
+              <CornerDownLeft
+                v-if="index === activeResult"
+                :class="projectStyles.trainingFindEnter"
+                aria-hidden="true"
+              />
             </li>
           </ul>
-          <p v-else :id="listId" role="status" class="px-3 py-4 text-center text-xs text-muted-foreground">
+          <p
+            v-else
+            :id="listId"
+            role="status"
+            class="px-3 py-4 text-center text-xs text-muted-foreground"
+          >
             {{ t('project.noAdvancedMatches') }}
           </p>
         </div>
@@ -334,13 +430,18 @@ function choosePreset(id: string) {
             :unmount-on-hide="false"
             @update:open="toggle(section.id, $event)"
           >
-            <CollapsibleTrigger class="training-section-trigger">
-              <ChevronRight class="training-section-chevron" aria-hidden="true" />
-              <span class="training-section-icon"><component :is="section.icon" aria-hidden="true" /></span>
+            <CollapsibleTrigger :class="projectStyles.trainingSectionTrigger">
+              <ChevronRight
+                :class="cn('training-section-chevron', projectStyles.trainingSectionChevron)"
+                aria-hidden="true"
+              />
+              <span :class="projectStyles.trainingSectionIcon"
+                ><component :is="section.icon" aria-hidden="true"
+              /></span>
               <span class="min-w-0 flex-1 truncate text-left text-[0.92rem] font-medium">
                 {{ section.title }}
               </span>
-              <span v-if="section.changed.length" class="training-section-count">
+              <span v-if="section.changed.length" :class="projectStyles.trainingSectionCount">
                 {{ t('project.nonDefaultFields', { count: section.changed.length }) }}
               </span>
             </CollapsibleTrigger>
@@ -398,117 +499,3 @@ function choosePreset(id: string) {
     </div>
   </InspectorPanel>
 </template>
-<style>
-.training-find {
-  position: relative;
-  width: min(20rem, 100%);
-}
-.training-find-icon {
-  position: absolute;
-  top: 50%;
-  left: 0.75rem;
-  width: 1rem;
-  height: 1rem;
-  color: var(--muted-foreground);
-  pointer-events: none;
-  transform: translateY(-50%);
-}
-.training-find-popover {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  right: 0;
-  z-index: 30;
-  width: min(24rem, calc(100vw - 2rem));
-  max-height: 22rem;
-  overflow-y: auto;
-  padding: 0.35rem;
-  border-radius: 0.9rem;
-  background: var(--popover);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 14%, transparent),
-    0 18px 40px -16px rgb(0 0 0 / 0.35);
-  animation: training-find-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-@keyframes training-find-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.98);
-  }
-}
-.training-find-option {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: 0.6rem;
-  cursor: default;
-}
-.training-find-option[aria-disabled='true'] {
-  opacity: 0.55;
-}
-.training-find-option[aria-selected='true'] {
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-}
-.training-find-value {
-  max-width: 40%;
-  overflow: hidden;
-  color: var(--muted-foreground);
-  font-family: ui-monospace, 'SF Mono', monospace;
-  font-size: 0.72rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.training-find-enter {
-  width: 0.85rem;
-  height: 0.85rem;
-  flex: none;
-  color: var(--primary);
-}
-.training-section-icon {
-  display: grid;
-  width: 1.75rem;
-  height: 1.75rem;
-  flex: none;
-  place-items: center;
-  border-radius: 0.5rem;
-  color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-}
-.training-section-icon svg {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-.training-section-trigger {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.8rem 1rem;
-  transition: background-color 150ms ease;
-}
-.training-section-trigger:hover {
-  background: color-mix(in srgb, var(--foreground) 3%, transparent);
-}
-.training-section-trigger:focus-visible {
-  outline-offset: -3px;
-}
-.training-section-chevron {
-  width: 1rem;
-  height: 1rem;
-  flex: none;
-  color: var(--muted-foreground);
-  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.training-section-trigger[data-state='open'] .training-section-chevron {
-  transform: rotate(90deg);
-}
-.training-section-count {
-  flex: none;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  color: var(--primary);
-  font-size: 0.72rem;
-  font-weight: 600;
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-}
-</style>

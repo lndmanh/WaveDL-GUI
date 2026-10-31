@@ -1,52 +1,41 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue';
 import { Field as VeeField } from 'vee-validate';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Input } from '@/components/ui/input';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-  FieldError,
-  FieldSet,
-  FieldLegend,
-  FieldDescription,
-} from '@/components/ui/field';
 import { storageMapSchema, type StorageMapping } from '../../../shared/schemas/storage-mapping';
-import { useI18n } from 'vue-i18n';
-import InfoChip from '../common/InfoChip.vue';
 
 const props = defineProps<{
   mappings?: readonly StorageMapping[];
   backend: string;
   disabled: boolean;
 }>();
+
 const emit = defineEmits<{ update: [mappings: StorageMapping[]] }>();
 const { t } = useI18n({ useScope: 'global' });
 const id = useId();
 const mappings = computed(() => props.mappings ?? []);
 const validation = computed(() => storageMapSchema.safeParse(mappings.value));
 const issues = computed(() => (validation.value.success ? [] : validation.value.error.issues));
+
 const mapErrors = computed(() =>
   issues.value.some((issue) => issue.path.length === 0) ? [t('storage.mapError')] : [],
 );
+
 function rootErrors(index: number, key: keyof StorageMapping): string[] {
   return issues.value.some((issue) => issue.path[0] === index && issue.path[1] === key)
     ? [t('storage.rootError')]
     : [];
 }
+
 function rowErrors(index: number): string[] {
   return issues.value.some((issue) => issue.path[0] === index && issue.path.length === 1)
     ? [t('storage.rowError')]
     : [];
 }
+
 function add() {
   if (props.disabled || mappings.value.length >= 32) return;
   emit('update', [...mappings.value, { host_root: '', execution_root: '' }]);
 }
+
 function update(index: number, key: keyof StorageMapping, value: string | number) {
   if (props.disabled) return;
   emit(
@@ -56,6 +45,7 @@ function update(index: number, key: keyof StorageMapping, value: string | number
     ),
   );
 }
+
 function remove(index: number) {
   if (props.disabled) return;
   emit(

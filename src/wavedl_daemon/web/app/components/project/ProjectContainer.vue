@@ -1,23 +1,17 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
-import {
-  computed,
-  onBeforeUnmount,
-  shallowRef,
-  toRaw,
-  useId,
-  useTemplateRef,
-  watch,
-} from 'vue';
+import { cn } from '@/lib/utils';
 import { useForm } from 'vee-validate';
-import { MotionConfig } from 'motion-v';
-import { ArrowRight, Check, CircleAlert, Info, OctagonAlert, TriangleAlert, Undo2, X } from '@lucide/vue';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { useClientMessages } from '../../composables/useClientMessages';
+import {
+  ArrowRight,
+  Check,
+  CircleAlert,
+  Info,
+  OctagonAlert,
+  TriangleAlert,
+  Undo2,
+  X,
+} from '@lucide/vue';
 import { clientError } from '../../i18n/client-messages';
-import { useModelCatalogue } from '../../composables/useModelCatalogue';
-import { useHostProfile } from '../../composables/useHostProfile';
 import { automaticRuntime, hostAccelerator, matchesAutomatic } from '../../lib/host-runtime';
 import type { RuntimeSetup } from '../../../shared/schemas/host-profile';
 import {
@@ -70,33 +64,34 @@ import {
   validDraftConfig,
 } from '../../lib/project-draft';
 import { draftConfigFields } from '../../../shared/schemas/project-draft';
-import ConfigMenu from './ConfigMenu.vue';
-import DatasetInspector from './DatasetInspector.vue';
-import ModelInspector from './ModelInspector.vue';
-import PlanInspector, { type ReadinessItem } from './PlanInspector.vue';
-import RunPipeline, { type PipelineBlock } from './RunPipeline.vue';
-import RuntimeInspector from './RuntimeInspector.vue';
-import StartPanel, { type DraftSummary } from './StartPanel.vue';
-import TrainingInspector from './TrainingInspector.vue';
+import type { ReadinessItem } from './PlanInspector.vue';
+import type { PipelineBlock } from './RunPipeline.vue';
+import type { DraftSummary } from './StartPanel.vue';
 
 const { locale, t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+
 function stateLabel(state: RunView['state']): string {
   return locale.value === 'en' ? state : t(runStateMessageKeys[state]);
 }
+
 const props = defineProps<{ session: ConnectionSession }>();
+
 const emit = defineEmits<{
   submitted: [run: RunView];
   submittedPlan: [run: RunView, plan: PlanView];
 }>();
+
 const panelId = useId();
 const importInput = useTemplateRef<HTMLInputElement>('importInput');
 
 function daemonId(): string | null {
   return toRaw(props.session).snapshot().health?.daemon_id ?? null;
 }
+
 function defaults(): TrainingRequest {
   const id = daemonId();
+
   return {
     backend: 'local',
     operation: 'train',
@@ -107,13 +102,16 @@ function defaults(): TrainingRequest {
     topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
   };
 }
+
 const { handleSubmit, values, setFieldValue, resetForm, validate } = useForm<TrainingRequest>({
   initialValues: defaults(),
   validationSchema: trainingRequestSchema,
   keepValuesOnUnmount: true,
 });
+
 const catalogue = useModelCatalogue(() => props.session);
 const host = useHostProfile(() => props.session);
+
 /** Automatic plans the detected Local setup; Manual leaves every runtime value to the user. */
 const setup = shallowRef<RuntimeSetup>('automatic');
 
@@ -127,11 +125,13 @@ const message = shallowRef('');
 const reportedRun = shallowRef<RunView | null>(null);
 const connected = shallowRef(false);
 const active = shallowRef<ProjectBlock>('dataset');
+
 /** A saved draft offered on the start panel; null once the user chooses how to begin. */
 const offered = shallowRef<ProjectDraft | null>(null);
 const pendingModel = shallowRef<string | null>(null);
 const dragging = shallowRef(false);
 const savedAt = shallowRef<number | null>(null);
+
 /** Bumped whenever a connection scope retires; inspectors drop transient UI state. */
 const scope = shallowRef(0);
 
@@ -143,8 +143,10 @@ interface Notice {
   readonly detail?: () => string;
   readonly undo?: () => void;
 }
+
 const notice = shallowRef<Notice | null>(null);
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
 function announce(value: Omit<Notice, 'id'>) {
   clearTimeout(noticeTimer);
   notice.value = { ...value, id: Date.now() };
@@ -175,6 +177,7 @@ const blockingMessages = [
   'project.selectionStale',
   'project.planRefused',
 ];
+
 const messageTone = computed(() =>
   blockingMessages.includes(message.value)
     ? 'destructive'
@@ -182,12 +185,16 @@ const messageTone = computed(() =>
       ? 'warning'
       : 'default',
 );
+
 /** The blocks a blocked plan points at, each one click from its fix. */
 const blockedBlocks = computed<ProjectBlock[]>(() => {
   if (messageTone.value !== 'destructive') return [];
   const pending = new Set<ProjectBlock>(issues.value);
+
   if (!data.value) pending.add('dataset');
+
   if (!model.value) pending.add('model');
+
   return projectBlocks.filter((block) => pending.has(block));
 });
 
@@ -195,6 +202,7 @@ let workflow = new ProjectPlan(props.session);
 let pending: AbortController | null = null;
 let epoch = 0;
 let unsubscribe: (() => void) | undefined;
+
 /** Set after the daemon acknowledges; the next edit makes the draft worth saving again. */
 let submittedDraft = false;
 
@@ -206,6 +214,7 @@ function invalidate() {
   plan.value = null;
   workflow.invalidate();
 }
+
 function retireScope() {
   scope.value++;
   invalidate();
@@ -217,6 +226,7 @@ function retireScope() {
   reportedRun.value = null;
   message.value = '';
 }
+
 watch(
   values,
   () => {
@@ -225,6 +235,7 @@ watch(
   },
   { deep: true, flush: 'sync' },
 );
+
 watch(
   () => props.session,
   (session) => {
@@ -237,10 +248,12 @@ watch(
       const wasConnected = connected.value;
       connected.value = state.status === 'connected';
       const fresh = state.revision !== revision;
+
       if (fresh || !connected.value) {
         revision = state.revision;
         retireScope();
       }
+
       // The revision bumps while still connecting, so offer on the transition to connected:
       // a verified connection offers the saved draft rather than silently replacing it.
       if (connected.value && (fresh || !wasConnected)) {
@@ -260,54 +273,65 @@ function selectData(selection: DataSelection) {
   } catch {
     return;
   }
+
   data.value = selection;
   datasetInspection.value = null;
   setFieldValue('config.data_path', selection.path);
+
   if (active.value === 'dataset' && !model.value) active.value = 'model';
 }
+
 function inspectData(inspection: DatasetInspection | null, selection: DataSelection | null) {
   if (!selection || selection !== toRaw(data.value)) return;
+
   try {
     new CatalogApi(toRaw(props.session)).assertSelection(selection);
   } catch {
     return;
   }
+
   datasetInspection.value = inspection;
 }
+
 function selectModel(selection: ModelSelection) {
   try {
     new CatalogApi(toRaw(props.session)).assertSelection(selection);
   } catch {
     return;
   }
+
   model.value = selection;
   pendingModel.value = null;
   setFieldValue('config.model', selection.model);
 }
+
 function chooseModel(description: ModelDescription, pretrained: boolean) {
   const selection = catalogue.select(description);
+
   if (!selection) return;
   selectModel(selection);
   setFieldValue('config.pretrained', pretrained);
 }
+
 // Draft restore and import name a model before the catalogue may have loaded.
-watch(
-  [() => catalogue.models.value, pendingModel],
-  ([models, id]) => {
-    if (!id || !models.length) return;
-    const description = models.find((item) => item.id === id);
-    const selection = description ? catalogue.select(description) : null;
-    if (selection) selectModel(selection);
-    else {
-      pendingModel.value = null;
-      announce({ tone: 'warning', title: () => t('builder.modelMissing', { model: id }) });
-    }
-  },
-);
+watch([() => catalogue.models.value, pendingModel], ([models, id]) => {
+  if (!id || !models.length) return;
+  const description = models.find((item) => item.id === id);
+  const selection = description ? catalogue.select(description) : null;
+
+  if (selection) selectModel(selection);
+  else {
+    pendingModel.value = null;
+    announce({ tone: 'warning', title: () => t('builder.modelMissing', { model: id }) });
+  }
+});
+
 function applyPreset(id: string) {
   const recipe = trainingRecipes.find((item) => item.id === id);
+
   if (recipe) setFieldValue('config', applyTrainingPreset(values.config, recipe.config));
 }
+
 function resetTraining() {
   const config = structuredClone(trainingDefaults);
   config.data_path = data.value?.path ?? config.data_path;
@@ -321,15 +345,21 @@ function resetTraining() {
 /** Writes only what differs, so an unchanged setup never revokes an approved plan. */
 function applyDetected() {
   const profile = host.profile.value;
+
   if (!profile || matchesAutomatic(values, profile)) return;
   const expected = automaticRuntime(profile);
+
   if (values.backend !== expected.backend) setFieldValue('backend', expected.backend);
+
   if (JSON.stringify(values.runtime) !== JSON.stringify(expected.runtime))
     setFieldValue('runtime', expected.runtime);
+
   if (JSON.stringify(values.topology) !== JSON.stringify(expected.topology))
     setFieldValue('topology', expected.topology);
+
   if (values.storage_map?.length) setFieldValue('storage_map', []);
 }
+
 // Automatic follows the profile and repairs any reset, restore or import that moved it.
 watch(
   () =>
@@ -349,6 +379,7 @@ function meaningful(): boolean {
   const fresh = defaults();
   const { config, ...rest } = toRaw(values);
   const { config: freshConfig, ...freshRest } = fresh;
+
   return (
     !!data.value ||
     !!model.value ||
@@ -356,16 +387,21 @@ function meaningful(): boolean {
     (setup.value === 'manual' && JSON.stringify(rest) !== JSON.stringify(freshRest))
   );
 }
+
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
 watch(
   [values, data, model, active, setup],
   () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       const id = daemonId();
+
       // Never overwrite a draft the user has not yet chosen to continue or discard.
       if (!id || offered.value || submittedDraft || !connected.value) return;
+
       if (!meaningful()) return;
+
       if (
         saveProjectDraft(id, {
           block: active.value,
@@ -388,32 +424,40 @@ async function restoreSelections(
   const current = epoch;
   const api = new CatalogApi(toRaw(props.session));
   const missing: string[] = [];
+
   if (dataset) {
     try {
       const selection = await api.resolve(dataset.root, dataset.relativePath);
+
       if (current === epoch && selection.kind === 'file') selectData(selection);
     } catch {
       missing.push(dataset.relativePath);
     }
   }
+
   if (chosen?.custom) {
     try {
       const selection = await api.selectCustomModel(chosen.id);
+
       if (current === epoch) selectModel(selection);
     } catch {
       missing.push(chosen.id);
     }
   } else if (chosen) pendingModel.value = chosen.id;
+
   return missing;
 }
+
 async function continueDraft() {
   const draft = offered.value;
+
   if (!draft) return;
   offered.value = null;
   setup.value = draftSetup(draft);
   resetForm({ values: draftRequest(draft, defaults()) });
   const missing = await restoreSelections(draft.dataset, draft.model);
   active.value = !data.value ? 'dataset' : !draft.model ? 'model' : draft.block;
+
   if (missing.length)
     announce({
       tone: 'warning',
@@ -421,8 +465,10 @@ async function continueDraft() {
       detail: () => missing.join(', '),
     });
 }
+
 function startFresh() {
   const id = daemonId();
+
   if (id) clearProjectDraft(id);
   offered.value = null;
   retireScope();
@@ -431,6 +477,7 @@ function startFresh() {
   active.value = 'dataset';
   savedAt.value = null;
 }
+
 /** After a submission: keep every choice, ready to swap the model and go again. */
 function another() {
   invalidate();
@@ -446,15 +493,19 @@ function another() {
 function openImport() {
   importInput.value?.click();
 }
+
 async function importFile(file: File) {
   if (file.size > CONFIG_IMPORT_LIMIT) {
     announce({
       tone: 'warning',
       title: () => clientMessage(clientError('configImportTooLarge')),
     });
+
     return;
   }
+
   let imported: ReturnType<typeof parseTrainingConfig>;
+
   try {
     imported = parseTrainingConfig(await file.text());
   } catch (error) {
@@ -463,9 +514,12 @@ async function importFile(file: File) {
       title: () => t('builder.importFailed', { file: file.name }),
       detail: () => clientMessage(error instanceof Error ? error : String(error)),
     });
+
     return;
   }
+
   const id = daemonId();
+
   // Field-wise snapshot (no deep clone of reactive state); environment values are copied.
   const before = id
     ? {
@@ -482,35 +536,43 @@ async function importFile(file: File) {
         inspection: datasetInspection.value,
       }
     : null;
+
   offered.value = null;
   // Fields that choose which code or checkpoint the run executes never arrive by file:
   // like presets, an import cannot retarget executable code or checkpoints.
   const withheld = codeFields.filter((name) => imported.config[name] !== undefined);
+
   const applied = validDraftConfig(
     Object.fromEntries(
       Object.entries(imported.config).filter(([name]) => !withheld.some((code) => code === name)),
     ),
   );
+
   const next = {
     ...values.config,
     ...applied,
     data_path: values.config.data_path,
     model: values.config.model,
   };
+
   // An import that changes nothing must not revoke an approved plan.
   if (JSON.stringify(next) !== JSON.stringify(values.config)) setFieldValue('config', next);
   const missing: string[] = [];
+
   if (imported.dataPath) {
     try {
       const selection = await new CatalogApi(toRaw(props.session)).locate(imported.dataPath);
+
       if (selection?.kind === 'file') selectData(selection);
       else missing.push(imported.dataPath);
     } catch {
       missing.push(imported.dataPath);
     }
   }
+
   if (imported.model) {
     const known = catalogue.models.value.find((item) => item.id === imported.model);
+
     if (known) chooseModel(known, imported.config.pretrained ?? values.config.pretrained);
     else if (catalogue.models.value.length) {
       try {
@@ -520,20 +582,24 @@ async function importFile(file: File) {
       }
     } else pendingModel.value = imported.model;
   }
+
   active.value = data.value ? 'training' : 'dataset';
   // Fields that choose which code or checkpoint the run executes are never applied quietly.
   announce({
     tone: missing.length || withheld.length ? 'warning' : 'success',
     title: () => t('builder.imported', { file: file.name, count: Object.keys(applied).length }),
-    detail: () => [
-      withheld.length
-        ? t('builder.importCode', { keys: withheld.map(fieldLabel).join(', ') })
-        : '',
-      missing.length ? t('builder.importMissing', { items: missing.join(', ') }) : '',
-      imported.skipped.length ? t('builder.importSkipped', { keys: imported.skipped.join(', ') }) : '',
-    ]
-      .filter(Boolean)
-      .join(' '),
+    detail: () =>
+      [
+        withheld.length
+          ? t('builder.importCode', { keys: withheld.map(fieldLabel).join(', ') })
+          : '',
+        missing.length ? t('builder.importMissing', { items: missing.join(', ') }) : '',
+        imported.skipped.length
+          ? t('builder.importSkipped', { keys: imported.skipped.join(', ') })
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
     undo: before
       ? () => {
           const restored = draftRequest(before.draft, defaults());
@@ -556,38 +622,49 @@ async function importFile(file: File) {
       : undefined,
   });
 }
+
 const codeFields: readonly TrainingFieldName[] = [
   'import_modules',
   'constraint',
   'constraint_file',
   'resume',
 ];
+
 function pickedFile(event: Event) {
   if (!(event.target instanceof HTMLInputElement)) return;
   const file = event.target.files?.[0];
   event.target.value = '';
+
   if (file) void importFile(file);
 }
+
 let dragDepth = 0;
+
 function hasFiles(event: DragEvent): boolean {
   return !!event.dataTransfer?.types.includes('Files');
 }
+
 function dragEnter(event: DragEvent) {
   if (!hasFiles(event)) return;
   dragDepth++;
   dragging.value = true;
 }
+
 function dragLeave(event: DragEvent) {
   if (!hasFiles(event)) return;
   dragDepth = Math.max(0, dragDepth - 1);
+
   if (!dragDepth) dragging.value = false;
 }
+
 function drop(event: DragEvent) {
   dragDepth = 0;
   dragging.value = false;
   const file = event.dataTransfer?.files[0];
+
   if (file && connected.value) void importFile(file);
 }
+
 function exportNotice(value: string | Error, ok: boolean, detail?: string) {
   announce({
     tone: ok ? 'success' : 'warning',
@@ -600,6 +677,7 @@ function exportNotice(value: string | Error, ok: boolean, detail?: string) {
 // ---- Planning workflow (unchanged semantics) ---------------------------------------------
 
 type WorkOperation = 'preview' | 'submit' | 'status';
+
 async function work(
   operation: WorkOperation,
   action: (signal: AbortSignal, isCurrent: () => boolean) => Promise<void>,
@@ -609,6 +687,7 @@ async function work(
   pending = new AbortController();
   busy.value = true;
   message.value = '';
+
   try {
     await action(pending.signal, () => current === epoch);
   } catch (error) {
@@ -628,23 +707,31 @@ async function work(
     }
   }
 }
+
 function preview(event?: Event) {
   const current = epoch;
+
   return handleSubmit(
     async (draft) => {
       if (current !== epoch) return;
+
       if (!data.value || !model.value) {
         message.value = 'project.selectionRequired';
+
         return;
       }
+
       try {
         workflow.prepare(draft, data.value, model.value);
       } catch {
         message.value = 'project.selectionStale';
+
         return;
       }
+
       await work('preview', async (signal, isCurrent) => {
         const result = await workflow.preview(signal);
+
         if (!isCurrent()) return;
         plan.value = result;
         active.value = 'plan';
@@ -654,63 +741,83 @@ function preview(event?: Event) {
       if (current !== epoch) return;
       message.value = 'project.planValidationRequired';
       const first = Object.keys(errors)[0];
+
       if (first) active.value = blockFor(first.split('.'));
     },
   )(event);
 }
+
 function submit() {
   return work('submit', async (signal, isCurrent) => {
     const approved = workflow.approved;
     const run = await workflow.submit(signal);
+
     if (!isCurrent()) return;
     acknowledged.value = run;
     message.value = 'project.daemonAcknowledgedThisExactPlan';
     const id = daemonId();
+
     if (id) clearProjectDraft(id);
     submittedDraft = true;
     emit('submitted', run);
+
     if (approved && isCurrent()) emit('submittedPlan', run, approved);
   });
 }
+
 function status() {
   return work('status', async (signal, isCurrent) => {
     const approved = workflow.approved;
     const run = await workflow.status(signal);
+
     if (!isCurrent()) return;
     reportedRun.value = run;
     message.value = 'reported';
+
     if (run.submission_requested) {
       acknowledged.value = run;
       emit('submitted', run);
+
       if (approved && isCurrent()) emit('submittedPlan', run, approved);
     }
   });
 }
+
 function openAcknowledged() {
   if (connected.value && acknowledged.value) emit('submitted', acknowledged.value);
 }
+
 function selectBlock(block: ProjectBlock) {
   // The start panel asks one question first; the strip only previews the draft.
   if (!offered.value) active.value = block;
 }
+
 /** The plan on screen is the one the daemon acknowledged; an edit starts a new plan. */
 const planSubmitted = computed(
   () => !!plan.value && acknowledged.value?.request_id === plan.value.request_id,
 );
+
 function review() {
   if (planSubmitted.value) {
     openAcknowledged();
+
     return;
   }
+
   active.value = 'plan';
+
   if (plan.value) return;
+
   if (canPreview.value) {
     void preview();
+
     return;
   }
+
   const current = epoch;
   void validate().then((result) => {
     if (current !== epoch) return;
+
     if (!result.valid) message.value = 'project.planValidationRequired';
     else if (!data.value || !model.value) message.value = 'project.selectionRequired';
   });
@@ -720,74 +827,108 @@ function review() {
 
 function blockFor(path: readonly PropertyKey[]): ProjectBlock {
   const [root, field] = path;
+
   if (root === 'config')
-    return field === 'data_path' ? 'dataset' : field === 'model' || field === 'pretrained' ? 'model' : 'training';
+    return field === 'data_path'
+      ? 'dataset'
+      : field === 'model' || field === 'pretrained'
+        ? 'model'
+        : 'training';
+
   return 'runtime';
 }
+
 const issues = computed(() => {
   const parsed = trainingRequestSchema.safeParse(values);
+
   return parsed.success ? [] : parsed.error.issues.map((issue) => blockFor(issue.path));
 });
+
 function issueCount(block: ProjectBlock): number {
   return issues.value.filter((item) => item === block).length;
 }
+
 const canPreview = computed(
   () => connected.value && !!data.value && !!model.value && !issues.value.length && !busy.value,
 );
+
 const catalogueModel = computed(() =>
   catalogue.models.value.find((item) => item.id === model.value?.model),
 );
+
 const shapeStatus = computed(() =>
   catalogueModel.value
-    ? modelShapeGuidance(datasetInspection.value, catalogueModel.value, values.config.single_channel)
-        .status
+    ? modelShapeGuidance(
+        datasetInspection.value,
+        catalogueModel.value,
+        values.config.single_channel,
+      ).status
     : 'unknown',
 );
+
 function fieldLabel(name: TrainingFieldName): string {
   const keys = trainingFieldMessageKeys[name];
+
   return keys ? t(keys.label) : name;
 }
+
 const presetLabel = computed(() => {
   const id = matchingPreset(values.config);
+
   if (id === 'defaults') return t('builder.defaultsShort');
   const keys = id ? trainingPresetMessageKeysFor(id) : null;
+
   return keys ? t(keys.label) : t('builder.customRecipe');
 });
+
 // `pretrained` belongs to the Model block, so it is not a Training change.
 const trainingFields = [
   ...essentialTrainingFields,
   ...trainingSections.flatMap((section) => section.fields),
 ];
+
 const changedCount = computed(
   () => trainingFields.filter((name) => changedFromDefault(name, values.config)).length,
 );
+
 const deviceLabels: Record<TrainingRequest['runtime']['device'], string> = {
   cpu: 'builder.deviceCpu',
   cuda: 'builder.deviceCuda',
   mps: 'builder.deviceMps',
   auto: 'builder.deviceAuto',
 };
+
 const datasetName = computed(
   () => data.value?.path.split(/[\\/]/).filter(Boolean).at(-1) ?? t('builder.nothingSelected'),
 );
+
 const modelName = computed(
   () =>
     catalogueModel.value?.displayName.replace(/ \(Pretrained\)$/, '') ??
     model.value?.model ??
     (pendingModel.value ? pendingModel.value : t('builder.nothingSelected')),
 );
+
 const pythonName = computed(() => {
   const python = values.runtime.python.trim();
-  return python ? python.split(/[\\/]/).filter(Boolean).slice(-3).join('/') : t('builder.pythonNeeded');
+
+  return python
+    ? python.split(/[\\/]/).filter(Boolean).slice(-3).join('/')
+    : t('builder.pythonNeeded');
 });
 
 const automaticShown = computed(() => setup.value === 'automatic' && !!host.profile.value);
+
 const acceleratorLabel = computed(() => {
   const profile = host.profile.value;
+
   if (!profile) return '';
   const kind = hostAccelerator(profile);
+
   if (kind === 'cuda') return profile.accelerators?.cuda[0]?.name ?? t('builder.deviceCuda');
+
   if (kind === 'mps') return t('builder.appleGpu');
+
   return kind === 'cpu' ? t('builder.deviceCpu') : t('builder.deviceAuto');
 });
 
@@ -861,14 +1002,16 @@ const blocks = computed<PipelineBlock[]>(() => [
         : canPreview.value
           ? t('builder.readyToPlan')
           : t('builder.planPending'),
-    detail: planSubmitted.value && acknowledged.value
-      ? stateLabel(acknowledged.value.state)
-      : plan.value
-        ? t('builder.awaitingApproval')
-        : t('builder.nothingStarts'),
+    detail:
+      planSubmitted.value && acknowledged.value
+        ? stateLabel(acknowledged.value.state)
+        : plan.value
+          ? t('builder.awaitingApproval')
+          : t('builder.nothingStarts'),
     state: plan.value ? 'complete' : 'pending',
   },
 ]);
+
 const reviewLabel = computed(() =>
   planSubmitted.value
     ? t('project.openAcknowledgedRun')
@@ -876,6 +1019,7 @@ const reviewLabel = computed(() =>
       ? t('builder.reviewPlan')
       : t('builder.createPlan'),
 );
+
 const readiness = computed<ReadinessItem[]>(() =>
   blocks.value
     .filter((block) => block.id !== 'plan')
@@ -888,13 +1032,16 @@ const readiness = computed<ReadinessItem[]>(() =>
       done: block.state !== 'pending' && !issueCount(block.id),
     })),
 );
+
 const draftSummary = computed<DraftSummary | null>(() => {
   const draft = offered.value;
+
   if (!draft) return null;
   const restored = draftRequest(draft, defaults());
   const presetId = matchingPreset(restored.config);
   const presetKeys = presetId ? trainingPresetMessageKeysFor(presetId) : null;
   const preset = presetId ? trainingRecipes.find((item) => item.id === presetId) : null;
+
   return {
     savedAt: draft.savedAt,
     steps: [
@@ -929,6 +1076,7 @@ const draftSummary = computed<DraftSummary | null>(() => {
           .slice(0, 4)
           .map((name) => {
             const value = restored.config[name];
+
             return `${fieldLabel(name)} ${
               typeof value === 'number'
                 ? compactNumber(value)
@@ -941,6 +1089,7 @@ const draftSummary = computed<DraftSummary | null>(() => {
           }),
   };
 });
+
 const savedRecently = computed(() => savedAt.value !== null);
 
 onBeforeUnmount(() => {
@@ -949,6 +1098,38 @@ onBeforeUnmount(() => {
   clearTimeout(saveTimer);
   clearTimeout(noticeTimer);
 });
+
+const projectStyles = {
+  draftSaved: cn('[animation:draft-saved-in_420ms_cubic-bezier(0.22,_1,_0.36,_1)]'),
+  runBuilderMuted: cn(
+    'opacity-55 [filter:saturate(0.4)] [transition:opacity_400ms_ease,_filter_400ms_ease]',
+  ),
+  runBuilderPanel: cn(
+    'min-h-96 rounded-[1.5rem] [transition:box-shadow_200ms_ease]',
+    "[&[data-dragging='true']]:shadow-[0_0_0_2px_var(--primary)]",
+  ),
+  runMessage: cn(
+    'rounded-[1rem] [animation:run-message-in_360ms_cubic-bezier(0.34,_1.56,_0.64,_1)]',
+    "[&[data-tone='destructive']]:shadow-[0_14px_30px_-22px_rgb(220_38_38_/_0.55)]",
+  ),
+  runMessageFix: cn(
+    'inline-flex items-center gap-[0.35rem] py-[0.3rem] px-[0.7rem] rounded-full text-[0.78rem] font-semibold',
+    '[background:color-mix(in_srgb,_currentColor_10%,_transparent)] [transition:background-color_150ms_ease]',
+    '[&:hover]:[background:color-mix(in_srgb,_currentColor_18%,_transparent)] [&_svg]:size-[0.8rem]',
+  ),
+  runNotice: cn(
+    'flex items-start gap-3 p-[0.75rem_0.75rem_0.75rem_1rem] rounded-[1rem] bg-surface',
+    'shadow-[0_0_0_0.5px_color-mix(in_srgb,_var(--foreground)_12%,_transparent),_0_16px_36px_-20px_rgb(0_0_0_/_0.35)]',
+    "[&[data-tone='success']_.run-notice-icon]:text-success [&[data-tone='warning']_.run-notice-icon]:text-warning",
+  ),
+  runNoticeEnterActive: cn(
+    '[transition:opacity_260ms_ease,_transform_360ms_cubic-bezier(0.34,_1.56,_0.64,_1)]',
+  ),
+  runNoticeLeaveActive: cn('[transition:opacity_160ms_ease,_transform_160ms_ease]'),
+  runNoticeEnterFrom: cn('opacity-0 [transform:translateY(-6px)_scale(0.98)]'),
+  runNoticeLeaveTo: cn('opacity-0 [transform:translateY(-6px)_scale(0.98)]'),
+  runNoticeIcon: cn('size-[1.1rem] flex-none mt-[0.1rem] text-primary'),
+};
 </script>
 <template>
   <section
@@ -969,7 +1150,7 @@ onBeforeUnmount(() => {
             {{ t('builder.subtitle') }}
             <span
               v-if="savedRecently && !offered"
-              class="draft-saved inline-flex items-center gap-1 text-xs"
+              :class="cn('inline-flex items-center gap-1 text-xs', projectStyles.draftSaved)"
               role="status"
             >
               <Check class="size-3 text-success" aria-hidden="true" />{{ t('builder.draftSaved') }}
@@ -1006,16 +1187,40 @@ onBeforeUnmount(() => {
         :review-label="reviewLabel"
         :review-disabled="!connected || busy || !!offered"
         :review-busy="busy"
-        :class="offered ? 'run-builder-muted' : ''"
+        :class="offered ? projectStyles.runBuilderMuted : ''"
         @select="selectBlock"
         @review="review"
       />
 
-      <Transition name="run-notice" mode="out-in">
-        <div v-if="notice" :key="notice.id" class="run-notice" :data-tone="notice.tone" role="status">
-          <Check v-if="notice.tone === 'success'" class="run-notice-icon" aria-hidden="true" />
-          <CircleAlert v-else-if="notice.tone === 'warning'" class="run-notice-icon" aria-hidden="true" />
-          <Info v-else class="run-notice-icon" aria-hidden="true" />
+      <Transition
+        :enter-active-class="projectStyles.runNoticeEnterActive"
+        :leave-active-class="projectStyles.runNoticeLeaveActive"
+        :enter-from-class="projectStyles.runNoticeEnterFrom"
+        :leave-to-class="projectStyles.runNoticeLeaveTo"
+        mode="out-in"
+      >
+        <div
+          v-if="notice"
+          :key="notice.id"
+          :class="projectStyles.runNotice"
+          :data-tone="notice.tone"
+          role="status"
+        >
+          <Check
+            v-if="notice.tone === 'success'"
+            :class="cn('run-notice-icon', projectStyles.runNoticeIcon)"
+            aria-hidden="true"
+          />
+          <CircleAlert
+            v-else-if="notice.tone === 'warning'"
+            :class="cn('run-notice-icon', projectStyles.runNoticeIcon)"
+            aria-hidden="true"
+          />
+          <Info
+            v-else
+            :class="cn('run-notice-icon', projectStyles.runNoticeIcon)"
+            aria-hidden="true"
+          />
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium">{{ notice.title() }}</p>
             <p v-if="notice.detail" class="mt-0.5 text-xs break-words text-muted-foreground">
@@ -1037,27 +1242,41 @@ onBeforeUnmount(() => {
         </div>
       </Transition>
 
-      <Alert v-if="message" role="alert" :variant="messageTone" class="run-message" :data-tone="messageTone">
+      <Alert
+        v-if="message"
+        role="alert"
+        :variant="messageTone"
+        :class="projectStyles.runMessage"
+        :data-tone="messageTone"
+      >
         <OctagonAlert v-if="messageTone === 'destructive'" aria-hidden="true" />
         <TriangleAlert v-else-if="messageTone === 'warning'" aria-hidden="true" />
         <Info v-else aria-hidden="true" />
         <AlertTitle>
-          {{ messageTone === 'destructive' ? t('builder.planBlocked') : t('project.planningStatus') }}
+          {{
+            messageTone === 'destructive' ? t('builder.planBlocked') : t('project.planningStatus')
+          }}
         </AlertTitle>
         <AlertDescription>
           <p>
-            {{ message === 'project.submissionAckUnknown' ? t('project.submissionAckUnknown') : displayMessage }}
+            {{
+              message === 'project.submissionAckUnknown'
+                ? t('project.submissionAckUnknown')
+                : displayMessage
+            }}
           </p>
           <div v-if="blockedBlocks.length" class="mt-2 flex flex-wrap gap-2">
             <button
               v-for="block in blockedBlocks"
               :key="block"
               type="button"
-              class="run-message-fix"
+              :class="projectStyles.runMessageFix"
               @click="selectBlock(block)"
             >
               {{ t(projectBlockMessageKeys[block]) }}
-              <span v-if="issueCount(block)" class="opacity-75">· {{ t('builder.issueCount', { count: issueCount(block) }) }}</span>
+              <span v-if="issueCount(block)" class="opacity-75"
+                >· {{ t('builder.issueCount', { count: issueCount(block) }) }}</span
+              >
               <ArrowRight aria-hidden="true" />
             </button>
           </div>
@@ -1078,7 +1297,7 @@ onBeforeUnmount(() => {
         :id="panelId"
         role="tabpanel"
         :aria-labelledby="`${panelId}-tab-${active}`"
-        class="run-builder-panel"
+        :class="projectStyles.runBuilderPanel"
         :data-dragging="dragging"
         novalidate
         @submit.prevent="preview"
@@ -1144,99 +1363,3 @@ onBeforeUnmount(() => {
     </MotionConfig>
   </section>
 </template>
-<style>
-.draft-saved {
-  animation: draft-saved-in 420ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-@keyframes draft-saved-in {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-}
-.run-builder-muted {
-  opacity: 0.55;
-  filter: saturate(0.4);
-  transition:
-    opacity 400ms ease,
-    filter 400ms ease;
-}
-.run-builder-panel {
-  min-height: 24rem;
-  border-radius: 1.5rem;
-  transition: box-shadow 200ms ease;
-}
-.run-builder-panel[data-dragging='true'] {
-  box-shadow: 0 0 0 2px var(--primary);
-}
-.run-message {
-  border-radius: 1rem;
-  animation: run-message-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.run-message[data-tone='destructive'] {
-  box-shadow: 0 14px 30px -22px rgb(220 38 38 / 0.55);
-}
-@keyframes run-message-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.99);
-  }
-}
-.run-message-fix {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  transition: background-color 150ms ease;
-}
-.run-message-fix:hover {
-  background: color-mix(in srgb, currentColor 18%, transparent);
-}
-.run-message-fix svg {
-  width: 0.8rem;
-  height: 0.8rem;
-}
-.run-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.75rem 0.75rem 0.75rem 1rem;
-  border-radius: 1rem;
-  background: var(--surface);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 12%, transparent),
-    0 16px 36px -20px rgb(0 0 0 / 0.35);
-}
-.run-notice-enter-active {
-  transition:
-    opacity 260ms ease,
-    transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.run-notice-leave-active {
-  transition:
-    opacity 160ms ease,
-    transform 160ms ease;
-}
-.run-notice-enter-from,
-.run-notice-leave-to {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.98);
-}
-.run-notice-icon {
-  width: 1.1rem;
-  height: 1.1rem;
-  flex: none;
-  margin-top: 0.1rem;
-  color: var(--primary);
-}
-.run-notice[data-tone='success'] .run-notice-icon {
-  color: var(--success);
-}
-.run-notice[data-tone='warning'] .run-notice-icon {
-  color: var(--warning);
-}
-</style>

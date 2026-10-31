@@ -1,25 +1,8 @@
 <script setup lang="ts">
-import { useClientMessages } from '../../composables/useClientMessages';
-import { useI18n } from 'vue-i18n';
 import { trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
 import { Field as VeeField } from 'vee-validate';
-import { computed, useId } from 'vue';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Field, FieldLabel, FieldDescription, FieldError } from '@/components/ui/field';
 import type { Json } from '../../lib/daemon-api';
 import { trainingFieldMetadata } from '../../../shared/schemas/training-request';
-import InfoChip from '../common/InfoChip.vue';
 
 const { clientMessage } = useClientMessages();
 const { t } = useI18n({ useScope: 'global' });
@@ -30,6 +13,7 @@ const idPrefix = useId();
 const controlId = computed(() => `${idPrefix}-training-${props.name}`);
 const label = computed(() => (messageKeys ? t(messageKeys.label) : props.name));
 const description = computed(() => (messageKeys ? t(messageKeys.description) : props.name));
+
 const defaultText = computed(() => {
   if (
     !option ||
@@ -37,19 +21,24 @@ const defaultText = computed(() => {
     (Array.isArray(option.default) && !option.default.length)
   )
     return t('project.none');
+
   return Array.isArray(option.default) ? option.default.join(', ') : String(option.default);
 });
+
 function listText(value: Json): string {
   return Array.isArray(value) ? value.join('\n') : '';
 }
+
 function listValue(value: string | number): (string | number)[] {
   if (!option || String(value).trim() === '') return [];
+
   return String(value)
     .split('\n')
     .map((item) =>
       option.kind === 'number' ? (item.trim() === '' ? Number.NaN : Number(item)) : item,
     );
 }
+
 function stringValue(value: string | number): string | null {
   return value === '' && option?.default === null ? null : String(value);
 }

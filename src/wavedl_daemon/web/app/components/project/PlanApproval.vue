@@ -1,19 +1,12 @@
 <script setup lang="ts">
-import { useId } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Empty, EmptyDescription } from '@/components/ui/empty';
 import type { PlanView } from '../../lib/daemon-api';
-import { usePlanSummary } from '../../composables/usePlanSummary';
-import InfoChip from '../common/InfoChip.vue';
 
 const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ plan: PlanView; busy: boolean; acknowledged?: boolean }>();
 const rawDisclosureId = useId();
+
 defineEmits<{ submit: []; status: [] }>();
+
 const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.plan);
 </script>
 

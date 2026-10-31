@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { useId } from 'vue';
+import { cn } from '@/lib/utils';
 
 /** `titleHidden` keeps the accessible name for panels whose controls speak for themselves. */
 defineProps<{ title: string; description?: string; titleHidden?: boolean }>();
+
 const titleId = useId();
+
+const projectStyles = {
+  inspectorPanel: cn(
+    'flex flex-col gap-6 [animation:inspector-enter_420ms_cubic-bezier(0.22,_1,_0.36,_1)]',
+  ),
+};
 </script>
 <template>
-  <section class="inspector-panel" :aria-labelledby="titleId">
+  <section :class="projectStyles.inspectorPanel" :aria-labelledby="titleId">
     <h2 v-if="titleHidden" :id="titleId" class="sr-only">{{ title }}</h2>
     <header v-else class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div class="min-w-0">
@@ -22,18 +29,3 @@ const titleId = useId();
     <slot />
   </section>
 </template>
-<style>
-.inspector-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  animation: inspector-enter 420ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-/* Panels toggle with v-show; a display change restarts this entrance. */
-@keyframes inspector-enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-</style>

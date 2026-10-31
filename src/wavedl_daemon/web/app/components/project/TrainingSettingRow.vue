@@ -1,27 +1,11 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { cn } from '@/lib/utils';
 import { Field as VeeField } from 'vee-validate';
 import { RotateCcw } from '@lucide/vue';
-import { FieldError } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { useClientMessages } from '../../composables/useClientMessages';
 import { trainingChoiceLabel, trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
 import { trainingDefaults, trainingFieldMetadata } from '../../../shared/schemas/training-request';
 import type { Json } from '../../lib/daemon-api';
 import type { TrainingFieldName } from '../../lib/training-layout';
-import NumberField from './NumberField.vue';
-import SegmentedControl from './SegmentedControl.vue';
 
 const props = defineProps<{ name: TrainingFieldName; disabled: boolean }>();
 const { t } = useI18n({ useScope: 'global' });
@@ -32,17 +16,22 @@ const idPrefix = useId();
 const controlId = `${idPrefix}-training-${props.name}`;
 const descriptionId = `${controlId}-description`;
 const label = computed(() => (keys ? t(keys.label) : props.name));
+
 // Many CLI help strings restate the label ("Optimizer for training"); drop those.
 const description = computed(() => {
   const text = keys ? t(keys.description) : '';
+
   const plain = (value: string) =>
     value
       .toLocaleLowerCase()
       .replace(/ (for training|mode)$/, '')
       .trim();
+
   return plain(text) === plain(label.value) ? '' : text;
 });
+
 const defaultValue = trainingDefaults[props.name];
+
 /** Example values shown inside free-text fields; technical, so never translated. */
 const examples: Partial<Record<TrainingFieldName, readonly string[]>> = {
   betas: ['0.9', '0.999'],
@@ -56,11 +45,19 @@ const examples: Partial<Record<TrainingFieldName, readonly string[]>> = {
   project_name: ['DL-Training'],
   run_name: ['resnet18-baseline'],
 };
+
 const placeholder = computed(() => {
   const values = examples[props.name];
-  return values ? t('builder.example', { value: values.join(option?.multiple ? '\n' : ', ') }) : undefined;
+
+  return values
+    ? t('builder.example', { value: values.join(option?.multiple ? '\n' : ', ') })
+    : undefined;
 });
-const segmented = computed(() => !!option && option.choices.length > 0 && option.choices.length <= 3);
+
+const segmented = computed(
+  () => !!option && option.choices.length > 0 && option.choices.length <= 3,
+);
+
 const stepStyle = computed(() =>
   props.name === 'batch_size'
     ? 'double'
@@ -68,6 +65,7 @@ const stepStyle = computed(() =>
       ? 'decade'
       : 'linear',
 );
+
 const minimum = computed(() =>
   option?.kind === 'integer' && !['seed', 'workers'].includes(props.name)
     ? ['patience', 'cv', 'save_every', 'warmup_epochs', 'scheduler_patience'].includes(props.name)
@@ -79,36 +77,72 @@ const minimum = computed(() =>
 function changed(value: Json | undefined): boolean {
   return JSON.stringify(value) !== JSON.stringify(defaultValue);
 }
+
 function listText(value: Json | undefined): string {
   return Array.isArray(value) ? value.join('\n') : '';
 }
+
 function listValue(value: string | number): (string | number)[] {
   if (!option || String(value).trim() === '') return [];
+
   return String(value)
     .split('\n')
     .map((item) =>
       option.kind === 'number' ? (item.trim() === '' ? Number.NaN : Number(item)) : item,
     );
 }
+
 function textValue(value: string | number): string | null {
   return value === '' && defaultValue === null ? null : String(value);
 }
+
 function numeric(value: Json | undefined): number | null {
   return typeof value === 'number' ? value : null;
 }
+
 function stringValue(value: Json | undefined): string {
-  return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
+  return typeof value === 'string'
+    ? value
+    : value === null || value === undefined
+      ? ''
+      : String(value);
 }
+
 function choiceValue(value: unknown, fallback: Json | undefined): string | undefined {
-  return typeof value === 'string' && value ? value : typeof fallback === 'string' ? fallback : undefined;
+  return typeof value === 'string' && value
+    ? value
+    : typeof fallback === 'string'
+      ? fallback
+      : undefined;
 }
+
+const projectStyles = {
+  trainingRow: cn(
+    '[&_+_.training-row]:[border-top:0.5px_solid_color-mix(in_srgb,_var(--foreground)_12%,_transparent)]',
+    '[&[data-invalid]_.surface-row]:[background:color-mix(in_srgb,_#bc2836_5%,_transparent)]',
+  ),
+  trainingRowDot: cn(
+    'flex-none size-[0.4rem] ml-[-0.35rem] rounded-full bg-transparent',
+    '[transition:background-color_200ms_ease,_transform_300ms_cubic-bezier(0.34,_1.56,_0.64,_1)] [transform:scale(0.4)]',
+    "[&[data-changed='true']]:bg-primary [&[data-changed='true']]:[transform:scale(1)]",
+  ),
+  trainingRowReset: cn(
+    'grid size-7 flex-none place-items-center rounded-full text-muted-foreground',
+    '[animation:reset-in_260ms_cubic-bezier(0.22,_1,_0.36,_1)] [&:hover:not(:disabled)]:text-primary',
+    '[&:hover:not(:disabled)]:[background:color-mix(in_srgb,_var(--primary)_10%,_transparent)] [&_svg]:size-[0.85rem]',
+  ),
+};
 </script>
 <template>
   <VeeField v-if="option" v-slot="{ field, errors }" :name="`config.${name}`" :keep-value="true">
-    <div class="training-row" :data-invalid="errors.length ? true : undefined" :data-field="name">
+    <div
+      :class="cn('training-row', projectStyles.trainingRow)"
+      :data-invalid="errors.length ? true : undefined"
+      :data-field="name"
+    >
       <div class="surface-row" :class="option.multiple ? 'flex-wrap' : ''">
         <span
-          class="training-row-dot"
+          :class="projectStyles.trainingRowDot"
           :data-changed="changed(field.value)"
           :aria-label="changed(field.value) ? t('builder.changedFromDefault') : undefined"
           :role="changed(field.value) ? 'img' : undefined"
@@ -128,7 +162,7 @@ function choiceValue(value: unknown, fallback: Json | undefined): string | undef
         <button
           v-if="changed(field.value)"
           type="button"
-          class="training-row-reset"
+          :class="projectStyles.trainingRowReset"
           :disabled="disabled"
           :aria-label="t('builder.resetSetting', { label })"
           :title="t('builder.resetSetting', { label })"
@@ -151,7 +185,12 @@ function choiceValue(value: unknown, fallback: Json | undefined): string | undef
             v-else-if="segmented && option"
             :id="controlId"
             :model-value="choiceValue(field.value, defaultValue)"
-            :options="option.choices.map((choice) => ({ value: choice, label: trainingChoiceLabel(name, choice, t) }))"
+            :options="
+              option.choices.map((choice) => ({
+                value: choice,
+                label: trainingChoiceLabel(name, choice, t),
+              }))
+            "
             :disabled="disabled"
             :label="label"
             :test-id="`training-field-${name}`"
@@ -226,59 +265,7 @@ function choiceValue(value: unknown, fallback: Json | undefined): string | undef
           />
         </div>
       </div>
-      <FieldError
-        v-if="errors.length"
-        class="px-4 pb-3 pl-8"
-        :errors="errors.map(clientMessage)"
-      />
+      <FieldError v-if="errors.length" class="px-4 pb-3 pl-8" :errors="errors.map(clientMessage)" />
     </div>
   </VeeField>
 </template>
-<style>
-.training-row + .training-row {
-  border-top: 0.5px solid color-mix(in srgb, var(--foreground) 12%, transparent);
-}
-.training-row-dot {
-  flex: none;
-  width: 0.4rem;
-  height: 0.4rem;
-  margin-left: -0.35rem;
-  border-radius: 999px;
-  background: transparent;
-  transition:
-    background-color 200ms ease,
-    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  transform: scale(0.4);
-}
-.training-row-dot[data-changed='true'] {
-  background: var(--primary);
-  transform: scale(1);
-}
-.training-row-reset {
-  display: grid;
-  width: 1.75rem;
-  height: 1.75rem;
-  flex: none;
-  place-items: center;
-  border-radius: 999px;
-  color: var(--muted-foreground);
-  animation: reset-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.training-row-reset:hover:not(:disabled) {
-  color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-}
-.training-row-reset svg {
-  width: 0.85rem;
-  height: 0.85rem;
-}
-@keyframes reset-in {
-  from {
-    opacity: 0;
-    transform: rotate(-90deg) scale(0.6);
-  }
-}
-.training-row[data-invalid] .surface-row {
-  background: color-mix(in srgb, #bc2836 5%, transparent);
-}
-</style>

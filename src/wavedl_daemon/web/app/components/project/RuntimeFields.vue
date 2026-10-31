@@ -1,20 +1,5 @@
 <script setup lang="ts">
-import { useClientMessages } from '../../composables/useClientMessages';
-import { useI18n } from 'vue-i18n';
 import { Field as VeeField } from 'vee-validate';
-import { useId } from 'vue';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Field, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field';
-import InfoChip from '../common/InfoChip.vue';
 import {
   runtimeValueMessageKeys,
   runtimeValues,
@@ -24,16 +9,22 @@ import {
 
 const { clientMessage } = useClientMessages();
 const { t } = useI18n({ useScope: 'global' });
+
 defineProps<{ disabled: boolean }>();
+
 const idPrefix = useId();
+
 function controlId(name: string): string {
   return `${idPrefix}-runtime-${name.replaceAll('.', '-')}`;
 }
+
 function runtimeValueLabel(value: string): string {
   if (!(runtimeValues as readonly string[]).includes(value)) return value;
   const key = runtimeValueMessageKeys[value as RuntimeValue];
+
   return key ? t(key) : value;
 }
+
 const textFields = [
   {
     name: 'runtime.python',
@@ -41,6 +32,7 @@ const textFields = [
     description: runtimeFieldMessageKeys.interpreterDescription,
   },
 ];
+
 const choices = [
   { name: 'backend', label: runtimeFieldMessageKeys.backend, values: ['local', 'slurm'] },
   {
@@ -54,6 +46,7 @@ const choices = [
     values: ['cpu', 'mps', 'cuda', 'auto'],
   },
 ];
+
 const counts = [
   { name: 'topology.num_machines', label: runtimeFieldMessageKeys.machines, min: 1 },
   {

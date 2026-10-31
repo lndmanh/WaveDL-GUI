@@ -1,12 +1,15 @@
 <script setup lang="ts" generic="Value extends string">
-import { useId } from 'vue';
-import { LayoutGroup, motion } from 'motion-v';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
+import { motion } from 'motion-v';
 
 const props = withDefaults(
   defineProps<{
     modelValue: Value | undefined;
-    options: readonly { readonly value: Value; readonly label: string; readonly disabled?: boolean }[];
+    options: readonly {
+      readonly value: Value;
+      readonly label: string;
+      readonly disabled?: boolean;
+    }[];
     label: string;
     id?: string;
     disabled?: boolean;
@@ -15,14 +18,31 @@ const props = withDefaults(
   }>(),
   { id: undefined, disabled: false, testId: undefined, size: 'sm' },
 );
+
 const emit = defineEmits<{ 'update:modelValue': [value: Value] }>();
 const thumb = `${useId()}-thumb`;
 
 function choose(value: unknown) {
   // A single toggle group emits '' when the active item is pressed again; keep it.
   const option = props.options.find((item) => item.value === value);
+
   if (option) emit('update:modelValue', option.value);
 }
+
+const projectStyles = {
+  segmentedControl: cn(
+    'gap-0.5 p-0.5 rounded-[0.65rem] [background:color-mix(in_srgb,_var(--foreground)_6.5%,_transparent)] max-w-full',
+    "overflow-x-auto [scrollbar-width:none] [&[data-size='md']_.segmented-control-item]:h-[2.2rem]",
+    "[&[data-size='md']_.segmented-control-item]:px-4 [&[data-size='md']_.segmented-control-item]:text-[0.85rem]",
+  ),
+  segmentedControlItem: cn(
+    'relative h-[1.85rem] min-w-0 rounded-sm px-[0.8rem] text-muted-foreground text-[0.8rem] font-medium',
+    "[transition:color_160ms_ease] [&:hover]:text-foreground [&[data-state='on']]:text-foreground",
+  ),
+  segmentedControlThumb: cn(
+    'absolute [inset:0] rounded-[inherit] bg-surface shadow-[0_1px_2px_rgb(0_0_0_/_0.12),_0_0_0_0.5px_rgb(0_0_0_/_0.06)]',
+  ),
+};
 </script>
 <template>
   <LayoutGroup>
@@ -30,7 +50,7 @@ function choose(value: unknown) {
       :id="id"
       type="single"
       :spacing="1"
-      class="segmented-control"
+      :class="cn('segmented-control', projectStyles.segmentedControl)"
       :data-size="size"
       :model-value="modelValue"
       :disabled="disabled"
@@ -44,12 +64,17 @@ function choose(value: unknown) {
         :value="option.value"
         :disabled="option.disabled"
         :data-value="option.value"
-        class="segmented-control-item data-[state=on]:bg-transparent hover:bg-transparent"
+        :class="
+          cn(
+            'segmented-control-item data-[state=on]:bg-transparent hover:bg-transparent',
+            projectStyles.segmentedControlItem,
+          )
+        "
       >
         <motion.span
           v-if="option.value === modelValue"
           :layout-id="thumb"
-          class="segmented-control-thumb"
+          :class="projectStyles.segmentedControlThumb"
           :transition="{ type: 'spring', stiffness: 560, damping: 38 }"
           aria-hidden="true"
         />
@@ -58,45 +83,3 @@ function choose(value: unknown) {
     </ToggleGroup>
   </LayoutGroup>
 </template>
-<style>
-.segmented-control {
-  gap: 2px;
-  padding: 2px;
-  border-radius: 0.65rem;
-  background: color-mix(in srgb, var(--foreground) 6.5%, transparent);
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.segmented-control-item {
-  position: relative;
-  height: 1.85rem;
-  min-width: 0;
-  border-radius: 0.5rem;
-  padding-inline: 0.8rem;
-  color: var(--muted-foreground);
-  font-size: 0.8rem;
-  font-weight: 500;
-  transition: color 160ms ease;
-}
-.segmented-control[data-size='md'] .segmented-control-item {
-  height: 2.2rem;
-  padding-inline: 1rem;
-  font-size: 0.85rem;
-}
-.segmented-control-item:hover {
-  color: var(--foreground);
-}
-.segmented-control-item[data-state='on'] {
-  color: var(--foreground);
-}
-.segmented-control-thumb {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--surface);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.12),
-    0 0 0 0.5px rgb(0 0 0 / 0.06);
-}
-</style>

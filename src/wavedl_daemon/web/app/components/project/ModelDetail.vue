@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { cn } from '@/lib/utils';
 import { Check, CircleAlert, CircleCheck, Info } from '@lucide/vue';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import type { DatasetInspection } from '../../lib/dataset-inspection';
 import { entryModel, type ModelEntry } from '../../lib/model-entries';
 import { modelShapeGuidance } from '../../lib/model-shape-guidance';
 import { modelPresentation } from '../../i18n/model-descriptions';
 import { modelCategoryMessageKeys, shapeGuidanceMessageKeys } from '../../i18n/dynamic-keys';
-import { mappedMessageKey, modelFamilyMessageKeys, modelTierMessageKeys } from '../catalog/model-facets';
+import {
+  mappedMessageKey,
+  modelFamilyMessageKeys,
+  modelTierMessageKeys,
+} from '../catalog/model-facets';
 
 const props = defineProps<{
   entry: ModelEntry;
@@ -19,46 +20,90 @@ const props = defineProps<{
   singleChannel: boolean;
   disabled: boolean;
 }>();
+
 const emit = defineEmits<{ 'update:weights': [value: boolean]; choose: [] }>();
 const { t, locale } = useI18n({ useScope: 'global' });
 const weightsId = useId();
 const tiers = ['Edge', 'Low', 'Medium', 'High'];
 
 const model = computed(() => entryModel(props.entry, props.weights));
-const text = computed(() =>
-  modelPresentation(model.value, locale.value === 'vi' ? 'vi' : 'en', t),
-);
+
+const text = computed(() => modelPresentation(model.value, locale.value === 'vi' ? 'vi' : 'en', t));
+
 const guidance = computed(() =>
   modelShapeGuidance(props.inspection, model.value, props.singleChannel),
 );
+
 const dataDims = computed(() => props.inspection?.inputShape.length ?? 0);
+
 const category = computed(() => {
   const key = mappedMessageKey(modelCategoryMessageKeys, model.value.category);
+
   return key ? t(key) : model.value.category;
 });
+
 const family = computed(() => {
   const key = mappedMessageKey(modelFamilyMessageKeys, model.value.architectureFamily);
+
   return key ? t(key) : model.value.architectureFamily;
 });
+
 const tier = computed(() => {
   const key = mappedMessageKey(modelTierMessageKeys, model.value.computeTier);
+
   return key ? t(key) : model.value.computeTier;
 });
+
 const title = computed(() => props.entry.primary.displayName.replace(/ \(Pretrained\)$/, ''));
 const tierLevel = computed(() => tiers.indexOf(model.value.computeTier) + 1);
+
 // Bundled translations cover pros only; cons stay in the daemon's English.
 const cons = computed(() => (locale.value === 'en' ? model.value.cons.slice(0, 3) : []));
+
 const shapeNote = computed(() =>
   t(shapeGuidanceMessageKeys[guidance.value.status], {
     shape: guidance.value.shape,
     dims: guidance.value.dimensions,
   }),
 );
+
 const megabytes = computed(() =>
   model.value.sizeMb >= 1000
     ? `${(model.value.sizeMb / 1000).toFixed(1)} GB`
     : `${Math.round(model.value.sizeMb)} MB`,
 );
+
+const projectStyles = {
+  modelDetailChoose: cn('min-w-40 rounded-[0.8rem]'),
+  modelStat: cn(
+    'flex flex-col gap-[0.3rem] py-[0.7rem] px-[0.85rem] rounded-[0.8rem]',
+    '[background:color-mix(in_srgb,_var(--foreground)_4.5%,_transparent)] [&_dt]:text-muted-foreground',
+    '[&_dt]:text-[0.72rem] [&_dd]:m-0 [&_dd]:text-[1.05rem] [&_dd]:font-semibold [&_dd]:tracking-[-0.01em]',
+  ),
+  modelTier: cn(
+    'block w-[0.9rem] h-[0.35rem] rounded-full [background:color-mix(in_srgb,_var(--foreground)_14%,_transparent)]',
+    "[&[data-on='true']]:bg-primary",
+  ),
+  modelDim: cn(
+    'py-[0.05rem] px-[0.4rem] rounded-[0.4rem] text-[0.85rem]',
+    "[background:color-mix(in_srgb,_var(--foreground)_7%,_transparent)] [&[data-match='true']]:text-primary-foreground",
+    "[&[data-match='true']]:bg-primary",
+  ),
+  modelFit: cn(
+    'flex gap-[0.6rem] py-3 px-[0.9rem] rounded-[0.8rem] text-[0.82rem] leading-[1.45]',
+    '[background:color-mix(in_srgb,_var(--foreground)_4%,_transparent)] [&_svg]:flex-none [&_svg]:size-4',
+    "[&_svg]:mt-[0.1rem] [&[data-status='described']]:[background:color-mix(in_srgb,_var(--success)_9%,_transparent)]",
+    "[&[data-status='described']_svg]:text-success",
+    "[&[data-status='mismatch']]:[background:color-mix(in_srgb,_var(--warning)_11%,_transparent)]",
+    "[&[data-status='mismatch']_svg]:text-warning",
+  ),
+  modelListTitle: cn('mb-2 text-[0.7rem] font-[650] tracking-[0.06em] uppercase'),
+  modelPoints: cn(
+    'flex flex-col gap-[0.45rem] text-[0.85rem] leading-[1.45] [&_li]:relative [&_li]:pl-[0.9rem]',
+    "[&_li::before]:[content:''] [&_li::before]:absolute [&_li::before]:left-0 [&_li::before]:top-[0.55em]",
+    '[&_li::before]:size-[0.3rem] [&_li::before]:rounded-full [&_li::before]:bg-current [&_li::before]:opacity-35',
+  ),
+};
 </script>
 <template>
   <article class="flex min-w-0 flex-col gap-6" :aria-label="title">
@@ -78,7 +123,7 @@ const megabytes = computed(() =>
       <Button
         type="button"
         size="lg"
-        class="model-detail-choose"
+        :class="projectStyles.modelDetailChoose"
         :variant="selected ? 'secondary' : 'default'"
         :disabled="disabled || selected"
         data-testid="model-select"
@@ -92,30 +137,35 @@ const megabytes = computed(() =>
     <p class="max-w-[62ch] text-[0.95rem] leading-relaxed">{{ text.bestFor }}</p>
 
     <dl class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-      <div class="model-stat">
+      <div :class="projectStyles.modelStat">
         <dt>{{ t('builder.parameters') }}</dt>
         <dd>{{ t('builder.millions', { value: model.paramsM }) }}</dd>
       </div>
-      <div class="model-stat">
+      <div :class="projectStyles.modelStat">
         <dt>{{ t('builder.weightsSize') }}</dt>
         <dd>{{ megabytes }}</dd>
       </div>
-      <div class="model-stat">
+      <div :class="projectStyles.modelStat">
         <dt>{{ t('builder.compute') }}</dt>
         <dd class="flex items-center gap-2">
           <span class="flex gap-0.5" aria-hidden="true">
-            <i v-for="level in 4" :key="level" class="model-tier" :data-on="level <= tierLevel" />
+            <i
+              v-for="level in 4"
+              :key="level"
+              :class="projectStyles.modelTier"
+              :data-on="level <= tierLevel"
+            />
           </span>
           <span class="text-sm">{{ tier }}</span>
         </dd>
       </div>
-      <div class="model-stat">
+      <div :class="projectStyles.modelStat">
         <dt>{{ t('builder.inputs') }}</dt>
         <dd class="flex gap-1">
           <span
             v-for="dims in model.supportedDims"
             :key="dims"
-            class="model-dim"
+            :class="projectStyles.modelDim"
             :data-match="dims === dataDims"
             >{{ dims }}D</span
           >
@@ -150,7 +200,7 @@ const megabytes = computed(() =>
 
     <div
       v-if="inspection"
-      class="model-fit"
+      :class="projectStyles.modelFit"
       :data-status="guidance.status"
       role="note"
     >
@@ -162,14 +212,16 @@ const megabytes = computed(() =>
 
     <div class="grid gap-6 sm:grid-cols-2">
       <section v-if="text.pros.length">
-        <h4 class="model-list-title text-success">{{ t('builder.goodAt') }}</h4>
-        <ul class="model-points">
+        <h4 :class="cn('text-success', projectStyles.modelListTitle)">{{ t('builder.goodAt') }}</h4>
+        <ul :class="projectStyles.modelPoints">
           <li v-for="pro in text.pros" :key="pro">{{ pro }}</li>
         </ul>
       </section>
       <section v-if="cons.length">
-        <h4 class="model-list-title text-warning">{{ t('builder.watchOut') }}</h4>
-        <ul class="model-points">
+        <h4 :class="cn('text-warning', projectStyles.modelListTitle)">
+          {{ t('builder.watchOut') }}
+        </h4>
+        <ul :class="projectStyles.modelPoints">
           <li v-for="con in cons" :key="con">{{ con }}</li>
         </ul>
       </section>
@@ -179,103 +231,3 @@ const megabytes = computed(() =>
     </p>
   </article>
 </template>
-<style>
-.model-detail-choose {
-  min-width: 10rem;
-  border-radius: 0.8rem;
-}
-.model-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.7rem 0.85rem;
-  border-radius: 0.8rem;
-  background: color-mix(in srgb, var(--foreground) 4.5%, transparent);
-}
-.model-stat dt {
-  color: var(--muted-foreground);
-  font-size: 0.72rem;
-}
-.model-stat dd {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.model-tier {
-  display: block;
-  width: 0.9rem;
-  height: 0.35rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--foreground) 14%, transparent);
-}
-.model-tier[data-on='true'] {
-  background: var(--primary);
-}
-.model-dim {
-  padding: 0.05rem 0.4rem;
-  border-radius: 0.4rem;
-  font-size: 0.85rem;
-  background: color-mix(in srgb, var(--foreground) 7%, transparent);
-}
-.model-dim[data-match='true'] {
-  color: var(--primary-foreground);
-  background: var(--primary);
-}
-.model-fit {
-  display: flex;
-  gap: 0.6rem;
-  padding: 0.75rem 0.9rem;
-  border-radius: 0.8rem;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-}
-.model-fit svg {
-  flex: none;
-  width: 1rem;
-  height: 1rem;
-  margin-top: 0.1rem;
-}
-.model-fit[data-status='described'] {
-  background: color-mix(in srgb, var(--success) 9%, transparent);
-}
-.model-fit[data-status='described'] svg {
-  color: var(--success);
-}
-.model-fit[data-status='mismatch'] {
-  background: color-mix(in srgb, var(--warning) 11%, transparent);
-}
-.model-fit[data-status='mismatch'] svg {
-  color: var(--warning);
-}
-.model-list-title {
-  margin-bottom: 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.model-points {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  font-size: 0.85rem;
-  line-height: 1.45;
-}
-.model-points li {
-  position: relative;
-  padding-left: 0.9rem;
-}
-.model-points li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.55em;
-  width: 0.3rem;
-  height: 0.3rem;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.35;
-}
-</style>

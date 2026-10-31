@@ -1,20 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, shallowRef, toRaw, useId, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { cn } from '@/lib/utils';
 import { Check, Plus, RefreshCw, Search, Sparkles } from '@lucide/vue';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { FieldError } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { customModelSchema } from '../../../shared/schemas/training-request';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { DatasetInspection } from '../../lib/dataset-inspection';
@@ -29,12 +15,8 @@ import {
 } from '../../lib/model-entries';
 import { modelShapeGuidance } from '../../lib/model-shape-guidance';
 import { browserStorage } from '../../lib/preferences';
-import type { CatalogueMessage } from '../../composables/useModelCatalogue';
 import { modelCategoryMessageKeys } from '../../i18n/dynamic-keys';
 import { mappedMessageKey, modelTierMessageKeys } from '../catalog/model-facets';
-import InspectorPanel from './InspectorPanel.vue';
-import ModelDetail from './ModelDetail.vue';
-import SegmentedControl from './SegmentedControl.vue';
 
 const props = defineProps<{
   session: ConnectionSession;
@@ -47,18 +29,25 @@ const props = defineProps<{
   singleChannel: boolean;
   disabled: boolean;
 }>();
+
 const emit = defineEmits<{
   choose: [model: ModelDescription, pretrained: boolean];
   custom: [selection: ModelSelection];
   reload: [];
 }>();
+
 const { t } = useI18n({ useScope: 'global' });
 const listId = useId();
 const searchId = useId();
 const customId = useId();
-const tiers = ['Edge', 'Low', 'Medium', 'High'] as const;
+
+type ModelTier = 'Edge' | 'Low' | 'Medium' | 'High';
+
+const tiers: readonly ModelTier[] = ['Edge', 'Low', 'Medium', 'High'];
+
 type Fit = 'fits' | 'all';
-type Tier = 'any' | (typeof tiers)[number];
+
+type Tier = 'any' | ModelTier;
 
 const query = shallowRef('');
 const fit = shallowRef<Fit>('fits');
@@ -72,16 +61,21 @@ const customError = shallowRef('');
 const customBusy = shallowRef(false);
 
 const entries = computed(() => modelEntries(props.models));
+
 const selectedKey = computed(() =>
   props.selection && props.selection.source !== 'custom'
     ? modelEntryKey(props.selection.model)
     : null,
 );
+
 function weightsFor(entry: ModelEntry): boolean {
   const choice = weightChoices.value[entry.key];
+
   if (choice !== undefined) return choice;
+
   return entry.key === selectedKey.value ? props.pretrained && !!entry.weighted : false;
 }
+
 function fits(entry: ModelEntry): boolean {
   return [entry.scratch, entry.weighted].some(
     (model) =>
@@ -89,11 +83,15 @@ function fits(entry: ModelEntry): boolean {
       modelShapeGuidance(props.inspection, model, props.singleChannel).status !== 'mismatch',
   );
 }
+
 const inspected = computed(() => (props.inspection?.inputShape.length ?? 0) > 0);
+
 const matching = computed(() => {
   const needle = query.value.trim().toLocaleLowerCase();
+
   return entries.value.filter((entry) => {
     const model = entry.primary;
+
     const haystack = [
       model.displayName,
       entry.key,
@@ -104,32 +102,41 @@ const matching = computed(() => {
     ]
       .join(' ')
       .toLocaleLowerCase();
+
     return (
       (!needle || haystack.includes(needle)) &&
       (tier.value === 'any' || model.computeTier === tier.value)
     );
   });
 });
+
 const fitting = computed(() => matching.value.filter(fits));
+
 const visible = computed(() =>
   inspected.value && fit.value === 'fits' ? fitting.value : matching.value,
 );
+
 const categoryOrder = Object.keys(modelCategoryMessageKeys);
+
 const groups = computed(() => {
   const recentEntries = recents.value.flatMap((key) =>
     visible.value.filter((entry) => entry.key === key),
   );
+
   const byCategory = new Map<string, ModelEntry[]>();
+
   for (const entry of visible.value)
     byCategory.set(entry.primary.category, [
       ...(byCategory.get(entry.primary.category) ?? []),
       entry,
     ]);
+
   const ordered = [...byCategory.entries()].sort(
     ([a], [b]) =>
       (categoryOrder.indexOf(a) + 1 || 99) - (categoryOrder.indexOf(b) + 1 || 99) ||
       a.localeCompare(b),
   );
+
   return [
     ...(recentEntries.length && !query.value
       ? [{ id: 'recent', label: t('builder.recent'), entries: recentEntries }]
@@ -138,13 +145,16 @@ const groups = computed(() => {
       id: category,
       label: (() => {
         const key = mappedMessageKey(modelCategoryMessageKeys, category);
+
         return key ? t(key) : category;
       })(),
       entries: [...items].sort((a, b) => a.primary.paramsM - b.primary.paramsM),
     })),
   ];
 });
+
 const flat = computed(() => groups.value.flatMap((group) => group.entries));
+
 const current = computed(
   () =>
     flat.value.find((entry) => entry.key === highlighted.value) ??
@@ -165,29 +175,38 @@ watch(
 function optionId(entry: ModelEntry, group: string): string {
   return `${listId}-${group.replace(/[^A-Za-z0-9]/g, '')}-${entry.key}`;
 }
+
 /** Rows, not entries: a recent model is listed twice and each copy is its own option. */
 const rows = computed(() =>
   groups.value.flatMap((group) =>
     group.entries.map((entry) => ({ entry, id: optionId(entry, group.id) })),
   ),
 );
+
 const cursor = shallowRef<string | null>(null);
+
 function highlight(entry: ModelEntry, group: string) {
   highlighted.value = entry.key;
   cursor.value = optionId(entry, group);
 }
+
 function navigate(event: KeyboardEvent) {
   const list = rows.value;
+
   if (!list.length) return;
+
   if (event.key === 'Enter' && current.value) {
     event.preventDefault();
     choose(current.value);
+
     return;
   }
+
   const index = Math.max(
     0,
     list.findIndex((row) => row.id === activeDescendant.value),
   );
+
   const next =
     event.key === 'ArrowDown'
       ? Math.min(list.length - 1, index + 1)
@@ -198,48 +217,63 @@ function navigate(event: KeyboardEvent) {
           : event.key === 'End'
             ? list.length - 1
             : null;
+
   const row = next === null ? undefined : list[next];
+
   if (!row) return;
   event.preventDefault();
   highlighted.value = row.entry.key;
   cursor.value = row.id;
   void nextTick(() => document.getElementById(row.id)?.scrollIntoView({ block: 'nearest' }));
 }
+
 function setWeights(entry: ModelEntry, value: boolean) {
   weightChoices.value = { ...weightChoices.value, [entry.key]: value };
 }
+
 function choose(entry: ModelEntry) {
   if (props.disabled) return;
   const weights = weightsFor(entry) && !!entry.weighted;
   recents.value = rememberRecentModel(browserStorage(), entry.key);
   emit('choose', entryModel(entry, weights), weights);
 }
+
 const activeDescendant = computed(() => {
   const key = current.value?.key;
   const matches = rows.value.filter((row) => row.entry.key === key);
+
   return (matches.find((row) => row.id === cursor.value) ?? matches[0])?.id;
 });
+
 const tierOptions = computed<{ value: Tier; label: string }[]>(() => [
   { value: 'any', label: t('builder.anySize') },
   ...tiers.map((value) => {
     const key = mappedMessageKey(modelTierMessageKeys, value);
+
     return { value, label: key ? t(key) : value };
   }),
 ]);
+
 const currentSelected = computed(() => {
   const entry = current.value;
+
   if (!entry || entry.key !== selectedKey.value || !props.selection) return false;
+
   return props.selection.model === entryModel(entry, weightsFor(entry)).id;
 });
 
 async function useCustom() {
   customError.value = '';
   const parsed = customModelSchema.safeParse({ modelId: customValue.value.trim() });
+
   if (!parsed.success) {
     customError.value = parsed.error.issues[0]?.message ?? t('project.customModelFailed');
+
     return;
   }
+
   customBusy.value = true;
+
   try {
     emit(
       'custom',
@@ -252,10 +286,45 @@ async function useCustom() {
     customBusy.value = false;
   }
 }
+
+const projectStyles = {
+  modelToolbar: cn('flex flex-wrap items-center gap-2'),
+  modelBrowser: cn(
+    'grid grid-cols-[minmax(15rem,_19rem)_minmax(0,_1fr)] min-h-136 overflow-hidden',
+    '[@media(max-width:_48rem)]:grid-cols-1',
+  ),
+  modelBrowserList: cn(
+    'flex min-h-0 flex-col [border-right:0.5px_solid_color-mix(in_srgb,_var(--foreground)_12%,_transparent)]',
+    '[background:color-mix(in_srgb,_var(--foreground)_2%,_transparent)] [@media(max-width:_48rem)]:[border-right:0]',
+    '[@media(max-width:_48rem)]:[border-bottom:0.5px_solid_color-mix(in_srgb,_var(--foreground)_12%,_transparent)]',
+  ),
+  modelBrowserScroll: cn(
+    'flex-1 max-h-136 overflow-y-auto p-[0.4rem_0.5rem_0.75rem] outline-none',
+    '[&:focus-visible]:shadow-[inset_0_0_0_2px_var(--primary)] [@media(max-width:_48rem)]:max-h-72',
+  ),
+  modelBrowserHeading: cn(
+    'sticky top-[-0.4rem] z-1 p-[0.75rem_0.6rem_0.3rem] text-muted-foreground text-[0.68rem] font-[650] tracking-[0.06em]',
+    'uppercase [background:linear-gradient(var(--surface)_70%,_transparent)]',
+  ),
+  modelBrowserRow: cn(
+    'flex items-center gap-2 py-[0.42rem] px-[0.6rem] rounded-[0.55rem] text-[0.86rem] cursor-default select-none',
+    "[&:hover:not([aria-selected='true'])]:[background:color-mix(in_srgb,_var(--foreground)_5%,_transparent)]",
+    "[&[aria-selected='true']]:text-primary-foreground [&[aria-selected='true']]:bg-primary [&[data-dim]]:opacity-45",
+    "[&[aria-selected='true']_.model-browser-size]:text-inherit [&[aria-selected='true']_.model-browser-size]:opacity-80",
+    "[&[aria-selected='true']_.model-browser-check]:text-inherit",
+  ),
+  modelBrowserSize: cn('text-muted-foreground text-xs/[inherit] tabular-nums'),
+  modelBrowserGlyph: cn('size-[0.8rem] flex-none opacity-55'),
+  modelBrowserCheck: cn('size-[0.9rem] flex-none text-primary'),
+  modelBrowserFooter: cn(
+    'p-[0.4rem] [border-top:0.5px_solid_color-mix(in_srgb,_var(--foreground)_12%,_transparent)]',
+  ),
+  modelBrowserDetail: cn('min-w-0 p-[1.75rem_2rem_2rem] [@media(max-width:_48rem)]:p-5'),
+};
 </script>
 <template>
   <InspectorPanel :title="t('builder.modelTitle')" title-hidden>
-    <div class="model-toolbar">
+    <div :class="projectStyles.modelToolbar">
       <div class="relative min-w-40 flex-1">
         <Search
           class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -320,8 +389,8 @@ async function useCustom() {
       </AlertDescription>
     </Alert>
 
-    <div class="surface-group model-browser">
-      <div class="model-browser-list">
+    <div :class="cn('surface-group', projectStyles.modelBrowser)">
+      <div :class="projectStyles.modelBrowserList">
         <p v-if="busy" role="status" class="sr-only">{{ t('catalog.readingModels') }}</p>
         <div v-if="busy" class="flex flex-col gap-2 p-3" aria-hidden="true">
           <Skeleton v-for="index in 8" :key="index" class="h-8 w-full rounded-lg" />
@@ -331,19 +400,19 @@ async function useCustom() {
           :id="listId"
           role="listbox"
           tabindex="0"
-          class="model-browser-scroll"
+          :class="projectStyles.modelBrowserScroll"
           :aria-label="t('catalog.modelCatalog')"
           :aria-activedescendant="activeDescendant"
           @keydown="navigate"
         >
           <div v-for="group in groups" :key="group.id" role="group" :aria-label="group.label">
-            <p class="model-browser-heading" aria-hidden="true">{{ group.label }}</p>
+            <p :class="projectStyles.modelBrowserHeading" aria-hidden="true">{{ group.label }}</p>
             <div
               v-for="entry in group.entries"
               :id="optionId(entry, group.id)"
               :key="`${group.id}-${entry.key}`"
               role="option"
-              class="model-browser-row"
+              :class="projectStyles.modelBrowserRow"
               :aria-selected="optionId(entry, group.id) === activeDescendant"
               :data-model-entry="entry.key"
               :data-dim="inspected && !fits(entry) ? true : undefined"
@@ -354,13 +423,15 @@ async function useCustom() {
               <span class="min-w-0 flex-1 truncate">{{ entry.primary.displayName }}</span>
               <Sparkles
                 v-if="entry.weighted"
-                class="model-browser-glyph"
+                :class="projectStyles.modelBrowserGlyph"
                 :aria-label="t('catalog.pretrained')"
               />
-              <span class="model-browser-size">{{ entry.primary.paramsM }}M</span>
+              <span :class="cn('model-browser-size', projectStyles.modelBrowserSize)"
+                >{{ entry.primary.paramsM }}M</span
+              >
               <Check
                 v-if="entry.key === selectedKey"
-                class="model-browser-check"
+                :class="cn('model-browser-check', projectStyles.modelBrowserCheck)"
                 :aria-label="t('builder.modelInUse')"
               />
             </div>
@@ -369,7 +440,7 @@ async function useCustom() {
         <p v-else-if="!message" role="status" class="p-6 text-center text-sm text-muted-foreground">
           {{ t('catalog.noModels') }}
         </p>
-        <div class="model-browser-footer">
+        <div :class="projectStyles.modelBrowserFooter">
           <Button
             v-if="!customOpen"
             type="button"
@@ -405,7 +476,7 @@ async function useCustom() {
         </div>
       </div>
 
-      <div class="model-browser-detail" aria-live="polite">
+      <div :class="projectStyles.modelBrowserDetail" aria-live="polite">
         <div
           v-if="selection?.source === 'custom'"
           class="mb-6 rounded-xl bg-primary/8 px-4 py-3 text-sm"
@@ -432,113 +503,3 @@ async function useCustom() {
     </div>
   </InspectorPanel>
 </template>
-<style>
-.model-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-.model-browser {
-  display: grid;
-  grid-template-columns: minmax(15rem, 19rem) minmax(0, 1fr);
-  min-height: 34rem;
-  overflow: hidden;
-}
-.model-browser-list {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  border-right: 0.5px solid color-mix(in srgb, var(--foreground) 12%, transparent);
-  background: color-mix(in srgb, var(--foreground) 2%, transparent);
-}
-.model-browser-scroll {
-  flex: 1;
-  max-height: 34rem;
-  overflow-y: auto;
-  padding: 0.4rem 0.5rem 0.75rem;
-  outline: none;
-}
-.model-browser-scroll:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--primary);
-}
-.model-browser-heading {
-  position: sticky;
-  top: -0.4rem;
-  z-index: 1;
-  padding: 0.75rem 0.6rem 0.3rem;
-  color: var(--muted-foreground);
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: linear-gradient(var(--surface) 70%, transparent);
-}
-.model-browser-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.42rem 0.6rem;
-  border-radius: 0.55rem;
-  font-size: 0.86rem;
-  cursor: default;
-  user-select: none;
-}
-.model-browser-row:hover:not([aria-selected='true']) {
-  background: color-mix(in srgb, var(--foreground) 5%, transparent);
-}
-.model-browser-row[aria-selected='true'] {
-  color: var(--primary-foreground);
-  background: var(--primary);
-}
-.model-browser-row[data-dim] {
-  opacity: 0.45;
-}
-.model-browser-size {
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-.model-browser-row[aria-selected='true'] .model-browser-size {
-  color: inherit;
-  opacity: 0.8;
-}
-.model-browser-glyph {
-  width: 0.8rem;
-  height: 0.8rem;
-  flex: none;
-  opacity: 0.55;
-}
-.model-browser-check {
-  width: 0.9rem;
-  height: 0.9rem;
-  flex: none;
-  color: var(--primary);
-}
-.model-browser-row[aria-selected='true'] .model-browser-check {
-  color: inherit;
-}
-.model-browser-footer {
-  padding: 0.4rem;
-  border-top: 0.5px solid color-mix(in srgb, var(--foreground) 12%, transparent);
-}
-.model-browser-detail {
-  min-width: 0;
-  padding: 1.75rem 2rem 2rem;
-}
-@media (max-width: 48rem) {
-  .model-browser {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .model-browser-list {
-    border-right: 0;
-    border-bottom: 0.5px solid color-mix(in srgb, var(--foreground) 12%, transparent);
-  }
-  .model-browser-scroll {
-    max-height: 18rem;
-  }
-  .model-browser-detail {
-    padding: 1.25rem;
-  }
-}
-</style>
