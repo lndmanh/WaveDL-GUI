@@ -256,8 +256,6 @@ async def serve(
             lifespan="on",
             proxy_headers=False,
             access_log=False,
-            # Keep the terminal to the two WaveDL lines; warnings still show.
-            log_level="warning",
             ws="none",
             server_header=False,
             limit_concurrency=256,
