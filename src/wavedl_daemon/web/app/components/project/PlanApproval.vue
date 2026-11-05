@@ -14,7 +14,7 @@ const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.p
   <section aria-labelledby="approved-plan-title" class="flex flex-col gap-5 border-t pt-6">
     <header class="flex flex-col gap-3">
       <h2 id="approved-plan-title" class="text-xl font-medium">
-        {{ t('project.persistedPlanForApproval') }}
+        {{ t('project.reviewYourRun') }}
       </h2>
       <p class="font-mono text-xs text-muted-foreground">
         {{
@@ -32,7 +32,7 @@ const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.p
       />
       <p class="text-sm text-muted-foreground">{{ t('project.planManifestHelp') }}</p>
     </header>
-    <div class="flex flex-wrap gap-2" :aria-label="t('project.planContext')">
+    <div class="flex flex-wrap gap-2" :aria-label="t('project.runSummary')">
       <Badge v-for="item in context" :key="item.label" variant="outline">
         {{ item.label }}: {{ item.value }}
       </Badge>
@@ -51,7 +51,7 @@ const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.p
       </Card>
     </div>
     <Empty v-else>
-      <EmptyDescription>{{ t('project.noPlanDifferences') }}</EmptyDescription>
+      <EmptyDescription>{{ t('project.usingDefaultSettings') }}</EmptyDescription>
     </Empty>
     <Collapsible>
       <CollapsibleTrigger
@@ -80,13 +80,13 @@ const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.p
     </Collapsible>
     <div class="flex flex-wrap gap-3">
       <Button type="button" :disabled="busy || acknowledged" @click="$emit('submit')">
-        {{ t(acknowledged ? 'project.submissionAcknowledged' : 'project.approveAndStartThisPlan') }}
+        {{ t(acknowledged ? 'project.runSubmitted' : 'project.startThisRun') }}
       </Button>
       <Button type="button" variant="outline" :disabled="busy" @click="$emit('status')">
-        {{ t('project.checkSubmissionStatus') }}
+        {{ t('project.refreshStatus') }}
       </Button>
-      <Badge variant="secondary">{{ t('project.planRetryHelp') }}</Badge>
-      <Badge variant="outline">{{ t('project.leaveDoesNotCancel') }}</Badge>
+      <Badge variant="secondary">{{ t('project.connectionDropsRefreshOrRetrySameRun') }}</Badge>
+      <Badge variant="outline">{{ t('project.leavingThisPageDoesNotStopTheRun') }}</Badge>
     </div>
   </section>
 </template>

@@ -998,9 +998,9 @@ const blocks = computed<PipelineBlock[]>(() => [
     value: planSubmitted.value
       ? t('builder.submitted')
       : plan.value
-        ? t('builder.planReady')
+        ? t('project.readyToStart')
         : canPreview.value
-          ? t('builder.readyToPlan')
+          ? t('project.readyToReview')
           : t('builder.planPending'),
     detail:
       planSubmitted.value && acknowledged.value
@@ -1014,10 +1014,10 @@ const blocks = computed<PipelineBlock[]>(() => [
 
 const reviewLabel = computed(() =>
   planSubmitted.value
-    ? t('project.openAcknowledgedRun')
+    ? t('project.viewTrainingRun')
     : plan.value
       ? t('builder.reviewPlan')
-      : t('builder.createPlan'),
+      : t('project.reviewTraining'),
 );
 
 const readiness = computed<ReadinessItem[]>(() =>
