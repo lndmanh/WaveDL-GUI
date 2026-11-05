@@ -41,6 +41,10 @@ interface PlanFact {
   readonly fullValue?: string;
 }
 
+export type PlanCommand =
+  | { readonly ok: true; readonly text: string }
+  | { readonly ok: false; readonly reason: string };
+
 export function buildPlanSummary(
   plan: PlanView | null,
   t: (key: string, values?: Record<string, string | number>) => string,

@@ -6,6 +6,7 @@ import {
   Check,
   ChevronRight,
   Circle,
+  Copy,
   LoaderCircle,
   Play,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
 } from '@lucide/vue';
 import type { ProjectBlock } from '../../../shared/schemas/project-draft';
 import type { PlanView, RunView } from '../../lib/daemon-api';
+import type { PlanCommand } from '../../lib/plan-summary';
 
 export interface ReadinessItem {
   readonly block: ProjectBlock;
@@ -23,6 +25,7 @@ export interface ReadinessItem {
 
 const props = defineProps<{
   plan: PlanView | null;
+  command: PlanCommand | null;
   acknowledged: RunView | null;
   readiness: readonly ReadinessItem[];
   canPreview: boolean;
@@ -43,6 +46,8 @@ const emit = defineEmits<{
 const { t } = useI18n({ useScope: 'global' });
 const titleId = useId();
 const settingsId = useId();
+const terminalId = useId();
+const { copy, copied, isSupported: canCopy } = useClipboard({ copiedDuring: 1600 });
 const { differences, context, sections, warnings } = usePlanSummary(() => props.plan);
 
 const submitted = computed(
@@ -205,6 +210,38 @@ const projectStyles = {
         <p v-else class="px-5 pb-4 text-sm text-muted-foreground">
           {{ t('project.usingDefaultTrainingSettings') }}
         </p>
+        <section
+          v-if="command"
+          class="mx-5 mb-5 min-w-0 rounded-xl border p-3"
+          :aria-labelledby="terminalId"
+        >
+          <h4 :id="terminalId" class="text-sm font-medium">{{ t('project.runItFromATerminal') }}</h4>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {{ t('project.sameTrainingWithWavedlCommandLine') }}
+          </p>
+          <div v-if="command.ok" class="mt-3 flex min-w-0 items-center gap-2">
+            <code class="min-w-0 flex-1 truncate text-xs" :title="command.text">{{
+              command.text
+            }}</code>
+            <Button
+              v-if="canCopy"
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="size-8 shrink-0"
+              :aria-label="t('project.copyStandaloneCliCommand')"
+              @click="copy(command.text)"
+            >
+              <Check v-if="copied" aria-hidden="true" /><Copy v-else aria-hidden="true" />
+            </Button>
+          </div>
+          <p v-else class="mt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {{ command.reason }}
+          </p>
+          <span class="sr-only" aria-live="polite" role="status">{{
+            copied ? t('project.copied') : ''
+          }}</span>
+        </section>
         <Collapsible
           v-if="sections.length"
           class="border-t border-[color-mix(in_srgb,var(--foreground)_10%,transparent)]"

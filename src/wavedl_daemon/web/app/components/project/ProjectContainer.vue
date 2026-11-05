@@ -64,6 +64,8 @@ import {
   validDraftConfig,
 } from '../../lib/project-draft';
 import { draftConfigFields } from '../../../shared/schemas/project-draft';
+import { trainingCommand } from '../../lib/training-export';
+import type { PlanCommand } from '../../lib/plan-summary';
 import type { ReadinessItem } from './PlanInspector.vue';
 import type { PipelineBlock } from './RunPipeline.vue';
 import type { DraftSummary } from './StartPanel.vue';
@@ -664,6 +666,16 @@ function drop(event: DragEvent) {
 
   if (file && connected.value) void importFile(file);
 }
+
+const planCommand = computed<PlanCommand | null>(() => {
+  if (!plan.value) return null;
+
+  try {
+    return { ok: true, text: trainingCommand(values) };
+  } catch (error) {
+    return { ok: false, reason: clientMessage(error instanceof Error ? error : String(error)) };
+  }
+});
 
 function exportNotice(value: string | Error, ok: boolean, detail?: string) {
   announce({
@@ -1350,6 +1362,7 @@ const projectStyles = {
         <PlanInspector
           v-show="active === 'plan'"
           :plan="plan"
+          :command="planCommand"
           :acknowledged="acknowledged"
           :readiness="readiness"
           :can-preview="canPreview"
