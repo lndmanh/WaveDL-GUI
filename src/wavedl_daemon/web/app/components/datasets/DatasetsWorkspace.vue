@@ -10,18 +10,23 @@ const selection = shallowRef<DataSelection | null>(null);
 const inspection = shallowRef<DatasetInspection | null>(null);
 let unsubscribe: (() => void) | undefined;
 
-watch(() => props.session, (session) => {
-  unsubscribe?.();
-  let revision = -1;
-  unsubscribe = toRaw(session).subscribe((state) => {
-    if (state.revision !== revision || state.status !== 'connected') {
-      selection.value = null;
-      inspection.value = null;
-    }
+watch(
+  () => props.session,
+  (session) => {
+    unsubscribe?.();
+    let revision = -1;
+    unsubscribe = toRaw(session).subscribe((state) => {
+      if (state.revision !== revision || state.status !== 'connected') {
+        selection.value = null;
+        inspection.value = null;
+      }
 
-    revision = state.revision;
-  });
-}, { immediate: true });
+      revision = state.revision;
+    });
+  },
+  { immediate: true },
+);
+
 onBeforeUnmount(() => unsubscribe?.());
 </script>
 
@@ -31,10 +36,22 @@ onBeforeUnmount(() => unsubscribe?.());
       <h1>{{ t('datasets.workspaceTitle') }}</h1>
       <p class="text-muted-foreground">{{ t('datasets.workspaceHelp') }}</p>
     </header>
-    <DatasetPathPicker :session="session" :selected="selection" @select="selection = $event" @inspected="inspection = $event" />
+    <DatasetPathPicker
+      :session="session"
+      :selected="selection"
+      @select="selection = $event"
+      @inspected="inspection = $event"
+    />
     <Collapsible v-if="inspection">
-      <CollapsibleTrigger class="flex items-center gap-2 rounded-md text-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]_svg]:rotate-90"><ChevronRight class="size-4 transition-transform" aria-hidden="true" />{{ t('datasets.technicalDetails') }}</CollapsibleTrigger>
-      <CollapsibleContent class="collapsible-motion pt-4"><DatasetInfoPanel :inspection="inspection" /></CollapsibleContent>
+      <CollapsibleTrigger
+        class="flex items-center gap-2 rounded-md text-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]_svg]:rotate-90"
+        ><ChevronRight class="size-4 transition-transform" aria-hidden="true" />{{
+          t('datasets.technicalDetails')
+        }}</CollapsibleTrigger
+      >
+      <CollapsibleContent class="collapsible-motion pt-4"
+        ><DatasetInfoPanel :inspection="inspection"
+      /></CollapsibleContent>
     </Collapsible>
     <DatasetPreviewPanel :session="session" :selection="selection" />
   </section>

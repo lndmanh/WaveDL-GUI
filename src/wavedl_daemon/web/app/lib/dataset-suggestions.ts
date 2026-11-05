@@ -12,7 +12,7 @@ export interface DatasetSuggestion {
 export function datasetFormat(path: string): string | null {
   const extension = path.match(/\.(npz|mat|h5|hdf5)$/i)?.[1]?.toUpperCase();
 
-  return extension === 'HDF5' ? 'H5' : extension ?? null;
+  return extension === 'HDF5' ? 'H5' : (extension ?? null);
 }
 
 /** Run summaries are advisory: callers must resolve each path in the current session. */
@@ -33,11 +33,11 @@ export function datasetSuggestions(runs: readonly RunView[]): DatasetSuggestion[
     const newer = (date?.getTime() ?? -Infinity) >= (previous?.lastUsed?.getTime() ?? -Infinity);
 
     groups.set(key, {
-      path: newer ? path : previous?.path ?? path,
+      path: newer ? path : (previous?.path ?? path),
       name: pathName(path),
       format,
       count: (previous?.count ?? 0) + 1,
-      lastUsed: newer ? date : previous?.lastUsed ?? null,
+      lastUsed: newer ? date : (previous?.lastUsed ?? null),
       order: Math.max(previous?.order ?? 0, order),
     });
   });
@@ -51,12 +51,12 @@ export function datasetSuggestions(runs: readonly RunView[]): DatasetSuggestion[
     .map(({ order: _order, ...suggestion }) => suggestion);
 }
 
-export function datasetInputShape(shape: readonly number[]): string {
-  return shape.length ? shape.join(' × ') : '1';
+export function datasetInputDimensions(dimensions: readonly number[]): string {
+  return dimensions.length ? dimensions.join(' × ') : '1';
 }
 
-export function datasetOutputValues(shape: readonly number[]): number | null {
-  const count = shape.reduce((product, size) => product * size, 1);
+export function datasetOutputValues(dimensions: readonly number[]): number | null {
+  const count = dimensions.reduce((product, size) => product * size, 1);
 
   return Number.isSafeInteger(count) && count > 0 ? count : null;
 }

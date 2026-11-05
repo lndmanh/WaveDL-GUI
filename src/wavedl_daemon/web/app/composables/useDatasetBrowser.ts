@@ -1,7 +1,11 @@
 import { CatalogApi, type BrowsePage, type DataSelection } from '../lib/catalog-api';
 import type { ConnectionSession } from '../lib/connection-session';
 import type { RunView } from '../lib/daemon-api';
-import { datasetFormat, datasetSuggestions, type DatasetSuggestion } from '../lib/dataset-suggestions';
+import {
+  datasetFormat,
+  datasetSuggestions,
+  type DatasetSuggestion,
+} from '../lib/dataset-suggestions';
 
 export interface DatasetBrowserColumn {
   readonly root: string;
@@ -53,6 +57,7 @@ export function useDatasetBrowser(session: () => ConnectionSession, allowDirecto
           (api, requestSignal) => api.listRuns({ limit: 100, offset, signal: requestSignal }),
           { signal },
         );
+
         runs.push(...page);
 
         if (page.length < 100) break;
@@ -164,24 +169,40 @@ export function useDatasetBrowser(session: () => ConnectionSession, allowDirecto
     }
   }
 
-  watch(session, (current) => {
-    unsubscribe?.();
-    let revision = -1;
-    let connected = false;
-    unsubscribe = toRaw(current).subscribe((state) => {
-      if (state.revision === revision && connected === (state.status === 'connected')) return;
-      revision = state.revision;
-      connected = state.status === 'connected';
+  watch(
+    session,
+    (current) => {
+      unsubscribe?.();
+      let revision = -1;
+      let connected = false;
+      unsubscribe = toRaw(current).subscribe((state) => {
+        if (state.revision === revision && connected === (state.status === 'connected')) return;
+        revision = state.revision;
+        connected = state.status === 'connected';
 
-      if (connected) void reload();
-      else reset();
-    });
-  }, { immediate: true });
+        if (connected) void reload();
+        else reset();
+      });
+    },
+    { immediate: true },
+  );
 
   onBeforeUnmount(() => {
     unsubscribe?.();
     reset();
   });
 
-  return { roots, columns, suggestions, candidate, busy, resolving, message, reload, browse, chooseFile, suggest };
+  return {
+    roots,
+    columns,
+    suggestions,
+    candidate,
+    busy,
+    resolving,
+    message,
+    reload,
+    browse,
+    chooseFile,
+    suggest,
+  };
 }

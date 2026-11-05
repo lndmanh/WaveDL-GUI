@@ -12,19 +12,24 @@ const props = defineProps<{
   page?: BrowsePage | null;
   busy?: boolean;
 }>();
+
 const emit = defineEmits<{
   choose: [entry: BrowseEntry];
   back: [];
   page: [offset: number];
 }>();
+
 const { t } = useI18n({ useScope: 'global' });
 const list = useTemplateRef<HTMLElement>('list');
 const active = shallowRef<string | null>(null);
 const selectable = computed(() => props.entries.filter((entry) => enabled(entry)));
+
 const tabStop = computed(() => {
   const preferred = active.value ?? props.selected;
 
-  return selectable.value.find((entry) => entry.name === preferred)?.name ?? selectable.value[0]?.name;
+  return (
+    selectable.value.find((entry) => entry.name === preferred)?.name ?? selectable.value[0]?.name
+  );
 });
 
 const styles = {
@@ -43,7 +48,11 @@ function enabled(entry: BrowseEntry): boolean {
 
 function focus(name?: string) {
   const buttons = list.value?.querySelectorAll<HTMLButtonElement>('[role="option"]');
-  const target = Array.from(buttons ?? []).find((button) => button.dataset.name === name && !button.disabled);
+
+  const target = Array.from(buttons ?? []).find(
+    (button) => button.dataset.name === name && !button.disabled,
+  );
+
   target?.focus();
 }
 
@@ -52,7 +61,8 @@ function keydown(event: KeyboardEvent, entry: BrowseEntry) {
   const index = selectable.value.findIndex((item) => item.name === entry.name);
   let next: BrowseEntry | undefined;
 
-  if (event.key === 'ArrowDown') next = selectable.value[Math.min(index + 1, selectable.value.length - 1)];
+  if (event.key === 'ArrowDown')
+    next = selectable.value[Math.min(index + 1, selectable.value.length - 1)];
   else if (event.key === 'ArrowUp') next = selectable.value[Math.max(index - 1, 0)];
   else if (event.key === 'Home') next = selectable.value[0];
   else if (event.key === 'End') next = selectable.value.at(-1);
@@ -70,17 +80,34 @@ function keydown(event: KeyboardEvent, entry: BrowseEntry) {
     focus(next.name);
   }
 }
-
 </script>
 
 <template>
   <section class="flex min-w-0 flex-col" :aria-label="title">
-    <h3 class="truncate border-b px-3 py-3 text-xs font-semibold text-muted-foreground" :title="title">{{ title }}</h3>
+    <h3
+      class="truncate border-b px-3 py-3 text-xs font-semibold text-muted-foreground"
+      :title="title"
+    >
+      {{ title }}
+    </h3>
     <div class="min-h-64 flex-1 overflow-y-auto p-1.5">
-      <div v-if="busy" class="space-y-3 p-2" role="status" :aria-label="t('datasets.browseLoading')">
+      <div
+        v-if="busy"
+        class="space-y-3 p-2"
+        role="status"
+        :aria-label="t('datasets.browseLoading')"
+      >
         <Skeleton v-for="index in 5" :key="index" class="h-7 w-full" />
       </div>
-      <div v-else ref="list" role="listbox" :aria-label="title" :aria-busy="busy" :tabindex="selectable.length ? undefined : 0" @keydown.left.self.prevent="emit('back')">
+      <div
+        v-else
+        ref="list"
+        role="listbox"
+        :aria-label="title"
+        :aria-busy="busy"
+        :tabindex="selectable.length ? undefined : 0"
+        @keydown.left.self.prevent="emit('back')"
+      >
         <button
           v-for="entry in entries"
           :key="entry.name"
@@ -97,19 +124,59 @@ function keydown(event: KeyboardEvent, entry: BrowseEntry) {
           @keydown="keydown($event, entry)"
           @click="emit('choose', entry)"
         >
-          <HardDrive v-if="locations" class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <Folder v-else-if="entry.kind === 'directory'" class="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <HardDrive
+            v-if="locations"
+            class="size-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Folder
+            v-else-if="entry.kind === 'directory'"
+            class="size-4 shrink-0 text-primary"
+            aria-hidden="true"
+          />
           <File v-else class="size-4 shrink-0" aria-hidden="true" />
           <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
-          <ChevronRight v-if="entry.kind === 'directory'" class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronRight
+            v-if="entry.kind === 'directory'"
+            class="size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
         </button>
-        <p v-if="!entries.length" class="px-2 py-5 text-sm text-muted-foreground" role="status">{{ t('datasets.emptyDirectory') }}</p>
+        <p v-if="!entries.length" class="px-2 py-5 text-sm text-muted-foreground" role="status">
+          {{ t('datasets.emptyDirectory') }}
+        </p>
       </div>
     </div>
-    <nav v-if="page && page.total > page.limit" class="flex items-center justify-between gap-1 border-t p-2" :aria-label="t('datasets.entries')">
-      <Button type="button" variant="ghost" size="icon-sm" :disabled="busy || page.offset === 0" :aria-label="t('datasets.previousEntries')" @click="emit('page', Math.max(0, page.offset - page.limit))"><ChevronLeft aria-hidden="true" /></Button>
-      <span class="text-[0.65rem] tabular-nums text-muted-foreground">{{ t('datasets.entryCount', { start: page.offset + 1, end: Math.min(page.offset + page.limit, page.total), total: page.total }) }}</span>
-      <Button type="button" variant="ghost" size="icon-sm" :disabled="busy || page.offset + page.limit >= page.total" :aria-label="t('datasets.nextEntries')" @click="emit('page', page.offset + page.limit)"><ChevronRight aria-hidden="true" /></Button>
+    <nav
+      v-if="page && page.total > page.limit"
+      class="flex items-center justify-between gap-1 border-t p-2"
+      :aria-label="t('datasets.entries')"
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        :disabled="busy || page.offset === 0"
+        :aria-label="t('datasets.previousEntries')"
+        @click="emit('page', Math.max(0, page.offset - page.limit))"
+        ><ChevronLeft aria-hidden="true"
+      /></Button>
+      <span class="text-[0.65rem] tabular-nums text-muted-foreground">{{
+        t('datasets.entryCount', {
+          start: page.offset + 1,
+          end: Math.min(page.offset + page.limit, page.total),
+          total: page.total,
+        })
+      }}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        :disabled="busy || page.offset + page.limit >= page.total"
+        :aria-label="t('datasets.nextEntries')"
+        @click="emit('page', page.offset + page.limit)"
+        ><ChevronRight aria-hidden="true"
+      /></Button>
     </nav>
   </section>
 </template>
