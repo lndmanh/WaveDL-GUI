@@ -73,14 +73,7 @@
     "name": "loss",
     "kind": "string",
     "multiple": false,
-    "choices": [
-      "mse",
-      "mae",
-      "huber",
-      "smooth_l1",
-      "log_cosh",
-      "weighted_mse"
-    ],
+    "choices": ["mse", "mae", "huber", "smooth_l1", "log_cosh", "weighted_mse"],
     "default": "mse"
   },
   {
@@ -101,14 +94,7 @@
     "name": "optimizer",
     "kind": "string",
     "multiple": false,
-    "choices": [
-      "adamw",
-      "adam",
-      "sgd",
-      "nadam",
-      "radam",
-      "rmsprop"
-    ],
+    "choices": ["adamw", "adam", "sgd", "nadam", "radam", "rmsprop"],
     "default": "adamw"
   },
   {
@@ -160,7 +146,7 @@
     "kind": "number",
     "multiple": false,
     "choices": [],
-    "default": 1e-06
+    "default": 1e-6
   },
   {
     "name": "scheduler_factor",
@@ -222,11 +208,7 @@
     "name": "cache_validate",
     "kind": "string",
     "multiple": false,
-    "choices": [
-      "sha256",
-      "fast",
-      "size"
-    ],
+    "choices": ["sha256", "fast", "size"],
     "default": "sha256"
   },
   {
@@ -289,11 +271,7 @@
     "name": "precision",
     "kind": "string",
     "multiple": false,
-    "choices": [
-      "bf16",
-      "fp16",
-      "no"
-    ],
+    "choices": ["bf16", "fp16", "no"],
     "default": "bf16"
   },
   {
@@ -315,18 +293,13 @@
     "kind": "number",
     "multiple": true,
     "choices": [],
-    "default": [
-      0.1
-    ]
+    "default": [0.1]
   },
   {
     "name": "constraint_reduction",
     "kind": "string",
     "multiple": false,
-    "choices": [
-      "mse",
-      "mae"
-    ],
+    "choices": ["mse", "mae"],
     "default": "mse"
   },
   {
