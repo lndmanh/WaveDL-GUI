@@ -24,6 +24,7 @@ from .base import (
     validate_output_limit,
     validate_seconds,
 )
+from .output import OutputLog
 
 
 CREATE_SUSPENDED = 0x00000004
@@ -237,7 +238,8 @@ class _Win32:
 
 
 class _Drain:
-    def __init__(self, fd: int, limit: int):
+    def __init__(self, fd: int, limit: int, output_log: OutputLog):
+        self._output_log = output_log
         self.data = bytearray()
         self.truncated = False
         self.error = None
@@ -247,6 +249,7 @@ class _Drain:
     def _read(self, fd: int, limit: int) -> None:
         try:
             while chunk := os.read(fd, 65536):
+                self._output_log.write(chunk)
                 remaining = limit - len(self.data)
                 self.data.extend(chunk[:remaining])
                 self.truncated |= len(chunk) > remaining
@@ -259,7 +262,9 @@ class _Drain:
 class WindowsProcess:
     """One owned job; completion means zero job members and drained streams."""
 
-    def __init__(self, api, job, process, pid, stdout, stderr, output_limit):
+    def __init__(
+        self, api, job, process, pid, stdout, stderr, output_limit, output_log=None
+    ):
         self.pid = pid
         self._api, self._job, self._process = api, job, process
         self._condition = threading.Condition()
@@ -268,8 +273,9 @@ class WindowsProcess:
         self._timed_out = False
         self._result = None
         self._error = None
-        self._stdout = _Drain(stdout, output_limit)
-        self._stderr = _Drain(stderr, output_limit)
+        self._output_log = OutputLog(output_log)
+        self._stdout = _Drain(stdout, output_limit, self._output_log)
+        self._stderr = _Drain(stderr, output_limit, self._output_log)
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
@@ -370,6 +376,7 @@ class WindowsProcess:
                     )
             for drain in (self._stdout, self._stderr):
                 drain.thread.join()
+            self._output_log.close()
             with self._condition:
                 self._result = result
                 self._error = error
@@ -403,7 +410,7 @@ class WindowsSupervisor:
             api.close(thread)
             thread = None
             supervised = WindowsProcess(
-                api, job, process, pid, stdout, stderr, output_limit
+                api, job, process, pid, stdout, stderr, output_limit, spec.output_log
             )
             reads.clear()
             return supervised

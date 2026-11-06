@@ -128,6 +128,7 @@ class ServiceSession:
                 self.log,
                 self.backends,
                 automatic_plots=automatic_plots,
+                training_complete=self.controller.training_complete,
             )
             self.automatic_plots = AutomaticPlots(self.runs, automatic_plots)
             self.catalog = CatalogService(

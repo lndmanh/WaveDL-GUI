@@ -42,6 +42,8 @@
   "daemonScopeChanged": "Máy chủ WaveDL hoặc phiên bản đã thay đổi. Cập nhật ứng dụng hoặc ngắt kết nối trước khi chuyển máy chủ.",
   "daemonResponseInvalid": "WaveDL gửi phản hồi không đọc được. Kết nối lại để kiểm tra.",
   "daemonRequestFailed": "Yêu cầu tới WaveDL thất bại ({status}).",
+  "invalidOutputRequest": "Yêu cầu đầu ra huấn luyện có lượt chạy, lần thử hoặc vị trí byte không hợp lệ.",
+  "invalidOutputResponse": "Không đọc được phản hồi đầu ra huấn luyện.",
   "invalidRunResponse": "Không đọc được thông tin hoặc trạng thái lượt chạy.",
   "jsonTooComplex": "Dữ liệu JSON quá phức tạp để đọc.",
   "invalidJsonValue": "Giá trị JSON không hợp lệ",

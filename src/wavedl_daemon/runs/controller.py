@@ -43,6 +43,7 @@ from wavedl_daemon.runs.model import (
     LocalHandle,
     ObservationFailed,
     Observed,
+    Operation,
     Outcome,
     Phase,
     SlurmHandle,
@@ -84,6 +85,7 @@ class Done:
     # A Slurm settle may leave the attempt open (an undrained file, a second
     # requeue); its observation is folded again on the next tick.
     observation: SlurmObservation | None = None
+    training_complete: tuple[int, bool] | None = None
 
 
 @dataclass
@@ -161,13 +163,31 @@ def _kill(backend: SlurmBackend, head: RunHead, handle: SlurmHandle) -> None:
     backend.cancel(head.ref.run_id, handle, interrupt=False)
 
 
-def _tail(head: RunHead) -> Done | None:
-    chunk = read_tail(
-        RunPaths(head.ref.run_dir).metrics(head.attempt), start=head.metrics_offset
-    )
-    if not chunk.rows:
+def _tail(head: RunHead, *, started_at: float | None = None) -> Done | None:
+    paths = RunPaths(head.ref.run_dir)
+    complete = None
+    if started_at is not None:
+        # The stable output directory may still contain a previous attempt's
+        # flag. Compare to AttemptOpened's daemon timestamp, not directory mtime
+        # (which changes as metrics/logs are added). Unmounted Slurm output is
+        # expected: activity then falls back to current-attempt metrics alone.
+        try:
+            fresh = (
+                paths.output / "training_complete.flag"
+            ).stat().st_mtime >= started_at
+        except OSError:
+            fresh = False
+        complete = (head.attempt, fresh)
+    rows = ()
+    if not head.metrics_sealed:
+        rows = read_tail(paths.metrics(head.attempt), start=head.metrics_offset).rows
+    if not rows and complete is None:
         return None
-    return Done(chunk.rows, Expect(offset=(head.attempt, head.metrics_offset)))
+    return Done(
+        rows,
+        Expect(offset=(head.attempt, head.metrics_offset)),
+        training_complete=complete,
+    )
 
 
 def _settle(head: RunHead, cause: LocalPoll | SlurmObservation) -> Done:
@@ -202,6 +222,7 @@ class RunController:
         self._clock = clock
         self._inflight: dict[RunId, tuple[WorkKind, WorkHandle[Done | None]]] = {}
         self._next_tail: dict[RunId, float] = {}
+        self._training_complete: dict[RunId, tuple[int, bool]] = {}
         self._retry_at: dict[RunId, float] = {}
         self._watches: dict[RunId, _Watch] = {}
         self._unknown_submissions: dict[RunId, str] = {}
@@ -219,6 +240,11 @@ class RunController:
             for watch in self._watches.values()
             if watch.error is not None
         }
+
+    def training_complete(self, run_id: RunId, attempt: int) -> bool:
+        """Last worker observation, fenced to the current attempt; no I/O."""
+        self._guard()
+        return self._training_complete.get(run_id) == (attempt, True)
 
     def _guard(self) -> None:
         if threading.get_ident() != self._thread:
@@ -257,6 +283,15 @@ class RunController:
             return
         if step is None:
             step = next_work(head, local_poll=poll)
+        if (
+            step is None
+            and isinstance(head.stage, Live)
+            and head.stage.phase is Phase.RUNNING
+            and head.ref.operation is Operation.TRAIN
+        ):
+            # Sealed metrics must not prevent observing the completion flag.
+            self._run(WorkKind.TAIL, head)
+            return
         match step:
             case Append(events=events, then=then):
                 if then is not None and not self._admits(then):
@@ -353,7 +388,16 @@ class RunController:
                 if now < self._next_tail.get(run_id, 0):
                     return
                 self._next_tail[run_id] = now + TAIL_INTERVAL_SECONDS
-                self._submit(kind, run_id, lambda: _tail(head))
+                started_at = None
+                if (
+                    head.ref.operation is Operation.TRAIN
+                    and isinstance(head.stage, Live)
+                    and head.stage.phase is Phase.RUNNING
+                ):
+                    opened = self._log.read_after(run_id, (head.attempt, -1), limit=1)
+                    if opened:
+                        started_at = datetime.fromisoformat(opened[0].ts).timestamp()
+                self._submit(kind, run_id, lambda: _tail(head, started_at=started_at))
 
     def _cancel(self, head: RunHead) -> None:
         stage = head.stage
@@ -427,7 +471,16 @@ class RunController:
                 done = handle.result()
                 if done is None:
                     continue
-                head = self._log.append(run_id, done.events, expect=done.expect)
+                head = self._log.head(run_id)
+                if (
+                    done.training_complete is not None
+                    and head is not None
+                    and head.attempt == done.training_complete[0]
+                    and not isinstance(head.stage, Ended)
+                ):
+                    self._training_complete[run_id] = done.training_complete
+                if done.events:
+                    head = self._log.append(run_id, done.events, expect=done.expect)
             except Stale:
                 head = None
             except Exception as error:
@@ -473,6 +526,7 @@ class RunController:
 
     def _forget(self, run_id: RunId) -> None:
         self._next_tail.pop(run_id, None)
+        self._training_complete.pop(run_id, None)
         self._retry_at.pop(run_id, None)
         self._watches.pop(run_id, None)
         self._unknown_submissions.pop(run_id, None)

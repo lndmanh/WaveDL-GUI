@@ -48,7 +48,7 @@ from wavedl_daemon.storage.run_log import Expect, New, Stale
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from wavedl_daemon.backends.contracts import Planner
     from wavedl_daemon.runs.layout import RunPaths
@@ -111,6 +111,7 @@ class RunResponse:
     summary: dict | None = None
     progress: RunProgress | None = None
     auto_plot: AutomaticPlotView | None = None
+    activity: Literal["starting", "training", "finalizing"] | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -322,12 +323,14 @@ class RunService:
         backends: Mapping[str, Planner],
         *,
         automatic_plots: AutomaticPlotStore | None = None,
+        training_complete: Callable[[RunId, int], bool] | None = None,
     ) -> None:
         self.settings = settings
         self.plans = plans
         self.log = log
         self.backends = dict(backends)
         self.automatic_plots = automatic_plots
+        self._training_complete = training_complete
         self._thread = threading.get_ident()
 
     def _guard(self) -> None:
@@ -592,7 +595,17 @@ class RunService:
             return view
         metric = self.log.latest_epoch_metric(RunId(view.run_id), view.attempt)
         approved_epochs = None if view.summary is None else view.summary.get("epochs")
-        return replace(view, progress=_run_progress(metric, approved_epochs))
+        activity = None
+        if view.operation == "train" and view.state == "running":
+            if self._training_complete is not None and self._training_complete(
+                RunId(view.run_id), view.attempt
+            ):
+                activity = "finalizing"
+            else:
+                activity = "starting" if metric is None else "training"
+        return replace(
+            view, progress=_run_progress(metric, approved_epochs), activity=activity
+        )
 
     def list(
         self, limit: int = 50, offset: int = 0, state: str | None = None

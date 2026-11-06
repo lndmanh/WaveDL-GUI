@@ -17,8 +17,11 @@ class ProcessSpec:
     cwd: Path
     environment: dict[str, str] | None = None
     inherit_environment: bool = True
+    output_log: Path | None = None
 
     def __post_init__(self) -> None:
+        if self.output_log is not None and not isinstance(self.output_log, Path):
+            raise ValueError("output_log must be a Path")
         if type(self.inherit_environment) is not bool:
             raise ValueError("inherit_environment must be a boolean")
         if not isinstance(self.argv, tuple) or not self.argv:

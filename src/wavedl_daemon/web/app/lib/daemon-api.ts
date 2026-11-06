@@ -7,11 +7,14 @@ import {
   planSchema,
   runListSchema,
   runViewSchema,
-  planPreviewSchema,
   sessionGrantSchema,
+  eventPageSchema,
+  outputChunkSchema,
   isUuid,
 } from './daemon-api-schemas';
 import { runEvidenceSchema } from '../../shared/schemas/run-evidence';
+import { cursorSchema } from '../../shared/schemas/event-stream';
+import type { Cursor, EventPage } from '~~/types/event-stream';
 import { clientError } from '../i18n/client-messages';
 import type { ClientErrorKey, MessageParams } from '~~/types/i18n';
 import type { Json, JsonObject } from '~~/types/json';
@@ -22,6 +25,8 @@ import type {
   RunState,
   RunView,
   PlanView,
+  OutputChunk,
+  OutputRequest,
   ApiErrorCode,
   DaemonApiErrorOptions,
 } from '~~/types/daemon-api';
@@ -630,6 +635,97 @@ export class DaemonApi {
         options.timeoutMs,
       ),
     );
+  }
+  async getOutput(
+    runId: string,
+    options: OutputRequest = {},
+    signal?: AbortSignal,
+    expectedDaemonId?: string,
+  ): Promise<OutputChunk> {
+    const { attempt, offset } = options;
+
+    if (
+      !isUuid(runId) ||
+      (attempt !== undefined && (!Number.isSafeInteger(attempt) || attempt < 1)) ||
+      (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0))
+    )
+      throw DaemonApiError.fromKey('response', 'invalidOutputRequest');
+    await this.health(signal);
+
+    if (expectedDaemonId !== undefined && expectedDaemonId !== this.#daemonId)
+      throw DaemonApiError.fromKey('identity', 'cursorDaemonMismatch');
+    const query = new URLSearchParams();
+
+    if (attempt !== undefined) query.set('attempt', String(attempt));
+
+    if (offset !== undefined) query.set('offset', String(offset));
+    const suffix = query.size > 0 ? `?${query}` : '';
+
+    const result = outputChunkSchema.safeParse(
+      await this.#json(
+        await this.#request(`/api/runs/${runId}/output${suffix}`, 'GET', undefined, signal),
+      ),
+    );
+
+    if (!result.success || (attempt !== undefined && result.data.attempt !== attempt))
+      throw DaemonApiError.fromKey('response', 'invalidOutputResponse');
+
+    return result.data;
+  }
+  async getEventPage(
+    runId: string,
+    cursor: Cursor,
+    signal?: AbortSignal,
+    expectedDaemonId?: string,
+    limit = 256,
+  ): Promise<EventPage> {
+    if (
+      !isUuid(runId) ||
+      !cursorSchema.safeParse(cursor).success ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 256
+    )
+      throw DaemonApiError.fromKey('response', 'invalidEventCursor');
+    await this.health(signal);
+
+    if (expectedDaemonId !== undefined && expectedDaemonId !== this.#daemonId)
+      throw DaemonApiError.fromKey('identity', 'cursorDaemonMismatch');
+
+    const result = eventPageSchema.safeParse(
+      await this.#json(
+        await this.#request(
+          `/api/runs/${runId}/events/page?attempt=${cursor.attempt}&seq=${cursor.seq}&limit=${limit}`,
+          'GET',
+          undefined,
+          signal,
+        ),
+      ),
+    );
+
+    if (!result.success) throw DaemonApiError.fromKey('response', 'invalidEventScope');
+    const page = result.data;
+    let previous = cursor;
+
+    for (const event of page.events) {
+      if (
+        event.run_id !== runId ||
+        event.attempt < previous.attempt ||
+        (event.attempt === previous.attempt && event.seq <= previous.seq)
+      )
+        throw DaemonApiError.fromKey('protocol', 'invalidEventScope');
+      previous = event;
+    }
+
+    if (
+      page.events.length > limit ||
+      page.next_cursor.attempt !== previous.attempt ||
+      page.next_cursor.seq !== previous.seq ||
+      (page.more && page.events.length === 0)
+    )
+      throw DaemonApiError.fromKey('protocol', 'uncommittedStreamProgress');
+
+    return page;
   }
   async openEvents(
     runId: string,

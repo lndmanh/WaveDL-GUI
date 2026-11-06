@@ -38,6 +38,113 @@ def positions(events):
     return [(item.attempt, item.seq) for item in events]
 
 
+def test_http_event_pages_share_sse_envelopes_and_resume_across_attempts(log):
+    start(log)
+    metrics(log, 3)
+    requeue(log)
+    metrics(log, 2)
+    expected = log.read_after(RunId(RUN_ID), (0, -1), limit=256)
+    routes = event_routes(event_log=log, broker=None, resolve_plan=lambda run: "plan")
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
+            base_url="http://testserver",
+        ) as client:
+            cursor = {"attempt": 0, "seq": -1}
+            received = []
+            while True:
+                response = await client.get(
+                    f"/api/runs/{RUN_ID}/events/page", params={**cursor, "limit": 2}
+                )
+                assert response.status_code == 200
+                assert response.headers["cache-control"] == "no-store"
+                page = response.json()
+                assert set(page) == {"events", "next_cursor", "more"}
+                assert len(page["events"]) <= 2
+                received.extend(page["events"])
+                cursor = page["next_cursor"]
+                if not page["more"]:
+                    break
+            assert received == [json.loads(encode(event)) for event in expected]
+            empty = await client.get(f"/api/runs/{RUN_ID}/events/page", params=cursor)
+            assert empty.json() == {"events": [], "next_cursor": cursor, "more": False}
+            head = await client.head(f"/api/runs/{RUN_ID}/events/page")
+            assert head.status_code == 200 and head.content == b""
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "query", ["limit=0", "limit=257", "limit=nan", "limit=1&limit=2"]
+)
+def test_http_event_page_rejects_invalid_limits(query):
+    routes = event_routes(event_log=None, broker=None, resolve_plan=lambda run: "plan")
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.get(f"/api/runs/{RUN_ID}/events/page?{query}")
+            assert response.status_code == 400
+            assert set(response.json()) == {"error"}
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("stage", ["resolve", "read", "lookahead"])
+def test_http_event_page_redacts_storage_failure(stage):
+    class FailedLog:
+        def read_after(self, run_id, cursor, *, limit):
+            if stage == "read" or cursor != (0, -1):
+                raise StorageWorkError("private-token private-path")
+            return [type("Event", (), {"attempt": 1, "seq": 0})()]
+
+    def resolver(run_id):
+        if stage == "resolve":
+            raise sqlite3.OperationalError("private-token private-path")
+        return "plan"
+
+    routes = event_routes(event_log=FailedLog(), broker=None, resolve_plan=resolver)
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.get(f"/api/runs/{RUN_ID}/events/page")
+            assert response.status_code == 503
+            assert set(response.json()) == {"error"}
+            assert "private-token" not in response.text
+            assert "private-path" not in response.text
+
+    asyncio.run(scenario())
+
+
+def test_http_event_page_unknown_run_and_noncanonical_identity():
+    calls = []
+
+    def resolver(run_id):
+        calls.append(run_id)
+        raise KeyError(run_id)
+
+    routes = event_routes(event_log=None, broker=None, resolve_plan=resolver)
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
+            base_url="http://testserver",
+        ) as client:
+            missing = await client.get(f"/api/runs/{RUN_ID}/events/page")
+            assert missing.status_code == 404
+            invalid = await client.get("/api/runs/not-a-uuid/events/page")
+            assert invalid.status_code == 400
+            assert calls == [RUN_ID]
+
+    asyncio.run(scenario())
+
+
 def test_frame_is_id_and_versioned_envelope(log):
     start(log)
     metrics(log, 1)
@@ -180,6 +287,40 @@ def test_replay_pages_are_byte_bounded_but_never_empty(log):
     assert len(encode(single[0])) > 0
 
 
+def test_http_event_page_more_respects_byte_bounded_short_pages(log):
+    start(log)
+    wide = {f"metric_{index:05d}": 1.0 for index in range(5000)}
+    head = log.head(RunId(RUN_ID))
+    log.append(
+        RunId(RUN_ID),
+        [
+            Metric(epoch, {**wide, "epoch": epoch}, head.metrics_offset + epoch)
+            for epoch in range(1, 31)
+        ],
+        expect=Expect(),
+    )
+    routes = event_routes(event_log=log, broker=None, resolve_plan=lambda run: "plan")
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=route_app(routes=routes)),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.get(
+                f"/api/runs/{RUN_ID}/events/page?attempt=1&seq=2&limit=256"
+            )
+            page = response.json()
+            assert response.status_code == 200
+            assert 0 < len(page["events"]) < 30
+            assert page["more"] is True
+            assert page["next_cursor"] == {
+                "attempt": 1,
+                "seq": page["events"][-1]["seq"],
+            }
+
+    asyncio.run(scenario())
+
+
 def test_async_owner_adapter_replay(log):
     start(log)
 
@@ -226,7 +367,8 @@ def test_disconnected_stream_cancels_async_wait(log):
         "attempt=9223372036854775808&seq=0",
     ],
 )
-def test_http_rejects_invalid_or_partial_cursors(query):
+@pytest.mark.parametrize("endpoint", ["events", "events/page"])
+def test_http_rejects_invalid_or_partial_cursors(query, endpoint):
     routes = event_routes(event_log=None, broker=None, resolve_plan=lambda run: "plan")
 
     async def scenario():
@@ -234,8 +376,9 @@ def test_http_rejects_invalid_or_partial_cursors(query):
             transport=httpx.ASGITransport(app=route_app(routes=routes)),
             base_url="http://testserver",
         ) as client:
-            response = await client.get(f"/api/runs/{RUN_ID}/events?{query}")
+            response = await client.get(f"/api/runs/{RUN_ID}/{endpoint}?{query}")
             assert response.status_code == 400
+            assert set(response.json()) == {"error"}
 
     asyncio.run(scenario())
 

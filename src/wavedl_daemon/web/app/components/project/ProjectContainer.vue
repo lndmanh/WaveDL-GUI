@@ -16,6 +16,7 @@ import { automaticRuntime, hostAccelerator, matchesAutomatic } from '../../lib/h
 import type { RuntimeSetup } from '../../../shared/schemas/host-profile';
 import {
   projectBlockMessageKeys,
+  runActivityMessageKeysFor,
   runStateMessageKeys,
   trainingChoiceLabel,
   trainingFieldMessageKeys,
@@ -67,8 +68,11 @@ import type { PipelineBlock, DraftSummary } from '~~/types/project-draft';
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 
-function stateLabel(state: RunView['state']): string {
-  return t(runStateMessageKeys[state]);
+function stateLabel(run: RunView): string {
+  const activity = runActivityMessageKeysFor(run);
+  const state = t(runStateMessageKeys[run.state]);
+
+  return activity ? `${state} · ${t(activity.label)}` : state;
 }
 
 const props = defineProps<{ session: ConnectionSession }>();
@@ -151,7 +155,7 @@ function announce(value: Omit<Notice, 'id'>) {
 const displayMessage = computed(() =>
   message.value === 'reported' && reportedRun.value
     ? t('project.reportedStatus', {
-        state: stateLabel(reportedRun.value.state),
+        state: stateLabel(reportedRun.value),
         submission: t(
           reportedRun.value.submission_requested
             ? 'project.submissionRequested'
@@ -1006,7 +1010,7 @@ const blocks = computed<PipelineBlock[]>(() => [
           : t('builder.planPending'),
     detail:
       planSubmitted.value && acknowledged.value
-        ? stateLabel(acknowledged.value.state)
+        ? stateLabel(acknowledged.value)
         : plan.value
           ? t('builder.awaitingApproval')
           : t('builder.nothingStarts'),

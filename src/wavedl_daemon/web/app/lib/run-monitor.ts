@@ -313,28 +313,84 @@ export class RunMonitor {
     this.#started = false;
     await this.start();
   }
+  async #receiveStream(parser: EventStreamParser, onData: () => void): Promise<void> {
+    const streamAbort = new AbortController();
+    const signal = AbortSignal.any([this.#abort.signal, streamAbort.signal]);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const response = await this.transport.openEvents(this.runId, this.#cursor, signal);
+
+      if (signal.aborted) {
+        await response.body?.cancel().catch(() => undefined);
+
+        return;
+      }
+
+      if (!response.body) throw DaemonApiError.fromKey('response', 'missingEventStream');
+      reader = response.body.getReader();
+      this.#publish({ stream: 'live', message: '' });
+
+      for (;;) {
+        // The daemon emits a heartbeat every second. Five seconds without
+        // bytes (including comments) allows several missed beats, not an
+        // indefinitely buffered proxy response. Restart after actual bytes.
+        const stalled = new Promise<never>((_, reject) => {
+          if (this.transport.getEventPage)
+            timer = setTimeout(() => {
+              reject(DaemonApiError.fromKey('http', 'daemonResponseTimedOut'));
+              streamAbort.abort();
+            }, 5000);
+        });
+
+        try {
+          const { value, done } = await Promise.race([reader.read(), stalled]);
+
+          if (done || signal.aborted) break;
+          await parser.push(value);
+          onData();
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      if (!signal.aborted) await parser.finish();
+      this.#publish({});
+    } finally {
+      clearTimeout(timer);
+      streamAbort.abort();
+      await reader?.cancel().catch(() => undefined);
+      reader?.releaseLock();
+    }
+  }
+  #canPollEvents(error: Error | DOMException): boolean {
+    if (!this.transport.getEventPage) return false;
+
+    if (error instanceof DaemonApiError)
+      return (
+        (error.code === 'http' && (error.status === undefined || error.status >= 500)) ||
+        (error.code === 'response' &&
+          ['expectedAnEventStream', 'missingEventStream'].includes(error.clientMessageKey ?? ''))
+      );
+
+    return (
+      error instanceof TypeError ||
+      (error instanceof DOMException &&
+        ['NetworkError', 'TimeoutError', 'AbortError'].includes(error.name))
+    );
+  }
   async #receive(): Promise<void> {
     let retries = 0;
+    // Keep JSON polling for this watch once a proxy rejects/buffers SSE.
+    // Re-probing adds another silent gap without improving event semantics.
+    let pollingEvents = false;
 
     while (!this.#abort.signal.aborted) {
       try {
         await this.#refresh();
         this.#loadTarget();
         this.#flushCursor();
-
-        const response = await this.transport.openEvents(
-          this.runId,
-          this.#cursor,
-          this.#abort.signal,
-        );
-
-        if (this.#abort.signal.aborted) {
-          await response.body?.cancel().catch(() => undefined);
-          break;
-        }
-
-        if (!response.body) throw DaemonApiError.fromKey('response', 'missingEventStream');
-        const reader = response.body.getReader();
 
         const parser = new EventStreamParser(
           this.runId,
@@ -353,25 +409,52 @@ export class RunMonitor {
           this.#abort.signal,
         );
 
-        this.#publish({ stream: 'live', message: '' });
+        if (pollingEvents && this.transport.getEventPage) {
+          let more = true;
 
-        try {
-          for (;;) {
-            const { value, done } = await reader.read();
+          while (more && !this.#abort.signal.aborted) {
+            const page = await this.transport.getEventPage(
+              this.runId,
+              this.#cursor,
+              this.#abort.signal,
+            );
 
-            if (done || this.#abort.signal.aborted) break;
-            await parser.push(value);
-            retries = 0;
+            if (this.#abort.signal.aborted) break;
+
+            // Use the same bounded parser, validation, dedupe, commit and
+            // cursor-advance path as SSE, including sparse journal positions.
+            for (const event of page.events) {
+              await parser.push(
+                new TextEncoder().encode(
+                  `id: ${event.attempt}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`,
+                ),
+              );
+            }
+
+            more = page.more;
+            this.#publish({ stream: 'live', message: '' });
           }
+        } else {
+          try {
+            await this.#receiveStream(parser, () => {
+              retries = 0;
+            });
+          } catch (error) {
+            if (this.#abort.signal.aborted) break;
 
-          await parser.finish();
-          this.#publish({});
-        } finally {
-          await reader.cancel().catch(() => undefined);
-          reader.releaseLock();
+            if (
+              !(error instanceof Error || error instanceof DOMException) ||
+              !this.#canPollEvents(error)
+            )
+              throw error;
+            pollingEvents = true;
+            this.#publish({ stream: 'reconnecting', message: '' });
+            continue;
+          }
         }
 
         if (this.#abort.signal.aborted) break;
+        retries = 0;
         await this.#refresh();
 
         if (this.#snapshot.run && terminalRun(this.#snapshot.run)) {
@@ -381,6 +464,11 @@ export class RunMonitor {
 
           if (this.#snapshot.run.auto_plot?.status !== 'pending') this.#abort.abort();
           break;
+        }
+
+        if (pollingEvents) {
+          await this.#pause(2000);
+          continue;
         }
       } catch (error) {
         if (this.#abort.signal.aborted) break;

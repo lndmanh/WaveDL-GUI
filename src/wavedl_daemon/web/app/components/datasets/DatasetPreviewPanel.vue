@@ -21,6 +21,7 @@ const tabs = [
 type Tab = (typeof tabs)[number][0];
 
 const activeTab = shallowRef<Tab>('input');
+
 const { data, loading, available, message, load, stop, trust } = useDatasetPreview(
   () => props.session,
   () => props.selection,

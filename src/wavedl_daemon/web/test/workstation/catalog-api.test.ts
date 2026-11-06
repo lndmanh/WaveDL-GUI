@@ -85,6 +85,7 @@ describe('dataset boundary parity', () => {
       },
       { relativePath: 'train.npz' },
     );
+
     expect(inspection.inputShape).toEqual([]);
     expect(inspection.inputDtype).toBe('float32');
   });

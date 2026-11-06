@@ -344,6 +344,165 @@ afterEach(() => {
 });
 
 describe('run monitoring', () => {
+  it('falls back after five silent heartbeat intervals, drains pages and resumes only committed events', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    const getEventPage = vi.fn<NonNullable<RunTransport['getEventPage']>>();
+    h.transport.getEventPage = getEventPage;
+
+    const event = (seq: number) =>
+      metricEvent({ name: 'loss', value: 1 / (seq + 1), step: seq }, 'metric', 1, seq);
+
+    getEventPage
+      .mockResolvedValueOnce({
+        events: [event(0), event(1), event(2)],
+        next_cursor: { attempt: 1, seq: 2 },
+        more: true,
+      })
+      .mockResolvedValueOnce({
+        events: [event(3)],
+        next_cursor: { attempt: 1, seq: 3 },
+        more: false,
+      })
+      .mockResolvedValue({ events: [], next_cursor: { attempt: 1, seq: 3 }, more: false });
+    const task = h.monitor.start();
+    await flush();
+    h.send(0);
+    // The last uncommitted frame must be discarded when abandoning SSE.
+    h.raw('id: 1:1\ndata: {"unfinished":');
+    await flush();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(getEventPage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getEventPage).toHaveBeenCalledTimes(2);
+    expect(getEventPage.mock.calls[0]?.[1]).toEqual({ attempt: 1, seq: 0 });
+    expect(getEventPage.mock.calls[1]?.[1]).toEqual({ attempt: 1, seq: 2 });
+    expect(h.monitor.snapshot().events.map((item) => item.seq)).toEqual([0, 1, 2, 3]);
+    expect(h.monitor.snapshot().metrics).toHaveLength(3);
+    expect(h.monitor.position()).toEqual({ attempt: 1, seq: 3 });
+    expect(h.monitor.snapshot().stream).toBe('live');
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(getEventPage).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getEventPage).toHaveBeenCalledTimes(3);
+    expect(h.transport.openEvents).toHaveBeenCalledTimes(1);
+    h.monitor.stop();
+    await task;
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(getEventPage).toHaveBeenCalledTimes(3);
+  });
+  it('falls back from a completely buffered response and aborts an in-flight page on stop', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    let pageSignal: AbortSignal | undefined;
+
+    const getEventPage = vi.fn<NonNullable<RunTransport['getEventPage']>>(
+      async (_runId, _cursor, signal) => {
+        pageSignal = signal;
+
+        return new Promise((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () =>
+              resolve({
+                events: [metricEvent({ message: 'late' }, 'warning')],
+                next_cursor: { attempt: 1, seq: 0 },
+                more: false,
+              }),
+            { once: true },
+          );
+        });
+      },
+    );
+
+    h.transport.getEventPage = getEventPage;
+    const task = h.monitor.start();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(getEventPage).toHaveBeenCalledTimes(1);
+    expect(getEventPage.mock.calls[0]?.[1]).toEqual({ attempt: 0, seq: -1 });
+    h.monitor.stop();
+    await task;
+    expect(pageSignal?.aborted).toBe(true);
+    expect(h.monitor.snapshot().events).toEqual([]);
+    expect(h.monitor.position()).toEqual({ attempt: 0, seq: -1 });
+  });
+  it('counts heartbeat comments as stream bytes instead of switching healthy idle runs', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.transport.getEventPage = vi.fn();
+    const task = h.monitor.start();
+    await flush();
+
+    for (let beat = 0; beat < 3; beat++) {
+      await vi.advanceTimersByTimeAsync(4000);
+      h.raw(': heartbeat\n\n');
+      await flush();
+    }
+
+    expect(h.transport.getEventPage).not.toHaveBeenCalled();
+    expect(h.monitor.position()).toEqual({ attempt: 0, seq: -1 });
+    h.monitor.stop();
+    await task;
+  });
+  it('switches a failed stream to bounded event polling and stops after draining a terminal run', async () => {
+    vi.useFakeTimers();
+    const h = harness(view({ state: 'completed' }));
+    vi.mocked(h.transport.openEvents).mockRejectedValueOnce(new TypeError('network disconnected'));
+
+    const events = Array.from({ length: 1010 }, (_, seq) =>
+      metricEvent({ message: 'diagnostic' }, 'warning', 1, seq),
+    );
+
+    const getEventPage = vi.fn<NonNullable<RunTransport['getEventPage']>>();
+    let offset = 0;
+    getEventPage.mockImplementation(async () => {
+      const page = events.slice(offset, offset + 256);
+      offset += page.length;
+
+      return {
+        events: page,
+        next_cursor: { attempt: 1, seq: offset - 1 },
+        more: offset < events.length,
+      };
+    });
+    h.transport.getEventPage = getEventPage;
+    const task = h.monitor.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await task;
+    expect(getEventPage).toHaveBeenCalledTimes(4);
+    expect(h.monitor.snapshot().events).toHaveLength(1000);
+    expect(h.monitor.snapshot().liveEvents).toHaveLength(256);
+    expect(h.monitor.snapshot().truncated).toBe(true);
+    expect(h.monitor.position()).toEqual({ attempt: 1, seq: 1009 });
+    expect(h.monitor.snapshot().stream).toBe('stopped');
+    expect(h.reportFailure).not.toHaveBeenCalled();
+  });
+  it.each([401, 403, 404])('does not hide HTTP %i behind polling', async (status) => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.transport.getEventPage = vi.fn();
+    vi.mocked(h.transport.openEvents).mockRejectedValue(
+      DaemonApiError.fromKey(status === 401 ? 'authentication' : 'http', 'daemonRequestFailed', {
+        status,
+        params: { status },
+      }),
+    );
+    const task = h.monitor.start();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.transport.getEventPage).not.toHaveBeenCalled();
+    h.monitor.stop();
+    await task;
+  });
+  it('keeps protocol violations fatal rather than falling back to polling', async () => {
+    const h = harness();
+    h.transport.getEventPage = vi.fn();
+    const task = h.monitor.start();
+    await flush();
+    h.raw('id: 1:0\ndata: {"malformed":true}\n\n');
+    await task;
+    expect(h.transport.getEventPage).not.toHaveBeenCalled();
+    expect(h.monitor.snapshot().stream).toBe('error');
+  });
   it.each([
     { attempt: null },
     { attempt: 0 },

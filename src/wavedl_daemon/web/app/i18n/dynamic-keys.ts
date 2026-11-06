@@ -232,6 +232,30 @@ export const runStateMessageKeys: Readonly<Record<RunState, string>> = {
   supervision_lost: 'runs.supervisionLost',
 };
 
+export const runActivityMessageKeys = {
+  starting: { label: 'runs.activityStarting', hint: 'runs.activityStartingHint' },
+  training: { label: 'runs.activityTraining', hint: null },
+  finalizing: { label: 'runs.activityFinalizing', hint: 'runs.activityFinalizingHint' },
+  plotsPending: { label: 'runs.automaticPlotsPending', hint: null },
+  plotsSubmitted: { label: 'runs.automaticPlotsSubmitted', hint: null },
+};
+
+export function runActivityMessageKeysFor(
+  run: RunView,
+): { label: string; hint: string | null } | null {
+  if (run.state === 'running' && run.operation === 'train' && run.activity) {
+    return runActivityMessageKeys[run.activity];
+  }
+
+  if (run.state === 'completed') {
+    if (run.auto_plot?.status === 'pending') return runActivityMessageKeys.plotsPending;
+
+    if (run.auto_plot?.status === 'submitted') return runActivityMessageKeys.plotsSubmitted;
+  }
+
+  return null;
+}
+
 export const runOperationMessageKeys: Readonly<Record<RunView['operation'], string>> = {
   train: 'runs.operationTrain',
   test: 'runs.operationTest',
@@ -362,6 +386,9 @@ export const dynamicMessageKeys: readonly string[] = [
   ]),
   ...Object.values(runtimeValueMessageKeys).filter((key): key is string => key !== null),
   ...Object.values(runStateMessageKeys),
+  ...Object.values(runActivityMessageKeys).flatMap(({ label, hint }) =>
+    hint ? [label, hint] : [label],
+  ),
   ...Object.values(runOperationMessageKeys),
   ...Object.values(runBackendMessageKeys),
   ...Object.values(runStreamMessageKeys),

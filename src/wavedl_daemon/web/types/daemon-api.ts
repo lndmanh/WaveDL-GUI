@@ -5,6 +5,7 @@ import type {
   RUN_STATES,
   runViewSchema,
   planSchema,
+  outputChunkSchema,
 } from '../app/lib/daemon-api-schemas';
 import type { runEvidenceSchema } from '../shared/schemas/run-evidence';
 import type { MessageParams } from './i18n';
@@ -36,6 +37,13 @@ export type RunView = Omit<z.output<typeof runViewSchema>, 'evidence' | 'progres
 export type RunSummary = NonNullable<z.output<typeof runViewSchema>['summary']>;
 
 export type PlanView = z.output<typeof planSchema>;
+
+export type OutputChunk = z.output<typeof outputChunkSchema>;
+
+export interface OutputRequest {
+  attempt?: number;
+  offset?: number;
+}
 
 export type ApiErrorCode = 'authentication' | 'identity' | 'protocol' | 'response' | 'http';
 

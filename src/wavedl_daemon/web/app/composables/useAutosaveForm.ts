@@ -5,7 +5,7 @@ import type { AutosaveStatus } from '~~/types/common';
 /** Validate the current snapshot, never a stale or partially valid form. */
 export function useAutosaveForm<T>(options: {
   schema: z.ZodType<T>;
-  values: () => unknown;
+  values: () => T;
   save: (value: T) => boolean;
 }) {
   const status = shallowRef<AutosaveStatus>('idle');

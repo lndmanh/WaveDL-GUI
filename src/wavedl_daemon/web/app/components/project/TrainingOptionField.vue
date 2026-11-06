@@ -2,6 +2,7 @@
 import { trainingChoiceLabel, trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
 import { Field as VeeField } from 'vee-validate';
 import { trainingFieldMetadata } from '../../../shared/schemas/training-request';
+import { jsonStringSchema } from '../../../shared/schemas/json';
 import type { Json } from '~~/types/json';
 
 const { clientMessage } = useClientMessages();
@@ -13,6 +14,7 @@ function updateValue(value: Json, change: (value: Json) => void, immediate = fal
   change(value);
   emit('changed', immediate);
 }
+
 const option = trainingFieldMetadata.find((item) => item.name === props.name);
 const messageKeys = trainingFieldMessageKeys[props.name];
 const idPrefix = useId();
@@ -28,11 +30,13 @@ const defaultText = computed(() => {
   )
     return t('project.none');
 
-  if (props.settingsControls && typeof option.default === 'boolean')
+  if (props.settingsControls && (option.default === true || option.default === false))
     return t(option.default ? 'builder.on' : 'builder.off');
 
-  if (props.settingsControls && typeof option.default === 'string' && option.choices.length)
-    return trainingChoiceLabel(props.name, option.default, t);
+  const string = jsonStringSchema.safeParse(option.default);
+
+  if (props.settingsControls && string.success && option.choices.length)
+    return trainingChoiceLabel(props.name, string.data, t);
 
   return Array.isArray(option.default) ? option.default.join(', ') : String(option.default);
 });

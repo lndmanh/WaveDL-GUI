@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import type { Json, JsonObject } from '../../types/json';
 
-export const jsonScalarSchema = z.union([z.null(), z.string(), z.boolean(), z.number().finite()]);
+export const jsonStringSchema = z.string();
+export const jsonNumberSchema = z.number().finite();
+
+export const jsonScalarSchema = z.union([
+  z.null(),
+  jsonStringSchema,
+  z.boolean(),
+  jsonNumberSchema,
+]);
 
 const containerFields = z.record(z.string(), z.unknown());
 

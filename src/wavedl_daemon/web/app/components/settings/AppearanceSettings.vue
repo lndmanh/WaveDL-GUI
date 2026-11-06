@@ -14,6 +14,7 @@ const props = defineProps<{ appearance?: AppearancePreferences }>();
 const emit = defineEmits<{ changed: [value: AppearancePreferences] }>();
 const { clientMessage } = useClientMessages();
 const { t } = useI18n({ useScope: 'global' });
+
 const { values, resetForm } = useForm({
   validationSchema: appearanceSchema,
   initialValues: props.appearance ?? loadAppearance(),
@@ -34,6 +35,7 @@ const autosave = useAutosaveForm({
     return saved;
   },
 });
+
 const { status } = autosave;
 
 function controlChange(

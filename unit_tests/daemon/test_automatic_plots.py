@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from uuid import uuid4
 
 import httpx
@@ -35,6 +36,7 @@ from wavedl_daemon.storage.plans import PlanStore
 from wavedl_daemon.storage.run_log import Expect, RunLog
 from wavedl_daemon.storage.settings import Settings
 
+from . import test_lifecycle_api, test_run_log
 from .test_hosted_app import (
     AUTH,
     TOKEN,
@@ -48,6 +50,11 @@ from .test_lifecycle_api import (
     from_checkpoint,
     request,
 )
+
+
+# Shared fixtures, bound by name so pytest discovers them in this module.
+environment = test_lifecycle_api.environment
+state = test_run_log.state
 
 
 @pytest.fixture
@@ -166,6 +173,7 @@ def test_payload_reuses_host_paths_runtime_and_inference_defaults(
             assert config[name] == option.default
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Slurm plans need POSIX paths")
 def test_slurm_rejection_is_failed_without_changing_device_or_allocation(
     environment, automatic
 ):

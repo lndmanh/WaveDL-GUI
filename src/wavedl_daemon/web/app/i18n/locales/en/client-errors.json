@@ -42,6 +42,8 @@
   "daemonScopeChanged": "The WaveDL server or its version has changed. Update the app, or disconnect before switching servers.",
   "daemonResponseInvalid": "WaveDL sent a response we couldn’t read. Reconnect to check the connection.",
   "daemonRequestFailed": "The WaveDL request failed ({status}).",
+  "invalidOutputRequest": "The trainer output request has an invalid run, attempt or byte position.",
+  "invalidOutputResponse": "The trainer output response couldn’t be read.",
   "invalidRunResponse": "The run details or status couldn’t be read.",
   "jsonTooComplex": "The JSON data is too complex to read.",
   "invalidJsonValue": "Invalid JSON value",

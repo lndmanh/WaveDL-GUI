@@ -1,5 +1,6 @@
 <script setup lang="ts">
 defineProps<{ label: string; description: string; disabled?: boolean }>();
+
 const emit = defineEmits<{ confirm: [] }>();
 const open = shallowRef(false);
 const { t } = useI18n({ useScope: 'global' });

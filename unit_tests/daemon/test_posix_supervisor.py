@@ -19,10 +19,11 @@ from wavedl_daemon.supervision.posix import POSIXProcess, POSIXSupervisor
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
 
 
-def start(tmp_path, code, output_limit=1048576):
+def start(tmp_path, code, output_limit=1048576, *, post_exit_drain_seconds=10):
     return POSIXSupervisor().start(
         ProcessSpec((sys.executable, "-c", code), tmp_path),
         output_limit=output_limit,
+        post_exit_drain_seconds=post_exit_drain_seconds,
     )
 
 
@@ -601,7 +602,7 @@ def test_escaped_session_retaining_pipes_fails_closed_and_reaps_leader(
         f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
         + ("time.sleep(60)\n" if cancel else "")
     )
-    process = start(tmp_path, code)
+    process = start(tmp_path, code, post_exit_drain_seconds=0.3)
     escaped_pid = None
     try:
         escaped_pid = wait_pid(pid_file)
@@ -658,3 +659,169 @@ def test_failing_group_evidence_cannot_skip_direct_child_reap(tmp_path, monkeypa
     assert isinstance(captured.value.__cause__, ValueError)
     with pytest.raises(ChildProcessError):
         os.waitpid(native.pid, os.WNOHANG)
+
+
+def test_output_log_tees_both_streams_beyond_capture_limit(tmp_path):
+    output = tmp_path / "output.log"
+    code = (
+        "import os,time\n"
+        "os.write(1, b'first\\xff\\n'); time.sleep(0.1)\n"
+        "os.write(2, b'second\\n'); time.sleep(0.1)\n"
+        "os.write(1, b'third\\n')\n"
+    )
+    process = POSIXSupervisor().start(
+        ProcessSpec((sys.executable, "-c", code), tmp_path, output_log=output),
+        output_limit=3,
+    )
+    result = process.wait(5)
+    assert result.returncode == 0
+    assert result.stdout == b"fir" and result.stderr == b"sec"
+    assert result.stdout_truncated and result.stderr_truncated
+    assert output.read_bytes() == b"first\xff\nsecond\nthird\n"
+    assert output.stat().st_mode & 0o777 == 0o600
+
+
+def test_output_log_is_bounded_with_one_marker(tmp_path, monkeypatch):
+    from wavedl_daemon.supervision.output import OUTPUT_LOG_TRUNCATED
+
+    monkeypatch.setattr("wavedl_daemon.supervision.output.OUTPUT_LOG_LIMIT", 100)
+    output = tmp_path / "output.log"
+    process = POSIXSupervisor().start(
+        ProcessSpec(
+            (
+                sys.executable,
+                "-c",
+                "import os; os.write(1,b'x'*200000); os.write(2,b'y'*200000)",
+            ),
+            tmp_path,
+            output_log=output,
+        ),
+        output_limit=0,
+    )
+    result = process.wait(5)
+    assert result.returncode == 0
+    contents = output.read_bytes()
+    assert len(contents) == 100 + len(OUTPUT_LOG_TRUNCATED)
+    assert contents.endswith(OUTPUT_LOG_TRUNCATED)
+    assert contents.count(OUTPUT_LOG_TRUNCATED) == 1
+    assert result.stdout_truncated and result.stderr_truncated
+
+
+@pytest.mark.parametrize("failure", ["open", "write", "preexisting"])
+def test_output_log_failure_never_stops_draining(tmp_path, monkeypatch, failure):
+    output = tmp_path / "output.log"
+    if failure == "open":
+        output = tmp_path / "absent" / "output.log"
+    elif failure == "preexisting":
+        output.write_bytes(b"do not replace")
+    else:
+
+        def fail(self, chunk):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("wavedl_daemon.supervision.output.OutputLog._write", fail)
+    process = POSIXSupervisor().start(
+        ProcessSpec(
+            (
+                sys.executable,
+                "-c",
+                "import os; os.write(1,b'x'*200000); os.write(2,b'y'*200000)",
+            ),
+            tmp_path,
+            output_log=output,
+        ),
+        output_limit=7,
+    )
+    result = process.wait(5)
+    assert result.returncode == 0
+    assert result.stdout == b"x" * 7 and result.stderr == b"y" * 7
+    if failure == "preexisting":
+        assert output.read_bytes() == b"do not replace"
+
+
+def test_short_lived_escaped_pipe_holder_can_finish_shutdown(tmp_path):
+    pid_file = tmp_path / "escaped.pid"
+    code = (
+        "import pathlib,subprocess,sys\n"
+        "child = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(1.5); print(\"helper stopped\")'], start_new_session=True)\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+    )
+    process = start(tmp_path, code, post_exit_drain_seconds=3)
+    escaped_pid = wait_pid(pid_file)
+    try:
+        assert os.getpgid(escaped_pid) == escaped_pid
+        result = process.wait(5)
+        assert result.returncode == 0
+        assert b"helper stopped" in result.stdout
+        assert_not_live(escaped_pid)
+    finally:
+        try:
+            os.kill(escaped_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def test_cancel_does_not_inherit_normal_post_exit_drain_grace(tmp_path):
+    pid_file = tmp_path / "escaped.pid"
+    code = (
+        "import pathlib,subprocess,sys,time\n"
+        "child = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(60)'], start_new_session=True)\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+        "time.sleep(60)\n"
+    )
+    process = start(tmp_path, code, post_exit_drain_seconds=60)
+    escaped_pid = wait_pid(pid_file)
+    try:
+        began = time.monotonic()
+        process.cancel(0)
+        with pytest.raises(RuntimeError, match="supervision failed"):
+            process.wait(5)
+        assert time.monotonic() - began < 3
+    finally:
+        try:
+            os.kill(escaped_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        assert_not_live(escaped_pid)
+
+
+@pytest.mark.parametrize("stop", ["cancel", "timeout"])
+def test_stop_shortens_an_already_running_normal_eof_grace(tmp_path, stop):
+    pid_file = tmp_path / "escaped.pid"
+    code = (
+        "import pathlib,subprocess,sys\n"
+        "child = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(60)'], start_new_session=True)\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+    )
+    process = start(tmp_path, code, post_exit_drain_seconds=60)
+    escaped_pid = wait_pid(pid_file)
+    try:
+        deadline = time.monotonic() + 3
+        while not process._leader_exited:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        began = time.monotonic()
+        if stop == "cancel":
+            process.cancel(0)
+        with pytest.raises(RuntimeError, match="supervision failed"):
+            process.wait(0.05 if stop == "timeout" else 5)
+        assert time.monotonic() - began < 3
+    finally:
+        try:
+            os.kill(escaped_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        assert_not_live(escaped_pid)
+
+
+@pytest.mark.parametrize("seconds", [-1, float("inf"), float("nan"), True])
+def test_invalid_post_exit_grace_is_refused_before_spawn(tmp_path, seconds):
+    with pytest.raises(ValueError):
+        start(
+            tmp_path,
+            "raise RuntimeError('must not run')",
+            post_exit_drain_seconds=seconds,
+        )

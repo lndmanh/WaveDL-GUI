@@ -445,7 +445,13 @@ const configuration = computed(() => {
           </dl>
         </TabsContent>
         <TabsContent value="logs" :class="styles.body">
-          <LogPanel :events="snapshot.events" :truncated="snapshot.truncated" panel />
+          <LogPanel
+            :run="snapshot.run"
+            :events="snapshot.events"
+            :truncated="snapshot.truncated"
+            :active="tab === 'logs'"
+            panel
+          />
         </TabsContent>
         <TabsContent v-if="hasEvaluation" value="evaluation" :class="styles.body">
           <EvaluationResultsPanel
@@ -456,11 +462,19 @@ const configuration = computed(() => {
         </TabsContent>
       </Tabs>
       <Teleport
-        v-if="logTarget && parkedLogs && snapshot.events.length"
+        v-if="logTarget && parkedLogs && snapshot.run"
         :to="isActive ? logTarget : parkedLogs"
         defer
       >
-        <LogPanel :events="snapshot.events" :truncated="snapshot.truncated" panel />
+        <LogPanel
+          :run="snapshot.run"
+          :events="snapshot.events"
+          :truncated="snapshot.truncated"
+          :active="
+            shellLayout.isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'logs'
+          "
+          panel
+        />
       </Teleport>
     </Card>
   </motion.div>
