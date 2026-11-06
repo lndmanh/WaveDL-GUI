@@ -56,6 +56,14 @@ export const runViewSchema = z.object({
   cancellation_requested: z.boolean(),
   evidence: jsonObjectSchema.nullable(),
   progress: runProgressSchema.nullable().optional(),
+  auto_plot: z
+    .object({
+      status: z.enum(['pending', 'submitted', 'failed']),
+      run_id: uuid.nullable(),
+      failure: z.string().nullable(),
+    })
+    .optional()
+    .nullable(),
   // Older daemons omit these; a run is still valid without a human identity.
   created_at: z.iso.datetime({ offset: true }).nullable().optional(),
   summary: z
