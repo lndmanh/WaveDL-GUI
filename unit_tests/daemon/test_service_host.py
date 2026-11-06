@@ -266,6 +266,7 @@ def test_http_async_adapter_awaits_typed_result_and_maps_deadline_503(tmp_path):
         "created_at": None,
         "summary": None,
         "progress": None,
+        "auto_plot": None,
     }
 
     class Reply:
