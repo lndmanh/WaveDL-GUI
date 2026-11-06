@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ConnectionSession } from '../../lib/connection-session';
-import type { DataSelection } from '../../lib/catalog-api';
+import type { DataSelection } from '~~/types/catalog-api';
 
 defineProps<{ session: ConnectionSession; allowDirectory?: boolean; label?: string }>();
 

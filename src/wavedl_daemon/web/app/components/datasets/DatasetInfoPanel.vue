@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DatasetInspection } from '../../lib/dataset-inspection';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
 
 const props = defineProps<{ inspection: DatasetInspection }>();
 const { t } = useI18n({ useScope: 'global' });
@@ -10,9 +10,10 @@ const details = computed(() => [
   { label: t('datasets.outputKey'), value: props.inspection.outputKey },
   {
     label: t('datasets.inputDtype'),
-    value: props.inspection.inputShape === null
-      ? t('datasets.pickledInputShape')
-      : props.inspection.inputDtype,
+    value:
+      props.inspection.inputShape === null
+        ? t('datasets.pickledInputShape')
+        : props.inspection.inputDtype,
   },
   { label: t('datasets.outputDtype'), value: props.inspection.outputDtype },
 ]);

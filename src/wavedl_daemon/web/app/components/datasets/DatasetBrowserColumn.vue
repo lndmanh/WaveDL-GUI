@@ -2,7 +2,7 @@
 import { ChevronLeft, ChevronRight, File, Folder, HardDrive } from '@lucide/vue';
 import { cn } from '@/lib/utils';
 import { datasetFormat } from '../../lib/dataset-suggestions';
-import type { BrowseEntry, BrowsePage } from '../../lib/catalog-api';
+import type { BrowseEntry, BrowsePage } from '~~/types/catalog-api';
 
 const props = defineProps<{
   title: string;

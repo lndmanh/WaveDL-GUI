@@ -2,10 +2,11 @@
 import { ArrowLeft, FileStack, RefreshCw, Search } from '@lucide/vue';
 import { cn } from '@/lib/utils';
 import type { ConnectionSession } from '../../lib/connection-session';
-import { CatalogApi, type BrowseEntry, type DataSelection } from '../../lib/catalog-api';
-import type { DatasetInspection } from '../../lib/dataset-inspection';
+import { CatalogApi } from '../../lib/catalog-api';
 import { pathName, relativeTime } from '../../lib/run-overview';
-import type { DatasetBrowserColumn } from '../../composables/useDatasetBrowser';
+import type { BrowseEntry, DataSelection } from '~~/types/catalog-api';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
+import type { DatasetBrowserColumn } from '~~/types/dataset-browser';
 
 const props = withDefaults(
   defineProps<{

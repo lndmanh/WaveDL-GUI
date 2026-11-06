@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { FileStack, Folder } from '@lucide/vue';
 import { cn } from '@/lib/utils';
-import type { DataSelection } from '../../lib/catalog-api';
-import type { DatasetInspection } from '../../lib/dataset-inspection';
 import {
   datasetFormat,
   datasetInputDimensions,
   datasetOutputValues,
 } from '../../lib/dataset-suggestions';
 import { pathName } from '../../lib/run-overview';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
 
 const props = defineProps<{
   selection: DataSelection | null;

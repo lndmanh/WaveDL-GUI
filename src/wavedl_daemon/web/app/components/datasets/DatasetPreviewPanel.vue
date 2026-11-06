@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { DataSelection } from '../../lib/catalog-api';
 import type { ConnectionSession } from '../../lib/connection-session';
 import { sampleMatrix } from '../../lib/dataset-preview';
 import { datasetPreviewMessageKeys, datasetPreviewTabMessageKeys } from '../../i18n/dynamic-keys';
+import type { DataSelection } from '~~/types/catalog-api';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
@@ -117,7 +117,8 @@ const matrices = computed(
           class="h-auto max-w-full whitespace-normal text-left"
           :disabled="!available"
           @click="trust"
-        >{{ t('datasets.trustPickle') }}</Button>
+          >{{ t('datasets.trustPickle') }}</Button
+        >
       </AlertDescription>
     </Alert>
     <p v-else-if="message" role="status">

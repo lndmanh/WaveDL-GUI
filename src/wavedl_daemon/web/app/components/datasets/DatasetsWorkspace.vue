@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ChevronRight } from '@lucide/vue';
 import type { ConnectionSession } from '../../lib/connection-session';
-import type { DataSelection } from '../../lib/catalog-api';
-import type { DatasetInspection } from '../../lib/dataset-inspection';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
 
 const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ session: ConnectionSession }>();

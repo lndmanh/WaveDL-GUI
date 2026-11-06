@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DatasetPreview } from '../../lib/dataset-preview';
+import type { DatasetPreview } from '~~/types/dataset-preview';
 
 const { t } = useI18n({ useScope: 'global' });
 
