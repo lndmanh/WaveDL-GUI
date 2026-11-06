@@ -173,3 +173,19 @@ def test_openapi_documents_daemon_errors_not_fastapi_422():
     schemas = spec["components"]["schemas"]
     assert schemas["ErrorResponse"]["required"] == ["error"]
     assert not {"HTTPValidationError", "ValidationError"} & schemas.keys()
+
+
+def test_dataset_polling_wire_contract():
+    spec = exporter().build_openapi()
+    schemas = spec["components"]["schemas"]
+    request = schemas["PreviewRequest"]
+    assert set(request["properties"]) == {"root", "path", "allow_pickle"}
+    assert request["properties"]["allow_pickle"]["default"] is False
+    assert set(request["required"]) == {"root", "path"}
+    response = schemas["PreviewResponse"]["properties"]
+    assert "input_sample_indices" in response
+    assert not {"identity", "fingerprint", "limits", "view"} & response.keys()
+    pending = spec["paths"]["/api/datasets/preview"]["post"]["responses"]["202"]
+    assert pending["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/PreviewPending"
+    }

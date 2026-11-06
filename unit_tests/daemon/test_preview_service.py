@@ -1,495 +1,339 @@
-"""Scoped supervised previews never expose arbitrary arrays or filesystem paths."""
+"""
+Supervised polling jobs, root authority and authenticated HTTP contracts.
+Author: Ngo Duc Manh Le (manh@nnsvn.me)
+"""
+
+from __future__ import annotations
 
 import asyncio
 import json
-import os
-import subprocess
 import sys
-import threading
 import time
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
-from scipy.io import savemat
 from starlette.testclient import TestClient
 
 from unit_tests.daemon.conftest import route_app
 from wavedl_daemon.execution.budget import BudgetExhausted, WorkBudget
-from wavedl_daemon.execution.pool import BoundedThreadPool, WorkCancelled
+from wavedl_daemon.execution.pool import BoundedThreadPool
 from wavedl_daemon.http.app import create_app
 from wavedl_daemon.http.preview import preview_routes
 from wavedl_daemon.runs.catalog import CatalogService
-from wavedl_daemon.runs.dataset_preview import PreviewLimits
-from wavedl_daemon.runs.preview_authority import PreviewForbidden
-from wavedl_daemon.runs.preview_service import (
-    DatasetPreviewService,
-    PreviewBadRequest,
+from wavedl_daemon.runs.dataset_preview import (
+    PickleRequired,
     PreviewRefused,
-    PreviewTooLarge,
-    validate_preview,
+    preview_dataset,
 )
+from wavedl_daemon.runs.preview_service import DatasetPreviewService
 from wavedl_daemon.runs.runtime_service import HostedServices
 from wavedl_daemon.storage.settings import Settings
+from wavedl_daemon.supervision.base import ProcessResult
 
 
-def make_service(tmp_path, pool, **kwargs):
-    return DatasetPreviewService(
-        sys.executable, Path.cwd(), pool, CatalogService({"data": tmp_path}), **kwargs
-    )
+def request(path="data.npz", allow_pickle=False):
+    return {"root": "data", "path": path, "allow_pickle": allow_pickle}
 
 
-def request(view="all", path="data.npz"):
-    return {"root": "data", "path": path, "view": view}
-
-
-def write_dataset(tmp_path):
+def write_dataset(path):
     np.savez(
-        tmp_path / "data.npz",
-        inputs=np.arange(24).reshape(6, 4),
-        outputs=np.arange(12).reshape(6, 2),
+        path, inputs=np.arange(24).reshape(6, 4), outputs=np.arange(12).reshape(6, 2)
     )
 
 
-@pytest.mark.parametrize("view", sorted(DatasetPreviewService.ALLOWED_VIEWS))
-def test_actual_npz_six_selectors(tmp_path, view):
-    write_dataset(tmp_path)
-    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
-        result = asyncio.run(make_service(tmp_path, pool).preview(request(view)))
-    assert result["schema_version"] == 1
-    assert result["input_shape"] == [6, 4]
-    assert result["selection"] == {"root": "data", "path": "data.npz"}
-    assert result["view"] == view
-    assert set(result["identity"]) == {"st_dev", "st_ino", "st_size", "st_mtime_ns"}
-    assert "raw" not in result
+def make_service(tmp_path, pool, **options):
+    return DatasetPreviewService(
+        sys.executable, Path.cwd(), pool, CatalogService({"data": tmp_path}), **options
+    )
 
 
-@pytest.mark.parametrize("suffix", [".npz", ".mat", ".h5", ".hdf5"])
-@pytest.mark.parametrize("rows,sample_cap", [(1, 512), (3, 1)])
-def test_one_sample_multi_output_correlation_is_unavailable(
-    tmp_path, suffix, rows, sample_cap
-):
-    """A valid single sampled row cannot yield a correlation matrix."""
-    path = tmp_path / ("data" + suffix)
-    arrays = {
-        "X": np.arange(rows * 4).reshape(rows, 4),
-        "Y": np.arange(rows * 2).reshape(rows, 2),
-    }
-    if suffix == ".npz":
-        np.savez(path, **arrays)
-    elif suffix == ".mat":
-        savemat(path, arrays, do_compression=True)
-    else:
-        import h5py
+def test_real_worker_and_per_call_deadline(tmp_path, monkeypatch):
+    write_dataset(tmp_path / "data.npz")
+    import wavedl_daemon.runs.preview_service as module
 
-        with h5py.File(path, "w") as file:
-            for name, array in arrays.items():
-                file[name] = array
-    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
-        service = make_service(
-            tmp_path,
-            pool,
-            limits=replace(
-                PreviewLimits(), max_sample_rows=sample_cap, max_output_bytes=200_000
-            ),
-        )
-        result = asyncio.run(service.preview(request(path=path.name)))
-    assert len(result["sample_indices"]) == 1
-    assert result["correlation"] == {"feature_indices": [0, 1], "matrix": None}
-    json.dumps(result, allow_nan=False)
+    original = module.run_command
+    observed = []
+
+    def run(spec, budget, *, token):
+        observed.append((spec, budget, token))
+        return original(spec, budget, token=token)
+
+    monkeypatch.setattr(module, "run_command", run)
+    with BoundedThreadPool(WorkBudget(timeout_seconds=0.05)) as pool:
+        service = make_service(tmp_path, pool)
+        value = asyncio.run(service.preview(request()))
+        assert value["selection"] == {"root": "data", "path": "data.npz"}
+        assert value["input_shape"] == [6, 4]
+        assert value["scatter"]["y"] == [0, 2, 4, 6, 8, 10]
+    spec, budget, token = observed[0]
+    assert "wavedl_daemon.runs.dataset_preview_worker" in spec.argv
+    assert budget.timeout_seconds == 600
+    assert token.deadline > time.monotonic() + 590
+    assert not {"identity", "fingerprint", "view", "limits"} & value.keys()
 
 
-@pytest.mark.parametrize(
-    "body",
-    [
-        {},
-        {"root": "data", "path": "data.npz"},
-        {**request(), "limits": {}},
-        {**request(), "view": "expression"},
-        {**request(), "path": 1},
-    ],
-)
-def test_fixed_schema_rejects_extra_fields_and_unknown_views(tmp_path, body):
-    with BoundedThreadPool(WorkBudget()) as pool, pytest.raises(PreviewBadRequest):
-        asyncio.run(make_service(tmp_path, pool).preview(body))
+def test_polling_deduplicates_jobs_and_caches_only_success(tmp_path):
+    write_dataset(tmp_path / "data.npz")
+    value = preview_dataset(tmp_path / "data.npz")
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool, wait_seconds=0.001)
+
+        async def run():
+            gate = asyncio.Event()
+            calls = []
+
+            async def compute(path, allow_pickle):
+                calls.append((path, allow_pickle))
+                await gate.wait()
+                return value
+
+            service._run = compute
+            assert await service.preview(request()) == {"status": "pending"}
+            assert await service.preview(request()) == {"status": "pending"}
+            assert len(calls) == 1
+            gate.set()
+            assert (await service.preview(request()))["input_shape"] == [6, 4]
+            assert (await service.preview(request()))["input_shape"] == [6, 4]
+            assert len(calls) == 1
+            await service.close()
+
+        asyncio.run(run())
 
 
-@pytest.mark.parametrize(
-    "path", ["../outside.npz", "/absolute.npz", "folder//data.npz", "folder\\data.npz"]
-)
-def test_traversal_rejected(tmp_path, path):
-    with BoundedThreadPool(WorkBudget()) as pool, pytest.raises(PreviewForbidden):
-        asyncio.run(make_service(tmp_path, pool).preview(request(path=path)))
+def test_failures_retry_and_allow_pickle_is_a_separate_cache_key(tmp_path):
+    write_dataset(tmp_path / "data.npz")
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool)
+
+        async def run():
+            calls = []
+
+            async def compute(path, allow_pickle):
+                calls.append(allow_pickle)
+                if not allow_pickle:
+                    raise PickleRequired("Dataset contains pickled arrays")
+                return {"ok": True}
+
+            service._run = compute
+            for _ in range(2):
+                with pytest.raises(PickleRequired):
+                    await service.preview(request())
+            assert (await service.preview(request(allow_pickle=True)))["ok"]
+            assert (await service.preview(request(allow_pickle=True)))["ok"]
+            assert calls == [False, False, True]
+            await service.close()
+
+        asyncio.run(run())
 
 
-def test_symlink_out_of_the_root_is_refused(tmp_path):
+def test_cache_invalidates_on_file_change_and_evicts_old_entries(tmp_path):
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool)
+
+        async def run():
+            calls = []
+
+            async def compute(path, allow_pickle):
+                calls.append(path)
+                return {"ok": True}
+
+            service._run = compute
+            for index in range(9):
+                (tmp_path / f"{index}.npz").write_bytes(b"fixture")
+                await service.preview(request(f"{index}.npz"))
+            assert len(service._cache) == 8
+            await service.preview(request("0.npz"))
+            (tmp_path / "0.npz").write_bytes(b"changed fixture")
+            await service.preview(request("0.npz"))
+            assert len(calls) == 11
+            await service.close()
+
+        asyncio.run(run())
+
+
+def test_concurrency_cap_is_503_and_cancelled_poll_does_not_cancel_job(tmp_path):
+    for index in range(3):
+        (tmp_path / f"{index}.npz").write_bytes(b"fixture")
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool, wait_seconds=0.001)
+
+        async def run():
+            gate = asyncio.Event()
+            calls = []
+
+            async def compute(path, allow_pickle):
+                calls.append(path)
+                await gate.wait()
+                return {"ok": True}
+
+            service._run = compute
+            try:
+                assert await service.preview(request("0.npz")) == {"status": "pending"}
+                assert await service.preview(request("1.npz")) == {"status": "pending"}
+                with pytest.raises(BudgetExhausted):
+                    await service.preview(request("2.npz"))
+                service.wait_seconds = 10
+                poll = asyncio.create_task(service.preview(request("0.npz")))
+                await asyncio.sleep(0.01)
+                poll.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await poll
+                assert len(service._jobs) == 2
+                gate.set()
+                assert (await service.preview(request("0.npz")))["ok"]
+                assert len(calls) == 2
+            finally:
+                await service.close()
+
+        asyncio.run(run())
+
+
+@pytest.mark.parametrize("selected", ["../outside.npz", "/tmp/outside.npz", "link.npz"])
+def test_root_escape_and_symlink_escape_refused(tmp_path, selected):
     root = tmp_path / "root"
     root.mkdir()
-    write_dataset(tmp_path)
-    (root / "link.npz").symlink_to(tmp_path / "data.npz")
-    with BoundedThreadPool(WorkBudget()) as pool, pytest.raises(PreviewForbidden):
-        asyncio.run(make_service(root, pool).preview(request(path="link.npz")))
-
-
-def test_no_content_cache(tmp_path):
-    write_dataset(tmp_path)
-    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
-        service = make_service(tmp_path, pool)
-        first = asyncio.run(service.preview(request()))
-        np.savez(tmp_path / "data.npz", inputs=np.ones((4, 3)), outputs=np.ones((4, 1)))
-        second = asyncio.run(service.preview(request()))
-    assert first["identity"] != second["identity"]
-    assert second["input_shape"] == [4, 3]
-
-
-@pytest.mark.parametrize(
-    "content",
-    [
-        b"{}",
-        b"[]",
-        b'{"schema_version":1,"schema_version":1}',
-        b'{"schema_version":NaN}',
-        b"invalid",
-    ],
-)
-def test_untrusted_process_json_is_strict(content):
-    with pytest.raises(PreviewRefused):
-        validate_preview(content, PreviewLimits())
-
-
-def test_json_byte_cap():
-    with pytest.raises(PreviewTooLarge):
-        validate_preview(b" " * 100, replace(PreviewLimits(), max_output_bytes=99))
-
-
-def test_pool_admission_shared(tmp_path):
-    ready, release = threading.Event(), threading.Event()
-    with BoundedThreadPool(WorkBudget(max_workers=1, max_pending=0)) as pool:
-
-        def occupied(token):
-            ready.set()
-            release.wait(5)
-
-        handle = pool.submit(occupied)
-        assert ready.wait(2)
-        try:
-            with pytest.raises(BudgetExhausted):
-                asyncio.run(make_service(tmp_path, pool).preview(request()))
-        finally:
-            release.set()
-            handle.result(5)
-
-
-def test_service_import_has_no_numeric_or_gui_dependencies():
-    # -S bypasses editable-install .pth files, so expose only the checkout source.
-    source_root = Path(__file__).resolve().parents[2] / "src"
-    code = "import sys; import wavedl_daemon.runs.preview_service; assert not any(x in sys.modules for x in ['numpy','torch','h5py','scipy','PySide6'])"
-    subprocess.run(
-        [sys.executable, "-S", "-c", code],
-        check=True,
-        capture_output=True,
-        timeout=10,
-        env=os.environ | {"PYTHONPATH": str(source_root)},
-    )
-
-
-def test_http_no_store_and_refusal_codes():
-    class Previewer:
-        async def preview(self, body):
-            if body.get("view") == "bad":
-                raise PreviewBadRequest("secret")
-            if body.get("view") == "refused":
-                raise PreviewRefused("secret")
-            return {
-                "schema_version": 1,
-                "identity": {
-                    "st_dev": 1,
-                    "st_ino": 1,
-                    "st_size": 1,
-                    "st_mtime_ns": 1,
-                },
-                "format": "npz",
-                "input_key": "inputs",
-                "output_key": "outputs",
-                "input_shape": [1, 1],
-                "output_shape": [1, 1],
-                "sample_indices": [0],
-                "input_histograms": [],
-                "output_histograms": [],
-                "correlation": {"feature_indices": [], "matrix": None},
-                "input_statistics": {"feature_indices": [], "means": [], "stds": []},
-                "scatter": {"feature_indices": [], "output_index": 0, "x": [], "y": []},
-                "samples": [],
-                "limits": {},
-                "selection": {"root": body["root"], "path": body["path"]},
-                "view": body["view"],
-            }
-
-    with TestClient(route_app(routes=preview_routes(Previewer()))) as client:
-        result = client.post("/api/datasets/preview", json=request())
-        assert result.status_code == 200
-        assert result.headers["cache-control"] == "no-store"
-        assert (
-            client.post("/api/datasets/preview", json=request("bad")).status_code == 400
-        )
-        refused = client.post("/api/datasets/preview", json=request("refused"))
-        assert refused.status_code == 400
-        assert refused.json() == {"error": "Bad request"}
-        assert "secret" not in refused.text
-
-
-def test_worker_output_shape_mutation_is_rejected(tmp_path):
-    write_dataset(tmp_path)
-    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
-        service = make_service(tmp_path, pool)
-        result = asyncio.run(service.preview(request()))
-        result.pop("selection")
-        result.pop("view")
-        result["scatter"]["x"][0].append(123)
+    outside = tmp_path / "outside.npz"
+    write_dataset(outside)
+    (root / "link.npz").symlink_to(outside)
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(root, pool)
         with pytest.raises(PreviewRefused):
-            validate_preview(json.dumps(result).encode(), service.limits)
+            asyncio.run(service.preview(request(selected)))
 
 
-def test_multi_sample_multi_output_missing_correlation_is_rejected(tmp_path):
-    """Unavailable single-row correlation must not weaken other matrix checks."""
-    write_dataset(tmp_path)
-    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
-        service = make_service(tmp_path, pool)
-        result = asyncio.run(service.preview(request()))
-    result.pop("selection")
-    result.pop("view")
-    result["correlation"]["matrix"] = None
-    with pytest.raises(PreviewRefused):
-        validate_preview(json.dumps(result).encode(), service.limits)
+def test_worker_timeout_and_crash_are_unavailable(tmp_path, monkeypatch):
+    (tmp_path / "data.npz").write_bytes(b"fixture")
+    import wavedl_daemon.runs.preview_service as module
+
+    for result in (
+        ProcessResult(-9, b"", b"", timed_out=True),
+        ProcessResult(-9, b"", b""),
+    ):
+        monkeypatch.setattr(
+            module, "run_command", lambda *args, res=result, **kwargs: res
+        )
+        with BoundedThreadPool(WorkBudget()) as pool, pytest.raises(BudgetExhausted):
+            asyncio.run(make_service(tmp_path, pool).preview(request()))
 
 
-def test_request_cancel_waits_for_cooperative_work_and_releases_slot(
-    tmp_path, monkeypatch
-):
-    write_dataset(tmp_path)
-    started, stopped = threading.Event(), threading.Event()
+def test_http_202_then_200_and_busy_is_503(tmp_path, monkeypatch):
+    import threading
+
+    for name in ("data.npz", "second.npz", "third.npz"):
+        write_dataset(tmp_path / name)
+    value = preview_dataset(tmp_path / "data.npz")
+    release = threading.Event()
+    calls = []
 
     def command(spec, budget, *, token):
-        started.set()
-        try:
-            while True:
-                token.wait(0.01)
-                token.check()
-        finally:
-            stopped.set()
-
-    monkeypatch.setattr("wavedl_daemon.runs.preview_service.run_command", command)
-    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
-
-        async def scenario():
-            task = asyncio.create_task(make_service(tmp_path, pool).preview(request()))
-            while not started.is_set():
-                await asyncio.sleep(0.01)
-            task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await task
-            assert stopped.is_set()
-            assert pool.outstanding == 0
-
-        asyncio.run(scenario())
-
-
-def test_process_deadline_reaps_child(tmp_path, monkeypatch):
-    from wavedl_daemon.runs import preview_service
-
-    write_dataset(tmp_path)
-    original = preview_service.run_command
-    ready = tmp_path / "preview-child-ready"
-    results = []
-    script = f"import time; from pathlib import Path; Path({str(ready)!r}).write_text('started'); time.sleep(30)"
-
-    def controlled(spec, budget, *, token):
-        result = original(
-            replace(spec, argv=(sys.executable, "-c", script)), budget, token=token
-        )
-        results.append(result)
-        return result
-
-    monkeypatch.setattr(preview_service, "run_command", controlled)
-    with BoundedThreadPool(
-        WorkBudget(max_workers=1, max_pending=0, timeout_seconds=1)
-    ) as pool:
-        service = DatasetPreviewService(
-            sys.executable, tmp_path, pool, CatalogService({"data": tmp_path})
-        )
-        start = time.monotonic()
-        with pytest.raises((BudgetExhausted, WorkCancelled)):
-            asyncio.run(service.preview(request()))
-        assert time.monotonic() - start < 3
-        assert pool.outstanding == 0
-    assert ready.read_text() == "started"
-    assert len(results) == 1 and results[0].timed_out
-
-
-def test_pending_preview_cancellation_drains_without_starting_child(
-    tmp_path, monkeypatch
-):
-    """A cancelled queued preview retains admission until it really unwinds."""
-    write_dataset(tmp_path)
-    started, release = threading.Event(), threading.Event()
-    children = []
-
-    def occupied(token):
-        started.set()
+        calls.append(spec)
         assert release.wait(5)
-
-    def command(*args, **kwargs):
-        children.append(args)
-        pytest.fail("Cancelled pending preview must not start a child")
+        return ProcessResult(0, json.dumps(value).encode(), b"")
 
     monkeypatch.setattr("wavedl_daemon.runs.preview_service.run_command", command)
-    with BoundedThreadPool(
-        WorkBudget(max_workers=1, max_pending=1, timeout_seconds=10)
-    ) as pool:
-        blocker = pool.submit(occupied)
-        assert started.wait(2)
-
-        async def scenario():
-            task = asyncio.create_task(make_service(tmp_path, pool).preview(request()))
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool, wait_seconds=0.001)
+        with TestClient(route_app(routes=preview_routes(service))) as client:
             try:
-                async with asyncio.timeout(2):
-                    while pool.outstanding != 2:
-                        await asyncio.sleep(0.01)
-                task.cancel()
-                await asyncio.sleep(0)
-                assert not task.done()
-                assert pool.outstanding == 2
+                pending = client.post("/api/datasets/preview", json=request())
+                assert pending.status_code == 202
+                assert pending.json() == {"status": "pending"}
+                assert pending.headers["cache-control"] == "no-store"
+                assert (
+                    client.post(
+                        "/api/datasets/preview", json=request("second.npz")
+                    ).status_code
+                    == 202
+                )
+                assert (
+                    client.post(
+                        "/api/datasets/preview", json=request("third.npz")
+                    ).status_code
+                    == 503
+                )
+                assert (
+                    client.post("/api/datasets/preview", json=request()).status_code
+                    == 202
+                )
+                release.set()
+                for name in ("data.npz", "second.npz"):
+                    deadline = time.monotonic() + 3
+                    while True:
+                        complete = client.post(
+                            "/api/datasets/preview", json=request(name)
+                        )
+                        if complete.status_code != 202 or time.monotonic() >= deadline:
+                            break
+                    assert complete.status_code == 200
+                    assert complete.headers["cache-control"] == "no-store"
+                assert len(calls) == 2
+                assert (
+                    client.post(
+                        "/api/datasets/preview", json={**request(), "view": "all"}
+                    ).status_code
+                    == 400
+                )
+                assert (
+                    client.post(
+                        "/api/datasets/preview",
+                        json={**request(), "allow_pickle": "true"},
+                    ).status_code
+                    == 400
+                )
             finally:
                 release.set()
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(task, 2)
-            blocker.result(2)
-            assert pool.outstanding == 0
-            assert not children
-            assert await pool.submit(lambda token: "reused").wait() == "reused"
-
-        asyncio.run(scenario())
 
 
-def test_hosted_preview_midrequest_mutation_refuses_decoded_child_result(
-    tmp_path, monkeypatch
-):
-    """Even valid child JSON is refused if its held file changes before return."""
-    from wavedl_daemon.runs import preview_service
-
-    write_dataset(tmp_path)
-    original_command = preview_service.run_command
-    decoded = []
-
-    def mutate_after_decode(spec, budget, *, token):
-        result = original_command(spec, budget, token=token)
-        assert result.returncode == 0
-        decoded.append(json.loads(result.stdout))
-        with (tmp_path / "data.npz").open("ab") as dataset:
-            dataset.write(b"changed-after-child-decode")
-        return result
-
-    monkeypatch.setattr(preview_service, "run_command", mutate_after_decode)
+def test_hosted_routes_preserve_auth_no_store_and_pickle_required(tmp_path):
+    write_dataset(tmp_path / "data.npz")
+    np.savez(
+        tmp_path / "object.npz",
+        inputs=np.array([np.ones(2)], dtype=object),
+        outputs=np.zeros((1, 1)),
+    )
     settings = Settings(tmp_path / "state", tmp_path / "runs")
     services = HostedServices(settings, browse_roots={"data": tmp_path})
-    app = create_app(
-        settings,
-        token="mutation-token",
-        daemon_id="initial",
-        build_id="preview-test",
-        services=services,
-    )
-    with TestClient(
-        app,
-        base_url="http://localhost:8420",
-        headers={"Authorization": "Bearer mutation-token"},
-    ) as client:
-        client.headers["X-WaveDL-Daemon-ID"] = client.get("/api/health").json()[
-            "daemon_id"
-        ]
-        result = client.post("/api/datasets/preview", json=request())
-        assert decoded[0]["input_shape"] == [6, 4]
-        assert result.status_code == 409, result.text
-        assert "scatter" not in result.text
-        assert str(tmp_path) not in result.text
-        assert services.pool.outstanding == 0
-
-
-def test_hosted_preview_shared_admission_refuses_then_recovers(tmp_path):
-    """The authenticated route shares capacity and returns no stale success."""
-    write_dataset(tmp_path)
-    settings = Settings(tmp_path / "state", tmp_path / "runs")
-    services = HostedServices(
-        settings,
-        browse_roots={"data": tmp_path},
-        budget=WorkBudget(max_workers=1, max_pending=0, timeout_seconds=10),
-    )
-    app = create_app(
-        settings,
-        token="admission-token",
-        daemon_id="initial",
-        build_id="preview-test",
-        services=services,
-    )
-    ready, release = threading.Event(), threading.Event()
-
-    def occupied(token):
-        ready.set()
-        assert release.wait(5)
-
-    with TestClient(
-        app,
-        base_url="http://localhost:8420",
-        headers={"Authorization": "Bearer admission-token"},
-    ) as client:
-        client.headers["X-WaveDL-Daemon-ID"] = client.get("/api/health").json()[
-            "daemon_id"
-        ]
-        blocker = services.pool.submit(occupied)
-        assert ready.wait(2)
-        try:
-            result = client.post("/api/datasets/preview", json=request())
-            assert result.status_code == 503, result.text
-            assert "scatter" not in result.text
-            assert str(tmp_path) not in result.text
-            assert services.pool.outstanding == 1
-        finally:
-            release.set()
-            blocker.result(2)
-        recovered = client.post("/api/datasets/preview", json=request())
-        assert recovered.status_code == 200, recovered.text
-        assert recovered.json()["input_shape"] == [6, 4]
-        assert services.pool.outstanding == 0
-
-
-def test_hosted_authenticated_preview_real_child_and_identity_boundary(tmp_path):
-    write_dataset(tmp_path)
-    settings = Settings(tmp_path / "state", tmp_path / "runs")
-    services = HostedServices(settings, browse_roots={"data": tmp_path})
-    token = "preview-acceptance-token"
+    token = "dataset-acceptance-token"
     app = create_app(
         settings,
         token=token,
         daemon_id="initial",
-        build_id="preview-test",
+        build_id="dataset-test",
         services=services,
     )
     with TestClient(app, base_url="http://localhost:8420") as client:
-        assert client.post("/api/datasets/preview", json=request()).status_code == 401
+        for endpoint in ("inspect", "preview"):
+            assert (
+                client.post(f"/api/datasets/{endpoint}", json=request()).status_code
+                == 401
+            )
         client.headers["Authorization"] = f"Bearer {token}"
-        daemon_id = client.get("/api/health").json()["daemon_id"]
-        client.headers["X-WaveDL-Daemon-ID"] = daemon_id
-        for view in sorted(DatasetPreviewService.ALLOWED_VIEWS):
-            result = client.post("/api/datasets/preview", json=request(view))
-            assert result.status_code == 200, result.text
-            value = result.json()
-            assert value["identity"]["st_ino"] == (tmp_path / "data.npz").stat().st_ino
-            assert value["input_shape"] == [6, 4]
-            assert value["scatter"]["y"] == [0, 2, 4, 6, 8, 10]
-            assert result.headers["cache-control"] == "no-store"
-            assert token not in result.text
-            assert str(tmp_path) not in result.text
+        client.headers["X-WaveDL-Daemon-ID"] = client.get("/api/health").json()[
+            "daemon_id"
+        ]
+        inspected = client.post(
+            "/api/datasets/inspect", json={"root": "data", "path": "object.npz"}
+        )
+        assert inspected.status_code == 200
+        assert inspected.headers["cache-control"] == "no-store"
+        assert inspected.json()["variables"][0]["dtype"] == "object"
+        response = client.post(
+            "/api/datasets/preview", json={"root": "data", "path": "data.npz"}
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers["cache-control"] == "no-store"
+        assert token not in response.text and str(tmp_path) not in response.text
+        response = client.post("/api/datasets/preview", json=request("object.npz"))
+        assert response.status_code == 409
+        assert response.json() == {"error": "Dataset contains pickled arrays"}
+        assert response.headers["cache-control"] == "no-store"
+        assert (
+            client.post(
+                "/api/datasets/preview", json=request("../data.npz")
+            ).status_code
+            == 400
+        )
         assert (
             client.post(
                 "/api/datasets/preview",
@@ -498,123 +342,58 @@ def test_hosted_authenticated_preview_real_child_and_identity_boundary(tmp_path)
             ).status_code
             == 403
         )
-        assert (
-            client.post(
-                "/api/datasets/preview",
-                json=request(),
-                headers={"X-WaveDL-Daemon-ID": "foreign-daemon"},
-            ).status_code
-            == 409
-        )
-        for body in (
-            request(path="../data.npz"),
-            {**request(), "root": "other"},
-            {**request(), "limits": {}},
-        ):
-            assert client.post("/api/datasets/preview", json=body).status_code == 400
-        (tmp_path / "bad.npz").write_bytes(b"malformed")
-        assert (
-            client.post(
-                "/api/datasets/preview", json=request(path="bad.npz")
-            ).status_code
-            == 400
-        )
-        np.savez(
-            tmp_path / "object.npz",
-            inputs=np.array([{"x": 1}], dtype=object),
-            outputs=np.zeros((1, 1)),
-        )
-        assert (
-            client.post(
-                "/api/datasets/preview", json=request(path="object.npz")
-            ).status_code
-            == 400
-        )
-        np.savez(
-            tmp_path / "wide.npz", inputs=np.ones((1, 65537)), outputs=np.zeros((1, 1))
-        )
-        assert (
-            client.post(
-                "/api/datasets/preview", json=request(path="wide.npz")
-            ).status_code
-            == 413
-        )
 
 
-@pytest.mark.parametrize("kind", ["mat", "h5", "hdf5"])
-def test_hosted_optional_dataset_formats(tmp_path, kind):
-    path = tmp_path / f"dataset.{kind}"
-    x, y = np.arange(24).reshape(6, 4), np.arange(12).reshape(6, 2)
-    if kind == "mat":
-        scipy = pytest.importorskip("scipy.io")
-        scipy.savemat(path, {"inputs": x, "outputs": y})
-    else:
-        h5py = pytest.importorskip("h5py")
-        with h5py.File(path, "w") as file:
-            file["inputs"], file["outputs"] = x, y
-    settings = Settings(tmp_path / "state", tmp_path / "runs")
-    services = HostedServices(settings, browse_roots={"data": tmp_path})
-    app = create_app(
-        settings,
-        token="formats-token",
-        daemon_id="initial",
-        build_id="test",
-        services=services,
-    )
-    with TestClient(
-        app,
-        base_url="http://localhost:8420",
-        headers={"Authorization": "Bearer formats-token"},
-    ) as client:
-        result = client.post("/api/datasets/preview", json=request(path=path.name))
-        assert result.status_code == 200, result.text
-        assert result.json()["input_shape"] == [6, 4]
+def test_close_terminates_real_worker_and_drains_pool(tmp_path, monkeypatch):
+    import os
 
+    from wavedl_daemon.execution.commands import run_command
+    from wavedl_daemon.supervision.base import ProcessSpec
 
-def test_http_disconnect_cancels_and_drains_preview():
-    stopped = asyncio.Event()
-    started = asyncio.Event()
+    write_dataset(tmp_path / "data.npz")
+    marker = tmp_path / "worker.pid"
+    script = "import os, pathlib, sys, time; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(60)"
+    completed = []
 
-    class Previewer:
-        async def preview(self, body):
-            started.set()
+    def command(spec, budget, *, token):
+        result = run_command(
+            ProcessSpec((sys.executable, "-I", "-c", script, str(marker)), Path.cwd()),
+            budget,
+            token=token,
+        )
+        completed.append(result)
+        return result
+
+    monkeypatch.setattr("wavedl_daemon.runs.preview_service.run_command", command)
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool, wait_seconds=0.001)
+
+        async def run():
             try:
-                await asyncio.Event().wait()
+                assert await service.preview(request()) == {"status": "pending"}
+                async with asyncio.timeout(3):
+                    while not marker.exists():
+                        await asyncio.sleep(0.005)
             finally:
-                stopped.set()
+                await service.close()
+            assert completed and completed[0].cancelled
+            assert pool.outstanding == 0
+            if os.name != "nt":
+                with pytest.raises(ProcessLookupError):
+                    os.kill(int(marker.read_text()), 0)
 
-    async def scenario():
-        app = route_app(routes=preview_routes(Previewer()))
-        messages = asyncio.Queue()
-        await messages.put(
-            {
-                "type": "http.request",
-                "body": json.dumps(request()).encode(),
-                "more_body": False,
-            }
-        )
-        sent = []
+        asyncio.run(run())
 
-        async def send(message):
-            sent.append(message)
 
-        scope = {
-            "type": "http",
-            "http_version": "1.1",
-            "scheme": "http",
-            "method": "POST",
-            "path": "/api/datasets/preview",
-            "raw_path": b"/api/datasets/preview",
-            "query_string": b"",
-            "headers": [(b"content-type", b"application/json")],
-            "server": ("localhost", 8420),
-            "client": ("localhost", 12345),
-        }
-        operation = asyncio.create_task(app(scope, messages.get, send))
-        await asyncio.wait_for(started.wait(), 2)
-        await messages.put({"type": "http.disconnect"})
-        await asyncio.wait_for(operation, 2)
-        assert stopped.is_set()
-        assert sent[0]["status"] == 503
-
-    asyncio.run(scenario())
+def test_full_size_image_samples_fit_worker_output_budget(tmp_path):
+    rng = np.random.default_rng(0)
+    np.savez(
+        tmp_path / "data.npz",
+        inputs=rng.normal(size=(3, 500, 500)),
+        outputs=np.zeros((3, 1)),
+    )
+    with BoundedThreadPool(WorkBudget()) as pool:
+        value = asyncio.run(make_service(tmp_path, pool).preview(request()))
+    size = len(json.dumps(value, separators=(",", ":")).encode())
+    assert 512 * 1024 < size < 2 * 1024 * 1024
+    assert [sample["shape"] for sample in value["samples"]] == [[125, 125]] * 3

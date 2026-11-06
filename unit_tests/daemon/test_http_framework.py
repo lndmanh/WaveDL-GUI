@@ -259,7 +259,7 @@ def test_strict_json_on_every_body_route(fake_services, path, limit, case):
 
 @pytest.mark.parametrize("group", ["inspect", "preview"])
 def test_dataset_refusal_is_bad_request(fake_services, group):
-    from wavedl_daemon.runs.dataset_headers import InspectionRefused
+    from wavedl_daemon.runs.inspection import InspectionRefused
     from wavedl_daemon.runs.preview_service import PreviewRefused
 
     async def inspect_dataset(root, path):
@@ -271,8 +271,6 @@ def test_dataset_refusal_is_bad_request(fake_services, group):
     fake_services.inspect = inspect_dataset
     fake_services.preview = preview_dataset
     body = {"root": "data", "path": "data.npz"}
-    if group == "preview":
-        body["view"] = "all"
     response = request(
         hosted_app(fake_services),
         method="POST",
@@ -280,7 +278,12 @@ def test_dataset_refusal_is_bad_request(fake_services, group):
         content=json.dumps(body),
     )
     assert response.status_code == 400
-    assert response.content == b'{"error":"Bad request"}'
+    assert response.json() == {
+        "error": "Could not inspect this dataset"
+        if group == "inspect"
+        else "Could not preview this dataset"
+    }
+    assert "private-secret" not in response.text
 
 
 @pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc"])

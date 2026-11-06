@@ -1,373 +1,164 @@
-"""Numerical preview uses pinned inputs and explicit allocation budgets."""
+"""
+Sampled numerical summaries across the supported training formats.
+Author: Ngo Duc Manh Le (manh@nnsvn.me)
+"""
 
-import json
-import os
-import struct
-import subprocess
-import sys
-import zipfile
-import zlib
-from dataclasses import replace
+from __future__ import annotations
 
 import h5py
 import numpy as np
 import pytest
 from scipy.io import savemat
+from scipy.sparse import csr_matrix
 
 from wavedl_daemon.runs.dataset_preview import (
-    PreviewLimits,
+    PickleRequired,
     PreviewRefused,
     preview_dataset,
 )
 
 
-def identity(path):
-    metadata = path.stat()
-    return {
-        key: getattr(metadata, key)
-        for key in ("st_dev", "st_ino", "st_size", "st_mtime_ns")
-    }
-
-
-def preview(path, **kwargs):
-    return preview_dataset(path, expected_identity=identity(path), **kwargs)
-
-
-@pytest.mark.parametrize("suffix", [".npz", ".mat", ".h5", ".hdf5"])
-def test_actual_numeric_formats_produce_six_bounded_views(tmp_path, suffix):
-    path = tmp_path / ("data" + suffix)
-    x = np.arange(6000, dtype=np.float32).reshape(1000, 2, 3)
-    y = np.arange(2000, dtype=np.float64).reshape(1000, 2)
-    if suffix == ".npz":
-        np.savez(path, X=x, Y=y)
-    elif suffix == ".mat":
-        savemat(path, {"X": x, "Y": y}, do_compression=True)
-    else:
-        with h5py.File(path, "w") as file:
-            file["X"], file["Y"] = x, y
-    original_bytes = path.read_bytes()
-    result = preview(path)
-    assert result["input_shape"] == [1000, 2, 3]
-    assert result["sample_indices"][0] == 0
-    assert result["sample_indices"][-1] == 999
-    assert len(result["sample_indices"]) == 512
-    assert len(result["samples"]) == 3
-    assert result["samples"][0]["values"] == x[0].tolist()
-    assert len(result["input_histograms"][0]["counts"]) == 32
-    assert set(result) == {
-        "schema_version",
-        "identity",
-        "format",
-        "input_key",
-        "output_key",
-        "input_shape",
-        "output_shape",
-        "sample_indices",
-        "input_histograms",
-        "output_histograms",
-        "correlation",
-        "input_statistics",
-        "scatter",
-        "samples",
-        "limits",
-    }
-    assert preview(path) == result
-    assert path.read_bytes() == original_bytes
-    json.dumps(result, allow_nan=False)
-
-
-def test_mat73_reverses_axes_and_sample_slices(tmp_path):
-    path = tmp_path / "mat73.mat"
-    x = np.arange(120).reshape(10, 3, 4)
-    y = np.arange(20).reshape(10, 2)
-    with h5py.File(path, "w") as file:
-        file["X"], file["Y"] = x.transpose(), y.transpose()
-    result = preview(path)
-    assert result["input_shape"] == list(x.shape)
-    assert result["samples"][0]["values"] == x[0].tolist()
-    assert result["scatter"]["y"] == y[:, 0].tolist()
-
-
-def test_key_priority_and_nonfinite_nulls(tmp_path):
-    path = tmp_path / "keys.npz"
-    x = np.array([[1, np.inf], [np.nan, 3], [4, 4]])
-    np.savez(
-        path,
-        input_train=x,
-        X=np.zeros((3, 1)),
-        output_train=np.ones((3, 2)),
-        Y=np.zeros((3, 1)),
+@pytest.mark.parametrize("compressed", [False, True])
+def test_numeric_npz_streams_only_sampled_rows(tmp_path, monkeypatch, compressed):
+    path = tmp_path / "data.npz"
+    inputs = np.arange(2000 * 4, dtype="float32").reshape(2000, 4)
+    outputs = np.arange(2000, dtype="float32").reshape(2000, 1)
+    (np.savez_compressed if compressed else np.savez)(
+        path, inputs=inputs, outputs=outputs
     )
-    result = preview(path)
-    assert result["input_key"] == "input_train"
-    assert result["output_key"] == "output_train"
-    assert result["samples"][0]["values"][1] is None
-    assert result["input_statistics"]["means"][0] is None
-    assert result["correlation"]["matrix"] == [[None, None], [None, None]]
-    json.dumps(result, allow_nan=False)
+    monkeypatch.setattr(
+        np,
+        "load",
+        lambda *args, **kwargs: pytest.fail("Numeric npz loaded a whole member"),
+    )
+    value = preview_dataset(path)
+    indices = np.linspace(0, 1999, 512, dtype=int)
+    assert value["sample_indices"] == indices.tolist()
+    assert value["input_sample_indices"] == indices.tolist()
+    assert value["scatter"]["x"] == inputs[indices].tolist()
+    assert value["scatter"]["y"] == outputs[indices, 0].tolist()
+    assert value["samples"][1]["values"] == inputs[indices[1]].tolist()
+    assert len(value["output_histograms"][0]["counts"]) == 32
+    assert sum(value["output_histograms"][0]["counts"]) == 512
+
+
+def test_fortran_npz_fallback(tmp_path):
+    path = tmp_path / "data.npz"
+    inputs = np.asfortranarray(np.arange(24).reshape(6, 4))
+    np.savez(path, inputs=inputs, outputs=np.zeros((6, 1)))
+    assert preview_dataset(path)["scatter"]["x"] == inputs.tolist()
+
+
+def test_object_npz_requires_permission_and_densifies_sparse_samples(tmp_path):
+    path = tmp_path / "data.npz"
+    inputs = np.empty(4, dtype=object)
+    for index in range(4):
+        inputs[index] = csr_matrix(np.full((5, 6), index + 1.0))
+    np.savez(path, inputs=inputs, outputs=np.arange(4).reshape(4, 1))
+    with pytest.raises(PickleRequired, match="Dataset contains pickled arrays"):
+        preview_dataset(path)
+    value = preview_dataset(path, allow_pickle=True)
+    assert value["input_shape"] == [4, 5, 6]
+    assert value["samples"][1]["shape"] == [5, 6]
+    assert value["samples"][1]["values"] == np.full((5, 6), 2.0).tolist()
+
+
+def test_input_sampling_budget_and_strided_samples_cover_full_image(tmp_path):
+    path = tmp_path / "images.h5"
+    with h5py.File(path, "w") as file:
+        file.create_dataset(
+            "inputs", shape=(1000, 500, 500), dtype="float32", fillvalue=2
+        )
+        file.create_dataset("outputs", data=np.arange(1000).reshape(1000, 1))
+    value = preview_dataset(path)
+    assert len(value["sample_indices"]) == 512
+    assert len(value["input_sample_indices"]) == 33
+    assert value["input_sample_indices"][0] == 0
+    assert value["input_sample_indices"][-1] == 999
+    assert len(value["scatter"]["x"]) == 33
+    assert value["scatter"]["y"] == value["input_sample_indices"]
+    assert sum(value["input_histograms"][0]["counts"]) == 33
+    assert sum(value["output_histograms"][0]["counts"]) == 512
+    assert value["samples"][0]["feature_shape"] == [500, 500]
+    assert value["samples"][0]["shape"] == [125, 125]
+    assert np.asarray(value["samples"][0]["values"]).size <= 16384
+    assert len(value["input_statistics"]["means"]) == 40
+
+
+@pytest.mark.parametrize("suffix", [".h5", ".hdf5", ".mat"])
+def test_hdf_and_mat73_fancy_indexing_matches_logical_rows(tmp_path, suffix):
+    path = tmp_path / ("data" + suffix)
+    inputs = np.arange(24, dtype="float32").reshape(6, 2, 2)
+    outputs = np.arange(12, dtype="float32").reshape(6, 2)
+    with h5py.File(path, "w") as file:
+        file["inputs"] = inputs.transpose() if suffix == ".mat" else inputs
+        file["outputs"] = outputs.transpose() if suffix == ".mat" else outputs
+    value = preview_dataset(path)
+    assert value["input_shape"] == [6, 2, 2]
+    assert value["samples"][2]["values"] == inputs[2].tolist()
+    assert value["scatter"]["y"] == outputs[:, 0].tolist()
+
+
+@pytest.mark.parametrize("version", ["4", "5"])
+def test_mat_numeric_preview(tmp_path, version):
+    path = tmp_path / "data.mat"
+    savemat(
+        path,
+        {"inputs": np.arange(12).reshape(6, 2), "outputs": np.arange(6).reshape(6, 1)},
+        format=version,
+    )
+    assert preview_dataset(path)["scatter"]["y"] == list(range(6))
 
 
 @pytest.mark.parametrize(
-    "array",
+    "values",
     [
-        np.empty((0, 2)),
-        np.ones((2, 2), dtype=complex),
-        np.ones((2, 2), dtype=[("a", "f4")]),
-        np.array([[object()]], dtype=object),
+        {"inputs": np.zeros((2, 2)), "outputs": np.zeros((3, 1))},
+        {"other": np.zeros((2, 2))},
+        {"inputs": np.zeros((0, 2)), "outputs": np.zeros((0, 1))},
+        {"inputs": np.array([["hello"]]), "outputs": np.zeros((1, 1))},
     ],
 )
-def test_invalid_array_types_rejected(tmp_path, array):
-    path = tmp_path / "invalid.npz"
-    np.savez(path, X=array, Y=np.ones((array.shape[0], 1)))
-    with pytest.raises(ValueError):
-        preview(path)
-
-
-def test_mismatched_rows_feature_width_and_output_caps(tmp_path):
-    path = tmp_path / "shape.npz"
-    np.savez(path, X=np.ones((3, 10)), Y=np.ones((2, 1)))
-    with pytest.raises(PreviewRefused, match="counts"):
-        preview(path)
-    np.savez(path, X=np.ones((3, 10)), Y=np.ones((3, 1)))
-    with pytest.raises(PreviewRefused, match="feature"):
-        preview(path, limits=replace(PreviewLimits(), max_input_features=9))
-    with pytest.raises(PreviewRefused, match="JSON"):
-        preview(path, limits=replace(PreviewLimits(), max_output_bytes=50))
-
-
-def test_changed_identity_and_changed_ancestry_refused(tmp_path):
+def test_invalid_training_arrays_refused(tmp_path, values):
     path = tmp_path / "data.npz"
-    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
-    old = identity(path)
-    np.savez(path, X=np.ones((3, 2)), Y=np.ones((3, 1)))
-    with pytest.raises(PreviewRefused, match="identity"):
-        preview_dataset(path, expected_identity=old)
-    envelope = {
-        "path": str(path),
-        "identity": identity(path),
-        "ancestry": [{"path": str(tmp_path), "st_dev": 0, "st_ino": 0}],
+    np.savez(path, **values)
+    with pytest.raises(PreviewRefused):
+        preview_dataset(path)
+
+
+def test_rank_one_samples_and_nonfinite_values_remain_json_safe(tmp_path):
+    path = tmp_path / "data.npz"
+    np.savez(
+        path, inputs=np.array([float("nan"), 1]), outputs=np.array([1, float("inf")])
+    )
+    value = preview_dataset(path)
+    assert value["samples"][0] == {
+        "sample_index": 0,
+        "feature_shape": [],
+        "shape": [1],
+        "values": [None],
     }
-    with pytest.raises(PreviewRefused, match="ancestry"):
-        preview_dataset(path, expected_identity=envelope)
+    assert value["correlation"]["matrix"] is None
+    assert value["scatter"]["y"] == [1, None]
 
 
-def test_file_and_zip_expansion_limits_precede_numeric_reads(tmp_path, monkeypatch):
-    path = tmp_path / "compressed.npz"
-    np.savez_compressed(path, X=np.zeros((10000, 10)), Y=np.zeros((10000, 1)))
-    monkeypatch.setattr(
-        np.lib.format,
-        "read_array",
-        lambda *a, **k: pytest.fail("No numeric decoding before cap"),
+def test_object_numeric_entries_are_normalized_after_opt_in(tmp_path):
+    path = tmp_path / "objects.npz"
+    np.savez(
+        path, inputs=np.array([[1, 2], [3, 4]], dtype=object), outputs=np.zeros((2, 1))
     )
-    with pytest.raises(PreviewRefused, match="expansion"):
-        preview(path)
-    with pytest.raises(PreviewRefused, match="file"):
-        preview(path, limits=replace(PreviewLimits(), max_file_bytes=1))
+    assert preview_dataset(path, allow_pickle=True)["scatter"]["x"] == [[1, 2], [3, 4]]
 
 
-def test_mat_trailing_compressed_bomb_refused_before_loadmat(tmp_path, monkeypatch):
-    path = tmp_path / "bomb.mat"
-    savemat(path, {"X": np.ones((2, 2)), "Y": np.ones((2, 1))})
-    original = path.read_bytes()
-    # Preserve a legitimate bounded matrix header then add extreme expansion.
-    first_size = struct.unpack("<I", original[132:136])[0]
-    payload = original[128 : 136 + first_size] + b"\0" * 100000
-    compressed = zlib.compress(payload)
-    path.write_bytes(
-        original[:128]
-        + struct.pack("<II", 15, len(compressed))
-        + compressed
-        + original[136 + first_size :]
-    )
-    import scipy.io
-
-    monkeypatch.setattr(
-        scipy.io,
-        "loadmat",
-        lambda *a, **k: pytest.fail("No numeric load before expansion cap"),
-    )
-    with pytest.raises(PreviewRefused, match="expansion"):
-        preview(path, limits=replace(PreviewLimits(), max_decompressed_bytes=10000))
-
-
-def test_hdf_links_and_chunk_expansion_refused(tmp_path):
-    path = tmp_path / "linked.hdf5"
-    with h5py.File(path, "w") as file:
-        file["X"] = h5py.ExternalLink("other.hdf5", "/X")
-        file["Y"] = np.ones((2, 1))
-    with pytest.raises(ValueError, match="links"):
-        preview(path)
+def test_external_hdf_storage_cannot_read_around_selection_authority(tmp_path):
+    path = tmp_path / "external.h5"
     with h5py.File(path, "w") as file:
         file.create_dataset(
-            "X", shape=(2, 1), maxshape=(None, 1), chunks=(10000, 1), dtype="f8"
+            "inputs",
+            shape=(2, 3),
+            dtype="float32",
+            external=[(str(tmp_path / "payload"), 0, h5py.h5f.UNLIMITED)],
         )
-        file["Y"] = np.ones((2, 1))
-    with pytest.raises(PreviewRefused, match="chunk"):
-        preview(path, limits=replace(PreviewLimits(), max_decompressed_bytes=1000))
-
-
-def test_zip_traversal_refused(tmp_path):
-    path = tmp_path / "traversal.npz"
-    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
-    with zipfile.ZipFile(path, "a") as file:
-        file.writestr("../extra.npy", file.read("X.npy"))
-    with pytest.raises(PreviewRefused, match="path"):
-        preview(path)
-
-
-def test_worker_stdout_is_finite_json_only(tmp_path):
-    path = tmp_path / "cli.npz"
-    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "wavedl_daemon.runs.dataset_preview",
-            "--path",
-            str(path),
-            "--expected-identity",
-            json.dumps(identity(path)),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout)["schema_version"] == 1
-    assert not completed.stderr
-
-
-def test_worker_reports_identity_changed_for_mutated_input(tmp_path):
-    path = tmp_path / "identity-change.npz"
-    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
-    expected = identity(path)
-    with path.open("ab") as stream:
-        stream.write(b"mutation")
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "wavedl_daemon.runs.dataset_preview",
-            "--path",
-            str(path),
-            "--expected-identity",
-            json.dumps(expected),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert completed.returncode != 0
-    assert json.loads(completed.stdout)["code"] == "identity_changed"
-
-
-def test_preview_detects_mutation_when_held_handle_metadata_is_stale(
-    tmp_path, monkeypatch
-):
-    path = tmp_path / "mutation.npz"
-    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
-    import wavedl_daemon.runs.dataset_preview as module
-
-    original = module._summaries
-    held = path.stat()
-
-    def mutate(*args):
-        result = original(*args)
-        with path.open("ab") as file:
-            file.write(b"changed")
-        monkeypatch.setattr(os, "fstat", lambda descriptor: held)
-        return result
-
-    monkeypatch.setattr(module, "_summaries", mutate)
-    with pytest.raises(PreviewRefused, match="changed"):
-        preview(path)
-
-
-def test_missing_path_after_numeric_read_is_an_identity_change(tmp_path, monkeypatch):
-    path = tmp_path / "mutation.npz"
-    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
-    import wavedl_daemon.runs.dataset_preview as module
-
-    original = module._summaries
-    stat = type(path).stat
-
-    def missing(target, *args, **kwargs):
-        if target == path:
-            raise FileNotFoundError("Dataset was removed")
-        return stat(target, *args, **kwargs)
-
-    def mutate(*args):
-        result = original(*args)
-        monkeypatch.setattr(type(path), "stat", missing)
-        return result
-
-    monkeypatch.setattr(module, "_summaries", mutate)
-    with pytest.raises(PreviewRefused, match="changed"):
-        preview(path)
-
-
-def test_content_mutation_during_numeric_read_is_refused(tmp_path, monkeypatch):
-    path = tmp_path / "mutation.npz"
-    np.savez(path, X=np.ones((2, 2)), Y=np.ones((2, 1)))
-    import wavedl_daemon.runs.dataset_preview as module
-
-    original = module._summaries
-    attempts = []
-
-    def mutate(*args):
-        result = original(*args)
-        attempts.append(True)
-        with path.open("ab") as file:
-            file.write(b"changed")
-        return result
-
-    monkeypatch.setattr(module, "_summaries", mutate)
-    with pytest.raises(PreviewRefused, match="changed"):
-        preview(path)
-    assert attempts == [True]
-
-
-def test_sample_slice_element_budget_and_scalar_features(tmp_path):
-    path = tmp_path / "slices.npz"
-    np.savez(path, X=np.arange(1000).reshape(10, 10, 10), Y=np.arange(10))
-    result = preview(path, limits=replace(PreviewLimits(), max_preview_elements=2))
-    assert len(result["samples"]) == 2
-    assert sum(np.asarray(sample["values"]).size for sample in result["samples"]) <= 2
-    assert result["samples"][0]["feature_shape"] == [10, 10]
-
-
-def test_all_nonfinite_histograms_are_empty_and_stats_null(tmp_path):
-    path = tmp_path / "nonfinite.npz"
-    np.savez(path, X=np.array([[np.nan], [np.inf]]), Y=np.array([[np.inf], [-np.inf]]))
-    result = preview(path)
-    assert sum(result["input_histograms"][0]["counts"]) == 0
-    assert result["input_statistics"]["means"] == [None]
-    assert result["scatter"]["y"] == [None, None]
-
-
-def test_one_sample_and_extreme_finite_numeric_values(tmp_path):
-    path = tmp_path / "one.npz"
-    np.savez(path, X=np.array([[1.0]]), Y=np.array([[2.0, 3.0]]))
-    result = preview(path)
-    assert result["sample_indices"] == [0]
-    assert result["correlation"]["matrix"] is None
-    np.savez(path, X=np.array([[1e300], [-1e300]]), Y=np.ones((2, 1)))
-    with pytest.raises(PreviewRefused, match="magnitude"):
-        preview(path)
-
-
-def test_mat4_and_boolean_numeric_samples(tmp_path):
-    path = tmp_path / "v4.mat"
-    savemat(
-        path,
-        {"X": np.arange(12).reshape(4, 3), "Y": np.arange(4).reshape(4, 1)},
-        format="4",
-    )
-    assert preview(path)["input_shape"] == [4, 3]
-    path = tmp_path / "bool.npz"
-    np.savez(
-        path, X=np.array([[True, False], [False, True]]), Y=np.array([[True], [False]])
-    )
-    result = preview(path)
-    assert result["samples"][0]["values"] == [1.0, 0.0]
-    assert all(type(value) is float for value in result["samples"][0]["values"])
+        file.create_dataset("outputs", data=np.zeros((2, 1)))
+    with pytest.raises(PreviewRefused, match="External dataset storage"):
+        preview_dataset(path)
