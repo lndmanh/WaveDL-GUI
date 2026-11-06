@@ -48,6 +48,7 @@ const styles = {
 
 const { t, locale } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+const { state: connectionState, monitorRun } = useWorkstation();
 const shellLayout = useShellLayout();
 const { isActive } = usePageActive();
 const labels = useRunLabels();
@@ -77,7 +78,7 @@ function focusTitle() {
 
 defineExpose({ focusTitle });
 
-defineEmits<{ cancel: []; replay: []; close: [] }>();
+defineEmits<{ cancel: []; retryAutomaticPlots: []; replay: []; close: [] }>();
 
 const tab = shallowRef<RunDetailTab>('overview');
 const logTarget = shallowRef<HTMLElement | null>(null);
@@ -308,6 +309,39 @@ const configuration = computed(() => {
             <code>{{ shortRunId(snapshot.run.run_id) }}</code>
           </li>
         </ul>
+        <div
+          v-if="snapshot.run?.auto_plot"
+          aria-live="polite"
+          class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+        >
+          <template v-if="snapshot.run.auto_plot.status === 'pending'">
+            <Spinner size="sm" :label="t('runs.automaticPlotsPending')" />
+            <span>{{ t('runs.automaticPlotsPending') }}</span>
+          </template>
+          <template v-else-if="snapshot.run.auto_plot.status === 'submitted'">
+            <span>{{ t('runs.automaticPlotsSubmitted') }}</span>
+            <Button
+              v-if="snapshot.run.auto_plot.run_id"
+              variant="link"
+              size="sm"
+              class="h-auto p-0 text-xs"
+              @click="monitorRun(snapshot.run.auto_plot.run_id)"
+            >{{ t('runs.automaticPlotsOpen') }}</Button>
+          </template>
+          <template v-else>
+            <span>{{ t('runs.automaticPlotsFailed') }}</span>
+            <span v-if="snapshot.run.auto_plot.failure" class="min-w-0 wrap-anywhere">{{
+              snapshot.run.auto_plot.failure
+            }}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-6 px-2 text-xs"
+              :disabled="snapshot.automaticPlotRetry || connectionState.status !== 'connected'"
+              @click="$emit('retryAutomaticPlots')"
+            >{{ t('runs.automaticPlotsRetry') }}</Button>
+          </template>
+        </div>
         <div
           v-if="metricSummary.progress"
           class="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs tabular-nums"

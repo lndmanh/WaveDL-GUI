@@ -29,6 +29,7 @@ const {
   select,
   replay,
   cancel,
+  retryAutomaticPlots,
   close,
   pause,
   resume,
@@ -160,6 +161,7 @@ watch(
             :back="stacked"
             :animate-entrance="entered"
             @cancel="cancel"
+            @retry-automatic-plots="retryAutomaticPlots"
             @replay="replay"
             @close="dismiss"
           />
