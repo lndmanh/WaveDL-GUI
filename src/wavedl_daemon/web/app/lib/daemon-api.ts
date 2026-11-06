@@ -673,7 +673,7 @@ export class DaemonApi {
   async mutate(
     path: string,
     body: JsonObject | undefined,
-    options: { signal?: AbortSignal; idempotencyKey?: string } = {},
+    options: { signal?: AbortSignal; idempotencyKey?: string; timeoutMs?: number } = {},
   ): Promise<Json> {
     this.#apiUrl(path);
     this.#requestBody(body, options.idempotencyKey);
@@ -687,7 +687,16 @@ export class DaemonApi {
       throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
 
     return this.#json(
-      await this.#request(path, 'POST', snapshot, options.signal, false, options.idempotencyKey),
+      await this.#request(
+        path,
+        'POST',
+        snapshot,
+        options.signal,
+        false,
+        options.idempotencyKey,
+        false,
+        options.timeoutMs,
+      ),
     );
   }
   async openEvents(
@@ -782,6 +791,7 @@ export class DaemonApi {
     bootstrap = false,
     idempotencyKey?: string,
     rotation = false,
+    timeoutMs = 15000,
   ): Promise<Response> {
     if (signal?.aborted) throw DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted');
 
@@ -811,7 +821,7 @@ export class DaemonApi {
 
     const timer = setTimeout(
       () => deadline.abort(DaemonApiError.fromKey('http', 'daemonRequestTimedOut')),
-      15000,
+      timeoutMs,
     );
 
     const revision = this.#credentialRevision;

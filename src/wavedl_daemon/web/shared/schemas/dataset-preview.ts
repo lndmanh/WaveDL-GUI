@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-export const PREVIEW_VIEWS = ['distribution', 'sample', 'correlation', 'statistics', 'scatter', 'all'] as const;
-
 export type PreviewValues = number | null | PreviewValues[];
 
 export const previewValuesSchema: z.ZodType<PreviewValues> = z.lazy(() =>
@@ -18,38 +16,16 @@ const indices = z
   .max(512)
   .refine((items) => items.every((item, index) => index === 0 || item > (items[index - 1] ?? -1)));
 
-const limits = z.strictObject({
-  max_file_bytes: integer.positive().max(67108864),
-  max_decompressed_bytes: integer.positive().max(67108864),
-  max_elements: integer.positive().max(8388608),
-  max_sample_rows: integer.positive().max(512),
-  max_input_features: integer.positive().max(65536),
-  max_output_features: integer.positive().max(256),
-  max_preview_elements: integer.positive().max(16384),
-  max_output_bytes: integer.positive().max(1048576),
-  max_zip_ratio: integer.positive().max(100),
-  max_variables: integer.positive().max(128),
-  max_header_bytes: integer.positive().max(16384),
-});
-
 const histogram = z.strictObject({
   feature_index: integer,
   counts: z.array(integer).length(32),
   edges: z.array(z.number().finite()).length(33),
 });
 
-// Filesystem metadata is display-only. Python's nanosecond integers can exceed
-// JavaScript precision: it must never become an identity/authorization token.
-const metadataInteger = z.number().finite().nonnegative().max(1e22).refine(Number.isInteger);
+export const datasetPreviewPendingSchema = z.strictObject({ status: z.literal('pending') });
 
 export const datasetPreviewSchema = z.strictObject({
   schema_version: z.literal(1),
-  identity: z.strictObject({
-    st_dev: metadataInteger,
-    st_ino: metadataInteger,
-    st_size: integer,
-    st_mtime_ns: metadataInteger,
-  }),
   format: z.enum(['npz', 'mat', 'h5', 'hdf5']),
   input_key: z
     .string()
@@ -64,6 +40,7 @@ export const datasetPreviewSchema = z.strictObject({
   'input_shape': tensorDimensions,
   'output_shape': tensorDimensions,
   sample_indices: indices.min(1),
+  input_sample_indices: indices.min(1),
   input_histograms: z.array(histogram).min(1).max(8),
   output_histograms: z.array(histogram).min(1).max(8),
   correlation: z.strictObject({
@@ -92,7 +69,5 @@ export const datasetPreviewSchema = z.strictObject({
     )
     .min(1)
     .max(3),
-  limits,
   selection: z.strictObject({ root: z.string(), path: z.string() }),
-  view: z.enum(PREVIEW_VIEWS),
 });

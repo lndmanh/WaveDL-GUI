@@ -4,27 +4,27 @@ import { ConnectionSession, ConnectionSessionError } from './connection-session'
 import { DaemonApiError, type Json } from './daemon-api';
 import {
   datasetPreviewSchema,
+  datasetPreviewPendingSchema,
   previewValuesSchema,
   type PreviewValues,
-  PREVIEW_VIEWS,
 } from '../../shared/schemas/dataset-preview';
-
-export { PREVIEW_VIEWS } from '../../shared/schemas/dataset-preview';
-
-export type PreviewView = (typeof PREVIEW_VIEWS)[number];
 
 export type DatasetPreview = z.infer<typeof datasetPreviewSchema>;
 
 export type PreviewSample = DatasetPreview['samples'][number];
 
+export class DatasetPreviewPickleRequiredError extends Error {
+  constructor() {
+    super('Dataset contains pickled arrays');
+    this.name = 'DatasetPreviewPickleRequiredError';
+  }
+}
+
 const product = (values: readonly number[]) => values.reduce((result, value) => result * value, 1);
 
-function boundedIndices(values: readonly number[], width: number, maximum: number) {
-  return (
-    values.length <= maximum &&
-    values.every(
-      (value, index) => value < width && (index === 0 || value > (values[index - 1] ?? -1)),
-    )
+function boundedIndices(values: readonly number[], width: number) {
+  return values.every(
+    (value, index) => value < width && (index === 0 || value > (values[index - 1] ?? -1)),
   );
 }
 
@@ -42,68 +42,47 @@ function nested(value: PreviewValues, dimensions: readonly number[]): boolean {
 export function parseDatasetPreview(
   value: Json,
   selection: Pick<DataSelection, 'root' | 'relativePath'>,
-  view: PreviewView,
 ): DatasetPreview {
   const fail = (): never => {
     throw DaemonApiError.fromKey('response', 'invalidDatasetPreview');
   };
 
-  let bytes: number;
-
-  try {
-    bytes = new TextEncoder().encode(JSON.stringify(value)).length;
-  } catch {
-    return fail();
-  }
-
-  if (bytes > 1048576) return fail();
   const parsed = datasetPreviewSchema.safeParse(value);
 
   if (!parsed.success) return fail();
   const data = parsed.data;
-  const cap = data.limits;
   const format = selection.relativePath.split('.').at(-1)?.toLowerCase();
 
   if (
     data.format !== format ||
-    bytes > cap.max_output_bytes ||
     data.selection.root !== selection.root ||
-    data.selection.path !== selection.relativePath ||
-    data.view !== view
+    data.selection.path !== selection.relativePath
   )
     return fail();
   const rows = data.input_shape[0] ?? 0;
   const xwidth = product(data.input_shape.slice(1));
   const ywidth = product(data.output_shape.slice(1));
   const count = data.sample_indices.length;
+  const inputCount = data.input_sample_indices.length;
 
   if (
     rows !== data.output_shape[0] ||
-    product(data.input_shape) > cap.max_elements ||
-    product(data.output_shape) > cap.max_elements ||
-    xwidth > cap.max_input_features ||
-    ywidth > cap.max_output_features ||
-    data.identity.st_size > cap.max_file_bytes ||
-    !boundedIndices(data.sample_indices, rows, cap.max_sample_rows)
+    !boundedIndices(data.sample_indices, rows) ||
+    !data.input_sample_indices.every((index) => data.sample_indices.includes(index))
   )
     return fail();
 
-  for (const [histograms, width] of [
-    [data.input_histograms, xwidth],
-    [data.output_histograms, ywidth],
-  ] as const) {
-    if (
-      !boundedIndices(
-        histograms.map((item) => item.feature_index),
-        width,
-        Math.min(8, width),
-      )
-    )
-      return fail();
+  const distributions = [
+    { histograms: data.input_histograms, width: xwidth, count: inputCount },
+    { histograms: data.output_histograms, width: ywidth, count },
+  ];
+
+  for (const { histograms, width, count: sampledRows } of distributions) {
+    if (!boundedIndices(histograms.map((item) => item.feature_index), width)) return fail();
 
     for (const histogram of histograms)
       if (
-        histogram.counts.reduce((sum, item) => sum + item, 0) > count ||
+        histogram.counts.reduce((sum, item) => sum + item, 0) > sampledRows ||
         !histogram.edges.every(
           (item, index) => index === 0 || item >= (histogram.edges[index - 1] ?? item),
         )
@@ -115,7 +94,7 @@ export function parseDatasetPreview(
 
   if (
     !correlation.feature_indices.length ||
-    !boundedIndices(correlation.feature_indices, ywidth, 30) ||
+    !boundedIndices(correlation.feature_indices, ywidth) ||
     (count <= 1 || correlation.feature_indices.length <= 1
       ? correlation.matrix !== null
       : !nested(correlation.matrix, [
@@ -131,7 +110,7 @@ export function parseDatasetPreview(
 
   if (
     !stats.feature_indices.length ||
-    !boundedIndices(stats.feature_indices, xwidth, 40) ||
+    !boundedIndices(stats.feature_indices, xwidth) ||
     stats.means.length !== stats.feature_indices.length ||
     stats.stds.length !== stats.feature_indices.length ||
     stats.stds.some((item) => item !== null && item < 0)
@@ -140,22 +119,20 @@ export function parseDatasetPreview(
 
   if (
     !data.scatter.feature_indices.length ||
-    !boundedIndices(data.scatter.feature_indices, xwidth, 8) ||
-    !nested(data.scatter.x, [count, data.scatter.feature_indices.length]) ||
-    data.scatter.y.length !== count ||
-    data.samples.length > count
+    !boundedIndices(data.scatter.feature_indices, xwidth) ||
+    !nested(data.scatter.x, [inputCount, data.scatter.feature_indices.length]) ||
+    data.scatter.y.length !== inputCount ||
+    data.samples.length > inputCount
   )
     return fail();
-  let elements = 0;
   const sampleIds = new Set<number>();
 
   for (const sample of data.samples) {
     const original = data.input_shape.slice(1);
-    elements += product(sample.shape);
 
     if (
       sampleIds.has(sample.sample_index) ||
-      !data.sample_indices.includes(sample.sample_index) ||
+      !data.input_sample_indices.includes(sample.sample_index) ||
       JSON.stringify(sample.feature_shape) !== JSON.stringify(original) ||
       sample.shape.length !== Math.max(1, original.length) ||
       sample.shape.some((size, index) => size > (original[index] ?? 1)) ||
@@ -165,45 +142,70 @@ export function parseDatasetPreview(
     sampleIds.add(sample.sample_index);
   }
 
-  if (elements > cap.max_preview_elements) return fail();
-
   return data;
+}
+
+async function waitForPreviewPoll(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return;
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
+
+    const timer = setTimeout(finish, 2000);
+    signal.addEventListener('abort', finish, { once: true });
+  });
 }
 
 export class DatasetPreviewApi {
   constructor(readonly session: ConnectionSession) {}
-  preview(
+  async preview(
     selection: DataSelection,
-    view: PreviewView,
-    signal?: AbortSignal,
+    options: { allow_pickle?: boolean; signal?: AbortSignal } = {},
   ): Promise<DatasetPreview> {
+    new CatalogApi(this.session).assertSelection(selection);
+
+    if (selection.kind !== 'file' || !/\.(npz|mat|h5|hdf5)$/i.test(selection.relativePath))
+      throw ConnectionSessionError.fromKey('request', 'datasetSelectionRequired');
+
+    // Keep the body identical across polls, including the explicit trust decision.
+    const body = {
+      root: selection.root,
+      path: selection.relativePath,
+      allow_pickle: options.allow_pickle ?? false,
+    };
+
     try {
-      new CatalogApi(this.session).assertSelection(selection);
+      return await this.session.perform(
+        async (api, requestSignal) => {
+          for (;;) {
+            requestSignal.throwIfAborted();
+            new CatalogApi(this.session).assertSelection(selection);
+            const result = await api.mutate('/api/datasets/preview', body, {
+              signal: requestSignal,
+              timeoutMs: 45000,
+            });
 
-      if (
-        selection.kind !== 'file' ||
-        !/\.(npz|mat|h5|hdf5)$/i.test(selection.relativePath) ||
-        !PREVIEW_VIEWS.includes(view)
-      )
-        throw ConnectionSessionError.fromKey('request', 'datasetSelectionRequired');
+            requestSignal.throwIfAborted();
+
+            if (!datasetPreviewPendingSchema.safeParse(result).success)
+              return parseDatasetPreview(result, selection);
+            await waitForPreviewPoll(requestSignal);
+          }
+        },
+        { signal: options.signal, timeoutMs: 20 * 60 * 1000 },
+      );
     } catch (error) {
-      return Promise.reject(error);
+      if (
+        error instanceof ConnectionSessionError &&
+        error.code === 'request' &&
+        error.status === 409
+      )
+        throw new DatasetPreviewPickleRequiredError();
+      throw error;
     }
-
-    return this.session.perform(
-      async (api, requestSignal) => {
-        new CatalogApi(this.session).assertSelection(selection);
-
-        const body = await api.mutate(
-          '/api/datasets/preview',
-          { root: selection.root, path: selection.relativePath, view },
-          { signal: requestSignal },
-        );
-
-        return parseDatasetPreview(body, selection, view);
-      },
-      { signal, timeoutMs: 60000 },
-    );
   }
 }
 

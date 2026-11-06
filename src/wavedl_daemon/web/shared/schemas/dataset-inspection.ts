@@ -1,10 +1,6 @@
 import { z } from 'zod';
 
-const integer = z
-  .number()
-  .int()
-  .nonnegative()
-  .max(8 * 1024 ** 3);
+const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 
 const text = z
   .string()
