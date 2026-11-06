@@ -136,10 +136,22 @@ class WorkLane:
             return not self._closed and len(self._tokens) < self._capacity
 
     def submit(
-        self, callback: Callable[[CancellationToken], T], *, deadline: bool = True
+        self,
+        callback: Callable[[CancellationToken], T],
+        *,
+        deadline: bool = True,
+        timeout_seconds: float | None = None,
     ) -> WorkHandle[T]:
         """Admit at most lane threads + max_pending uncompleted operations."""
-        timeout = self.budget.timeout_seconds if deadline else math.inf
+        timeout = (
+            (
+                self.budget.timeout_seconds
+                if timeout_seconds is None
+                else timeout_seconds
+            )
+            if deadline
+            else math.inf
+        )
         token = CancellationToken(time.monotonic() + timeout)
         with self._lock:
             if self._closed:
@@ -220,8 +232,13 @@ class BoundedThreadPool:
     def outstanding(self) -> int:
         return self._shared_lane.outstanding + self.control_lane.outstanding
 
-    def submit(self, callback: Callable[[CancellationToken], T]) -> WorkHandle[T]:
-        return self._shared_lane.submit(callback)
+    def submit(
+        self,
+        callback: Callable[[CancellationToken], T],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> WorkHandle[T]:
+        return self._shared_lane.submit(callback, timeout_seconds=timeout_seconds)
 
     def shutdown(self, *, wait: bool = True) -> None:
         self._closed = True
