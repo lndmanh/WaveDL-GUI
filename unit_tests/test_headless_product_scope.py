@@ -33,7 +33,6 @@ def test_web_validation_keeps_only_daemon_client_logic():
         "auth-routing",
         "run-monitor",
         "run-monitor-publication",
-        "autoplot-controller",
         "result-operations",
         "workstation-controls",
         "plot-series",
