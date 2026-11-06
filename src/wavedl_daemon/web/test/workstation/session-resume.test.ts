@@ -4,11 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionSession } from '../../app/lib/connection-session';
 import { translateClientDiagnostic } from '../../app/i18n/client-messages';
 import { credentialSchema } from '../../shared/schemas/session-credential';
-import {
-  loadSessionCredential,
-  SESSION_CREDENTIAL_KEY,
-  type SessionCredential,
-} from '../../app/lib/session-credential';
+import { loadSessionCredential, SESSION_CREDENTIAL_KEY } from '../../app/lib/session-credential';
+import type { SessionCredential } from '../../shared/schemas/session-credential';
 
 const origin = window.location.origin;
 const health = { daemon_id: 'daemon-one', build_id: 'build-a', protocol_min: 1, protocol_max: 1 };

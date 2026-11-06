@@ -366,7 +366,10 @@ describe('automatic plot retry', () => {
     );
 
     api.setToken(token);
-    await expect(api.retryAutomaticPlots(matrixId)).rejects.toMatchObject({ code: 'http', status: 409 });
+    await expect(api.retryAutomaticPlots(matrixId)).rejects.toMatchObject({
+      code: 'http',
+      status: 409,
+    });
   });
 });
 

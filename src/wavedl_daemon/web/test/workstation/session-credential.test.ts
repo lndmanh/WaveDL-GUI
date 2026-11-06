@@ -4,8 +4,8 @@ import {
   loadSessionCredential,
   saveSessionCredential,
   SESSION_CREDENTIAL_KEY,
-  type SessionCredentialStorage,
 } from '../../app/lib/session-credential';
+import type { PreferenceStorage as SessionCredentialStorage } from '../../types/preferences';
 
 function storage(): SessionCredentialStorage & { values: Map<string, string> } {
   const values = new Map<string, string>();
