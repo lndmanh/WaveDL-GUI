@@ -225,6 +225,10 @@ def strict_json_route(max_bytes: int) -> type[APIRoute]:
     return StrictJSONRoute
 
 
+class PublicHTTPException(HTTPException):
+    """A fixed, client-facing detail, never text from a file or underlying error."""
+
+
 async def _http_error(request, exc):
     messages = {
         400: "Bad request",
@@ -239,7 +243,11 @@ async def _http_error(request, exc):
         422: "Invalid request",
     }
     return JSONResponse(
-        {"error": messages.get(exc.status_code, "Request failed")},
+        {
+            "error": exc.detail
+            if isinstance(exc, PublicHTTPException)
+            else messages.get(exc.status_code, "Request failed")
+        },
         exc.status_code,
         headers=exc.headers,
     )
