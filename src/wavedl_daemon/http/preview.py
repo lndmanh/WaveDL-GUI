@@ -1,75 +1,46 @@
 """
-Authenticated dataset preview endpoint.
+Authenticated dataset preview polling endpoint.
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
-from starlette.exceptions import HTTPException
-from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
-from wavedl_daemon.http.app import strict_json_route
+from wavedl_daemon.http.app import PublicHTTPException, strict_json_route
 from wavedl_daemon.http.schemas.common import JSON_BODY_ERRORS, NO_STORE
-from wavedl_daemon.http.schemas.datasets import PreviewRequest, PreviewResponse
-from wavedl_daemon.runs.preview_authority import (
-    PreviewChanged,
-    PreviewForbidden,
-    PreviewMissing,
+from wavedl_daemon.http.schemas.datasets import (
+    PreviewPending,
+    PreviewRequest,
+    PreviewResponse,
 )
-from wavedl_daemon.runs.preview_service import (
-    PreviewBadRequest,
-    PreviewIdentityChanged,
-    PreviewRefused,
-    PreviewTooLarge,
-)
+from wavedl_daemon.runs.dataset_preview import PickleRequired, PreviewRefused
 
 
 def preview_routes(previewer):
-    async def preview_dataset(
-        body: PreviewRequest, request: Request, response: Response
-    ):
-        async def disconnected():
-            while True:
-                message = await request.receive()
-                if message["type"] == "http.disconnect":
-                    return
-
-        operation = asyncio.create_task(previewer.preview(body.model_dump(mode="json")))
-        disconnect = asyncio.create_task(disconnected())
+    async def preview_dataset(body: PreviewRequest, response: Response):
         try:
-            done, _ = await asyncio.wait(
-                {operation, disconnect}, return_when=asyncio.FIRST_COMPLETED
-            )
-            if operation not in done:
-                operation.cancel()
-                try:
-                    await operation
-                except asyncio.CancelledError:
-                    pass
-                raise HTTPException(503, "Dataset preview unavailable")
-            result = await operation
-        except (PreviewIdentityChanged, PreviewChanged):
-            raise HTTPException(409, "Dataset identity changed") from None
-        except PreviewTooLarge:
-            raise HTTPException(413, "Preview exceeds limit") from None
-        except (PreviewBadRequest, PreviewForbidden, PreviewMissing):
-            raise HTTPException(400, "Invalid preview request") from None
+            result = await previewer.preview(body.model_dump(mode="json"))
+        except PickleRequired:
+            raise PublicHTTPException(
+                409, "Dataset contains pickled arrays", headers=NO_STORE
+            ) from None
         except PreviewRefused:
-            raise HTTPException(400, "Dataset preview refused") from None
+            raise PublicHTTPException(
+                400, "Could not preview this dataset", headers=NO_STORE
+            ) from None
         except (BudgetExhausted, StorageWorkError, WorkCancelled, OSError):
-            raise HTTPException(503, "Dataset preview unavailable") from None
-        finally:
-            disconnect.cancel()
-            if not operation.done():
-                operation.cancel()
-            await asyncio.gather(disconnect, operation, return_exceptions=True)
+            raise PublicHTTPException(
+                503,
+                "Dataset preview is busy or unavailable; try again",
+                headers=NO_STORE,
+            ) from None
+        if result.get("status") == "pending":
+            return JSONResponse(result, status_code=202, headers=NO_STORE)
         response.headers.update(NO_STORE)
         return result
 
@@ -78,7 +49,13 @@ def preview_routes(previewer):
         "/api/datasets/preview",
         preview_dataset,
         operation_id="preview_dataset",
-        responses=JSON_BODY_ERRORS,
+        responses={
+            **JSON_BODY_ERRORS,
+            202: {
+                "model": PreviewPending,
+                "description": "Preview is running; repeat the same request to poll",
+            },
+        },
         methods=["POST"],
         response_model=PreviewResponse,
         route_class_override=strict_json_route(65536),

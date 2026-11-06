@@ -15,10 +15,10 @@ from starlette.responses import Response
 
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
-from wavedl_daemon.http.app import strict_json_route
+from wavedl_daemon.http.app import PublicHTTPException, strict_json_route
 from wavedl_daemon.http.schemas.common import JSON_BODY_ERRORS, NO_STORE
 from wavedl_daemon.http.schemas.datasets import InspectionResponse, InspectRequest
-from wavedl_daemon.runs.dataset_headers import InspectionRefused
+from wavedl_daemon.runs.inspection import InspectionRefused
 
 
 def inspection_routes(inspector):
@@ -46,7 +46,9 @@ def inspection_routes(inspector):
                 raise HTTPException(503, "Dataset inspection unavailable")
             result = await operation
         except InspectionRefused:
-            raise HTTPException(400, "Dataset inspection refused") from None
+            raise PublicHTTPException(
+                400, "Could not inspect this dataset", headers=NO_STORE
+            ) from None
         except (BudgetExhausted, StorageWorkError, WorkCancelled, OSError):
             raise HTTPException(503, "Dataset inspection unavailable") from None
         finally:
