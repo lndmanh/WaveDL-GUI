@@ -97,7 +97,7 @@
   },
   "data_path": {
     "label": "Đường dẫn bộ dữ liệu",
-    "description": "Đường dẫn đến bộ dữ liệu NPZ trên máy chủ daemon."
+    "description": "Đường dẫn đến bộ dữ liệu NPZ trên máy chủ WaveDL."
   },
   "workers": {
     "label": "Tiến trình tải dữ liệu",
