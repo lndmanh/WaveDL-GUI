@@ -44,6 +44,7 @@ def test_openapi_documents_run_lifecycle():
         "/api/runs",
         "/api/runs/{run_id}",
         "/api/runs/{run_id}/cancel",
+        "/api/runs/{run_id}/automatic-plots/retry",
     }
     assert "post" in paths["/api/runs/plan"]
     assert {"get", "post"} <= paths["/api/runs"].keys()
@@ -159,6 +160,7 @@ def test_openapi_documents_daemon_errors_not_fastapi_422():
         ("get", "/api/runs"): "list_runs",
         ("get", "/api/runs/{run_id}"): "get_run",
         ("post", "/api/runs/{run_id}/cancel"): "cancel_run",
+        ("post", "/api/runs/{run_id}/automatic-plots/retry"): "retry_automatic_plot",
     }
     error = {"$ref": "#/components/schemas/ErrorResponse"}
     for operation in operations.values():
