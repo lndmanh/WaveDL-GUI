@@ -1,5 +1,3 @@
-
-
 export interface BreadcrumbItemType {
   title: string;
   href: string;
@@ -23,3 +21,5 @@ export type FormatDateInput = Date | number | string;
 export interface FormatDateOptions extends Intl.DateTimeFormatOptions {
   fallback?: string;
 }
+
+export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';

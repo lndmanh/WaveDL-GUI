@@ -1,4 +1,4 @@
-import type { BreadcrumbItemType } from '../types/breadcrumbs';
+import type { BreadcrumbItemType } from '~~/types/common';
 
 interface PageBreadcrumbOverride {
   path: string;

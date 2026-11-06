@@ -1,6 +1,6 @@
 import { runIdForPath } from '../shell/sections';
-import type { BreadcrumbItemType } from '../types/breadcrumbs';
 import type { RouteMeta } from 'vue-router';
+import type { BreadcrumbItemType } from '~~/types/common';
 
 export function buildRouteBreadcrumbs(input: {
   path: string;
