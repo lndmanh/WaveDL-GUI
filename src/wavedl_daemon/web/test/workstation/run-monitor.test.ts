@@ -280,7 +280,9 @@ function harness(initial = view(), store: CursorStore | null = null) {
   let current = initial;
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
 
+  const retryAutomaticPlots = vi.fn<(runId: string, signal: AbortSignal) => Promise<RunView>>(async () => current);
   const transport: RunTransport = {
+    retryAutomaticPlots,
     getRun: vi.fn(async () => current),
     cancelRun: vi.fn(async () => view({ cancellation_requested: true, state: 'stopping' })),
     openEvents: vi.fn(
@@ -313,6 +315,7 @@ function harness(initial = view(), store: CursorStore | null = null) {
     monitor,
     reportFailure,
     transport,
+    retryAutomaticPlots,
     set: (run: RunView) => {
       current = run;
     },
@@ -857,6 +860,113 @@ describe('run monitoring', () => {
     expect(h.monitor.snapshot().run?.state).toBe('completed');
     expect(h.monitor.snapshot().stream).toBe('stopped');
   });
+  it.each([
+    view({ state: 'completed', auto_plot: { status: 'submitted', run_id: id, failure: null } }),
+    view({ state: 'completed', auto_plot: { status: 'failed', run_id: null, failure: 'No checkpoint' } }),
+    view({ state: 'completed', auto_plot: null }),
+    view({ state: 'completed' }),
+  ])('polls terminal pending metadata until it becomes $auto_plot without reopening SSE', async (settled) => {
+    vi.useFakeTimers();
+    const h = harness(view({ state: 'completed', auto_plot: { status: 'pending', run_id: null, failure: null } }));
+    const task = h.monitor.start();
+    await flush();
+    h.end();
+    await flush();
+    expect(h.monitor.snapshot().stream).toBe('stopped');
+    const calls = vi.mocked(h.transport.getRun).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(200);
+    expect(vi.mocked(h.transport.getRun).mock.calls.length).toBeGreaterThan(calls);
+    expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('pending');
+    h.set(settled);
+    await vi.advanceTimersByTimeAsync(100);
+    await task;
+    expect(h.monitor.snapshot().run?.auto_plot).toEqual(settled.auto_plot);
+    const stoppedCalls = vi.mocked(h.transport.getRun).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.transport.getRun).toHaveBeenCalledTimes(stoppedCalls);
+    expect(h.transport.openEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps terminal metadata polling within the page scope', async () => {
+    vi.useFakeTimers();
+    const h = harness(view({ state: 'completed', auto_plot: { status: 'pending', run_id: null, failure: null } }));
+    const task = h.monitor.start();
+    await flush();
+    h.end();
+    await flush();
+    h.monitor.pause();
+    await task;
+    const calls = vi.mocked(h.transport.getRun).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.transport.getRun).toHaveBeenCalledTimes(calls);
+    expect(h.monitor.snapshot().freshness).toBe('stale');
+  });
+
+  it('accepts the retry response and resumes metadata-only polling until submission', async () => {
+    vi.useFakeTimers();
+    const failed = view({ state: 'completed', auto_plot: { status: 'failed', run_id: null, failure: 'Unavailable' } });
+    const h = harness(failed);
+    const task = h.monitor.start();
+    await flush();
+    h.end();
+    await task;
+    const pending = view({ state: 'completed', auto_plot: { status: 'pending', run_id: null, failure: null } });
+    h.retryAutomaticPlots.mockResolvedValueOnce(pending);
+    h.set(pending);
+    await h.monitor.retryAutomaticPlots();
+    expect(h.monitor.snapshot().run).toEqual(pending);
+    expect(h.monitor.snapshot().automaticPlotRetry).toBe(false);
+    const calls = vi.mocked(h.transport.getRun).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(200);
+    expect(vi.mocked(h.transport.getRun).mock.calls.length).toBeGreaterThan(calls);
+    h.set(view({ state: 'completed', auto_plot: { status: 'submitted', run_id: id, failure: null } }));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('submitted');
+    const stoppedCalls = vi.mocked(h.transport.getRun).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.transport.getRun).toHaveBeenCalledTimes(stoppedCalls);
+    expect(h.transport.openEvents).toHaveBeenCalledTimes(1);
+    h.monitor.stop();
+  });
+
+  it('prevents duplicate retries and ignores an acknowledgement after the page pauses', async () => {
+    const h = harness(view({ state: 'completed', auto_plot: { status: 'failed', run_id: null, failure: 'Unavailable' } }));
+    const task = h.monitor.start();
+    await flush();
+    h.end();
+    await task;
+    let resolveRetry: ((run: RunView) => void) | undefined;
+    h.retryAutomaticPlots.mockImplementationOnce(() => new Promise((resolve) => { resolveRetry = resolve; }));
+    const retry = h.monitor.retryAutomaticPlots();
+    expect(h.monitor.snapshot().automaticPlotRetry).toBe(true);
+    await h.monitor.retryAutomaticPlots();
+    expect(h.retryAutomaticPlots).toHaveBeenCalledTimes(1);
+    h.monitor.pause();
+    expect(h.retryAutomaticPlots.mock.calls[0]?.[1].aborted).toBe(true);
+    resolveRetry?.(view({ state: 'completed', auto_plot: { status: 'pending', run_id: null, failure: null } }));
+    await retry;
+    expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('failed');
+    expect(h.monitor.snapshot().automaticPlotRetry).toBe(false);
+    await h.monitor.retryAutomaticPlots();
+    expect(h.retryAutomaticPlots).toHaveBeenCalledTimes(1);
+    h.monitor.stop();
+  });
+
+  it('shows retry errors through the existing action message without replacing the run', async () => {
+    const h = harness(view({ state: 'completed', auto_plot: { status: 'failed', run_id: null, failure: 'Unavailable' } }));
+    const task = h.monitor.start();
+    await flush();
+    h.end();
+    await task;
+    const error = new DaemonApiError('http', 'Retry unavailable', 503);
+    h.retryAutomaticPlots.mockRejectedValueOnce(error);
+    await h.monitor.retryAutomaticPlots();
+    expect(h.monitor.snapshot().message).toBe(error);
+    expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('failed');
+    expect(h.monitor.snapshot().automaticPlotRetry).toBe(false);
+    h.monitor.stop();
+  });
+
   it('identity/protocol failure halts instead of reconnecting to a replacement daemon', async () => {
     const h = harness();
     vi.mocked(h.transport.getRun).mockRejectedValue(new DaemonApiError('identity', 'changed'));
