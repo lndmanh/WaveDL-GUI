@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest';
-import type { RunView } from '../../app/lib/daemon-api';
 import {
   datasetFormat,
   datasetInputDimensions,
   datasetOutputValues,
   datasetSuggestions,
 } from '../../app/lib/dataset-suggestions';
+import type { RunView } from '../../types/daemon-api';
 
 function run(id: string, path: string | null, created: string | null = null): RunView {
   return {

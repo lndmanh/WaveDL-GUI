@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogApi } from '../../app/lib/catalog-api';
-import type { Json } from '../../app/lib/daemon-api';
 import {
   DatasetPreviewApi,
   DatasetPreviewPickleRequiredError,
   parseDatasetPreview,
   sampleMatrix,
-  type DatasetPreview,
 } from '../../app/lib/dataset-preview';
 import { ConnectionSession } from './session-fixture';
+import type { Json } from '../../types/json';
+import type { DatasetPreview } from '../../types/dataset-preview';
 
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
 const selection = { root: 'data', relativePath: 'train.npz' };
@@ -16,7 +16,7 @@ const selection = { root: 'data', relativePath: 'train.npz' };
 function histogram(count: number) {
   return {
     feature_index: 0,
-    counts: Array.from({ length: 32 }, (_, index) => index === 0 ? count : 0),
+    counts: Array.from({ length: 32 }, (_, index) => (index === 0 ? count : 0)),
     edges: Array.from({ length: 33 }, (_, index) => index),
   };
 }
@@ -51,26 +51,41 @@ function json(body: Json, status = 200, headers: Record<string, string> = {}) {
 
 async function setup(respond: (signal?: AbortSignal | null) => Response | Promise<Response>) {
   let observedHealth = health;
+
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
     if (String(url).endsWith('/api/health')) return json(observedHealth);
 
     if (String(url).endsWith('/api/browse/resolve'))
-      return json({ root: 'data', relative_path: 'train.npz', path: '/srv/train.npz', kind: 'file' });
+      return json({
+        root: 'data',
+        relative_path: 'train.npz',
+        path: '/srv/train.npz',
+        kind: 'file',
+      });
 
     return respond(init?.signal);
   });
 
-  const session = new ConnectionSession({ origin: 'http://localhost:8765', buildId: '1.8.1', fetcher });
+  const session = new ConnectionSession({
+    origin: 'http://localhost:8765',
+    buildId: '1.8.1',
+    fetcher,
+  });
+
   expect(await session.connect('token')).toBe(true);
   const selected = await new CatalogApi(session).resolve('data', 'train.npz');
-  const requests = () => fetcher.mock.calls.filter(([url]) => String(url).endsWith('/api/datasets/preview'));
+
+  const requests = () =>
+    fetcher.mock.calls.filter(([url]) => String(url).endsWith('/api/datasets/preview'));
 
   return {
     session,
     selected,
     api: new DatasetPreviewApi(session),
     requests,
-    replaceDaemon: () => { observedHealth = { ...health, daemon_id: 'different-daemon' }; },
+    replaceDaemon: () => {
+      observedHealth = { ...health, daemon_id: 'different-daemon' };
+    },
   };
 }
 
@@ -103,12 +118,14 @@ describe('dataset preview responses', () => {
       output_shape: [131072, 1],
       sample_indices: [0, 65535, 131071],
       input_sample_indices: [0, 131071],
-      samples: [{
-        sample_index: 0,
-        feature_shape: [500, 500],
-        shape: [125, 125],
-        values: Array.from({ length: 125 }, () => Array.from({ length: 125 }, () => 1)),
-      }],
+      samples: [
+        {
+          sample_index: 0,
+          feature_shape: [500, 500],
+          shape: [125, 125],
+          values: Array.from({ length: 125 }, () => Array.from({ length: 125 }, () => 1)),
+        },
+      ],
     });
 
     const result = parseDatasetPreview(value, selection);
@@ -125,9 +142,11 @@ describe('dataset preview responses', () => {
 describe('dataset preview polling', () => {
   it('polls 202 to 200 with an identical body and no removed view field', async () => {
     let count = 0;
+
     const { api, selected, requests, session } = await setup(() =>
       ++count === 1 ? json({ status: 'pending' }, 202) : json(preview()),
     );
+
     vi.useFakeTimers();
     const task = api.preview(selected);
     const result = expect(task).resolves.toEqual(preview());
@@ -154,9 +173,11 @@ describe('dataset preview polling', () => {
 
   it('forwards an explicit pickle opt-in on every poll', async () => {
     let count = 0;
+
     const { api, selected, requests, session } = await setup(() =>
       ++count === 1 ? json({ status: 'pending' }, 202) : json(preview()),
     );
+
     vi.useFakeTimers();
     const task = api.preview(selected, { allow_pickle: true });
     const result = expect(task).resolves.toEqual(preview());
@@ -171,7 +192,10 @@ describe('dataset preview polling', () => {
   });
 
   it('stops further requests when aborted between polls', async () => {
-    const { api, selected, requests, session } = await setup(() => json({ status: 'pending' }, 202));
+    const { api, selected, requests, session } = await setup(() =>
+      json({ status: 'pending' }, 202),
+    );
+
     vi.useFakeTimers();
     const controller = new AbortController();
     const task = api.preview(selected, { signal: controller.signal });
@@ -188,7 +212,10 @@ describe('dataset preview polling', () => {
   });
 
   it('stops polling when the connection scope ends', async () => {
-    const { api, selected, requests, session } = await setup(() => json({ status: 'pending' }, 202));
+    const { api, selected, requests, session } = await setup(() =>
+      json({ status: 'pending' }, 202),
+    );
+
     vi.useFakeTimers();
     const task = api.preview(selected);
     const result = expect(task).rejects.toMatchObject({ code: 'stale' });
@@ -201,22 +228,24 @@ describe('dataset preview polling', () => {
   });
 
   it('allows an individual poll to take longer than the backend’s 15-second wait', async () => {
-    const { api, selected, session } = await setup((signal) =>
-      new Promise((resolve, reject) => {
-        const finish = () => {
-          signal?.removeEventListener('abort', abort);
-          resolve(json(preview()));
-        };
+    const { api, selected, session } = await setup(
+      (signal) =>
+        new Promise((resolve, reject) => {
+          const finish = () => {
+            signal?.removeEventListener('abort', abort);
+            resolve(json(preview()));
+          };
 
-        const abort = () => {
-          clearTimeout(timer);
-          reject(new Error('Request aborted'));
-        };
+          const abort = () => {
+            clearTimeout(timer);
+            reject(new Error('Request aborted'));
+          };
 
-        const timer = setTimeout(finish, 16000);
-        signal?.addEventListener('abort', abort, { once: true });
-      }),
+          const timer = setTimeout(finish, 16000);
+          signal?.addEventListener('abort', abort, { once: true });
+        }),
     );
+
     vi.useFakeTimers();
     const task = api.preview(selected);
     const result = expect(task).resolves.toEqual(preview());
@@ -227,7 +256,10 @@ describe('dataset preview polling', () => {
   });
 
   it('ends a pending job at the overall 20-minute deadline and clears its poll timer', async () => {
-    const { api, selected, requests, session } = await setup(() => json({ status: 'pending' }, 202));
+    const { api, selected, requests, session } = await setup(() =>
+      json({ status: 'pending' }, 202),
+    );
+
     vi.useFakeTimers();
     const task = api.preview(selected);
     const result = expect(task).rejects.toMatchObject({ code: 'request' });
@@ -249,7 +281,10 @@ describe('dataset preview polling', () => {
 
   it('keeps final 400 and 503 errors local to the request', async () => {
     for (const status of [400, 503]) {
-      const { api, selected, session } = await setup(() => json({ error: 'Could not preview' }, status));
+      const { api, selected, session } = await setup(() =>
+        json({ error: 'Could not preview' }, status),
+      );
+
       await expect(api.preview(selected)).rejects.toMatchObject({ code: 'request', status });
       expect(session.snapshot().status).toBe('connected');
       session.detach();

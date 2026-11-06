@@ -41,13 +41,22 @@ describe('dataset boundary parity', () => {
   });
 
   it('keeps pickled input shapes unknown while retaining output metadata and sample counts', () => {
-    const inspection = parseDatasetInspection({
-      ...header,
-      variables: [
-        { ...variable, name: 'input_train', dtype: 'object', shape: [131072], sample_count: 131072 },
-        { ...variable, name: 'output_train', shape: [131072, 3], sample_count: 131072 },
-      ],
-    }, { relativePath: 'train.npz' });
+    const inspection = parseDatasetInspection(
+      {
+        ...header,
+        variables: [
+          {
+            ...variable,
+            name: 'input_train',
+            dtype: 'object',
+            shape: [131072],
+            sample_count: 131072,
+          },
+          { ...variable, name: 'output_train', shape: [131072, 3], sample_count: 131072 },
+        ],
+      },
+      { relativePath: 'train.npz' },
+    );
 
     expect(inspection).toMatchObject({
       inputShape: null,
@@ -56,29 +65,43 @@ describe('dataset boundary parity', () => {
       numSamples: 131072,
     });
     expect(modelShapeGuidance(inspection, { supportedDims: [1, 2, 3] })).toEqual({
-      status: 'unknown', shape: '', dimensions: 0,
+      status: 'unknown',
+      shape: '',
+      dimensions: 0,
     });
-    expect(modelShapeGuidance({ ...inspection, inputShape: [500, 500] }, { supportedDims: [1] }).status)
-      .toBe('unknown');
+    expect(
+      modelShapeGuidance({ ...inspection, inputShape: [500, 500] }, { supportedDims: [1] }).status,
+    ).toBe('unknown');
   });
 
   it('does not mistake real scalar samples for unknown pickled shapes', () => {
-    const inspection = parseDatasetInspection({
-      ...header,
-      variables: [{ ...variable, shape: [2] }, { ...variable, name: 'Y' }],
-    }, { relativePath: 'train.npz' });
+    const inspection = parseDatasetInspection(
+      {
+        ...header,
+        variables: [
+          { ...variable, shape: [2] },
+          { ...variable, name: 'Y' },
+        ],
+      },
+      { relativePath: 'train.npz' },
+    );
     expect(inspection.inputShape).toEqual([]);
     expect(inspection.inputDtype).toBe('float32');
   });
 
   it('accepts large declared arrays without the removed file-size budget', () => {
-    expect(parseDatasetInspection({
-      ...header,
-      variables: [
-        { ...variable, declared_bytes: 20 * 1024 ** 3 },
-        { ...variable, name: 'Y', declared_bytes: 20 * 1024 ** 3 },
-      ],
-    }, { relativePath: 'train.npz' }).inputShape).toEqual([3]);
+    expect(
+      parseDatasetInspection(
+        {
+          ...header,
+          variables: [
+            { ...variable, declared_bytes: 20 * 1024 ** 3 },
+            { ...variable, name: 'Y', declared_bytes: 20 * 1024 ** 3 },
+          ],
+        },
+        { relativePath: 'train.npz' },
+      ).inputShape,
+    ).toEqual([3]);
   });
 
   it('retains finite nullable nested preview values without coercion', () => {
