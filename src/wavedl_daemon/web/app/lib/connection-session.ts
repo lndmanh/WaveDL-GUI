@@ -1,53 +1,20 @@
-import {
-  clientError,
-  type ClientErrorKey,
-  type ClientErrorParams,
-  type ClientMessage,
-} from '../i18n/client-messages';
-import {
-  DaemonApi,
-  DaemonApiError,
-  stripBootstrapUrl,
-  type Health,
-  type SessionGrant,
-} from './daemon-api';
+import { clientError } from '../i18n/client-messages';
+import { DaemonApi, DaemonApiError, stripBootstrapUrl } from './daemon-api';
 import {
   clearSessionCredentialArea,
   removeMatchingSessionCredential,
   saveSessionCredential,
-  type SessionCredential,
-  type SessionCredentialStorageArea,
 } from './session-credential';
-
-export type ConnectionStatus =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'authentication'
-  | 'skew'
-  | 'offline'
-  | 'error';
-
-export interface ConnectionState {
-  status: ConnectionStatus;
-  health: Health | null;
-  message: ClientMessage | Error | null;
-  revision: number;
-  buildMismatch: boolean;
-}
-
-export interface ConnectionOptions {
-  origin: string;
-  buildId: string;
-  fetcher?: typeof fetch;
-  timeoutMs?: number;
-  online?: boolean;
-}
-
-export interface WorkOptions {
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}
+import type { ClientErrorKey, MessageParams, ClientMessage } from '~~/types/i18n';
+import type { Health, SessionGrant } from '~~/types/daemon-api';
+import type { SessionCredential } from '../../shared/schemas/session-credential';
+import type { SessionCredentialStorageArea } from '~~/types/session-credential';
+import type {
+  ConnectionStatus,
+  ConnectionState,
+  ConnectionOptions,
+  WorkOptions,
+} from '~~/types/connection-session';
 
 export class ConnectionSessionError extends Error {
   constructor(
@@ -62,7 +29,7 @@ export class ConnectionSessionError extends Error {
     message: string,
     public readonly status?: number,
     public readonly clientMessageKey?: ClientErrorKey,
-    public readonly clientMessageParams?: ClientErrorParams,
+    public readonly clientMessageParams?: MessageParams,
   ) {
     super(message);
     this.name = 'ConnectionSessionError';
@@ -71,7 +38,7 @@ export class ConnectionSessionError extends Error {
   static fromKey(
     code: ConnectionSessionError['code'],
     key: ClientErrorKey,
-    options: { status?: number; params?: ClientErrorParams } = {},
+    options: { status?: number; params?: MessageParams } = {},
   ): ConnectionSessionError {
     const { status, params } = options;
 

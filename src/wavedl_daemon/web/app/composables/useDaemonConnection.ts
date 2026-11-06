@@ -1,7 +1,8 @@
-import { ConnectionSession, type ConnectionOptions } from '../lib/connection-session';
+import { ConnectionSession } from '../lib/connection-session';
 import { stripBootstrapUrl } from '../lib/daemon-api';
 import { clearSessionCredentialArea, loadSessionCredential } from '../lib/session-credential';
 import { loadKeepSignedIn, saveKeepSignedIn } from '../lib/preferences';
+import type { ConnectionOptions } from '~~/types/connection-session';
 
 /** Owns browser storage and mount ordering for the current daemon session. */
 export function useDaemonConnection(options: ConnectionOptions) {

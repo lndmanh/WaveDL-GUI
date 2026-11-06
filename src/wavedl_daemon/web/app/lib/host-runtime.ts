@@ -1,7 +1,6 @@
 import type { HostProfile } from '../../shared/schemas/host-profile';
 import type { TrainingRequest } from '../../shared/schemas/training-request';
-
-export type AutomaticRuntime = Pick<TrainingRequest, 'backend' | 'runtime' | 'topology'>;
+import type { AutomaticRuntime, HostAccelerator } from '~~/types/host-runtime';
 
 /**
  * The setup automatic mode plans: one Local process on the daemon's own interpreter.
@@ -28,8 +27,6 @@ export function matchesAutomatic(request: TrainingRequest, profile: HostProfile)
     !request.storage_map?.length
   );
 }
-
-export type HostAccelerator = 'cuda' | 'mps' | 'cpu' | 'unknown';
 
 /** What `auto` resolves to on this host, in the trainer's order of preference. */
 export function hostAccelerator(profile: HostProfile): HostAccelerator {

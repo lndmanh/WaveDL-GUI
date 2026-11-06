@@ -1,24 +1,15 @@
 import { clientError } from '../i18n/client-messages';
-import { parseJson, type Json } from './daemon-api';
+import { parseJson } from './daemon-api';
 import { credentialSchema, type SessionCredential } from '../../shared/schemas/session-credential';
+import type { Json } from '~~/types/json';
+import type {
+  SessionCredentialStorageArea,
+  StoredSessionCredential,
+} from '~~/types/session-credential';
+import type { PreferenceStorage } from '~~/types/preferences';
 
 export const SESSION_CREDENTIAL_KEY = 'wavedl.session.v1';
 export const SESSION_CREDENTIAL_LIMIT = 16 * 1024;
-
-export type { SessionCredential } from '../../shared/schemas/session-credential';
-
-export type SessionCredentialStorageArea = 'session' | 'local';
-
-export interface SessionCredentialStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-}
-
-export interface StoredSessionCredential {
-  credential: SessionCredential;
-  storage: SessionCredentialStorageArea;
-}
 
 function validOrigin(value: string): boolean {
   try {
@@ -50,7 +41,7 @@ function parseCredential(value: Json | SessionCredential): SessionCredential | n
   }
 }
 
-function browserStorage(area: SessionCredentialStorageArea): SessionCredentialStorage | null {
+function browserStorage(area: SessionCredentialStorageArea): PreferenceStorage | null {
   try {
     if (typeof window === 'undefined') return null;
 
@@ -80,8 +71,8 @@ export function parseStoredSessionCredential(raw: string | null): SessionCredent
 
 export function loadSessionCredential(
   storages: {
-    session?: SessionCredentialStorage | null;
-    local?: SessionCredentialStorage | null;
+    session?: PreferenceStorage | null;
+    local?: PreferenceStorage | null;
   } = {},
   expectedOrigin?: string,
 ): StoredSessionCredential | null {
@@ -115,8 +106,8 @@ export function saveSessionCredential(
   value: SessionCredential,
   storageArea: SessionCredentialStorageArea = 'session',
   storages: {
-    session?: SessionCredentialStorage | null;
-    local?: SessionCredentialStorage | null;
+    session?: PreferenceStorage | null;
+    local?: PreferenceStorage | null;
   } = {},
 ): boolean {
   try {
@@ -149,8 +140,8 @@ function parseCredentialForMatch(raw: string | null): SessionCredential | null {
 export function removeMatchingSessionCredential(
   token: string,
   storages: {
-    session?: SessionCredentialStorage | null;
-    local?: SessionCredentialStorage | null;
+    session?: PreferenceStorage | null;
+    local?: PreferenceStorage | null;
   } = {},
 ): void {
   for (const area of ['session', 'local'] as const) {
@@ -162,8 +153,8 @@ export function removeMatchingSessionCredentialInArea(
   token: string,
   area: SessionCredentialStorageArea,
   storages: {
-    session?: SessionCredentialStorage | null;
-    local?: SessionCredentialStorage | null;
+    session?: PreferenceStorage | null;
+    local?: PreferenceStorage | null;
   } = {},
 ): void {
   try {
@@ -182,8 +173,8 @@ export function removeMatchingSessionCredentialInArea(
 export function clearSessionCredentialArea(
   area: SessionCredentialStorageArea,
   storages: {
-    session?: SessionCredentialStorage | null;
-    local?: SessionCredentialStorage | null;
+    session?: PreferenceStorage | null;
+    local?: PreferenceStorage | null;
   } = {},
 ): void {
   try {
@@ -196,8 +187,8 @@ export function clearSessionCredentialArea(
 
 export function clearSessionCredential(
   storages: {
-    session?: SessionCredentialStorage | null;
-    local?: SessionCredentialStorage | null;
+    session?: PreferenceStorage | null;
+    local?: PreferenceStorage | null;
   } = {},
 ): void {
   for (const area of ['session', 'local'] as const) {

@@ -1,9 +1,4 @@
-import type { ConnectionStatus } from '../lib/connection-session';
-
-export interface WorkstationAuthState {
-  status: ConnectionStatus;
-  resumePending: boolean;
-}
+import type { WorkstationAuthState } from '~~/types/workstation';
 
 /** Middleware runs before the layout mounts. Defer until initial resume settles. */
 export function useWorkstationAuth() {

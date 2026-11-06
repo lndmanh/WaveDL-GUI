@@ -1,4 +1,4 @@
-import type { ConnectionStatus } from '../lib/connection-session';
+import type { ConnectionStatus } from '~~/types/connection-session';
 
 export const connectionStatusKey: Record<ConnectionStatus, string> = {
   connected: 'shell.connected',

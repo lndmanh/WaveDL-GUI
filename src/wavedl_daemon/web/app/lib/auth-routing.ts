@@ -1,7 +1,7 @@
-import type { ConnectionStatus } from './connection-session';
 import { stripBootstrapUrl } from './daemon-api';
 import { nextPathSchema } from '../../shared/schemas/auth-routing';
 import type { LocationQueryValue } from 'vue-router';
+import type { ConnectionStatus } from '~~/types/connection-session';
 
 const WORK_PATHS = ['/experiments', '/new', '/datasets', '/results'];
 

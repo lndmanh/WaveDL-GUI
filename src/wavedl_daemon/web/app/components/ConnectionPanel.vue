@@ -14,11 +14,12 @@ import {
   TriangleAlert,
   Unplug,
 } from '@lucide/vue';
-import type { ConnectionState } from '../lib/connection-session';
+
 import {
   daemonCredentialSchema,
   type DaemonCredentialValues,
 } from '#shared/schemas/daemon-connection';
+import type { ConnectionState } from '~~/types/connection-session';
 
 // Utility bundles keep state and descendant styling beside their component.
 const styles = {
