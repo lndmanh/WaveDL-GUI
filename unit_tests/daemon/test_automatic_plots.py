@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from uuid import uuid4
 
 import httpx
@@ -172,6 +173,7 @@ def test_payload_reuses_host_paths_runtime_and_inference_defaults(
             assert config[name] == option.default
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Slurm plans need POSIX paths")
 def test_slurm_rejection_is_failed_without_changing_device_or_allocation(
     environment, automatic
 ):

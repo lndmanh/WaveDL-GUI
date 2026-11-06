@@ -31,7 +31,11 @@ class OutputLog:
             try:
                 # Attempt directories are exclusively claimed, owner-private
                 # directories. Never follow or replace a preexisting file.
-                self._fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                # O_BINARY stops Windows from rewriting trainer "\n" as "\r\n".
+                flags = (
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+                )
+                self._fd = os.open(path, flags, 0o600)
             except OSError:
                 _LOG.warning("Could not create trainer output log", exc_info=True)
 
