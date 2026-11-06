@@ -221,6 +221,35 @@ export function resetTrainingPreferences(daemonId: string, storage = browserStor
   }
 }
 
+export function clearDataPreferences(storage = browserStorage()): boolean {
+  try {
+    if (!storage) return false;
+    storage.removeItem(keepSignedInKey);
+    storage.removeItem(shellDockKey);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearLocalPreferences(
+  daemonId: string | null,
+  storage = browserStorage(),
+): boolean {
+  try {
+    if (!storage) return false;
+    const daemonKey = daemonId ? trainingKey(daemonId) : null;
+    storage.removeItem(appearanceKey);
+
+    if (daemonKey) storage.removeItem(daemonKey);
+
+    return clearDataPreferences(storage);
+  } catch {
+    return false;
+  }
+}
+
 /** Apply only when creating a fresh draft, never to a approved/submitted plan. */
 export function applyTrainingPreferences(
   current: TrainingConfig,

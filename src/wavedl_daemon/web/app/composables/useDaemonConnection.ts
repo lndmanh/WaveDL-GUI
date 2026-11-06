@@ -21,15 +21,17 @@ export function useDaemonConnection(options: ConnectionOptions) {
 
   const canMutate = computed(() => state.value.status === 'connected');
 
-  function setKeepSignedIn(value: boolean): void {
+  function setKeepSignedIn(value: boolean): boolean {
     const next = value === true;
+    const saved = saveKeepSignedIn(next);
 
-    if (keepSignedIn.value === next) return;
     keepSignedIn.value = next;
-    saveKeepSignedIn(next);
-    session.setKeepSignedIn(next);
+    const hasCredential = session.sessionCredential !== null;
+    const sessionSaved = session.setKeepSignedIn(next);
 
     if (!next) clearSessionCredentialArea('local');
+
+    return saved && (!hasCredential || sessionSaved);
   }
 
   const online = () => session.setOnline(navigator.onLine);
