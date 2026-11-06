@@ -8,7 +8,7 @@ export interface DatasetInspection {
   numSamples: number;
   inputKey: string;
   outputKey: string;
-  inputShape: number[];
+  inputShape: number[] | null;
   outputShape: number[];
   inputDtype: string;
   outputDtype: string;
@@ -40,11 +40,7 @@ export function parseDatasetInspection(
   if (metadata.format !== selection.relativePath.split('.').at(-1)?.toLowerCase()) return fail();
   const variables = new Map(metadata.variables.map((item) => [item.name, item]));
 
-  if (
-    variables.size !== metadata.variables.length ||
-    metadata.variables.reduce((total, item) => total + item.declared_bytes, 0) > 8 * 1024 ** 3
-  )
-    return fail();
+  if (variables.size !== metadata.variables.length) return fail();
 
   for (const item of metadata.variables) {
     if (item.shape.length ? item.sample_count !== item.shape[0] : item.sample_count !== null)
@@ -81,7 +77,7 @@ export function parseDatasetInspection(
     numSamples: inputs.sample_count,
     inputKey: inputs.name,
     outputKey: outputs.name,
-    inputShape: inputs.shape.slice(1),
+    inputShape: inputs.dtype === 'object' ? null : inputs.shape.slice(1),
     outputShape: outputs.shape.slice(1).length ? outputs.shape.slice(1) : [1],
     inputDtype: inputs.dtype,
     outputDtype: outputs.dtype,

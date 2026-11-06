@@ -4,6 +4,7 @@ import { ConnectionSession } from './session-fixture';
 import { CatalogApi, relativePath } from '../../app/lib/catalog-api';
 import { parseDatasetInspection } from '../../app/lib/dataset-inspection';
 import { previewValuesSchema } from '../../shared/schemas/dataset-preview';
+import { modelShapeGuidance } from '../../app/lib/model-shape-guidance';
 
 describe('dataset boundary parity', () => {
   const variable = {
@@ -37,6 +38,47 @@ describe('dataset boundary parity', () => {
     }
 
     expect(() => parseDatasetInspection(header, { relativePath: 'train.mat' })).toThrow();
+  });
+
+  it('keeps pickled input shapes unknown while retaining output metadata and sample counts', () => {
+    const inspection = parseDatasetInspection({
+      ...header,
+      variables: [
+        { ...variable, name: 'input_train', dtype: 'object', shape: [131072], sample_count: 131072 },
+        { ...variable, name: 'output_train', shape: [131072, 3], sample_count: 131072 },
+      ],
+    }, { relativePath: 'train.npz' });
+
+    expect(inspection).toMatchObject({
+      inputShape: null,
+      inputDtype: 'object',
+      outputShape: [3],
+      numSamples: 131072,
+    });
+    expect(modelShapeGuidance(inspection, { supportedDims: [1, 2, 3] })).toEqual({
+      status: 'unknown', shape: '', dimensions: 0,
+    });
+    expect(modelShapeGuidance({ ...inspection, inputShape: [500, 500] }, { supportedDims: [1] }).status)
+      .toBe('unknown');
+  });
+
+  it('does not mistake real scalar samples for unknown pickled shapes', () => {
+    const inspection = parseDatasetInspection({
+      ...header,
+      variables: [{ ...variable, shape: [2] }, { ...variable, name: 'Y' }],
+    }, { relativePath: 'train.npz' });
+    expect(inspection.inputShape).toEqual([]);
+    expect(inspection.inputDtype).toBe('float32');
+  });
+
+  it('accepts large declared arrays without the removed file-size budget', () => {
+    expect(parseDatasetInspection({
+      ...header,
+      variables: [
+        { ...variable, declared_bytes: 20 * 1024 ** 3 },
+        { ...variable, name: 'Y', declared_bytes: 20 * 1024 ** 3 },
+      ],
+    }, { relativePath: 'train.npz' }).inputShape).toEqual([3]);
   });
 
   it('retains finite nullable nested preview values without coercion', () => {

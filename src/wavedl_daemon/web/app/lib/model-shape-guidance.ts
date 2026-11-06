@@ -13,7 +13,7 @@ export function modelShapeGuidance(
   model: Pick<ModelDescription, 'supportedDims'>,
   singleChannel = false,
 ): ModelShapeGuidance {
-  const shape = inspection?.inputShape ?? [];
+  const shape = inspection?.inputDtype === 'object' ? [] : (inspection?.inputShape ?? []);
   const dimensions = shape.length;
   const unknown: ModelShapeGuidance = { status: 'unknown', shape: '', dimensions: 0 };
 
