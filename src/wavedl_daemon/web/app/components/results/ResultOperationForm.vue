@@ -7,11 +7,11 @@ import {
 import { useForm, Field as VeeField } from 'vee-validate';
 import { resultRequestSchema } from '../../../shared/schemas/result-request';
 import type { ConnectionSession } from '../../lib/connection-session';
-import type { Checkpoint } from '../../lib/artifact-client';
-import type { DataSelection } from '../../lib/catalog-api';
-import type { PlanView } from '../../lib/daemon-api';
 import { ResultOperations } from '../../lib/result-operations';
 import { createResultOperationDefaults } from '../../lib/result-operation-defaults';
+import type { Checkpoint } from '~~/types/artifact-client';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { PlanView } from '~~/types/daemon-api';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();

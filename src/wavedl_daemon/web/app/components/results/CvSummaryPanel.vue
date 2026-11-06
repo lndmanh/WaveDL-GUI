@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { Artifact } from '../../lib/artifact-client';
 import type { ConnectionSession } from '../../lib/connection-session';
-import { loadCvSummary, type CvMetric, type CvSummary } from '../../lib/cv-summary';
+import { loadCvSummary } from '../../lib/cv-summary';
+import type { Artifact } from '~~/types/artifact-client';
+import type { CvMetric, CvSummary } from '~~/types/cv-summary';
 
 const props = defineProps<{ session: ConnectionSession; artifacts: readonly Artifact[] }>();
 const { t, locale } = useI18n({ useScope: 'global' });

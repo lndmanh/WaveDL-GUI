@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { RunView } from '../../lib/daemon-api';
-import type { RunEvent } from '../../lib/event-stream';
 import { evaluationResults } from '../../lib/evaluation-results';
 import { evaluationMetricMessageKeys } from '../../i18n/dynamic-keys';
+import type { RunView } from '~~/types/daemon-api';
+import type { RunEvent } from '~~/types/event-stream';
 
 const { t } = useI18n({ useScope: 'global' });
 

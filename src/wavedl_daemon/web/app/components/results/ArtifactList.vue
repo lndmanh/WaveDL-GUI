@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import type { Artifact } from '../../lib/artifact-client';
+import type { Artifact } from '~~/types/artifact-client';
 
 // Utility bundles keep state and descendant styling beside their component.
 const styles = {

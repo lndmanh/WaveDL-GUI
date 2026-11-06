@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import type { ConnectionSession } from '../../lib/connection-session';
-import {
-  ArtifactClient,
-  pngPreviewBlob,
-  type Artifact,
-  type Inventory,
-} from '../../lib/artifact-client';
+import { ArtifactClient, pngPreviewBlob } from '../../lib/artifact-client';
 import { artifactDownloadName } from '../../lib/artifact-download';
-import type { RunMonitorSnapshot } from '../../lib/run-monitor';
+import type { Artifact, Inventory } from '~~/types/artifact-client';
+import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 
 const { isActive } = usePageActive();
 const { t, locale } = useI18n({ useScope: 'global' });
