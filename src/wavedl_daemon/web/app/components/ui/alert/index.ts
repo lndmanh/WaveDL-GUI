@@ -12,11 +12,11 @@ export const alertVariants = cva(
       variant: {
         default: 'bg-card text-card-foreground',
         destructive:
-          'text-red-800 bg-red-50 [&>svg]:text-red-700 *:data-[slot=alert-description]:text-red-700 border border-red-200 dark:text-red-200 dark:bg-red-950 dark:[&>svg]:text-red-300 dark:*:data-[slot=alert-description]:text-red-300 dark:border-red-800',
+          'text-foreground bg-destructive/8 border-destructive/30 [&>svg]:text-destructive *:data-[slot=alert-description]:text-foreground/80 dark:bg-destructive/10 dark:border-destructive/25',
         warning:
-          'text-amber-900 bg-amber-50 [&>svg]:text-amber-600 *:data-[slot=alert-description]:text-amber-800 border border-amber-200 dark:text-amber-100 dark:bg-amber-950 dark:[&>svg]:text-amber-300 dark:*:data-[slot=alert-description]:text-amber-200 dark:border-amber-800',
+          'text-foreground bg-warning/8 border-warning/30 [&>svg]:text-warning *:data-[slot=alert-description]:text-foreground/80 dark:bg-warning/10 dark:border-warning/25',
         success:
-          'text-green-800 bg-green-50 [&>svg]:text-green-700 *:data-[slot=alert-description]:text-green-700 border border-green-200 dark:text-green-200 dark:bg-green-950 dark:[&>svg]:text-green-300 dark:*:data-[slot=alert-description]:text-green-300 dark:border-green-800',
+          'text-foreground bg-success/8 border-success/30 [&>svg]:text-success *:data-[slot=alert-description]:text-foreground/80 dark:bg-success/10 dark:border-success/25',
       },
     },
     defaultVariants: {
