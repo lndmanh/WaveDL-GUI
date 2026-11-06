@@ -1,6 +1,7 @@
-import type { DataSelection } from '../lib/catalog-api';
 import type { ConnectionSession } from '../lib/connection-session';
-import { DatasetInspectionApi, type DatasetInspection } from '../lib/dataset-inspection';
+import { DatasetInspectionApi } from '../lib/dataset-inspection';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
 
 /** Header requests never outlive their selection or connection revision. */
 export function useDatasetInspection(

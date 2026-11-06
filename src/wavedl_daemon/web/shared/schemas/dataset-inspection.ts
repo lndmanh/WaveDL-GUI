@@ -10,7 +10,7 @@ const text = z
 const variable = z.strictObject({
   name: text,
   dtype: text,
-  'shape': z.array(integer).max(16),
+  shape: z.array(integer).max(16),
   sample_count: integer.nullable(),
   declared_bytes: integer,
 });

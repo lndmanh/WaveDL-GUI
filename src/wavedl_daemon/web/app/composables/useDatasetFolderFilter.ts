@@ -1,5 +1,6 @@
-import { CatalogApi, type BrowseEntry, type BrowsePage } from '../lib/catalog-api';
+import { CatalogApi } from '../lib/catalog-api';
 import type { ConnectionSession } from '../lib/connection-session';
+import type { BrowseEntry, BrowsePage } from '~~/types/catalog-api';
 
 /** Search one folder, including its other pages, never its descendants. */
 export function useDatasetFolderFilter(

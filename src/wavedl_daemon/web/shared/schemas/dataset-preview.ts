@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-export type PreviewValues = number | null | PreviewValues[];
+import type { PreviewValues } from '../../types/dataset-preview';
 
 export const previewValuesSchema: z.ZodType<PreviewValues> = z.lazy(() =>
   z.union([z.number().finite(), z.null(), z.array(previewValuesSchema)]),
@@ -37,8 +36,8 @@ export const datasetPreviewSchema = z.strictObject({
     .min(1)
     .max(1024)
     .refine((value) => !value.includes('\0') && new TextEncoder().encode(value).length <= 1024),
-  'input_shape': tensorDimensions,
-  'output_shape': tensorDimensions,
+  input_shape: tensorDimensions,
+  output_shape: tensorDimensions,
   sample_indices: indices.min(1),
   input_sample_indices: indices.min(1),
   input_histograms: z.array(histogram).min(1).max(8),
@@ -62,8 +61,8 @@ export const datasetPreviewSchema = z.strictObject({
     .array(
       z.strictObject({
         sample_index: integer,
-        'feature_shape': z.array(integer.positive()).max(15),
-        'shape': tensorDimensions,
+        feature_shape: z.array(integer.positive()).max(15),
+        shape: tensorDimensions,
         values: previewValuesSchema,
       }),
     )

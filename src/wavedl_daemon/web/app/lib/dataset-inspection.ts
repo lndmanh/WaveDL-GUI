@@ -1,19 +1,10 @@
-import { CatalogApi, type DataSelection } from './catalog-api';
+import { CatalogApi } from './catalog-api';
 import { ConnectionSession, ConnectionSessionError } from './connection-session';
-import { DaemonApiError, type Json } from './daemon-api';
+import { DaemonApiError } from './daemon-api';
 import { datasetInspectionSchema } from '../../shared/schemas/dataset-inspection';
-
-export interface DatasetInspection {
-  format: string;
-  numSamples: number;
-  inputKey: string;
-  outputKey: string;
-  inputShape: number[] | null;
-  outputShape: number[];
-  inputDtype: string;
-  outputDtype: string;
-  fileSize: null;
-}
+import type { DataSelection } from '~~/types/catalog-api';
+import type { Json } from '~~/types/json';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
 
 export function parseDatasetInspection(
   value: Json,

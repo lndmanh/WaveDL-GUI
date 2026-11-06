@@ -1,13 +1,6 @@
-import type { RunView } from './daemon-api';
 import { pathName, runCreatedAt } from './run-overview';
-
-export interface DatasetSuggestion {
-  readonly path: string;
-  readonly name: string;
-  readonly format: string;
-  readonly count: number;
-  readonly lastUsed: Date | null;
-}
+import type { RunView } from '~~/types/daemon-api';
+import type { DatasetSuggestion } from '~~/types/dataset-suggestions';
 
 export function datasetFormat(path: string): string | null {
   const extension = path.match(/\.(npz|mat|h5|hdf5)$/i)?.[1]?.toUpperCase();

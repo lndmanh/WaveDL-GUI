@@ -1,21 +1,9 @@
-import { CatalogApi, type BrowsePage, type DataSelection } from '../lib/catalog-api';
+import { CatalogApi } from '../lib/catalog-api';
 import type { ConnectionSession } from '../lib/connection-session';
-import type { RunView } from '../lib/daemon-api';
-import {
-  datasetFormat,
-  datasetSuggestions,
-  type DatasetSuggestion,
-} from '../lib/dataset-suggestions';
-
-export interface DatasetBrowserColumn {
-  readonly root: string;
-  readonly path: string;
-  readonly page: BrowsePage | null;
-}
-
-export interface ResolvedDatasetSuggestion extends DatasetSuggestion {
-  readonly selection: DataSelection;
-}
+import { datasetFormat, datasetSuggestions } from '../lib/dataset-suggestions';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { RunView } from '~~/types/daemon-api';
+import type { DatasetBrowserColumn, ResolvedDatasetSuggestion } from '~~/types/dataset-browser';
 
 export function useDatasetBrowser(session: () => ConnectionSession, allowDirectory: () => boolean) {
   const roots = shallowRef<readonly string[]>([]);

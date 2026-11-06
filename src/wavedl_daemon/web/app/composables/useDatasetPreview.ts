@@ -1,10 +1,7 @@
-import type { DataSelection } from '../lib/catalog-api';
 import type { ConnectionSession } from '../lib/connection-session';
-import {
-  DatasetPreviewApi,
-  DatasetPreviewPickleRequiredError,
-  type DatasetPreview,
-} from '../lib/dataset-preview';
+import { DatasetPreviewApi, DatasetPreviewPickleRequiredError } from '../lib/dataset-preview';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { DatasetPreview } from '~~/types/dataset-preview';
 
 type PreviewMessage =
   | { kind: 'key'; key: string }

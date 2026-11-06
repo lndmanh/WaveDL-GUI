@@ -1,17 +1,14 @@
-import type { z } from 'zod';
-import { CatalogApi, type DataSelection } from './catalog-api';
+import { CatalogApi } from './catalog-api';
 import { ConnectionSession, ConnectionSessionError } from './connection-session';
-import { DaemonApiError, type Json } from './daemon-api';
+import { DaemonApiError } from './daemon-api';
 import {
   datasetPreviewSchema,
   datasetPreviewPendingSchema,
   previewValuesSchema,
-  type PreviewValues,
 } from '../../shared/schemas/dataset-preview';
-
-export type DatasetPreview = z.infer<typeof datasetPreviewSchema>;
-
-export type PreviewSample = DatasetPreview['samples'][number];
+import type { DataSelection } from '~~/types/catalog-api';
+import type { Json } from '~~/types/json';
+import type { PreviewValues, DatasetPreview, PreviewSample } from '~~/types/dataset-preview';
 
 export class DatasetPreviewPickleRequiredError extends Error {
   constructor() {
@@ -78,7 +75,13 @@ export function parseDatasetPreview(
   ];
 
   for (const { histograms, width, count: sampledRows } of distributions) {
-    if (!boundedIndices(histograms.map((item) => item.feature_index), width)) return fail();
+    if (
+      !boundedIndices(
+        histograms.map((item) => item.feature_index),
+        width,
+      )
+    )
+      return fail();
 
     for (const histogram of histograms)
       if (
