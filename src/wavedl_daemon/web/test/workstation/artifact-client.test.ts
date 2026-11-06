@@ -132,7 +132,7 @@ describe('published artifact authority', () => {
     view.setUint32(20, 10);
     expect((await pngPreviewBlob(new Blob([bytes]))).type).toBe('image/png');
     view.setUint32(16, 9000);
-    await expect(pngPreviewBlob(new Blob([bytes]))).rejects.toThrow('pixel');
+    await expect(pngPreviewBlob(new Blob([bytes]))).rejects.toThrow('too large to preview');
     await expect(pngPreviewBlob(new Blob(['<svg/>']))).rejects.toThrow('PNG');
   });
   it('discards a late streamed response when the owning session detaches', async () => {
@@ -211,7 +211,7 @@ describe('published artifact authority', () => {
 
     if (!listed) throw new Error('Missing artifact');
     await expect(oversized.client.verifiedBlob(listed)).rejects.toThrow(
-      'This artifact exceeds the 64 MiB browser memory budget. Use the CLI to export it.',
+      'This file exceeds the 64 MiB browser limit. Use the command line to export it.',
     );
     expect(oversized.session.api).not.toBeNull();
   });
@@ -223,7 +223,7 @@ describe('published artifact authority', () => {
 
     if (!artifact || !checkpoint) throw new Error('Missing inventory');
     await expect(client.verifiedBlob(artifact)).rejects.toThrow(
-      'This artifact exceeds the 64 MiB browser memory budget. Use the CLI to export it.',
+      'This file exceeds the 64 MiB browser limit. Use the command line to export it.',
     );
     expect(calls.some((call) => call.path.endsWith('weights.bin'))).toBe(false);
     expect(() => client.assertSelection(checkpoint)).not.toThrow();

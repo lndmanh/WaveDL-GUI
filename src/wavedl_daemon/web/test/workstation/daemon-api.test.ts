@@ -403,7 +403,7 @@ describe('daemon transport', () => {
     expect(failure).toBeInstanceOf(DaemonApiError);
     expect(failure).toMatchObject({
       code: 'http',
-      message: 'Daemon request failed (503)',
+      message: 'The WaveDL request failed (503).',
       status: 503,
       buildMismatch: false,
       daemonIdentityChanged: false,
@@ -501,7 +501,7 @@ describe('daemon transport', () => {
     );
 
     api.setToken(token);
-    const pending = expect(api.health()).rejects.toThrow('Connection credential changed');
+    const pending = expect(api.health()).rejects.toThrow('Your access key changed');
     api.setToken('replacement');
     respond?.(json({}, 401));
     await pending;
@@ -564,7 +564,7 @@ describe('daemon transport', () => {
 
     const pending = expect(
       api.bootstrap(`${origin}/?bootstrap=once`, () => undefined),
-    ).rejects.toThrow('Connection credential changed');
+    ).rejects.toThrow('Your access key changed');
 
     // Let the response reader begin before revoking its connection scope.
     await Promise.resolve();
@@ -595,7 +595,7 @@ describe('daemon transport', () => {
       );
 
       api.setToken(token);
-      const pending = expect(api.health()).rejects.toThrow('Daemon response timed out');
+      const pending = expect(api.health()).rejects.toThrow('WaveDL took too long to respond');
       await vi.advanceTimersByTimeAsync(30001);
       await pending;
       expect(cancelled).toBe(true);
@@ -619,7 +619,7 @@ describe('daemon transport', () => {
       );
 
       api.setToken(token);
-      const pending = expect(api.health()).rejects.toThrow('Daemon request timed out');
+      const pending = expect(api.health()).rejects.toThrow('The WaveDL request timed out');
       await vi.advanceTimersByTimeAsync(15001);
       await pending;
     } finally {
@@ -629,7 +629,7 @@ describe('daemon transport', () => {
   it.each(['{"daemon_id":"a","daemon_id":"b"}', '{"nested":{"key":1,"k\\u0065y":2}}'])(
     'rejects ambiguous JSON members: %s',
     (text) => {
-      expect(() => parseJson(text)).toThrow('Duplicate JSON member');
+      expect(() => parseJson(text)).toThrow('duplicate key');
     },
   );
   it('allows repeated names in distinct objects and punctuation inside strings', () => {
@@ -642,11 +642,11 @@ describe('daemon transport', () => {
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
     await expect(api.mutate('/api/runs/plan', { text: '🌊'.repeat(300000) })).rejects.toThrow(
-      'Request exceeds byte limit',
+      'The request is too large to send',
     );
     await expect(
       api.mutate('/api/runs/plan', {}, { idempotencyKey: 'bad\u0000key' }),
-    ).rejects.toThrow('Invalid idempotency key');
+    ).rejects.toThrow('request key used to prevent duplicate runs is invalid');
     expect(fetcher).not.toHaveBeenCalled();
   });
   it('strips bootstrap and pasted secrets before exchange and keeps bearer only in memory', async () => {
@@ -894,7 +894,7 @@ describe('daemon transport', () => {
     vi.stubGlobal('location', { origin: 'http://localhost:8765' });
 
     try {
-      expect(() => new DaemonApi(origin)).toThrow('current browser origin');
+      expect(() => new DaemonApi(origin)).toThrow('same server address as this page');
     } finally {
       vi.unstubAllGlobals();
     }

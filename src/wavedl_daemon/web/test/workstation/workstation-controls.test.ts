@@ -120,7 +120,7 @@ describe('workstation control boundaries', () => {
     expect(request([-0.5, -2])).toContain(' --constraint_weight -0.5 -2');
     expect(request([-0.5])).toContain(' --grad_clip=-1e-7');
     expect(() => request([-1e-7])).toThrow(
-      'Standalone CLI list entries cannot start with an option prefix; use the YAML export.',
+      'List entries in command-line exports can’t start with an option prefix. Export as YAML instead.',
     );
   });
 

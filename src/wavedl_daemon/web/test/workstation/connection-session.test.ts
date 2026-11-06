@@ -94,7 +94,7 @@ describe('browser connection authority', () => {
         expect(error.code).toBe('request');
         expect(error.status).toBe(status);
         expect(error.message).toBe(
-          'The daemon request failed. Verify connectivity and the operation outcome before retrying.',
+          'The WaveDL request failed. Check your connection and whether the action went through before trying again.',
         );
         expect(String(error)).not.toContain('/private/path');
         expect(String(error)).not.toContain('secret');
