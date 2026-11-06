@@ -11,11 +11,9 @@ const text = z
   .refine((value) => !value.includes('\0'), { params: { clientMessageKey: 'nulNotAllowed' } });
 const nullableText = text.nullable();
 /** Upstream's argparse would read a leading-dash list item as a flag. */
-export const listItemText = text
-  .min(1)
-  .refine((value) => !value.startsWith('-'), {
-    params: { clientMessageKey: 'leadingDashNotAllowed' },
-  });
+export const listItemText = text.min(1).refine((value) => !value.startsWith('-'), {
+  params: { clientMessageKey: 'leadingDashNotAllowed' },
+});
 const csvNumbers = text.refine(
   (value) => value.split(',').every((part) => part.trim() !== '' && Number.isFinite(Number(part))),
   { params: { clientMessageKey: 'enterCommaSeparatedFiniteNumbers' } },

@@ -1,4 +1,3 @@
-import type { Json, PlanView } from './daemon-api';
 import { planManifestSchema, planPreviewContextSchema } from '../../shared/schemas/plan-summary';
 import {
   trainingConfigSchema,
@@ -18,21 +17,11 @@ import {
   essentialTrainingFields,
   trainingFieldVisible,
   trainingSections,
-  type TrainingFieldName,
 } from './training-layout';
-
-export interface PlanRow {
-  readonly name: string;
-  readonly label: string;
-  readonly value: string;
-  readonly changed: boolean;
-}
-
-export interface PlanSection {
-  readonly id: string;
-  readonly title: string;
-  readonly rows: readonly PlanRow[];
-}
+import type { Json } from '~~/types/json';
+import type { PlanView } from '~~/types/daemon-api';
+import type { TrainingFieldName } from '~~/types/training-layout';
+import type { PlanRow, PlanSection } from '~~/types/plan-summary';
 
 type PlanTrainingFieldName = TrainingFieldName | 'model' | 'data_path';
 
@@ -41,10 +30,6 @@ interface PlanFact {
   readonly value: string;
   readonly fullValue?: string;
 }
-
-export type PlanCommand =
-  | { readonly ok: true; readonly text: string }
-  | { readonly ok: false; readonly reason: string };
 
 export function buildPlanSummary(
   plan: PlanView | null,
@@ -120,36 +105,44 @@ export function buildPlanSummary(
     }),
   ].join(', ');
   const dataset = typeof config.data_path === 'string' ? config.data_path : undefined;
-  const context: readonly PlanFact[] = training ? [
-    {
-      label: t('project.dataset'),
-      value: dataset?.split(/[\\/]/).filter(Boolean).pop() || t('project.notAvailable'),
-      fullValue: dataset,
-    },
-    { label: t('training.model.label'), value: display(config.model) },
-    { label: t('project.whereItRuns'), value: runtimeLabel(preview.target) },
-    { label: t('project.contextOperation'), value: operationLabel(review?.operation) },
-    { label: t('project.hardware'), value: runtimeLabel(runtime?.device) },
-    { label: t('builder.distributed'), value: parallelism },
-  ] : [
-    { label: t('project.contextBackend'), value: runtimeLabel(preview.target) },
-    { label: t('project.contextOperation'), value: operationLabel(review?.operation) },
-    { label: t('project.contextDevice'), value: runtimeLabel(runtime?.device) },
-    { label: t('project.contextTopology'), value: parallelism },
-  ];
+  const context: readonly PlanFact[] = training
+    ? [
+        {
+          label: t('project.dataset'),
+          value: dataset?.split(/[\\/]/).filter(Boolean).pop() || t('project.notAvailable'),
+          fullValue: dataset,
+        },
+        { label: t('training.model.label'), value: display(config.model) },
+        { label: t('project.whereItRuns'), value: runtimeLabel(preview.target) },
+        { label: t('project.contextOperation'), value: operationLabel(review?.operation) },
+        { label: t('project.hardware'), value: runtimeLabel(runtime?.device) },
+        { label: t('builder.distributed'), value: parallelism },
+      ]
+    : [
+        { label: t('project.contextBackend'), value: runtimeLabel(preview.target) },
+        { label: t('project.contextOperation'), value: operationLabel(review?.operation) },
+        { label: t('project.contextDevice'), value: runtimeLabel(runtime?.device) },
+        { label: t('project.contextTopology'), value: parallelism },
+      ];
 
   const validatedConfig = trainingConfigSchema.safeParse(config);
   function trainingRow(name: PlanTrainingFieldName): PlanRow[] {
     const value = config[name];
 
     if (
-      value === undefined || value === null || value === '' ||
+      value === undefined ||
+      value === null ||
+      value === '' ||
       (Array.isArray(value) && !value.length)
-    ) return [];
+    )
+      return [];
     if (
-      name !== 'model' && name !== 'data_path' && validatedConfig.success &&
+      name !== 'model' &&
+      name !== 'data_path' &&
+      validatedConfig.success &&
       !trainingFieldVisible(name, validatedConfig.data)
-    ) return [];
+    )
+      return [];
 
     return [
       {
@@ -176,10 +169,12 @@ export function buildPlanSummary(
       title: t(trainingSectionMessageKeys[section.id]),
     })),
   ];
-  const environmentNames = [...new Set([
-    ...Object.keys(runtime?.environment ?? {}),
-    ...(preview.environment ?? []).map(([name]) => name),
-  ])].join(', ');
+  const environmentNames = [
+    ...new Set([
+      ...Object.keys(runtime?.environment ?? {}),
+      ...(preview.environment ?? []).map(([name]) => name),
+    ]),
+  ].join(', ');
   const runtimeRows: readonly {
     readonly name: string;
     readonly label: string;
@@ -199,7 +194,8 @@ export function buildPlanSummary(
     {
       name: 'working_directory',
       label: t('project.trainingFolder'),
-      value: review?.working_directory !== review?.run_directory ? review?.working_directory : undefined,
+      value:
+        review?.working_directory !== review?.run_directory ? review?.working_directory : undefined,
     },
     { name: 'environment', label: t('project.environmentVariableNames'), value: environmentNames },
     ...(review?.storage_map?.map((mapping, index) => ({
@@ -215,16 +211,22 @@ export function buildPlanSummary(
     { name: 'run_id', label: t('runs.configRunId'), value: plan?.run_id },
     { name: 'plan_id', label: t('project.planId'), value: plan?.plan_id },
   ];
-  const sections: readonly PlanSection[] = training ? [
-    ...sectionTable.map(({ id, title, fields }) => ({ id, title, rows: fields.flatMap(trainingRow) })),
-    {
-      id: 'runtime',
-      title: t('project.whereItRuns'),
-      rows: runtimeRows.flatMap(({ name, label, value }) =>
-        value ? [{ name, label, value, changed: false }] : [],
-      ),
-    },
-  ].filter((section) => section.rows.length > 0) : [];
+  const sections: readonly PlanSection[] = training
+    ? [
+        ...sectionTable.map(({ id, title, fields }) => ({
+          id,
+          title,
+          rows: fields.flatMap(trainingRow),
+        })),
+        {
+          id: 'runtime',
+          title: t('project.whereItRuns'),
+          rows: runtimeRows.flatMap(({ name, label, value }) =>
+            value ? [{ name, label, value, changed: false }] : [],
+          ),
+        },
+      ].filter((section) => section.rows.length > 0)
+    : [];
 
   return { manifest, differences, context, sections, warnings: preview.warnings ?? [] };
 }

@@ -1,19 +1,6 @@
 import { trainingDefaults, type TrainingConfig } from '../../shared/schemas/training-request';
-import type { DraftConfig } from '../../shared/schemas/project-draft';
 import { trainingPresets } from './training-presets';
-
-export type TrainingFieldName = keyof DraftConfig;
-
-export type TrainingSectionId =
-  | 'optimizer'
-  | 'schedule'
-  | 'loss'
-  | 'data'
-  | 'checkpoints'
-  | 'validation'
-  | 'constraints'
-  | 'code'
-  | 'logging';
+import type { TrainingFieldName, TrainingSectionId } from '~~/types/training-layout';
 
 /** Shown on the Training block itself; everything else lives in a section. */
 export const essentialTrainingFields = [

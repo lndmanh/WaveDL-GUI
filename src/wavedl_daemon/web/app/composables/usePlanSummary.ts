@@ -1,5 +1,5 @@
-import type { PlanView } from '../lib/daemon-api';
 import { buildPlanSummary } from '../lib/plan-summary';
+import type { PlanView } from '~~/types/daemon-api';
 
 export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
   const { t } = useI18n({ useScope: 'global' });

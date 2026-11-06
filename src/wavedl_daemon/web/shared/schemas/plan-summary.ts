@@ -32,7 +32,13 @@ const topologySchema = z.object({
 export const planPreviewContextSchema = z.object({
   target: optionalText,
   topology: topologySchema.catch({}).default({}),
-  resources: z.array(z.tuple([z.string(), jsonScalarSchema])).optional().catch(undefined),
-  environment: z.array(z.tuple([z.string(), z.string()])).optional().catch(undefined),
+  resources: z
+    .array(z.tuple([z.string(), jsonScalarSchema]))
+    .optional()
+    .catch(undefined),
+  environment: z
+    .array(z.tuple([z.string(), z.string()]))
+    .optional()
+    .catch(undefined),
   warnings: z.array(z.string()).optional().catch(undefined),
 });

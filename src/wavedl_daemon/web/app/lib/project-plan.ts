@@ -1,9 +1,11 @@
 import { clientError } from '../i18n/client-messages';
 import { trainingRequestSchema, type TrainingRequest } from '../../shared/schemas/training-request';
-import { CatalogApi, type DataSelection, type ModelSelection } from './catalog-api';
+import { CatalogApi } from './catalog-api';
 import type { ConnectionSession } from './connection-session';
-import { DaemonApiError, type PlanView, type RunView } from './daemon-api';
+import { DaemonApiError } from './daemon-api';
 import { toRaw } from 'vue';
+import type { DataSelection, ModelSelection } from '~~/types/catalog-api';
+import type { PlanView, RunView } from '~~/types/daemon-api';
 
 /** Memory-only draft/approval scope; retries never rotate an unchanged request key. */
 export class ProjectPlan {

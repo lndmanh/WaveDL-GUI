@@ -1,22 +1,14 @@
 import { parse } from 'yaml';
 import { clientError } from '../i18n/client-messages';
-import type { DraftConfig } from '../../shared/schemas/project-draft';
 import { validDraftConfig } from './project-draft';
 import {
   trainingImportSchema,
   importedSelectionsSchema,
   type TrainingImportDocument,
 } from '../../shared/schemas/training-import';
+import type { ImportedTrainingConfig } from '~~/types/training-import';
 
 export const CONFIG_IMPORT_LIMIT = 64 * 1024;
-
-export interface ImportedTrainingConfig {
-  readonly config: DraftConfig;
-  readonly dataPath: string | null;
-  readonly model: string | null;
-  /** Keys present in the file that were not applied (unknown, daemon-owned or invalid). */
-  readonly skipped: readonly string[];
-}
 
 // The CLI writes these as YAML lists; the draft keeps comma-separated text.
 const commaSeparated = new Set(['loss_weights', 'betas', 'milestones']);

@@ -4,16 +4,16 @@ import {
   draftConfigSchema,
   projectDraftSchema,
   type DraftConfig,
-  type ProjectBlock,
   type ProjectDraft,
 } from '../../shared/schemas/project-draft';
 import { storageMappingSchema, type StorageMapping } from '../../shared/schemas/storage-mapping';
 import type { TrainingRequest } from '../../shared/schemas/training-request';
 import type { RuntimeSetup } from '../../shared/schemas/host-profile';
-import type { DataSelection, ModelSelection } from './catalog-api';
 import { parseJson } from './daemon-api';
 import type { TrainingImportDocument } from '../../shared/schemas/training-import';
-import { boundedText, browserStorage, type PreferenceStorage } from './preferences';
+import { boundedText, browserStorage } from './preferences';
+import type { PreferenceStorage } from '~~/types/preferences';
+import type { DraftSnapshot } from '~~/types/project-draft';
 
 function draftKey(daemonId: string): string {
   if (!daemonId || daemonId.length > 256 || [...daemonId].some((char) => char.charCodeAt(0) < 32))
@@ -52,14 +52,6 @@ function validMappings(mappings: TrainingRequest['storage_map']): StorageMapping
 
     return parsed.success ? [parsed.data] : [];
   });
-}
-
-export interface DraftSnapshot {
-  readonly block: ProjectBlock;
-  readonly data: DataSelection | null;
-  readonly model: ModelSelection | null;
-  readonly request: TrainingRequest;
-  readonly setup: RuntimeSetup;
 }
 
 export function projectDraft(daemonId: string, snapshot: DraftSnapshot): ProjectDraft {
