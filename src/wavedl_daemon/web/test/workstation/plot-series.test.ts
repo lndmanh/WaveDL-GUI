@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import type { MetricRecord } from '../../app/lib/metric-history';
 import { buildPlotSeries, minimumPoint } from '../../app/lib/plot-series';
+import type { MetricRecord } from '../../types/metric-history';
 
 function record(overrides: Partial<MetricRecord>): MetricRecord {
   return {

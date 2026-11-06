@@ -7,7 +7,7 @@ import {
   pngPreviewBlob,
 } from '../../app/lib/artifact-client';
 import { ConnectionSession } from './session-fixture';
-import type { Json } from '../../app/lib/daemon-api';
+import type { Json } from '../../types/json';
 
 const run = '22222222-2222-4222-8222-222222222222';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };

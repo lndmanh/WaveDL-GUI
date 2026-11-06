@@ -5,11 +5,10 @@ import {
   INITIAL_CURSOR,
   streamRun,
   validCursor,
-  type RunEvent,
-  type Cursor,
 } from '../../app/lib/event-stream';
 import { DaemonApi } from '../../app/lib/daemon-api';
 import type { FixtureEventOverrides } from './fixture-schemas';
+import type { RunEvent, Cursor } from '../../types/event-stream';
 
 const run = '11111111-1111-1111-1111-111111111111';
 const encoder = new TextEncoder();

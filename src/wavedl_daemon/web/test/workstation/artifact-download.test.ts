@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Artifact } from '../../app/lib/artifact-client';
 import { artifactDownloadName } from '../../app/lib/artifact-download';
+import type { Artifact } from '../../types/artifact-client';
 
 const artifact: Artifact = {
   runId: '22222222-2222-4222-8222-222222222222',
@@ -13,7 +13,9 @@ describe('artifact download provenance', () => {
   it.each(['../unsafe', '', '22222222-2222-4222-8222-22222222222'])(
     'rejects an unverified run identity in a filename label: %s',
     async (runId) => {
-      await expect(artifactDownloadName({ ...artifact, runId })).rejects.toThrow('run ID is invalid');
+      await expect(artifactDownloadName({ ...artifact, runId })).rejects.toThrow(
+        'run ID is invalid',
+      );
     },
   );
   it.each(['metrics.csv', 'model.onnx'])('keeps full run identity for %s', async (path) => {

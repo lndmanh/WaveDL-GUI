@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { RunMonitor, type RunMonitorSnapshot, type RunTransport } from '../../app/lib/run-monitor';
-import type { JsonObject, RunView } from '../../app/lib/daemon-api';
+import { RunMonitor } from '../../app/lib/run-monitor';
+import type { RunMonitorSnapshot, RunTransport } from '../../types/run-monitor';
+import type { JsonObject } from '../../types/json';
+import type { RunView } from '../../types/daemon-api';
 
 const id = '11111111-1111-1111-1111-111111111111';
 
