@@ -1,8 +1,5 @@
 import { z } from 'zod';
-
-export type Json = null | boolean | number | string | Json[] | JsonObject;
-
-export type JsonObject = { [key: string]: Json };
+import type { Json, JsonObject } from '../../types/json';
 
 export const jsonScalarSchema = z.union([z.null(), z.string(), z.boolean(), z.number().finite()]);
 
@@ -12,34 +9,36 @@ type JsonContainer = z.infer<typeof containerFields>;
 
 // Keep own members, including __proto__. This container contract deliberately
 // makes no claim about child types; only jsonObjectSchema validates those.
-export const jsonContainerSchema = z.custom<JsonContainer>((value) =>
-  containerFields.safeParse(value).success,
+export const jsonContainerSchema = z.custom<JsonContainer>(
+  (value) => containerFields.safeParse(value).success,
 );
 
-export const jsonObjectSchema: z.ZodType<JsonObject> = jsonContainerSchema.transform((value, ctx) => {
-  const result: JsonObject = {};
+export const jsonObjectSchema: z.ZodType<JsonObject> = jsonContainerSchema.transform(
+  (value, ctx) => {
+    const result: JsonObject = {};
 
-  for (const [key, child] of Object.entries(value)) {
-    const parsed = jsonSchema.safeParse(child);
+    for (const [key, child] of Object.entries(value)) {
+      const parsed = jsonSchema.safeParse(child);
 
-    if (!parsed.success) {
-      for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: [key, ...issue.path] });
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues)
+          ctx.addIssue({ ...issue, path: [key, ...issue.path] });
 
-      return z.NEVER;
+        return z.NEVER;
+      }
+
+      Object.defineProperty(result, key, {
+        value: parsed.data,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
 
-    Object.defineProperty(result, key, {
-      value: parsed.data, enumerable: true, writable: true, configurable: true,
-    });
-  }
-
-  return result;
-});
+    return result;
+  },
+);
 
 export const jsonSchema: z.ZodType<Json> = z.lazy(() =>
-  z.union([
-    jsonScalarSchema,
-    z.array(jsonSchema),
-    jsonObjectSchema,
-  ]),
+  z.union([jsonScalarSchema, z.array(jsonSchema), jsonObjectSchema]),
 );
