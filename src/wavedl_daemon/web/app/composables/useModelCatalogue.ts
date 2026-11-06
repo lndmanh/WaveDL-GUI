@@ -1,7 +1,6 @@
 import type { ConnectionSession } from '../lib/connection-session';
-import { CatalogApi, type ModelDescription, type ModelSelection } from '../lib/catalog-api';
-
-export type CatalogueMessage = '' | 'catalog.modelsUnavailable' | 'catalog.connectionChanged';
+import { CatalogApi } from '../lib/catalog-api';
+import type { ModelDescription, ModelSelection, CatalogueMessage } from '~~/types/catalog-api';
 
 /** One catalogue per verified connection revision; selections are branded by CatalogApi. */
 export function useModelCatalogue(source: MaybeRefOrGetter<ConnectionSession>) {

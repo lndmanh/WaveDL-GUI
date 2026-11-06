@@ -1,20 +1,7 @@
-import type { ModelDescription } from './catalog-api';
 import { parseJson } from './daemon-api';
 import { recentModelsSchema } from '../../shared/schemas/model-recents';
-
-/**
- * One architecture as the user thinks of it. The catalogue lists `x` and
- * `x_pretrained` separately; weights only load when the run also sets `pretrained`.
- */
-export interface ModelEntry {
-  readonly key: string;
-  /** Trains from scratch; null when the architecture only ships a weights-capable id. */
-  readonly scratch: ModelDescription | null;
-  /** Accepts `pretrained: true`; null when no ImageNet weights exist. */
-  readonly weighted: ModelDescription | null;
-  /** The description shown for the entry (the from-scratch variant when both exist). */
-  readonly primary: ModelDescription;
-}
+import type { ModelDescription } from '~~/types/catalog-api';
+import type { ModelEntry } from '~~/types/model-entries';
 
 const suffix = '_pretrained';
 

@@ -1,11 +1,6 @@
-import type { ModelDescription } from './catalog-api';
-import type { DatasetInspection } from './dataset-inspection';
-
-export type ModelShapeGuidance = {
-  status: 'described' | 'mismatch' | 'unknown' | 'ambiguous';
-  shape: string;
-  dimensions: number;
-};
+import type { ModelDescription } from '~~/types/catalog-api';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
+import type { ModelShapeGuidance } from '~~/types/model-shape-guidance';
 
 /** Header-only advice using prepare_data's spatial-shape convention, not model validation. */
 export function modelShapeGuidance(
