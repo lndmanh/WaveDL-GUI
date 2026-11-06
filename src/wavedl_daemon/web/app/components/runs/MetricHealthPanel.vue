@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import type { MetricHealth } from '../../lib/metric-history';
 import {
   metricHealthLabelMessageKeys,
   metricHealthStatusMessageKeys,
 } from '../../i18n/dynamic-keys';
+import type { MetricHealth } from '~~/types/metric-history';
 
 // Utility bundles keep state and descendant styling beside their component.
 const styles = {

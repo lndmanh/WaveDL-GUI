@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import type { RuntimeMetricSummary } from '../../lib/metric-history';
+import type { RuntimeMetricSummary } from '~~/types/metric-history';
 
 // Utility bundles keep state and descendant styling beside their component.
 const styles = {

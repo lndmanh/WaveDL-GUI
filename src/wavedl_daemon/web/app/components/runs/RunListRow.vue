@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { CircleX } from '@lucide/vue';
-import type { RunView } from '../../lib/daemon-api';
-import { relativeTime, runCreatedAt, type RunColumn } from '../../lib/run-overview';
+import { relativeTime, runCreatedAt } from '../../lib/run-overview';
 import { runStateMessageKeys } from '../../i18n/dynamic-keys';
+import type { RunView } from '~~/types/daemon-api';
+import type { RunColumn } from '~~/types/run-overview';
 
 const styles = {
   row: cn(

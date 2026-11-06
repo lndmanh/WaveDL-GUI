@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import type { MetricSummary } from '../../lib/metric-history';
+import type { MetricSummary } from '~~/types/metric-history';
 
 const styles = {
   metricSpecList: cn(

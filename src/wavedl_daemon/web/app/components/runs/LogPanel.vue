@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import type { RunEvent } from '../../lib/event-stream';
 import { eventDiagnostic } from '../../lib/run-monitor';
+import type { RunEvent } from '~~/types/event-stream';
 
 // Utility bundles keep state and descendant styling beside their component.
 const styles = {

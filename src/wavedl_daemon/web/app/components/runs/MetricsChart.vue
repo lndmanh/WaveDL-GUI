@@ -4,16 +4,11 @@ import { CurveType, type FreeBrushConfigInterface } from '@unovis/ts';
 import { VisXYContainer, VisLine, VisAxis, VisFreeBrush, VisPlotline } from '@unovis/vue';
 import { ChartTooltipContent, componentToString, type ChartConfig } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
-import type { MetricRecord } from '../../lib/metric-history';
 import type { RuntimeMetricField } from '../../../shared/schemas/metric-history';
-import {
-  buildPlotSeries,
-  minimumPoint,
-  type PlotChannel,
-  type PlotPoint,
-  type PlotSeries,
-} from '../../lib/plot-series';
+import { buildPlotSeries, minimumPoint } from '../../lib/plot-series';
 import { plotMetricMessageKeys } from '../../i18n/dynamic-keys';
+import type { MetricRecord } from '~~/types/metric-history';
+import type { PlotChannel, PlotPoint, PlotSeries } from '~~/types/plot-series';
 
 const styles = {
   header: cn('flex shrink-0 flex-wrap items-center gap-2'),

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { TrendingDown, TrendingUp } from '@lucide/vue';
-import type { MetricRecord, MetricSummary } from '../../lib/metric-history';
 import { buildPlotSeries, minimumPoint } from '../../lib/plot-series';
+import type { MetricRecord, MetricSummary } from '~~/types/metric-history';
 
 type StatChannel = 'train_loss' | 'val_loss' | 'r2' | 'lr';
 

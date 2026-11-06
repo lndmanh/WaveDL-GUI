@@ -10,7 +10,7 @@ import {
   Search,
   SearchX,
 } from '@lucide/vue';
-import type { RunView } from '../../lib/daemon-api';
+
 import { runStateMessageKeys } from '../../i18n/dynamic-keys';
 import {
   groupRuns,
@@ -19,13 +19,16 @@ import {
   runCreatedAt,
   runFilterOf,
   runMatches,
-  type RunColumn,
-  type RunColumnId,
-  type RunColumnRegistry,
-  type RunFilter,
-  type RunGroupKey,
-  type RunSort,
 } from '../../lib/run-overview';
+import type { RunView } from '~~/types/daemon-api';
+import type {
+  RunColumn,
+  RunColumnId,
+  RunColumnRegistry,
+  RunFilter,
+  RunGroupKey,
+  RunSort,
+} from '~~/types/run-overview';
 
 const FOLD_DURATION = 340;
 

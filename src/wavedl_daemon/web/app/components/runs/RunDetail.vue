@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { motion, useReducedMotion } from 'motion-v';
 import { ArrowLeft, Check, Copy, Ellipsis, OctagonX, RotateCcw, ScrollText, X } from '@lucide/vue';
 import { evaluationResults } from '../../lib/evaluation-results';
-import { canRequestCancellation, type RunMonitorSnapshot } from '../../lib/run-monitor';
+import { canRequestCancellation } from '../../lib/run-monitor';
 import {
   durationText,
   pathName,
@@ -16,6 +16,7 @@ import {
   runCancellationMessageKeys,
   runStreamMessageKeys,
 } from '../../i18n/dynamic-keys';
+import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 
 type RunDetailTab = 'overview' | 'metrics' | 'configuration' | 'logs' | 'evaluation';
 
@@ -326,7 +327,8 @@ const configuration = computed(() => {
               size="sm"
               class="h-auto p-0 text-xs"
               @click="monitorRun(snapshot.run.auto_plot.run_id)"
-            >{{ t('runs.automaticPlotsOpen') }}</Button>
+              >{{ t('runs.automaticPlotsOpen') }}</Button
+            >
           </template>
           <template v-else>
             <span>{{ t('runs.automaticPlotsFailed') }}</span>
@@ -339,7 +341,8 @@ const configuration = computed(() => {
               class="h-6 px-2 text-xs"
               :disabled="snapshot.automaticPlotRetry || connectionState.status !== 'connected'"
               @click="$emit('retryAutomaticPlots')"
-            >{{ t('runs.automaticPlotsRetry') }}</Button>
+              >{{ t('runs.automaticPlotsRetry') }}</Button
+            >
           </template>
         </div>
         <div

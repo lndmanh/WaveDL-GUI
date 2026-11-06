@@ -16,9 +16,10 @@ import {
   Unplug,
   WifiOff,
 } from '@lucide/vue';
-import type { RunState, RunView } from '../../lib/daemon-api';
-import type { MetricSummary } from '../../lib/metric-history';
+
 import { runStateMessageKeys } from '../../i18n/dynamic-keys';
+import type { RunState, RunView } from '~~/types/daemon-api';
+import type { MetricSummary } from '~~/types/metric-history';
 
 type StateTone = 'outline' | 'secondary' | 'blue' | 'warning' | 'success' | 'destructive';
 
