@@ -33,15 +33,8 @@ import {
 } from '../../../shared/schemas/project-draft';
 import { ConnectionSessionError, type ConnectionSession } from '../../lib/connection-session';
 import { applyTrainingPreferences, loadTrainingPreferences } from '../../lib/preferences';
-import type { PlanView, RunView } from '../../lib/daemon-api';
-import {
-  CatalogApi,
-  type DataSelection,
-  type ModelDescription,
-  type ModelSelection,
-} from '../../lib/catalog-api';
+import { CatalogApi } from '../../lib/catalog-api';
 import { ProjectPlan } from '../../lib/project-plan';
-import type { DatasetInspection } from '../../lib/dataset-inspection';
 import { modelShapeGuidance } from '../../lib/model-shape-guidance';
 import { applyTrainingPreset } from '../../lib/training-presets';
 import {
@@ -51,7 +44,6 @@ import {
   matchingPreset,
   trainingRecipes,
   trainingSections,
-  type TrainingFieldName,
 } from '../../lib/training-layout';
 import { CONFIG_IMPORT_LIMIT, parseTrainingConfig } from '../../lib/training-import';
 import {
@@ -65,10 +57,12 @@ import {
 } from '../../lib/project-draft';
 import { draftConfigFields } from '../../../shared/schemas/project-draft';
 import { trainingCommand } from '../../lib/training-export';
-import type { PlanCommand } from '../../lib/plan-summary';
-import type { ReadinessItem } from './PlanInspector.vue';
-import type { PipelineBlock } from './RunPipeline.vue';
-import type { DraftSummary } from './StartPanel.vue';
+import type { PlanView, RunView } from '~~/types/daemon-api';
+import type { DataSelection, ModelDescription, ModelSelection } from '~~/types/catalog-api';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
+import type { TrainingFieldName } from '~~/types/training-layout';
+import type { PlanCommand, ReadinessItem } from '~~/types/plan-summary';
+import type { PipelineBlock, DraftSummary } from '~~/types/project-draft';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
@@ -945,9 +939,10 @@ const blocks = computed<PipelineBlock[]>(() => [
     detail: datasetInspection.value
       ? t('builder.datasetDetail', {
           samples: datasetInspection.value.numSamples.toLocaleString(),
-          shape: datasetInspection.value.inputShape === null
-            ? t('datasets.pickledInputShape')
-            : datasetInspection.value.inputShape.join(' × '),
+          shape:
+            datasetInspection.value.inputShape === null
+              ? t('datasets.pickledInputShape')
+              : datasetInspection.value.inputShape.join(' × '),
         })
       : data.value
         ? data.value.root

@@ -3,10 +3,10 @@ import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'motion-v';
 import { ArrowRight, ChevronRight, FileStack } from '@lucide/vue';
 import type { ConnectionSession } from '../../lib/connection-session';
-import type { DataSelection } from '../../lib/catalog-api';
-import type { DatasetInspection } from '../../lib/dataset-inspection';
 import { pathName } from '../../lib/run-overview';
 import { datasetInputDimensions, datasetOutputValues } from '../../lib/dataset-suggestions';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
 
 const props = defineProps<{
   session: ConnectionSession;
@@ -43,9 +43,10 @@ const stats = computed(() => {
 
   return {
     samples: current.numSamples.toLocaleString(locale.value),
-    input: current.inputShape === null
-      ? t('datasets.pickledInputShape')
-      : datasetInputDimensions(current.inputShape),
+    input:
+      current.inputShape === null
+        ? t('datasets.pickledInputShape')
+        : datasetInputDimensions(current.inputShape),
     output: output.value?.toLocaleString(locale.value) ?? '—',
   };
 });

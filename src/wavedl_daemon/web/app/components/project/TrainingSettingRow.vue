@@ -4,8 +4,8 @@ import { Field as VeeField } from 'vee-validate';
 import { RotateCcw } from '@lucide/vue';
 import { trainingChoiceLabel, trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
 import { trainingDefaults, trainingFieldMetadata } from '../../../shared/schemas/training-request';
-import type { Json } from '../../lib/daemon-api';
-import type { TrainingFieldName } from '../../lib/training-layout';
+import type { Json } from '~~/types/json';
+import type { TrainingFieldName } from '~~/types/training-layout';
 
 const props = defineProps<{ name: TrainingFieldName; disabled: boolean }>();
 const { t } = useI18n({ useScope: 'global' });

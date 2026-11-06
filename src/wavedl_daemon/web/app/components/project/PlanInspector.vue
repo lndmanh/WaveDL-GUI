@@ -13,16 +13,9 @@ import {
   TriangleAlert,
 } from '@lucide/vue';
 import type { ProjectBlock } from '../../../shared/schemas/project-draft';
-import type { PlanView, RunView } from '../../lib/daemon-api';
-import type { PlanCommand } from '../../lib/plan-summary';
 import { pathName } from '../../lib/run-overview';
-
-export interface ReadinessItem {
-  readonly block: ProjectBlock;
-  readonly label: string;
-  readonly detail: string;
-  readonly done: boolean;
-}
+import type { PlanView, RunView } from '~~/types/daemon-api';
+import type { PlanCommand, ReadinessItem } from '~~/types/plan-summary';
 
 const props = defineProps<{
   plan: PlanView | null;
@@ -124,7 +117,11 @@ const projectStyles = {
 <template>
   <InspectorPanel :title="t('builder.planTitle')" :description="t('builder.planDescription')">
     <!-- Started: this exact plan was sent; summarise the run and point to its page. -->
-    <section v-if="submitted && acknowledged" class="flex flex-col gap-4" :aria-labelledby="startedId">
+    <section
+      v-if="submitted && acknowledged"
+      class="flex flex-col gap-4"
+      :aria-labelledby="startedId"
+    >
       <div :class="cn('surface-group', projectStyles.planSuccess)">
         <svg :class="projectStyles.planSuccessMark" viewBox="0 0 64 64" aria-hidden="true">
           <motion.circle
@@ -265,7 +262,9 @@ const projectStyles = {
         </div>
         <ul v-if="differences.length" :class="projectStyles.planDifferences">
           <li v-for="item in differences" :key="item.name">
-            <span class="col-span-3 min-w-0 [overflow-wrap:anywhere] sm:col-span-1">{{ item.label }}</span>
+            <span class="col-span-3 min-w-0 [overflow-wrap:anywhere] sm:col-span-1">{{
+              item.label
+            }}</span>
             <span :class="projectStyles.planDefault" :title="item.defaultValue">{{
               item.defaultValue
             }}</span>
@@ -281,7 +280,9 @@ const projectStyles = {
           class="mx-5 mb-5 min-w-0 rounded-xl border p-3"
           :aria-labelledby="terminalId"
         >
-          <h4 :id="terminalId" class="text-sm font-medium">{{ t('project.runItFromATerminal') }}</h4>
+          <h4 :id="terminalId" class="text-sm font-medium">
+            {{ t('project.runItFromATerminal') }}
+          </h4>
           <p class="mt-1 text-xs text-muted-foreground">
             {{ t('project.sameTrainingWithWavedlCommandLine') }}
           </p>
@@ -341,7 +342,9 @@ const projectStyles = {
                         v-if="row.changed"
                         class="ml-1 inline-flex items-center gap-1 text-xs text-muted-foreground"
                       >
-                        <span class="size-1.5 rounded-full bg-primary" aria-hidden="true" />{{ t('project.changed') }}
+                        <span class="size-1.5 rounded-full bg-primary" aria-hidden="true" />{{
+                          t('project.changed')
+                        }}
                       </span>
                     </dd>
                   </div>
@@ -380,11 +383,7 @@ const projectStyles = {
 
     <!-- Not reviewed yet: a checklist and the review action. -->
     <template v-else>
-      <div
-        v-if="acknowledged"
-        class="surface-group surface-row"
-        :aria-label="t('project.lastRun')"
-      >
+      <div v-if="acknowledged" class="surface-group surface-row" :aria-label="t('project.lastRun')">
         <span :class="projectStyles.planCheckMark" data-done="true" aria-hidden="true"
           ><Check
         /></span>

@@ -14,15 +14,7 @@ import {
 } from '@lucide/vue';
 import type { ProjectBlock } from '../../../shared/schemas/project-draft';
 import { EASE_OUT_EXPO } from '@/lib/animation';
-
-export interface PipelineBlock {
-  readonly id: ProjectBlock;
-  readonly label: string;
-  readonly value: string;
-  readonly detail: string;
-  /** complete: ready; attention: usable but worth a look; pending: needs input. */
-  readonly state: 'complete' | 'attention' | 'pending';
-}
+import type { PipelineBlock } from '~~/types/project-draft';
 
 const props = defineProps<{
   blocks: readonly PipelineBlock[];
@@ -222,7 +214,6 @@ const projectStyles = {
   ),
   runPipelineCount: cn('block text-center text-[0.72rem] text-muted-foreground tabular-nums'),
 };
-
 </script>
 <template>
   <div

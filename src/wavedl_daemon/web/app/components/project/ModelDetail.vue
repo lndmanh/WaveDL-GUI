@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { Check, CircleAlert, CircleCheck, Info } from '@lucide/vue';
-import type { DatasetInspection } from '../../lib/dataset-inspection';
-import { entryModel, type ModelEntry } from '../../lib/model-entries';
+import { entryModel } from '../../lib/model-entries';
 import { modelShapeGuidance } from '../../lib/model-shape-guidance';
 import { modelPresentation } from '../../i18n/model-descriptions';
 import { modelCategoryMessageKeys, shapeGuidanceMessageKeys } from '../../i18n/dynamic-keys';
@@ -11,6 +10,8 @@ import {
   modelFamilyMessageKeys,
   modelTierMessageKeys,
 } from '../catalog/model-facets';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
+import type { ModelEntry } from '~~/types/model-entries';
 
 const props = defineProps<{
   entry: ModelEntry;

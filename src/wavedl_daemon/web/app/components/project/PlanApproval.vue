@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PlanView } from '../../lib/daemon-api';
+import type { PlanView } from '~~/types/daemon-api';
 
 const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ plan: PlanView; busy: boolean; acknowledged?: boolean }>();

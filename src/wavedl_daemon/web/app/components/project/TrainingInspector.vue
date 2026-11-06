@@ -34,9 +34,8 @@ import {
   trainingFieldVisible,
   trainingRecipes,
   trainingSections,
-  type TrainingFieldName,
-  type TrainingSectionId,
 } from '../../lib/training-layout';
+import type { TrainingFieldName, TrainingSectionId } from '~~/types/training-layout';
 
 const props = defineProps<{ disabled: boolean; scope?: number }>();
 const emit = defineEmits<{ preset: [id: string]; reset: [] }>();

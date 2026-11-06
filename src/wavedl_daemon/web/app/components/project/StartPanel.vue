@@ -4,16 +4,7 @@ import { motion } from 'motion-v';
 import type { Transition } from 'motion-v';
 import { CornerDownLeft, FileUp, Plus } from '@lucide/vue';
 import type { Button } from '@/components/ui/button';
-
-export interface DraftSummary {
-  readonly savedAt: number;
-  readonly steps: readonly {
-    readonly label: string;
-    readonly value: string;
-    readonly done: boolean;
-  }[];
-  readonly changes: readonly string[];
-}
+import type { DraftSummary } from '~~/types/project-draft';
 
 const props = defineProps<{ summary: DraftSummary; dragging: boolean }>();
 const emit = defineEmits<{ continue: []; import: []; fresh: [] }>();

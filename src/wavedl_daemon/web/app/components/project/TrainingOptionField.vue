@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { trainingChoiceLabel, trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
 import { Field as VeeField } from 'vee-validate';
-import type { Json } from '../../lib/daemon-api';
 import { trainingFieldMetadata } from '../../../shared/schemas/training-request';
+import type { Json } from '~~/types/json';
 
 const { clientMessage } = useClientMessages();
 const { t } = useI18n({ useScope: 'global' });
@@ -59,7 +59,11 @@ function stringValue(value: string | number): string | null {
   <VeeField v-if="option" v-slot="{ field, errors }" :name="`config.${name}`" :keep-value="true">
     <Field
       :data-invalid="!!errors.length"
-      :class="settingsControls ? '[&_input]:min-h-11 [&_textarea]:min-h-20 [&_button[role=combobox]]:min-h-11 [&_button[role=combobox]]:w-full' : ''"
+      :class="
+        settingsControls
+          ? '[&_input]:min-h-11 [&_textarea]:min-h-20 [&_button[role=combobox]]:min-h-11 [&_button[role=combobox]]:w-full'
+          : ''
+      "
     >
       <div
         v-if="option.kind !== 'boolean'"
@@ -83,7 +87,11 @@ function stringValue(value: string | number): string | null {
           @update:model-value="updateValue($event ?? false, field.onChange, true)"
           @blur="field.onBlur"
         />
-        <FieldLabel :for="controlId" :class="settingsControls ? 'min-h-11 flex-1 items-center' : ''">{{ label }}</FieldLabel>
+        <FieldLabel
+          :for="controlId"
+          :class="settingsControls ? 'min-h-11 flex-1 items-center' : ''"
+          >{{ label }}</FieldLabel
+        >
       </Field>
       <Select
         v-else-if="option.choices.length"
@@ -127,7 +135,9 @@ function stringValue(value: string | number): string | null {
         :model-value="field.value"
         :disabled="disabled"
         :aria-invalid="!!errors.length"
-        @update:model-value="updateValue($event === '' ? Number.NaN : Number($event), field.onChange)"
+        @update:model-value="
+          updateValue($event === '' ? Number.NaN : Number($event), field.onChange)
+        "
         @blur="field.onBlur"
       />
       <Input

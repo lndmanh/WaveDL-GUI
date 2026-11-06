@@ -3,20 +3,21 @@ import { cn } from '@/lib/utils';
 import { Check, Plus, RefreshCw, Search, Sparkles } from '@lucide/vue';
 import { customModelSchema } from '../../../shared/schemas/training-request';
 import type { ConnectionSession } from '../../lib/connection-session';
-import type { DatasetInspection } from '../../lib/dataset-inspection';
-import { CatalogApi, type ModelDescription, type ModelSelection } from '../../lib/catalog-api';
+import { CatalogApi } from '../../lib/catalog-api';
 import {
   entryModel,
   loadRecentModels,
   modelEntries,
   modelEntryKey,
   rememberRecentModel,
-  type ModelEntry,
 } from '../../lib/model-entries';
 import { modelShapeGuidance } from '../../lib/model-shape-guidance';
 import { browserStorage } from '../../lib/preferences';
 import { modelCategoryMessageKeys } from '../../i18n/dynamic-keys';
 import { mappedMessageKey, modelTierMessageKeys } from '../catalog/model-facets';
+import type { DatasetInspection } from '~~/types/dataset-inspection';
+import type { CatalogueMessage, ModelDescription, ModelSelection } from '~~/types/catalog-api';
+import type { ModelEntry } from '~~/types/model-entries';
 
 const props = defineProps<{
   session: ConnectionSession;
