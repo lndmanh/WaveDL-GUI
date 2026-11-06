@@ -6,12 +6,14 @@ import {
   Check,
   ChevronRight,
   Circle,
+  Copy,
   LoaderCircle,
   Play,
   RefreshCw,
 } from '@lucide/vue';
 import type { ProjectBlock } from '../../../shared/schemas/project-draft';
 import type { PlanView, RunView } from '../../lib/daemon-api';
+import { pathName } from '../../lib/run-overview';
 
 export interface ReadinessItem {
   readonly block: ProjectBlock;
@@ -27,7 +29,6 @@ const props = defineProps<{
   canPreview: boolean;
   busy: boolean;
   connected: boolean;
-  stateLabel: string;
 }>();
 
 const emit = defineEmits<{
@@ -41,6 +42,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ useScope: 'global' });
 const rawId = useId();
+const startedId = useId();
+const labels = useRunLabels();
+const { copy, copied, isSupported: canCopy } = useClipboard({ copiedDuring: 1600 });
 const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.plan);
 
 /** Only the exact plan the daemon acknowledged is locked; an edited draft plans anew. */
@@ -48,12 +52,23 @@ const submitted = computed(
   () => !!props.plan && props.acknowledged?.request_id === props.plan.request_id,
 );
 
+/** What the started run is made of; the model is listed only when a name titles the run. */
+const facts = computed(() => {
+  const summary = props.acknowledged?.summary;
+
+  return [
+    { label: t('runs.configModel'), value: summary?.name ? summary.model : null },
+    { label: t('runs.configDataset'), value: pathName(summary?.data_path) || null },
+    { label: t('runs.configEpochs'), value: summary?.epochs ? String(summary.epochs) : null },
+  ].filter((fact): fact is { label: string; value: string } => !!fact.value);
+});
+
 const projectStyles = {
   planSuccess: cn(
-    'flex flex-col items-center gap-[0.6rem] p-[2.5rem_1.5rem_2rem] text-center',
+    'flex flex-col items-center gap-[0.6rem] p-[2.25rem_1.5rem_1.75rem] text-center',
     '[background:radial-gradient(60%_80%_at_50%_0%,_color-mix(in_srgb,_var(--success)_12%,_transparent),_transparent),_var(--surface)]',
   ),
-  planSuccessMark: cn('size-17 mb-2 text-success'),
+  planSuccessMark: cn('size-15 mb-1 text-success'),
   planStat: cn(
     'py-[0.6rem] px-3 rounded-lg [background:color-mix(in_srgb,_var(--foreground)_4.5%,_transparent)]',
     '[&_dt]:text-muted-foreground [&_dt]:text-[0.7rem] [&_dd]:m-[0.15rem_0_0] [&_dd]:text-[0.92rem] [&_dd]:font-semibold',
@@ -84,7 +99,7 @@ const projectStyles = {
     'whitespace-pre-wrap [background:color-mix(in_srgb,_var(--foreground)_5%,_transparent)]',
   ),
   planApprove: cn(
-    'min-w-48 h-[2.9rem] rounded-[0.9rem]',
+    'min-w-48 h-[2.9rem] rounded-[0.9rem] max-sm:w-full',
     'shadow-[inset_0_1px_0_rgb(255_255_255_/_0.2),_0_8px_20px_-10px_color-mix(in_srgb,_var(--primary)_80%,_transparent)]',
   ),
   planCheck: cn(
@@ -96,83 +111,124 @@ const projectStyles = {
     "[&[data-done='false']_svg]:stroke-[1.5]",
   ),
   planCta: cn('flex flex-wrap items-center gap-4 py-[1.1rem] px-5'),
+  planDivider: cn('border-t border-[color-mix(in_srgb,var(--foreground)_10%,transparent)]'),
 };
 </script>
 <template>
   <InspectorPanel :title="t('builder.planTitle')" :description="t('builder.planDescription')">
-    <!-- Acknowledged: the daemon accepted this exact plan. -->
-    <section
-      v-if="submitted && acknowledged"
-      :class="cn('surface-group', projectStyles.planSuccess)"
-      :aria-label="t('project.acknowledgedTrainingRun')"
-    >
-      <svg :class="projectStyles.planSuccessMark" viewBox="0 0 64 64" aria-hidden="true">
-        <motion.circle
-          cx="32"
-          cy="32"
-          r="29"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="3"
-          :initial="{ pathLength: 0, opacity: 0.2 }"
-          :animate="{ pathLength: 1, opacity: 1 }"
-          :transition="{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }"
-        />
-        <motion.path
-          d="M20 33.5 28.5 42 44.5 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="4"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          :initial="{ pathLength: 0 }"
-          :animate="{ pathLength: 1 }"
-          :transition="{ duration: 0.4, delay: 0.45, ease: 'easeOut' }"
-        />
-      </svg>
-      <h3 class="text-[1.4rem] font-semibold tracking-[-0.02em]">
-        {{ t('project.daemonAcknowledgedTheRun') }}
-      </h3>
-      <p class="max-w-[52ch] text-sm text-muted-foreground">
-        {{ t('project.submissionAckHelp', { run: acknowledged.run_id, state: stateLabel }) }}
-      </p>
-      <div class="mt-2 flex flex-wrap justify-center gap-2">
+    <!-- Started: this exact plan was sent; summarise the run and point to its page. -->
+    <section v-if="submitted && acknowledged" class="flex flex-col gap-4" :aria-labelledby="startedId">
+      <div :class="cn('surface-group', projectStyles.planSuccess)">
+        <svg :class="projectStyles.planSuccessMark" viewBox="0 0 64 64" aria-hidden="true">
+          <motion.circle
+            cx="32"
+            cy="32"
+            r="29"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            :initial="{ pathLength: 0, opacity: 0.2 }"
+            :animate="{ pathLength: 1, opacity: 1 }"
+            :transition="{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }"
+          />
+          <motion.path
+            d="M20 33.5 28.5 42 44.5 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            :initial="{ pathLength: 0 }"
+            :animate="{ pathLength: 1 }"
+            :transition="{ duration: 0.4, delay: 0.45, ease: 'easeOut' }"
+          />
+        </svg>
+        <h3 :id="startedId" class="text-[1.4rem] font-semibold tracking-[-0.02em]">
+          {{ t('project.runOnItsWay') }}
+        </h3>
+        <p class="max-w-[46ch] text-sm text-muted-foreground">
+          {{ t('project.runOnItsWayHelp') }}
+        </p>
+      </div>
+
+      <motion.div
+        class="surface-group overflow-hidden"
+        role="group"
+        :aria-label="t('project.runDetails')"
+        :initial="{ opacity: 0, y: 8 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }"
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
+          <p class="min-w-0 flex-1 text-[1.05rem] font-semibold [overflow-wrap:anywhere]">
+            {{ labels.title(acknowledged) }}
+          </p>
+          <RunStateChip :run="acknowledged" />
+        </div>
+        <dl v-if="facts.length" class="grid grid-cols-1 gap-2 px-5 pt-4 sm:grid-cols-3">
+          <div v-for="fact in facts" :key="fact.label" :class="projectStyles.planStat">
+            <dt>{{ fact.label }}</dt>
+            <dd>{{ fact.value }}</dd>
+          </div>
+        </dl>
+        <div
+          :class="
+            cn(
+              'mt-4 flex items-center gap-2 px-5 py-2 text-xs text-muted-foreground',
+              projectStyles.planDivider,
+            )
+          "
+        >
+          <span class="flex-none">{{ t('runs.configRunId') }}</span>
+          <code class="min-w-0 flex-1 truncate font-mono">{{ acknowledged.run_id }}</code>
+          <Button
+            v-if="canCopy"
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="size-7 shrink-0"
+            :aria-label="t('runs.copyRunId')"
+            @click="copy(acknowledged.run_id)"
+          >
+            <Check v-if="copied" aria-hidden="true" /><Copy v-else aria-hidden="true" />
+          </Button>
+          <span class="sr-only" aria-live="polite">{{ copied ? t('runs.runIdCopied') : '' }}</span>
+        </div>
+      </motion.div>
+
+      <div class="flex flex-wrap justify-center gap-2">
         <Button
           type="button"
           size="lg"
-          class="rounded-xl"
+          :class="projectStyles.planApprove"
           :disabled="!connected"
           @click="emit('open')"
         >
-          {{ t('project.openAcknowledgedRun') }}<ArrowRight aria-hidden="true" />
+          {{ t('project.viewRun') }}<ArrowRight aria-hidden="true" />
         </Button>
-        <Button type="button" size="lg" variant="ghost" class="rounded-xl" @click="emit('fresh')">
+        <Button
+          type="button"
+          size="lg"
+          variant="ghost"
+          class="rounded-xl max-sm:w-full"
+          @click="emit('fresh')"
+        >
           {{ t('builder.startAnother') }}
         </Button>
       </div>
     </section>
 
-    <!-- Planned: review what the daemon will run, then approve. -->
+    <!-- Planned: review exactly what will run, then start it. -->
     <template v-else-if="plan">
       <section class="surface-group overflow-hidden" aria-labelledby="approved-plan-title">
-        <header class="flex flex-wrap items-start justify-between gap-4 px-5 pt-5">
-          <div class="min-w-0">
-            <p class="flex items-center gap-1.5 text-xs font-semibold text-success">
-              <Check class="size-3.5" aria-hidden="true" />{{ t('builder.planReady') }}
-            </p>
-            <h3 id="approved-plan-title" class="mt-1 text-[1.15rem] font-semibold">
-              {{ t('project.persistedPlanForApproval') }}
-            </h3>
-            <p class="mt-1 font-mono text-[0.68rem] break-all text-muted-foreground">
-              {{
-                t('project.runRunRequestRequestPlanPlan', {
-                  run: plan.run_id,
-                  request: plan.request_id,
-                  plan: plan.plan_id,
-                })
-              }}
-            </p>
-          </div>
+        <header class="px-5 pt-5">
+          <p class="flex items-center gap-1.5 text-xs font-semibold text-success">
+            <Check class="size-3.5" aria-hidden="true" />{{ t('builder.planReady') }}
+          </p>
+          <h3 id="approved-plan-title" class="mt-1 text-[1.15rem] font-semibold">
+            {{ t('project.persistedPlanForApproval') }}
+          </h3>
+          <p class="mt-1 text-sm text-muted-foreground">{{ t('project.planManifestHelp') }}</p>
         </header>
         <dl
           class="grid grid-cols-2 gap-2 px-5 pt-4 sm:grid-cols-4"
@@ -199,7 +255,7 @@ const projectStyles = {
         <p v-else class="px-5 pb-4 text-sm text-muted-foreground">
           {{ t('project.noPlanDifferences') }}
         </p>
-        <Collapsible class="border-t border-[color-mix(in_srgb,var(--foreground)_10%,transparent)]">
+        <Collapsible :class="projectStyles.planDivider">
           <CollapsibleTrigger
             :id="rawId"
             :class="projectStyles.planRawTrigger"
@@ -213,6 +269,15 @@ const projectStyles = {
           </CollapsibleTrigger>
           <CollapsibleContent class="collapsible-motion">
             <div class="flex flex-col gap-3 px-5 pb-5">
+              <p class="font-mono text-[0.68rem] break-all text-muted-foreground">
+                {{
+                  t('project.runRunRequestRequestPlanPlan', {
+                    run: plan.run_id,
+                    request: plan.request_id,
+                    plan: plan.plan_id,
+                  })
+                }}
+              </p>
               <div
                 v-if="manifest"
                 :class="projectStyles.planCode"
@@ -231,46 +296,47 @@ const projectStyles = {
           </CollapsibleContent>
         </Collapsible>
       </section>
-      <div class="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          size="lg"
-          :class="projectStyles.planApprove"
-          :disabled="busy || !connected || submitted"
-          @click="emit('submit')"
-        >
-          <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
-          <Play v-else aria-hidden="true" />
-          {{ t(submitted ? 'project.submissionAcknowledged' : 'project.approveAndStartThisPlan') }}
-        </Button>
-        <Button type="button" variant="ghost" :disabled="busy" @click="emit('status')">
-          <RefreshCw aria-hidden="true" />{{ t('project.checkSubmissionStatus') }}
-        </Button>
-        <Button v-if="busy" type="button" variant="ghost" @click="emit('stop')">
-          {{ t('project.stopWaiting') }}
-        </Button>
+      <div :class="cn('surface-group', projectStyles.planCta)">
+        <div class="min-w-0 flex-1 basis-56">
+          <p class="text-[0.9rem] font-medium">{{ t('project.leaveDoesNotCancel') }}</p>
+          <p class="text-xs text-muted-foreground">{{ t('project.planRetryHelp') }}</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 max-sm:w-full">
+          <Button v-if="busy" type="button" variant="ghost" @click="emit('stop')">
+            {{ t('project.stopWaiting') }}
+          </Button>
+          <Button type="button" variant="ghost" :disabled="busy" @click="emit('status')">
+            <RefreshCw aria-hidden="true" />{{ t('project.checkSubmissionStatus') }}
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            :class="projectStyles.planApprove"
+            :disabled="busy || !connected || submitted"
+            @click="emit('submit')"
+          >
+            <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
+            <Play v-else aria-hidden="true" />
+            {{ t(submitted ? 'project.submissionAcknowledged' : 'project.startTraining') }}
+          </Button>
+        </div>
       </div>
-      <p class="text-xs text-muted-foreground">
-        {{ t('project.planRetryHelp') }} {{ t('project.leaveDoesNotCancel') }}
-      </p>
     </template>
 
-    <!-- Not planned yet: a readiness checklist and the planning action. -->
+    <!-- Not reviewed yet: a checklist and the review action. -->
     <template v-else>
       <div
         v-if="acknowledged"
         class="surface-group surface-row"
-        :aria-label="t('project.acknowledgedTrainingRun')"
+        :aria-label="t('project.lastRun')"
       >
         <span :class="projectStyles.planCheckMark" data-done="true" aria-hidden="true"
           ><Check
         /></span>
         <span class="min-w-0 flex-1">
-          <span class="block text-[0.9rem] font-medium">{{
-            t('project.daemonAcknowledgedTheRun')
-          }}</span>
-          <span class="block truncate font-mono text-xs text-muted-foreground">{{
-            acknowledged.run_id
+          <span class="block text-xs text-muted-foreground">{{ t('project.lastRun') }}</span>
+          <span class="block truncate text-[0.9rem] font-medium">{{
+            labels.title(acknowledged)
           }}</span>
         </span>
         <Button
@@ -281,7 +347,7 @@ const projectStyles = {
           :disabled="!connected"
           @click="emit('open')"
         >
-          {{ t('project.openAcknowledgedRun') }}
+          {{ t('project.viewRun') }}
         </Button>
       </div>
       <ul class="surface-group overflow-hidden" :aria-label="t('builder.readiness')">
