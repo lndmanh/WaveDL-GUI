@@ -34,9 +34,16 @@ export default defineNuxtConfig({
     defaults: { subsets: ['latin', 'latin-ext', 'vietnamese'] },
     families: [
       {
-        name: 'Manrope',
+        name: 'Inter',
         provider: 'google',
-        weights: ['200 800'],
+        weights: ['300 800'],
+        styles: ['normal'],
+        global: true,
+      },
+      {
+        name: 'JetBrains Mono',
+        provider: 'google',
+        weights: ['400 600'],
         styles: ['normal'],
         global: true,
       },

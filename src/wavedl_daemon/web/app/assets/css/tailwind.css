@@ -46,10 +46,10 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   /* Typography: one UI family, one optional reading family */
-  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-reader: 'Source Serif 4', ui-serif, Georgia, Cambria, 'Times New Roman', serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 
   /* Shape */
   --radius-xs: calc(var(--radius) - 8px);
@@ -85,7 +85,9 @@
 }
 
 html {
-  font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  /* Inter's open digits, single-storey a and flat-tailed l read better at UI sizes. */
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -122,12 +124,12 @@ button:disabled {
 
 /* Grouped inset lists (System Settings style) used by the run builder. */
 @utility surface-group {
-  border-radius: 1rem;
+  border-radius: var(--radius-2xl);
   background: var(--surface);
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 13%, transparent),
-    0 1px 2px rgb(0 0 0 / 0.04),
-    0 14px 32px -24px rgb(0 0 0 / 0.3);
+    0 0 0 1px var(--border),
+    0 1px 2px var(--shadow-soft),
+    0 12px 28px -22px var(--shadow-strong);
 }
 @utility surface-row {
   display: flex;
