@@ -1,16 +1,9 @@
 import { Package, ScrollText } from '@lucide/vue';
+import type { ShellPanelTabId, ShellPanelTabDefinition } from '~~/types/shell';
 
 export const SHELL_PANEL_MIN_WIDTH = 320;
 export const SHELL_PANEL_DEFAULT_WIDTH = 368;
 export const SHELL_PANEL_MAX_WIDTH = 520;
-
-export type ShellPanelTabId = 'logs' | 'artifacts';
-
-export interface ShellPanelTabDefinition {
-  id: ShellPanelTabId;
-  labelKey: string;
-  icon: Component;
-}
 
 export const SHELL_PANEL_TABS: readonly ShellPanelTabDefinition[] = [
   { id: 'logs', labelKey: 'shell.logs', icon: ScrollText },

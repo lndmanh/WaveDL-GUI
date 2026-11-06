@@ -1,6 +1,6 @@
-export const shellScrollKey: InjectionKey<Ref<HTMLElement | null>> = Symbol('shell-scroll');
+import type { ShellScrollTarget } from '~~/types/shell';
 
-export type ShellScrollTarget = Window | HTMLElement;
+export const shellScrollKey: InjectionKey<Ref<HTMLElement | null>> = Symbol('shell-scroll');
 
 export function provideShellScroll(container: Ref<HTMLElement | null>): void {
   provide(shellScrollKey, container);

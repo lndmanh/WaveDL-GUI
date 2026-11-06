@@ -1,22 +1,4 @@
-import type { ShallowRef } from 'vue';
-import type { DaemonApiError } from '../lib/daemon-api';
-import type { ConnectionSession } from '../lib/connection-session';
-import type { AppearancePreferences } from '../lib/preferences';
-import type { useDaemonConnection } from './useDaemonConnection';
-
-export type WorkstationConnection = ReturnType<typeof useDaemonConnection>;
-
-export interface WorkstationContext {
-  connection: WorkstationConnection;
-  state: WorkstationConnection['state'];
-  api: WorkstationConnection['api'];
-  session: ConnectionSession;
-  reportFailure: ComputedRef<(error: DaemonApiError) => void>;
-  revision: ComputedRef<number>;
-  appearance: ShallowRef<AppearancePreferences>;
-  appearanceChanged(value: AppearancePreferences): void;
-  monitorRun(runId: string): Promise<void>;
-}
+import type { WorkstationContext } from '~~/types/workstation';
 
 const workstationKey: InjectionKey<WorkstationContext> = Symbol('workstation');
 

@@ -12,8 +12,8 @@ export function segmentedSelectionSchema(choices: readonly string[]) {
 
 export const locateRequestSchema = z.object({ root: z.string(), path: z.string() });
 
-export const storedDockSlotsSchema = z.array(
-  z.enum(WORKSTATION_SECTIONS).nullable().catch(null),
-).length(5);
+export const storedDockSlotsSchema = z
+  .array(z.enum(WORKSTATION_SECTIONS).nullable().catch(null))
+  .length(5);
 
 export type StoredDockSlots = z.output<typeof storedDockSlotsSchema>;

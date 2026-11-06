@@ -1,3 +1,5 @@
+import type { ShellScrollTarget } from '~~/types/shell';
+
 /**
  * Preserve the scroll offset across `<KeepAlive>` deactivation.
  *

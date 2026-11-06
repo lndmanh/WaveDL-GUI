@@ -12,25 +12,12 @@ import { isUuid } from '../lib/daemon-api-schemas';
  * - WorkstationShell exposes an `actions` slot. Connection and Settings are pages.
  */
 import { FileChartColumn, Layers, Database, Plus, Cable, Settings2 } from '@lucide/vue';
-import {
-  WORKSTATION_SECTIONS,
-  type PrimaryWorkstationSection,
-  type WorkstationSection,
-} from '../lib/shell-test-ids';
-
-export type { PrimaryWorkstationSection, WorkstationSection };
-
-export type ShellCommand = 'connection' | 'settings';
-
-export interface ShellNavigationDescriptor<
-  Section extends WorkstationSection = WorkstationSection,
-> {
-  id: Section;
-  labelKey: string;
-  icon: Component;
-  path: string;
-  command?: ShellCommand;
-}
+import { WORKSTATION_SECTIONS } from '../lib/shell-test-ids';
+import type {
+  PrimaryWorkstationSection,
+  WorkstationSection,
+  ShellNavigationDescriptor,
+} from '~~/types/shell';
 
 export const SHELL_PRIMARY_NAVIGATION: readonly ShellNavigationDescriptor<PrimaryWorkstationSection>[] =
   [

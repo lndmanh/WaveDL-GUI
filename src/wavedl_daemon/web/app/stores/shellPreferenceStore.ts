@@ -1,9 +1,6 @@
 import { loadShellDockSlots, saveShellDockSlots } from '../lib/preferences';
-import {
-  DEFAULT_SHELL_DOCK_SLOTS,
-  normalizeShellDockSlots,
-  type ShellDockSlots,
-} from '../constants/shellDock';
+import { DEFAULT_SHELL_DOCK_SLOTS, normalizeShellDockSlots } from '../constants/shellDock';
+import type { ShellDockSlots } from '~~/types/shell';
 
 export const useShellPreferencesStore = defineStore('shellPreferences', () => {
   const storedDockSlots = shallowRef(loadShellDockSlots());

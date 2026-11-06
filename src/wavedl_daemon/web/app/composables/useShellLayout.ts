@@ -3,13 +3,10 @@ import {
   SHELL_PANEL_MAX_WIDTH,
   SHELL_PANEL_MIN_WIDTH,
   SHELL_PANEL_TABS,
-  type ShellPanelTabDefinition,
-  type ShellPanelTabId,
 } from '../shell/constants';
-import type { WorkstationSection } from '../lib/shell-test-ids';
-import { sectionForPath } from '../shell/sections';
 
-export type { ShellPanelTabDefinition, ShellPanelTabId } from '../shell/constants';
+import { sectionForPath } from '../shell/sections';
+import type { ShellPanelTabDefinition, ShellPanelTabId, ShellLayoutState } from '~~/types/shell';
 
 const shellRoutePathKey: InjectionKey<ComputedRef<string>> = Symbol('shell-route-path');
 
@@ -20,34 +17,6 @@ const shellNavigateKey: InjectionKey<ShellNavigate> = Symbol('shell-navigate');
 
 function clampPanelWidth(value: number): number {
   return Math.max(SHELL_PANEL_MIN_WIDTH, Math.min(SHELL_PANEL_MAX_WIDTH, Math.round(value)));
-}
-
-export interface ShellLayoutState {
-  activeSection: ComputedRef<WorkstationSection>;
-  isRailVisible: ComputedRef<boolean>;
-  isFocusMode: Ref<boolean>;
-  isPanelSheetVisible: ComputedRef<boolean>;
-  isCompanionShowing: ComputedRef<boolean>;
-  resolvedActiveTab: ComputedRef<ShellPanelTabId>;
-  visitedTabIds: Set<ShellPanelTabId>;
-  enterFocusMode(): void;
-  exitFocusMode(): void;
-  toggleFocusMode(): void;
-  isPanelOpen: Ref<boolean>;
-  isPanelVisible: ComputedRef<boolean>;
-  isDockedLayout: Ref<boolean>;
-  panelTabs: Ref<readonly ShellPanelTabDefinition[]>;
-  activeTab: Ref<ShellPanelTabId>;
-  panelWidth: Ref<number>;
-  commandPaletteOpen: Ref<boolean>;
-  setRailVisible(visible: boolean): void;
-  setDockedLayout(docked: boolean): void;
-  setPanelTabs(tabs: readonly ShellPanelTabDefinition[]): void;
-  setActiveTab(tab: ShellPanelTabId): void;
-  setPanelWidth(width: number): void;
-  openPanel(): void;
-  closePanel(): void;
-  togglePanel(): void;
 }
 
 export function createShellLayoutState(

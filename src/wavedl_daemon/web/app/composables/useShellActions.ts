@@ -1,4 +1,4 @@
-import type { WorkstationSection } from '../shell/sections';
+import type { WorkstationSection } from '~~/types/shell';
 
 type ShellActions = (section: WorkstationSection) => void;
 

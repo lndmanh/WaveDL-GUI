@@ -1,22 +1,10 @@
 import { SHELL_ACTION_NAVIGATION, SHELL_PRIMARY_NAVIGATION } from '../shell/sections';
-import type { WorkstationSection, ShellNavigationDescriptor } from '../shell/sections';
 import {
   storedDockSlotsSchema,
   type StoredDockSlots,
 } from '../../shared/schemas/workstation-controls';
-import type { Json } from '../../shared/schemas/json';
-
-export type ShellDockDestinationId = WorkstationSection;
-
-export type ShellDockDestination = ShellNavigationDescriptor;
-
-export type ShellDockSlots = [
-  WorkstationSection,
-  WorkstationSection,
-  WorkstationSection,
-  WorkstationSection,
-  WorkstationSection,
-];
+import type { WorkstationSection, ShellNavigationDescriptor, ShellDockSlots } from '~~/types/shell';
+import type { Json } from '~~/types/json';
 
 export const SHELL_DOCK_SLOT_COUNT = 5;
 
@@ -28,14 +16,14 @@ export const DEFAULT_SHELL_DOCK_SLOTS: ShellDockSlots = [
   'settings',
 ];
 
-export const SHELL_DOCK_DESTINATIONS: readonly ShellDockDestination[] = [
+export const SHELL_DOCK_DESTINATIONS: readonly ShellNavigationDescriptor[] = [
   ...SHELL_PRIMARY_NAVIGATION,
   ...SHELL_ACTION_NAVIGATION,
 ];
 
 export function getShellDockDestination(
-  id: ShellDockDestinationId,
-): ShellDockDestination | undefined {
+  id: WorkstationSection,
+): ShellNavigationDescriptor | undefined {
   return SHELL_DOCK_DESTINATIONS.find((item) => item.id === id);
 }
 
