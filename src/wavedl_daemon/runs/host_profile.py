@@ -1,8 +1,8 @@
 """
 Describes the daemon host so the client can prefill a Local runtime.
 
-The daemon never imports numerical packages. Accelerators are probed in a
-reaped child of the daemon interpreter, the same one dataset inspection uses.
+Accelerators are probed in a reaped child of the daemon interpreter so the
+daemon itself does not import the training stack.
 
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """
