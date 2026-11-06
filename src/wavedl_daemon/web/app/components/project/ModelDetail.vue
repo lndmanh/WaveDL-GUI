@@ -34,7 +34,7 @@ const guidance = computed(() =>
   modelShapeGuidance(props.inspection, model.value, props.singleChannel),
 );
 
-const dataDims = computed(() => props.inspection?.inputShape.length ?? 0);
+const dataDims = computed(() => props.inspection?.inputShape?.length ?? 0);
 
 const category = computed(() => {
   const key = mappedMessageKey(modelCategoryMessageKeys, model.value.category);

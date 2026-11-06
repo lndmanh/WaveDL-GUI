@@ -84,7 +84,7 @@ function fits(entry: ModelEntry): boolean {
   );
 }
 
-const inspected = computed(() => (props.inspection?.inputShape.length ?? 0) > 0);
+const inspected = computed(() => (props.inspection?.inputShape?.length ?? 0) > 0);
 
 const matching = computed(() => {
   const needle = query.value.trim().toLocaleLowerCase();

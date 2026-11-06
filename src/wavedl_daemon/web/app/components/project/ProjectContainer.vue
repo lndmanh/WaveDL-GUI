@@ -945,7 +945,9 @@ const blocks = computed<PipelineBlock[]>(() => [
     detail: datasetInspection.value
       ? t('builder.datasetDetail', {
           samples: datasetInspection.value.numSamples.toLocaleString(),
-          shape: datasetInspection.value.inputShape.join(' × '),
+          shape: datasetInspection.value.inputShape === null
+            ? t('datasets.pickledInputShape')
+            : datasetInspection.value.inputShape.join(' × '),
         })
       : data.value
         ? data.value.root

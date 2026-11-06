@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataSelection } from '../../lib/catalog-api';
 import type { ConnectionSession } from '../../lib/connection-session';
-import { DatasetPreviewApi, sampleMatrix, type DatasetPreview } from '../../lib/dataset-preview';
+import { sampleMatrix } from '../../lib/dataset-preview';
 import { datasetPreviewMessageKeys, datasetPreviewTabMessageKeys } from '../../i18n/dynamic-keys';
 
 const { t } = useI18n({ useScope: 'global' });
@@ -20,96 +20,18 @@ const tabs = [
 
 type Tab = (typeof tabs)[number][0];
 
-type PreviewMessage = { kind: 'key'; key: string } | { kind: 'error'; value: Error };
-
 const activeTab = shallowRef<Tab>('input');
-const data = shallowRef<DatasetPreview | null>(null);
-const loading = shallowRef(false);
-const available = shallowRef(false);
-const message = shallowRef<PreviewMessage | null>(null);
-let request: AbortController | null = null;
-let sequence = 0;
-let unsubscribe: (() => void) | null = null;
-
-function revoke() {
-  sequence++;
-  request?.abort();
-  request = null;
-  data.value = null;
-  loading.value = false;
-}
-
-function stop() {
-  if (!loading.value) return;
-  revoke();
-  message.value = { kind: 'key', key: 'datasets.previewStopped' };
-}
-
-async function load() {
-  revoke();
-  message.value = null;
-  const selection = props.selection ? toRaw(props.selection) : null;
-
-  if (!selection) return;
-
-  if (!available.value) {
-    message.value = { kind: 'key', key: 'datasets.previewReconnect' };
-
-    return;
-  }
-
-  const controller = new AbortController();
-  request = controller;
-  const current = sequence;
-  loading.value = true;
-
-  try {
-    const result = await new DatasetPreviewApi(toRaw(props.session)).preview(
-      selection,
-      'all',
-      controller.signal,
-    );
-
-    if (current === sequence && !controller.signal.aborted) data.value = result;
-  } catch (error) {
-    if (current === sequence && !controller.signal.aborted)
-      message.value =
-        error instanceof Error
-          ? { kind: 'error', value: error }
-          : { kind: 'key', key: 'datasets.previewUnavailable' };
-  } finally {
-    if (current === sequence) {
-      loading.value = false;
-      request = null;
-    }
-  }
-}
-
-watch(
+const { data, loading, available, message, load, stop, trust } = useDatasetPreview(
   () => props.session,
-  (session) => {
-    unsubscribe?.();
-    revoke();
-    const connection = toRaw(session);
-    let revision = connection.snapshot().revision;
-    unsubscribe = connection.subscribe((state) => {
-      available.value = state.status === 'connected';
-
-      if (state.revision !== revision || state.status !== 'connected') {
-        revision = state.revision;
-        revoke();
-        message.value = { kind: 'key', key: 'datasets.previewReconnect' };
-      }
-    });
-  },
-  { immediate: true },
+  () => props.selection,
 );
 
-watch(() => [props.selection, props.session], load, { immediate: true });
+const sampledRows = computed(() => {
+  if (!data.value) return 0;
 
-onBeforeUnmount(() => {
-  unsubscribe?.();
-  revoke();
+  return activeTab.value === 'output' || activeTab.value === 'correlation'
+    ? data.value.sample_indices.length
+    : data.value.input_sample_indices.length;
 });
 
 function selectTab(value: string | number) {
@@ -185,6 +107,19 @@ const matrices = computed(
       }}</Button>
     </div>
     <p v-if="loading" role="status">{{ t('datasets.previewLoading') }}</p>
+    <Alert v-else-if="message?.kind === 'pickle'" variant="warning" role="status" class="mt-4">
+      <AlertTitle>{{ t('datasets.pickleTitle') }}</AlertTitle>
+      <AlertDescription class="gap-3">
+        <p>{{ t('datasets.pickleWarning') }}</p>
+        <p>{{ t('datasets.pickleResources') }}</p>
+        <Button
+          type="button"
+          class="h-auto max-w-full whitespace-normal text-left"
+          :disabled="!available"
+          @click="trust"
+        >{{ t('datasets.trustPickle') }}</Button>
+      </AlertDescription>
+    </Alert>
     <p v-else-if="message" role="status">
       {{ message.kind === 'key' ? t(message.key) : clientMessage(message.value) }}
     </p>
@@ -198,7 +133,7 @@ const matrices = computed(
         <Badge variant="outline" data-testid="preview-bounds">
           {{
             t('datasets.previewBounds', {
-              count: data.sample_indices.length,
+              count: sampledRows,
               total: data.input_shape[0] ?? 0,
             })
           }}

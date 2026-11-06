@@ -8,7 +8,12 @@ const details = computed(() => [
   { label: t('datasets.format'), value: props.inspection.format.toUpperCase() },
   { label: t('datasets.inputKey'), value: props.inspection.inputKey },
   { label: t('datasets.outputKey'), value: props.inspection.outputKey },
-  { label: t('datasets.inputDtype'), value: props.inspection.inputDtype },
+  {
+    label: t('datasets.inputDtype'),
+    value: props.inspection.inputShape === null
+      ? t('datasets.pickledInputShape')
+      : props.inspection.inputDtype,
+  },
   { label: t('datasets.outputDtype'), value: props.inspection.outputDtype },
 ]);
 </script>

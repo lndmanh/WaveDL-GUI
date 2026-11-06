@@ -43,7 +43,9 @@ const stats = computed(() => {
 
   return {
     samples: current.numSamples.toLocaleString(locale.value),
-    input: datasetInputDimensions(current.inputShape),
+    input: current.inputShape === null
+      ? t('datasets.pickledInputShape')
+      : datasetInputDimensions(current.inputShape),
     output: output.value?.toLocaleString(locale.value) ?? '—',
   };
 });

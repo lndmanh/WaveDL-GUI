@@ -74,7 +74,9 @@ const styles = {
         </p>
         <div class="flex flex-wrap gap-2">
           <span :class="styles.pill">{{
-            t('datasets.inputSummary', { shape: datasetInputDimensions(inspection.inputShape) })
+            inspection.inputShape === null
+              ? t('datasets.pickledInputShape')
+              : t('datasets.inputSummary', { shape: datasetInputDimensions(inspection.inputShape) })
           }}</span>
           <span :class="styles.pill">{{
             outputValues === null
