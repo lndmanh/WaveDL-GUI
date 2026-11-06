@@ -2,7 +2,7 @@ import { type Json, type PlanView } from '../lib/daemon-api';
 import { planManifestSchema, planPreviewContextSchema } from '../../shared/schemas/plan-summary';
 import { trainingDefaults } from '../../shared/schemas/training-request';
 import { inferenceDefaults } from '../../shared/schemas/result-request';
-import { trainingFieldMessageKeys } from '../i18n/dynamic-keys';
+import { runOperationMessageKeys, trainingFieldMessageKeys } from '../i18n/dynamic-keys';
 
 function equal(left: Json, right: Json | undefined): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -25,6 +25,20 @@ export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
 
   function text(value: string | undefined): string {
     return value ?? t('project.notAvailable');
+  }
+
+  function backend(value: string | undefined): string {
+    if (value === 'local') return t('builder.backendLocal');
+    if (value === 'slurm') return t('builder.backendSlurm');
+
+    return text(value);
+  }
+
+  function operation(value: string | undefined): string {
+    if (value === 'train' || value === 'test' || value === 'plot')
+      return t(runOperationMessageKeys[value]);
+
+    return text(value);
   }
 
   const document = computed(() => {
@@ -64,8 +78,8 @@ export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
     const topology = preview.topology;
 
     return [
-      { label: t('project.contextBackend'), value: text(preview.target) },
-      { label: t('project.contextOperation'), value: text(document.value?.review.operation) },
+      { label: t('project.contextBackend'), value: backend(preview.target) },
+      { label: t('project.contextOperation'), value: operation(document.value?.review.operation) },
       { label: t('project.contextDevice'), value: text(runtime?.device) },
       {
         label: t('project.contextTopology'),
