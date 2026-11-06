@@ -1,12 +1,18 @@
 import { clientError } from '../i18n/client-messages';
 import { z } from 'zod';
 import { parseJson } from './daemon-api';
-import { resolveShellDockSlots, type ShellDockSlots } from '../constants/shellDock';
+import { resolveShellDockSlots } from '../constants/shellDock';
 import {
   trainingConfigBaseSchema,
   trainingDefaults,
   type TrainingConfig,
 } from '../../shared/schemas/training-request';
+import type { ShellDockSlots } from '~~/types/shell';
+import type {
+  AppearancePreferences,
+  TrainingPreferences,
+  PreferenceStorage,
+} from '~~/types/preferences';
 
 export const PREFERENCES_LIMIT = 64 * 1024;
 
@@ -16,8 +22,6 @@ export const appearanceSchema = z.strictObject({
   zoom: z.union([z.literal(90), z.literal(100), z.literal(110), z.literal(125)]),
   language: z.enum(['en', 'vi']),
 });
-
-export type AppearancePreferences = z.infer<typeof appearanceSchema>;
 
 export const defaultAppearance: AppearancePreferences = {
   theme: 'system',
@@ -42,20 +46,12 @@ export const trainingPreferencesSchema = trainingConfigBaseSchema.omit({
   project_name: true,
 });
 
-export type TrainingPreferences = z.infer<typeof trainingPreferencesSchema>;
-
 export const trainingPreferenceFields = trainingPreferencesSchema.keyof().options;
 
 export function defaultTrainingPreferences(): TrainingPreferences {
   return trainingPreferencesSchema.parse(
     Object.fromEntries(trainingPreferenceFields.map((name) => [name, trainingDefaults[name]])),
   );
-}
-
-export interface PreferenceStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
 }
 
 export function browserStorage(): PreferenceStorage | null {

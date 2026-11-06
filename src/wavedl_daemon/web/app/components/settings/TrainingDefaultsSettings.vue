@@ -31,32 +31,49 @@ const autosave = useAutosaveForm({
 });
 const { status } = autosave;
 
-watch(() => props.daemonId, (daemonId) => {
-  autosave.cancel();
-  resetForm({ values: { config: daemonId ? loadTrainingPreferences(daemonId) : defaultTrainingPreferences() } });
-});
+watch(
+  () => props.daemonId,
+  (daemonId) => {
+    autosave.cancel();
+    resetForm({
+      values: {
+        config: daemonId ? loadTrainingPreferences(daemonId) : defaultTrainingPreferences(),
+      },
+    });
+  },
+);
 
 const groups = computed(() => {
   const needle = search.value.trim().toLocaleLowerCase();
   const matches = (name: string) => {
     const keys = trainingFieldMessageKeys[name];
 
-    return !needle || name.includes(needle) || (keys && t(keys.label).toLocaleLowerCase().includes(needle));
+    return (
+      !needle ||
+      name.includes(needle) ||
+      (keys && t(keys.label).toLocaleLowerCase().includes(needle))
+    );
   };
   const sections = [
     {
       id: 'essentials',
       title: t('shell.settingsTrainingEssentials'),
-      fields: trainingPreferenceFields.filter((name) => name === 'pretrained' || essentialTrainingFields.some((field) => field === name)),
+      fields: trainingPreferenceFields.filter(
+        (name) => name === 'pretrained' || essentialTrainingFields.some((field) => field === name),
+      ),
     },
     ...trainingSections.map((section) => ({
       id: section.id,
       title: t(trainingSectionMessageKeys[section.id]),
-      fields: trainingPreferenceFields.filter((name) => section.fields.some((field) => field === name)),
+      fields: trainingPreferenceFields.filter((name) =>
+        section.fields.some((field) => field === name),
+      ),
     })),
   ];
 
-  return sections.map((section) => ({ ...section, fields: section.fields.filter(matches) })).filter((section) => section.fields.length);
+  return sections
+    .map((section) => ({ ...section, fields: section.fields.filter(matches) }))
+    .filter((section) => section.fields.length);
 });
 
 function resetDefaults(): void {
@@ -73,7 +90,9 @@ function resetDefaults(): void {
   <section aria-labelledby="defaults-heading" class="flex flex-col gap-6">
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div class="space-y-1.5">
-        <h2 id="defaults-heading" class="text-xl font-semibold tracking-tight">{{ t('shell.settingsTraining') }}</h2>
+        <h2 id="defaults-heading" class="text-xl font-semibold tracking-tight">
+          {{ t('shell.settingsTraining') }}
+        </h2>
         <p class="text-sm text-muted-foreground">{{ t('shell.trainingDefaultsSummary') }}</p>
       </div>
       <SettingsSaveStatus :status="status" />
@@ -85,22 +104,41 @@ function resetDefaults(): void {
         <EmptyDescription>{{ t('shell.trainingDefaultsDisconnected') }}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button as-child class="min-h-11"><NuxtLink to="/login">{{ t('shell.connection') }}</NuxtLink></Button>
+        <Button as-child class="min-h-11"
+          ><NuxtLink to="/login">{{ t('shell.connection') }}</NuxtLink></Button
+        >
       </EmptyContent>
     </Empty>
     <template v-else>
       <div class="relative">
-        <FieldLabel :for="searchId" class="sr-only">{{ t('shell.settingsSearchFields') }}</FieldLabel>
-        <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input :id="searchId" v-model="search" type="search" :placeholder="t('shell.settingsSearchFields')" class="min-h-11 pl-9" />
+        <FieldLabel :for="searchId" class="sr-only">{{
+          t('shell.settingsSearchFields')
+        }}</FieldLabel>
+        <Search
+          class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          :id="searchId"
+          v-model="search"
+          type="search"
+          :placeholder="t('shell.settingsSearchFields')"
+          class="min-h-11 pl-9"
+        />
       </div>
       <form class="flex flex-col gap-5" @submit.prevent @focusout="autosave.flush">
         <Card v-for="group in groups" :key="group.id" class="gap-4">
           <CardHeader>
-            <CardTitle :id="`defaults-group-${group.id}`" class="text-base">{{ group.title }}</CardTitle>
+            <CardTitle :id="`defaults-group-${group.id}`" class="text-base">{{
+              group.title
+            }}</CardTitle>
           </CardHeader>
           <CardContent>
-            <FieldGroup class="grid gap-x-8 gap-y-6 sm:grid-cols-2" role="group" :aria-labelledby="`defaults-group-${group.id}`">
+            <FieldGroup
+              class="grid gap-x-8 gap-y-6 sm:grid-cols-2"
+              role="group"
+              :aria-labelledby="`defaults-group-${group.id}`"
+            >
               <TrainingOptionField
                 v-for="name in group.fields"
                 :key="name"
@@ -120,7 +158,11 @@ function resetDefaults(): void {
         </Empty>
       </form>
       <div>
-        <SettingsResetDialog :label="t('shell.settingsResetDefaults')" :description="t('shell.settingsResetTrainingHelp')" @confirm="resetDefaults" />
+        <SettingsResetDialog
+          :label="t('shell.settingsResetDefaults')"
+          :description="t('shell.settingsResetTrainingHelp')"
+          @confirm="resetDefaults"
+        />
       </div>
     </template>
   </section>

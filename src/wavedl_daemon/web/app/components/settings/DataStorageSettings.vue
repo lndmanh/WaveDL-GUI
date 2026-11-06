@@ -6,9 +6,9 @@ import {
   clearLocalPreferences,
   loadAppearance,
   loadKeepSignedIn,
-  type AppearancePreferences,
 } from '../../lib/preferences';
 import { dataPreferencesSchema } from '../../../shared/schemas/settings';
+import type { AppearancePreferences } from '~~/types/preferences';
 
 const props = defineProps<{ daemonId: string | null }>();
 const emit = defineEmits<{ cleared: [appearance: AppearancePreferences] }>();
@@ -53,23 +53,38 @@ function resetPreferences(all: boolean): void {
   <section aria-labelledby="data-settings-heading" class="flex flex-col gap-6">
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div class="space-y-1.5">
-        <h2 id="data-settings-heading" class="text-xl font-semibold tracking-tight">{{ t('shell.settingsDataStorage') }}</h2>
+        <h2 id="data-settings-heading" class="text-xl font-semibold tracking-tight">
+          {{ t('shell.settingsDataStorage') }}
+        </h2>
         <p class="text-sm text-muted-foreground">{{ t('shell.preferencesSubtitle') }}</p>
       </div>
       <SettingsSaveStatus :status="status" />
     </header>
     <Card>
-      <CardHeader><CardTitle class="text-base">{{ t('shell.settingsBrowserStorage') }}</CardTitle></CardHeader>
+      <CardHeader
+        ><CardTitle class="text-base">{{
+          t('shell.settingsBrowserStorage')
+        }}</CardTitle></CardHeader
+      >
       <CardContent class="space-y-6">
         <form @submit.prevent>
           <VeeField v-slot="{ field, errors }" name="keepSignedIn">
             <Field orientation="horizontal" :data-invalid="!!errors.length" class="items-center">
               <FieldContent>
-                <FieldLabel for="settings-keep-signed-in" class="min-h-11 items-center">{{ t('shell.keepMeSignedInOnThisBrowser') }}</FieldLabel>
-                <FieldDescription id="settings-sign-in-help">{{ t('shell.sessionStorageHelp') }}</FieldDescription>
+                <FieldLabel for="settings-keep-signed-in" class="min-h-11 items-center">{{
+                  t('shell.keepMeSignedInOnThisBrowser')
+                }}</FieldLabel>
+                <FieldDescription id="settings-sign-in-help">{{
+                  t('shell.sessionStorageHelp')
+                }}</FieldDescription>
                 <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
               </FieldContent>
-              <Switch id="settings-keep-signed-in" :model-value="field.value === true" aria-describedby="settings-sign-in-help" @update:model-value="change($event, field.onChange)" />
+              <Switch
+                id="settings-keep-signed-in"
+                :model-value="field.value === true"
+                aria-describedby="settings-sign-in-help"
+                @update:model-value="change($event, field.onChange)"
+              />
             </Field>
           </VeeField>
         </form>
@@ -92,9 +107,21 @@ function resetPreferences(all: boolean): void {
         <CardDescription>{{ t('shell.settingsLocalScope') }}</CardDescription>
       </CardHeader>
       <CardContent class="flex flex-wrap gap-3">
-        <SettingsResetDialog :label="t('shell.settingsResetDefaults')" :description="t('shell.settingsResetDataHelp')" @confirm="resetPreferences(false)" />
-        <SettingsResetDialog :label="t('shell.settingsResetAll')" :description="t('shell.settingsResetAllHelp')" @confirm="resetPreferences(true)" />
-        <SettingsResetDialog :label="t('shell.settingsClearLocal')" :description="t('shell.settingsClearLocalHelp')" @confirm="resetPreferences(true)" />
+        <SettingsResetDialog
+          :label="t('shell.settingsResetDefaults')"
+          :description="t('shell.settingsResetDataHelp')"
+          @confirm="resetPreferences(false)"
+        />
+        <SettingsResetDialog
+          :label="t('shell.settingsResetAll')"
+          :description="t('shell.settingsResetAllHelp')"
+          @confirm="resetPreferences(true)"
+        />
+        <SettingsResetDialog
+          :label="t('shell.settingsClearLocal')"
+          :description="t('shell.settingsClearLocalHelp')"
+          @confirm="resetPreferences(true)"
+        />
       </CardContent>
     </Card>
   </section>

@@ -1,7 +1,6 @@
 import { useTimeoutFn } from '@vueuse/core';
 import type { z } from 'zod';
-
-export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+import type { AutosaveStatus } from '~~/types/common';
 
 /** Validate the current snapshot, never a stale or partially valid form. */
 export function useAutosaveForm<T>(options: {

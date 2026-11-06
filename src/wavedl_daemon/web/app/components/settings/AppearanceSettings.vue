@@ -6,9 +6,9 @@ import {
   loadAppearance,
   saveAppearance,
   applyAppearance,
-  type AppearancePreferences,
 } from '../../lib/preferences';
 import { appearanceControlMessageKeys } from '../../i18n/dynamic-keys';
+import type { AppearancePreferences } from '~~/types/preferences';
 
 const props = defineProps<{ appearance?: AppearancePreferences }>();
 const emit = defineEmits<{ changed: [value: AppearancePreferences] }>();
@@ -24,7 +24,11 @@ const autosave = useAutosaveForm({
   values: () => values,
   save: (value) => {
     const saved = saveAppearance(value);
-    applyAppearance(value, document.documentElement, window.matchMedia('(prefers-color-scheme: dark)').matches);
+    applyAppearance(
+      value,
+      document.documentElement,
+      window.matchMedia('(prefers-color-scheme: dark)').matches,
+    );
     emit('changed', value);
 
     return saved;
@@ -32,7 +36,11 @@ const autosave = useAutosaveForm({
 });
 const { status } = autosave;
 
-function controlChange(name: string, value: string, change: (value: string | number) => void): void {
+function controlChange(
+  name: string,
+  value: string,
+  change: (value: string | number) => void,
+): void {
   change(name === 'zoom' ? Number(value) : value);
   autosave.queue(true);
 }
@@ -104,13 +112,19 @@ const controls = [
                 class="gap-3 border-b py-5 first:pt-0 last:border-0 last:pb-0 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(10rem,16rem)] sm:items-center"
               >
                 <div class="space-y-1">
-                  <FieldLabel :for="`preference-${control.name}`">{{ t(control.label) }}</FieldLabel>
-                  <FieldDescription v-if="control.name === 'language'">{{ t('shell.languageHelp') }}</FieldDescription>
+                  <FieldLabel :for="`preference-${control.name}`">{{
+                    t(control.label)
+                  }}</FieldLabel>
+                  <FieldDescription v-if="control.name === 'language'">{{
+                    t('shell.languageHelp')
+                  }}</FieldDescription>
                 </div>
                 <div class="space-y-2">
                   <Select
                     :model-value="String(field.value)"
-                    @update:model-value="controlChange(control.name, String($event ?? ''), field.onChange)"
+                    @update:model-value="
+                      controlChange(control.name, String($event ?? ''), field.onChange)
+                    "
                   >
                     <SelectTrigger
                       :id="`preference-${control.name}`"
@@ -123,7 +137,12 @@ const controls = [
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem v-for="option in control.options" :key="option.value" :value="String(option.value)" class="min-h-11">
+                        <SelectItem
+                          v-for="option in control.options"
+                          :key="option.value"
+                          :value="String(option.value)"
+                          class="min-h-11"
+                        >
                           {{ t(option.label, { value: option.value }) }}
                         </SelectItem>
                       </SelectGroup>
