@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { motion } from 'motion-v';
 import { Activity, Search, Settings2, Unplug } from '@lucide/vue';
-import { SHELL_PRIMARY_NAVIGATION, type WorkstationSection } from '../../shell/sections';
-import type { ConnectionStatus } from '../../lib/connection-session';
+import { SHELL_PRIMARY_NAVIGATION } from '../../shell/sections';
 import { connectionStatusKey } from '../../constants/shellConnection';
+import type { WorkstationSection } from '~~/types/shell';
+import type { ConnectionStatus } from '~~/types/connection-session';
 
 const props = defineProps<{ section: WorkstationSection; status: ConnectionStatus }>();
 const emit = defineEmits<{ navigate: [section: WorkstationSection]; command: [] }>();

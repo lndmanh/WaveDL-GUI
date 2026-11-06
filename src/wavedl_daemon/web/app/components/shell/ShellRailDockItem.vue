@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { motion } from 'motion-v';
 import type { MotionValue, SpringOptions } from 'motion-v';
-import type { ShellNavigationDescriptor } from '../../shell/sections';
+import type { ShellNavigationDescriptor } from '~~/types/shell';
 
 const { t } = useI18n({ useScope: 'global' });
 const emit = defineEmits<{ select: [item: ShellNavigationDescriptor] }>();

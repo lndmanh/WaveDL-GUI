@@ -1,15 +1,10 @@
 <script setup lang="ts">
 import { motion } from 'motion-v';
 
-import {
-  getShellDockDestination,
-  SHELL_DOCK_DESTINATIONS,
-  type ShellDockDestination,
-} from '../../constants/shellDock';
+import { getShellDockDestination, SHELL_DOCK_DESTINATIONS } from '../../constants/shellDock';
 import { SPRING_DEFAULT } from '@/lib/animation';
-
-import type { WorkstationSection } from '../../shell/sections';
-import type { ConnectionStatus } from '../../lib/connection-session';
+import type { ShellNavigationDescriptor, WorkstationSection } from '~~/types/shell';
+import type { ConnectionStatus } from '~~/types/connection-session';
 
 const props = defineProps<{ section: WorkstationSection; status: ConnectionStatus }>();
 const emit = defineEmits<{ navigate: [section: WorkstationSection]; command: [] }>();
@@ -54,7 +49,7 @@ const menuItems = computed(() => {
   ];
 });
 
-function isActive(item: ShellDockDestination) {
+function isActive(item: ShellNavigationDescriptor) {
   return item.id === props.section;
 }
 
@@ -66,7 +61,7 @@ const dockInitial = computed(() =>
 
 const dockTransition = computed(() => (reducedMotion.value ? { duration: 0 } : SPRING_DEFAULT));
 
-function selectItem(item: ShellDockDestination) {
+function selectItem(item: ShellNavigationDescriptor) {
   emit('navigate', item.id);
 }
 </script>

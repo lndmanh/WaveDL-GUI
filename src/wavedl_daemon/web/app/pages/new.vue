@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RunView } from '../lib/daemon-api';
+import type { RunView } from '~~/types/daemon-api';
 
 definePageMeta({
   title: 'shell.newTrainingRun',
@@ -22,10 +22,6 @@ function submitted(run: RunView): void {
 
 <template>
   <ShellPage data-work-page="project">
-    <ProjectContainer
-      v-show="!!api"
-      :session="session"
-      @submitted="submitted"
-    />
+    <ProjectContainer v-show="!!api" :session="session" @submitted="submitted" />
   </ShellPage>
 </template>

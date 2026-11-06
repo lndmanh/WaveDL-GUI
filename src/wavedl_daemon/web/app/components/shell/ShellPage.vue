@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { SHELL_PANEL_TABS } from '../../shell/constants';
 import { cn } from '@/lib/utils';
+import type { ShellPanelTabDefinition } from '~~/types/shell';
 
 const props = withDefaults(
   defineProps<{

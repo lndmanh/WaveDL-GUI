@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { shellPanelTabTargetId, type ShellPanelTabDefinition } from '../../shell/constants';
+import { shellPanelTabTargetId } from '../../shell/constants';
+import type { ShellPanelTabDefinition } from '~~/types/shell';
 
 const props = defineProps<{ tab: ShellPanelTabDefinition }>();
 const { t } = useI18n({ useScope: 'global' });

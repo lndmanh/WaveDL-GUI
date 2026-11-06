@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { motion } from 'motion-v';
 import { SHELL_RAIL_WIDTH, SHELL_RAIL_GUTTER } from '../../constants/shellRail';
-import type { ConnectionStatus } from '../../lib/connection-session';
 import {
   sectionPath,
   SHELL_ACTION_NAVIGATION,
   SHELL_PRIMARY_NAVIGATION,
 } from '../../shell/sections';
-import { type WorkstationSection } from '../../lib/shell-test-ids';
+import type { ConnectionStatus } from '~~/types/connection-session';
+import type { WorkstationSection } from '~~/types/shell';
 
 const props = defineProps<{
   status: ConnectionStatus;

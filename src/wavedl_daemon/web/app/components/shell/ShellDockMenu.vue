@@ -2,19 +2,18 @@
 import { motion } from 'motion-v';
 import { connectionStatusKey } from '../../constants/shellConnection';
 import { Ellipsis, X } from '@lucide/vue';
-
-import type { ShellDockDestination, ShellDockDestinationId } from '../../constants/shellDock';
+import type { ShellNavigationDescriptor, WorkstationSection } from '~~/types/shell';
 
 interface Props {
-  items: readonly ShellDockDestination[];
-  activeId?: ShellDockDestinationId;
+  items: readonly ShellNavigationDescriptor[];
+  activeId?: WorkstationSection;
 }
 
 const props = defineProps<Props>();
 const open = defineModel<boolean>('open', { default: false });
 
 const emit = defineEmits<{
-  select: [item: ShellDockDestination];
+  select: [item: ShellNavigationDescriptor];
   command: [];
 }>();
 
@@ -24,7 +23,7 @@ const statusLabel = computed(() => t(connectionStatusKey[state.value.status]));
 const contentMotion = useMenuContentMotion();
 const itemMotion = useMenuItemMotion();
 
-function selectItem(item: ShellDockDestination) {
+function selectItem(item: ShellNavigationDescriptor) {
   open.value = false;
   emit('select', item);
 }

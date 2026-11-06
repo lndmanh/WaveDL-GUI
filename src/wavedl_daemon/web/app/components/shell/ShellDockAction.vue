@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ShellNavigationDescriptor } from '../../shell/sections';
+import type { ShellNavigationDescriptor } from '~~/types/shell';
 
 const props = defineProps<{
   item: ShellNavigationDescriptor;

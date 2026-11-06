@@ -5,9 +5,8 @@ import {
   SHELL_PANEL_TABS,
   SHELL_PANEL_MAX_WIDTH,
   SHELL_PANEL_MIN_WIDTH,
-  type ShellPanelTabDefinition,
-  type ShellPanelTabId,
 } from '../../shell/constants';
+import type { ShellPanelTabDefinition, ShellPanelTabId } from '~~/types/shell';
 
 const props = defineProps<{
   tabs: readonly ShellPanelTabDefinition[];

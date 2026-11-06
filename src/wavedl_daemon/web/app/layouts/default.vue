@@ -2,10 +2,11 @@
 import { TriangleAlert } from '@lucide/vue';
 import { CLIENT_BUILD_ID } from '../lib/build-identity';
 import type { DaemonApiError } from '../lib/daemon-api';
-import { applyAppearance, loadAppearance, type AppearancePreferences } from '../lib/preferences';
+import { applyAppearance, loadAppearance } from '../lib/preferences';
 import { authRedirect } from '../lib/auth-routing';
 import { navigationPath, runIdForPath, sectionForPath, sectionPath } from '../shell/sections';
 import { connectionStatusKey } from '../constants/shellConnection';
+import type { AppearancePreferences } from '~~/types/preferences';
 
 const router = useRouter();
 const route = useRoute();

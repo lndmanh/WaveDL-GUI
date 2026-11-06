@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue';
-import {
-  SHELL_ACTION_NAVIGATION,
-  SHELL_PRIMARY_NAVIGATION,
-  type ShellNavigationDescriptor,
-} from '../../shell/sections';
-import type { WorkstationSection } from '../../lib/shell-test-ids';
+import { SHELL_ACTION_NAVIGATION, SHELL_PRIMARY_NAVIGATION } from '../../shell/sections';
+import type { ShellNavigationDescriptor, WorkstationSection } from '~~/types/shell';
 
 const open = defineModel<boolean>('open', { default: false });
 const emit = defineEmits<{ navigate: [section: WorkstationSection] }>();
