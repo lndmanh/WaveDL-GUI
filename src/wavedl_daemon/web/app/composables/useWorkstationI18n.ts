@@ -1,8 +1,8 @@
 import { configureValidationLocale } from '../i18n/client-messages';
-import type { WorkstationLocale } from '../i18n/core';
+import type { Locale } from '~~/types/i18n';
 
 /** Appearance preferences are the sole owner of the application's locale. */
-export function provideWorkstationLocale(locale: Readonly<Ref<WorkstationLocale>>): void {
+export function provideWorkstationLocale(locale: Readonly<Ref<Locale>>): void {
   const composer = useI18n({ useScope: 'global' });
   watch(
     locale,

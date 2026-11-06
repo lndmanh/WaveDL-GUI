@@ -1,4 +1,5 @@
-import { isClientDiagnostic, type ClientMessage } from '../i18n/client-messages';
+import { isClientDiagnostic } from '../i18n/client-messages';
+import type { ClientMessage } from '~~/types/i18n';
 
 /** Use only at client-diagnostic render boundaries, never for daemon logs/details. */
 export function useClientMessages() {

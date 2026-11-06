@@ -1,32 +1,18 @@
 import modelSourceHashes from './model-source-hashes.json';
 import modelMessagesVI from './locales/vi/models.json';
-import type { ModelDescription } from '../lib/catalog-api';
-import type { WorkstationLocale } from './core';
-
-export type BundledModelId = keyof typeof modelSourceHashes;
-
-export type ModelMessageKey =
-  | `models.${BundledModelId}.description`
-  | `models.${BundledModelId}.bestFor`
-  | `models.${BundledModelId}.shortDescription`
-  | `models.${BundledModelId}.pros.first`
-  | `models.${BundledModelId}.pros.second`;
-
-export type ModelMessageTranslator = (key: ModelMessageKey) => string;
+import type { ModelDescription } from '~~/types/catalog-api';
+import type {
+  Locale,
+  BundledModelId,
+  ModelMessageTranslator,
+  ModelPresentation,
+} from '~~/types/i18n';
 
 /** Vietnamese model copy is bundled; English remains the daemon's authoritative text. */
 export const bundledModelMessages = {
   vi: modelMessagesVI,
   sourceHashes: modelSourceHashes,
 } as const;
-
-export interface ModelPresentation {
-  readonly shortDescription: string;
-  readonly pros: readonly string[];
-  readonly description: string;
-  readonly bestFor: string;
-  readonly untranslated: boolean;
-}
 
 function isBundledModelId(id: string): id is BundledModelId {
   return Object.hasOwn(modelSourceHashes, id);
@@ -55,7 +41,7 @@ export function hashModelSource(value: string): string {
 /** Unknown IDs and changed daemon metadata remain authoritative, verbatim plaintext. */
 export function modelPresentation(
   model: ModelDescription,
-  locale: WorkstationLocale,
+  locale: Locale,
   translate: ModelMessageTranslator,
 ): ModelPresentation {
   const original = {

@@ -1,6 +1,7 @@
 import trainingOptions from '../../shared/training-options.json';
-import type { RunMonitorSnapshot } from '../lib/run-monitor';
-import type { RunState, RunView } from '../lib/daemon-api';
+import type { RunMonitorSnapshot } from '~~/types/run-monitor';
+import type { RunState, RunView } from '~~/types/daemon-api';
+import type { RuntimeValue } from '~~/types/i18n';
 
 export const workstationNavigationMessageKeys = {
   experiments: 'shell.experiments',
@@ -200,8 +201,6 @@ export const runtimeValues = [
   'cuda',
   'auto',
 ] as const;
-
-export type RuntimeValue = (typeof runtimeValues)[number];
 
 export const runtimeValueMessageKeys: Readonly<Record<RuntimeValue, string | null>> = {
   local: 'project.local',

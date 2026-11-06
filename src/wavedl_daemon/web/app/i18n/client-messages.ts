@@ -3,33 +3,28 @@ import vietnameseClientErrors from './locales/vi/client-errors.json';
 import englishZodLocale from 'zod/v4/locales/en.js';
 import vietnameseZodLocale from 'zod/v4/locales/vi.js';
 import { z } from 'zod';
-import type { MessageParams, WorkstationLocale } from './core';
 import {
   clientDiagnosticSchema,
   customIssueParamsSchema,
 } from '../../shared/schemas/client-diagnostic';
-
-export type ClientErrorKey = keyof typeof englishClientErrors;
-
-export type ClientErrorParams = MessageParams;
+import type {
+  MessageParams,
+  Locale,
+  ClientErrorKey,
+  ClientDiagnostic,
+  ClientMessage,
+} from '~~/types/i18n';
 
 type ClientErrorCatalog = Record<ClientErrorKey, string>;
 
-export interface ClientDiagnostic {
-  readonly clientMessageKey: ClientErrorKey;
-  readonly clientMessageParams?: ClientErrorParams;
-}
-
-export type ClientMessage = string | ClientDiagnostic;
-
-let validationLocale: WorkstationLocale = 'en';
+let validationLocale: Locale = 'en';
 
 /** A client-owned diagnostic whose English Error.message remains API-compatible. */
 export class ClientError extends Error implements ClientDiagnostic {
   constructor(
     readonly clientMessageKey: ClientErrorKey,
     message = englishClientErrors[clientMessageKey],
-    readonly clientMessageParams: ClientErrorParams = {},
+    readonly clientMessageParams: MessageParams = {},
   ) {
     super(message);
     this.name = 'ClientError';
@@ -41,25 +36,25 @@ export class ClientRangeError extends RangeError implements ClientDiagnostic {
   constructor(
     readonly clientMessageKey: ClientErrorKey,
     message = englishClientErrors[clientMessageKey],
-    readonly clientMessageParams: ClientErrorParams = {},
+    readonly clientMessageParams: MessageParams = {},
   ) {
     super(message);
     this.name = 'ClientRangeError';
   }
 }
 
-export function clientError(key: ClientErrorKey, params: ClientErrorParams = {}): ClientError {
+export function clientError(key: ClientErrorKey, params: MessageParams = {}): ClientError {
   return new ClientError(key, interpolate(englishClientErrors[key], params), params);
 }
 
 export function clientRangeError(
   key: ClientErrorKey,
-  params: ClientErrorParams = {},
+  params: MessageParams = {},
 ): ClientRangeError {
   return new ClientRangeError(key, interpolate(englishClientErrors[key], params), params);
 }
 
-function interpolate(template: string, params: ClientErrorParams): string {
+function interpolate(template: string, params: MessageParams): string {
   return template.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (_match, name: string) => {
     const value = params[name];
 
@@ -71,15 +66,15 @@ export function isClientDiagnostic(value: ClientMessage | Error): value is Clien
   return clientDiagnosticSchema.safeParse(value).success;
 }
 
-const localeMessages: Record<WorkstationLocale, ClientErrorCatalog> = {
+const localeMessages: Record<Locale, ClientErrorCatalog> = {
   en: englishClientErrors,
   vi: vietnameseClientErrors,
 };
 
 function translatedClientError(
-  locale: WorkstationLocale,
+  locale: Locale,
   key: ClientErrorKey,
-  params: ClientErrorParams,
+  params: MessageParams,
 ): string | undefined {
   const template = localeMessages[locale][key];
 
@@ -89,7 +84,7 @@ function translatedClientError(
 }
 
 /** Use Zod 4's bundled locale maps and stable keys for product-defined custom issues. */
-export function configureValidationLocale(locale: WorkstationLocale): void {
+export function configureValidationLocale(locale: Locale): void {
   validationLocale = locale;
   z.config({
     localeError:
@@ -106,13 +101,13 @@ export function configureValidationLocale(locale: WorkstationLocale): void {
 }
 
 /** Resolve schema-owned overrides while retaining Zod's built-in map for other issues. */
-export function validationMessage(key: ClientErrorKey, params: ClientErrorParams = {}): string {
+export function validationMessage(key: ClientErrorKey, params: MessageParams = {}): string {
   return interpolate(localeMessages[validationLocale][key], params);
 }
 
 /** Pure helper for non-component callers; raw or daemon-owned text is never reverse-matched. */
 export function translateClientDiagnostic(
-  locale: WorkstationLocale,
+  locale: Locale,
   diagnostic: ClientMessage | Error,
 ): string {
   const parsed = clientDiagnosticSchema.safeParse(diagnostic);
