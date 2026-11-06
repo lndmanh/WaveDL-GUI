@@ -337,7 +337,7 @@ describe('attempt aware fetch stream', () => {
 
     await expect(
       streamRun(api, run, new CursorStore('daemon-a', run, storage), () => undefined),
-    ).rejects.toMatchObject({ code: 'protocol', message: 'Stream requires replay' });
+    ).rejects.toMatchObject({ code: 'protocol', message: 'Live updates need to be reloaded.' });
     expect(saved).toEqual([]);
   });
   it('caps multibyte lines by UTF8 bytes, not character count', async () => {
@@ -345,7 +345,7 @@ describe('attempt aware fetch stream', () => {
       new EventStreamParser(run, INITIAL_CURSOR, () => undefined).push(
         encoder.encode('🌊'.repeat(270000)),
       ),
-    ).rejects.toThrow('line exceeds limit');
+    ).rejects.toThrow('live updates is too long');
   });
   it('refuses cursor stores scoped to a different daemon or run', async () => {
     const urls: string[] = [];

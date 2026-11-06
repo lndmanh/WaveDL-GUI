@@ -160,7 +160,7 @@ describe('locating imported dataset paths', () => {
     });
 
     await expect(api.locate('/srv/data/train.npz', controller.signal)).rejects.toThrow(
-      'discard this result',
+      'Don’t use this result',
     );
   });
 });

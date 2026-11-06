@@ -258,6 +258,118 @@ describe.each(['get', 'list'])('run progress through %s', (method) => {
   });
 });
 
+describe.each(['get', 'list'])('automatic plot metadata through %s', (method) => {
+  it.each([
+    { label: 'omitted', fields: {}, expected: undefined },
+    { label: 'null', fields: { auto_plot: null }, expected: null },
+    {
+      label: 'pending',
+      fields: { auto_plot: { status: 'pending', run_id: null, failure: null } },
+      expected: { status: 'pending', run_id: null, failure: null },
+    },
+    {
+      label: 'submitted',
+      fields: { auto_plot: { status: 'submitted', run_id: matrixId, failure: null } },
+      expected: { status: 'submitted', run_id: matrixId, failure: null },
+    },
+    {
+      label: 'failed',
+      fields: { auto_plot: { status: 'failed', run_id: null, failure: 'No checkpoint' } },
+      expected: { status: 'failed', run_id: null, failure: 'No checkpoint' },
+    },
+  ])('accepts $label metadata', async ({ fields, expected }) => {
+    const body = { ...matrixRun, ...fields };
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
+    );
+
+    api.setToken(token);
+    const run = method === 'list' ? (await api.listRuns())[0] : await api.getRun(matrixId);
+    expect(run?.auto_plot).toEqual(expected);
+  });
+
+  it.each([
+    { status: 'unknown', run_id: null, failure: null },
+    { status: 'pending', run_id: 'invalid', failure: null },
+    { status: 'failed', run_id: null, failure: 42 },
+    { status: 'pending', failure: null },
+    { status: 'failed', run_id: null },
+  ])('rejects malformed metadata %j', async (auto_plot) => {
+    const body = { ...matrixRun, auto_plot };
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
+    );
+
+    api.setToken(token);
+    await expect(method === 'list' ? api.listRuns() : api.getRun(matrixId)).rejects.toMatchObject({
+      code: 'response',
+      clientMessageKey: 'invalidRunResponse',
+    });
+  });
+});
+
+describe('automatic plot retry', () => {
+  it('posts the run action and validates the updated 202 training run', async () => {
+    const body = {
+      ...matrixRun,
+      state: 'completed',
+      auto_plot: { status: 'pending', run_id: null, failure: null },
+    };
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      String(url).endsWith('/health') ? json(health) : json(body, 202),
+    );
+    const api = new DaemonApi(origin, {}, fetcher);
+    const controller = new AbortController();
+
+    api.setToken(token);
+    await expect(api.retryAutomaticPlots(matrixId, controller.signal)).resolves.toEqual({
+      ...body,
+      progress: null,
+    });
+    const request = fetcher.mock.calls.find(([url]) =>
+      String(url).endsWith(`/api/runs/${matrixId}/automatic-plots/retry`),
+    );
+    expect(request?.[1]?.method).toBe('POST');
+    expect(request?.[1]?.body).toBeUndefined();
+    expect(request?.[1]?.signal?.aborted).toBe(false);
+    controller.abort();
+    expect(request?.[1]?.signal?.aborted).toBe(true);
+  });
+
+  it('rejects an invalid run identity before sending a request', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const api = new DaemonApi(origin, {}, fetcher);
+
+    api.setToken(token);
+    await expect(api.retryAutomaticPlots('invalid')).rejects.toMatchObject({ code: 'identity' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ...matrixRun, run_id: '22222222-2222-2222-2222-222222222222' },
+    { ...matrixRun, auto_plot: { status: 'unknown', run_id: null, failure: null } },
+  ])('rejects malformed or foreign retry responses', async (body) => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      String(url).endsWith('/health') ? json(health) : json(body, 202),
+    );
+
+    api.setToken(token);
+    await expect(api.retryAutomaticPlots(matrixId)).rejects.toMatchObject({
+      code: 'response',
+      clientMessageKey: 'invalidRunResponse',
+    });
+  });
+
+  it('preserves ordinary action failures', async () => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      String(url).endsWith('/health') ? json(health) : json({ error: 'Not retryable' }, 409),
+    );
+
+    api.setToken(token);
+    await expect(api.retryAutomaticPlots(matrixId)).rejects.toMatchObject({ code: 'http', status: 409 });
+  });
+});
+
 describe('daemon transport', () => {
   it.each(['/api/datasets/inspect', '/api/datasets/preview'])(
     'keeps a dataset refusal on %s a sanitized request error without retiring the session',
@@ -291,7 +403,7 @@ describe('daemon transport', () => {
     expect(failure).toBeInstanceOf(DaemonApiError);
     expect(failure).toMatchObject({
       code: 'http',
-      message: 'Daemon request failed (503)',
+      message: 'The WaveDL request failed (503).',
       status: 503,
       buildMismatch: false,
       daemonIdentityChanged: false,
@@ -389,7 +501,7 @@ describe('daemon transport', () => {
     );
 
     api.setToken(token);
-    const pending = expect(api.health()).rejects.toThrow('Connection credential changed');
+    const pending = expect(api.health()).rejects.toThrow('Your access key changed');
     api.setToken('replacement');
     respond?.(json({}, 401));
     await pending;
@@ -452,7 +564,7 @@ describe('daemon transport', () => {
 
     const pending = expect(
       api.bootstrap(`${origin}/?bootstrap=once`, () => undefined),
-    ).rejects.toThrow('Connection credential changed');
+    ).rejects.toThrow('Your access key changed');
 
     // Let the response reader begin before revoking its connection scope.
     await Promise.resolve();
@@ -483,7 +595,7 @@ describe('daemon transport', () => {
       );
 
       api.setToken(token);
-      const pending = expect(api.health()).rejects.toThrow('Daemon response timed out');
+      const pending = expect(api.health()).rejects.toThrow('WaveDL took too long to respond');
       await vi.advanceTimersByTimeAsync(30001);
       await pending;
       expect(cancelled).toBe(true);
@@ -507,7 +619,7 @@ describe('daemon transport', () => {
       );
 
       api.setToken(token);
-      const pending = expect(api.health()).rejects.toThrow('Daemon request timed out');
+      const pending = expect(api.health()).rejects.toThrow('The WaveDL request timed out');
       await vi.advanceTimersByTimeAsync(15001);
       await pending;
     } finally {
@@ -517,7 +629,7 @@ describe('daemon transport', () => {
   it.each(['{"daemon_id":"a","daemon_id":"b"}', '{"nested":{"key":1,"k\\u0065y":2}}'])(
     'rejects ambiguous JSON members: %s',
     (text) => {
-      expect(() => parseJson(text)).toThrow('Duplicate JSON member');
+      expect(() => parseJson(text)).toThrow('duplicate key');
     },
   );
   it('allows repeated names in distinct objects and punctuation inside strings', () => {
@@ -530,11 +642,11 @@ describe('daemon transport', () => {
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
     await expect(api.mutate('/api/runs/plan', { text: '🌊'.repeat(300000) })).rejects.toThrow(
-      'Request exceeds byte limit',
+      'The request is too large to send',
     );
     await expect(
       api.mutate('/api/runs/plan', {}, { idempotencyKey: 'bad\u0000key' }),
-    ).rejects.toThrow('Invalid idempotency key');
+    ).rejects.toThrow('request key used to prevent duplicate runs is invalid');
     expect(fetcher).not.toHaveBeenCalled();
   });
   it('strips bootstrap and pasted secrets before exchange and keeps bearer only in memory', async () => {
@@ -782,7 +894,7 @@ describe('daemon transport', () => {
     vi.stubGlobal('location', { origin: 'http://localhost:8765' });
 
     try {
-      expect(() => new DaemonApi(origin)).toThrow('current browser origin');
+      expect(() => new DaemonApi(origin)).toThrow('same server address as this page');
     } finally {
       vi.unstubAllGlobals();
     }

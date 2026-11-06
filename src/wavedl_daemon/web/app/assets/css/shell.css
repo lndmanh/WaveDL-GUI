@@ -18,35 +18,36 @@
  * background and card are only four lightness points apart.
  */
 [data-shell] {
-  --shell-ground: oklch(0.965 0.006 268);
+  --shell-ground: oklch(0.962 0.005 262);
 }
 
 .dark [data-shell] {
-  --shell-ground: oklch(0.13 0.016 265);
+  --shell-ground: oklch(0.12 0.006 262);
 }
 
 /*
  * The rail's glass can only refract what sits behind it, and the rail runs the
  * full height of the left edge — so the ground carries a colour field at the
  * bottom-left as well as the top. Without it the lower pills frost empty space
- * and read grey while the upper ones glow.
+ * and read grey while the upper ones glow. Every field stays near the brand hue
+ * so the wash reads as one light source, not a mix of tints.
  */
 .shell-ground {
   background:
     radial-gradient(
-      120% 90% at 12% 4%,
-      color-mix(in oklab, var(--primary) 16%, transparent),
-      transparent 58%
+      110% 80% at 10% 0%,
+      color-mix(in oklab, var(--primary) 12%, transparent),
+      transparent 60%
     ),
     radial-gradient(
-      70% 45% at 2% 88%,
-      color-mix(in oklab, oklch(0.85 0.08 158) 22%, transparent),
+      70% 45% at 0% 92%,
+      color-mix(in oklab, oklch(0.8 0.1 215) 16%, transparent),
       transparent 64%
     ),
     radial-gradient(
-      100% 80% at 92% 96%,
-      color-mix(in oklab, oklch(0.82 0.09 220) 18%, transparent),
-      transparent 60%
+      90% 70% at 96% 100%,
+      color-mix(in oklab, oklch(0.78 0.1 285) 12%, transparent),
+      transparent 62%
     ),
     var(--shell-ground);
 }
@@ -54,19 +55,19 @@
 .dark .shell-ground {
   background:
     radial-gradient(
-      120% 90% at 12% 4%,
-      color-mix(in oklab, var(--primary) 10%, transparent),
-      transparent 58%
+      110% 80% at 10% 0%,
+      color-mix(in oklab, var(--primary) 9%, transparent),
+      transparent 60%
     ),
     radial-gradient(
-      70% 45% at 2% 88%,
-      color-mix(in oklab, oklch(0.6 0.09 168) 16%, transparent),
+      70% 45% at 0% 92%,
+      color-mix(in oklab, oklch(0.55 0.1 220) 12%, transparent),
       transparent 64%
     ),
     radial-gradient(
-      100% 80% at 92% 96%,
-      color-mix(in oklab, oklch(0.55 0.1 250) 16%, transparent),
-      transparent 60%
+      90% 70% at 96% 100%,
+      color-mix(in oklab, oklch(0.5 0.12 285) 10%, transparent),
+      transparent 62%
     ),
     var(--shell-ground);
 }

@@ -21,7 +21,7 @@ export type AppearancePreferences = z.infer<typeof appearanceSchema>;
 
 export const defaultAppearance: AppearancePreferences = {
   theme: 'system',
-  accent: 'neutral',
+  accent: 'blue',
   zoom: 100,
   language: 'en',
 };
@@ -221,6 +221,35 @@ export function resetTrainingPreferences(daemonId: string, storage = browserStor
   }
 }
 
+export function clearDataPreferences(storage = browserStorage()): boolean {
+  try {
+    if (!storage) return false;
+    storage.removeItem(keepSignedInKey);
+    storage.removeItem(shellDockKey);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearLocalPreferences(
+  daemonId: string | null,
+  storage = browserStorage(),
+): boolean {
+  try {
+    if (!storage) return false;
+    const daemonKey = daemonId ? trainingKey(daemonId) : null;
+    storage.removeItem(appearanceKey);
+
+    if (daemonKey) storage.removeItem(daemonKey);
+
+    return clearDataPreferences(storage);
+  } catch {
+    return false;
+  }
+}
+
 /** Apply only when creating a fresh draft, never to a approved/submitted plan. */
 export function applyTrainingPreferences(
   current: TrainingConfig,
@@ -241,18 +270,6 @@ export function applyAppearance(
   root.style.colorScheme = dark ? 'dark' : 'light';
   root.style.fontSize = `${(16 * parsed.zoom) / 100}px`;
 
-  const colors = {
-    neutral: '',
-    blue: 'oklch(0.55 0.17 255)',
-    violet: 'oklch(0.55 0.18 300)',
-    green: 'oklch(0.50 0.12 155)',
-  };
-
-  for (const name of ['--primary', '--ring']) {
-    if (parsed.accent === 'neutral') root.style.removeProperty(name);
-    else root.style.setProperty(name, colors[parsed.accent]);
-  }
-
-  if (parsed.accent === 'neutral') root.style.removeProperty('--primary-foreground');
-  else root.style.setProperty('--primary-foreground', '#ffffff');
+  // Each accent's light and dark palette lives in theme.css under [data-accent].
+  root.dataset.accent = parsed.accent;
 }

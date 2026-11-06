@@ -15,6 +15,7 @@ export interface RunTransport {
   getRun(runId: string, signal: AbortSignal): Promise<RunView>;
   openEvents(runId: string, cursor: Cursor, signal: AbortSignal): Promise<Response>;
   cancelRun(runId: string, signal: AbortSignal): Promise<RunView>;
+  retryAutomaticPlots?(runId: string, signal: AbortSignal): Promise<RunView>;
 }
 
 export interface RunMonitorSnapshot {
@@ -25,6 +26,7 @@ export interface RunMonitorSnapshot {
   stream: 'connecting' | 'live' | 'reconnecting' | 'stopped' | 'error';
   message: ClientMessage | Error;
   cancellation: 'idle' | 'sending' | 'requested' | 'unknown';
+  automaticPlotRetry: boolean;
   truncated: boolean;
   metrics: readonly MetricRecord[];
   summary: MetricSummary;
@@ -65,6 +67,8 @@ function fatal(cause: unknown): boolean {
 export class RunMonitor {
   #abort = new AbortController();
   #cancelAbort = new AbortController();
+  // Terminal observation stops before a user can retry; page pause still retires this action.
+  #plotRetryAbort = new AbortController();
   #cursor: Cursor = { ...INITIAL_CURSOR };
   #listeners = new Set<(snapshot: RunMonitorSnapshot) => void>();
   #started = false;
@@ -92,6 +96,7 @@ export class RunMonitor {
     stream: 'connecting',
     message: '',
     cancellation: 'idle',
+    automaticPlotRetry: false,
     truncated: false,
     metrics: [],
     summary: { progress: null, best: null, latest: null },
@@ -329,6 +334,7 @@ export class RunMonitor {
 
     if (!allowed() || !this.#abort.signal.aborted) return;
     this.#abort = new AbortController();
+    this.#plotRetryAbort = new AbortController();
     this.#started = false;
     await this.start();
   }
@@ -397,7 +403,8 @@ export class RunMonitor {
           if (this.#replayTargetStatus === 'pending') this.#replayTargetStatus = 'invalidated';
           this.#flushCursor();
           this.#publish({ stream: 'stopped' });
-          this.#abort.abort();
+
+          if (this.#snapshot.run.auto_plot?.status !== 'pending') this.#abort.abort();
           break;
         }
       } catch (error) {
@@ -425,6 +432,14 @@ export class RunMonitor {
 
       try {
         await this.#refresh();
+
+        if (
+          this.#snapshot.stream === 'stopped' &&
+          this.#snapshot.run &&
+          terminalRun(this.#snapshot.run) &&
+          this.#snapshot.run.auto_plot?.status !== 'pending'
+        )
+          this.#abort.abort();
       } catch (error) {
         if (this.#abort.signal.aborted) break;
         this.#publish({ message: message(error) });
@@ -480,16 +495,60 @@ export class RunMonitor {
       }
     }
   }
+  async retryAutomaticPlots(): Promise<void> {
+    const retry = this.transport.retryAutomaticPlots;
+    const signal = this.#plotRetryAbort.signal;
+
+    if (
+      !retry ||
+      signal.aborted ||
+      this.#snapshot.automaticPlotRetry ||
+      this.#snapshot.run?.auto_plot?.status !== 'failed'
+    )
+      return;
+    this.#publish({ automaticPlotRetry: true, message: '' });
+
+    try {
+      const run = await retry(this.runId, signal);
+
+      if (signal.aborted) return;
+      this.#refreshRevision++;
+      this.#accept(run);
+
+      if (run.auto_plot?.status === 'pending' && this.#abort.signal.aborted) {
+        await this.#running;
+
+        if (signal.aborted) return;
+        this.#abort = new AbortController();
+        this.#running = this.#poll();
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        this.#publish({ message: error instanceof Error ? error : message(error) });
+
+        if (fatal(error)) {
+          this.#abort.abort();
+          this.#flushCursor();
+
+          if (error instanceof DaemonApiError) this.reportFailure(error);
+        }
+      }
+    } finally {
+      if (!signal.aborted) this.#publish({ automaticPlotRetry: false });
+    }
+  }
   stop(): void {
     this.#cancelAbort.abort();
     this.pause();
   }
   pause(): void {
+    this.#plotRetryAbort.abort();
     this.#flushCursor();
     this.#abort.abort();
     this.#publish({
       stream: 'stopped',
       freshness: 'stale',
+      automaticPlotRetry: false,
       liveEvents: [],
       metrics: [],
       summary: { progress: null, best: null, latest: null },

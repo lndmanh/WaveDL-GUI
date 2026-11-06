@@ -8,6 +8,7 @@ import {
 import { inferenceDefaults } from '../../shared/schemas/result-request';
 import {
   planRuntimeMessageKeys,
+  runOperationMessageKeys,
   trainingChoiceLabel,
   trainingFieldMessageKeys,
   trainingSectionMessageKeys,
@@ -75,6 +76,13 @@ export function buildPlanSummary(
     return key ? t(key) : text(value);
   }
 
+  function operationLabel(value: string | undefined): string {
+    if (value === 'train' || value === 'test' || value === 'plot')
+      return t(runOperationMessageKeys[value]);
+
+    return text(value);
+  }
+
   const parsed = planManifestSchema.safeParse(plan?.preview.spec);
   const document = parsed.success ? parsed.data : null;
   const manifest = document?.manifest ?? null;
@@ -120,11 +128,12 @@ export function buildPlanSummary(
     },
     { label: t('training.model.label'), value: display(config.model) },
     { label: t('project.whereItRuns'), value: runtimeLabel(preview.target) },
+    { label: t('project.contextOperation'), value: operationLabel(review?.operation) },
     { label: t('project.hardware'), value: runtimeLabel(runtime?.device) },
     { label: t('builder.distributed'), value: parallelism },
   ] : [
     { label: t('project.contextBackend'), value: runtimeLabel(preview.target) },
-    { label: t('project.contextOperation'), value: text(review?.operation) },
+    { label: t('project.contextOperation'), value: operationLabel(review?.operation) },
     { label: t('project.contextDevice'), value: runtimeLabel(runtime?.device) },
     { label: t('project.contextTopology'), value: parallelism },
   ];

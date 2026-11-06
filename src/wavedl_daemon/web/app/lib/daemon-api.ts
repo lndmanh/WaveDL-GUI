@@ -63,6 +63,11 @@ export interface RunView {
   created_at?: string | null;
   summary?: RunSummary | null;
   progress?: RunProgress | null;
+  auto_plot?: {
+    status: 'pending' | 'submitted' | 'failed';
+    run_id: string | null;
+    failure: string | null;
+  } | null;
 }
 
 /** The approved inputs that name a run; never live state. */
@@ -656,6 +661,14 @@ export class DaemonApi {
     if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
 
     return runView(await this.mutate(`/api/runs/${runId}/cancel`, undefined, { signal }), runId);
+  }
+  async retryAutomaticPlots(runId: string, signal?: AbortSignal): Promise<RunView> {
+    if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
+
+    return runView(
+      await this.mutate(`/api/runs/${runId}/automatic-plots/retry`, undefined, { signal }),
+      runId,
+    );
   }
   async mutate(
     path: string,

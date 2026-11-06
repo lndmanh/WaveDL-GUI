@@ -13,7 +13,7 @@ defineOptions({ name: 'WorkstationNewPage' });
 // The kept-alive root: descendants that mount while hidden inherit its state.
 usePageActive();
 
-const { api, session, monitorRun, automaticPlots } = useWorkstation();
+const { api, session, monitorRun } = useWorkstation();
 
 function submitted(run: RunView): void {
   void monitorRun(run.run_id);
@@ -26,7 +26,6 @@ function submitted(run: RunView): void {
       v-show="!!api"
       :session="session"
       @submitted="submitted"
-      @submitted-plan="automaticPlots.capture"
     />
   </ShellPage>
 </template>

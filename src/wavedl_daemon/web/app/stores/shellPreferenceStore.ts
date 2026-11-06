@@ -19,5 +19,10 @@ export const useShellPreferencesStore = defineStore('shellPreferences', () => {
     updateSlots(DEFAULT_SHELL_DOCK_SLOTS);
   }
 
-  return { dockSlots, saveFailed, updateSlots, reset };
+  function reload(): void {
+    storedDockSlots.value = loadShellDockSlots();
+    saveFailed.value = false;
+  }
+
+  return { dockSlots, saveFailed, updateSlots, reset, reload };
 });

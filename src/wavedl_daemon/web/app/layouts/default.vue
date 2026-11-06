@@ -39,8 +39,6 @@ const connection = useDaemonConnection({
 });
 
 const { state, api } = connection;
-const automaticPlots = useAutomaticPlots(connection.session);
-const automaticPlotState = automaticPlots.state;
 const auth = useWorkstationAuth();
 const appearance = shallowRef(loadAppearance());
 const section = computed(() => sectionForPath(route.path));
@@ -90,7 +88,6 @@ const context = {
   state,
   api,
   session: connection.session,
-  automaticPlots,
   reportFailure,
   revision,
   appearance,
@@ -118,12 +115,6 @@ onScopeDispose(() => systemTheme?.removeEventListener('change', refreshAppearanc
 
 <template>
   <WorkstationShell v-if="section !== 'connection'" :status="state.status" :section="section">
-    <AutomaticPlotStatus
-      :state="automaticPlotState"
-      @retry="automaticPlots.retry"
-      @stop="automaticPlots.stop"
-      @monitor="monitorRun"
-    />
     <Alert
       v-if="state.message"
       data-connection-notice
@@ -143,12 +134,6 @@ onScopeDispose(() => systemTheme?.removeEventListener('change', refreshAppearanc
     <span class="sr-only" aria-live="polite" aria-atomic="true">{{
       t(connectionStatusKey[state.status])
     }}</span>
-    <AutomaticPlotStatus
-      :state="automaticPlotState"
-      @retry="automaticPlots.retry"
-      @stop="automaticPlots.stop"
-      @monitor="monitorRun"
-    />
     <slot />
     <BuildSkewPrompt :visible="state.buildMismatch === true" />
   </div>

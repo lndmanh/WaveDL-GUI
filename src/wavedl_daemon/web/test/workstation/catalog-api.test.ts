@@ -211,11 +211,11 @@ describe('scoped daemon catalogues', () => {
     expect(Object.isFrozen(selected)).toBe(true);
     api.assertSelection(selected);
     expect(fetcher.mock.calls.every(([url]) => String(url).endsWith('/api/health'))).toBe(true);
-    expect(() => api.assertSelection({ ...selected })).toThrow('Select again');
+    expect(() => api.assertSelection({ ...selected })).toThrow('Choose again');
     const other = await setup({});
-    expect(() => other.api.assertSelection(selected)).toThrow('Select again');
+    expect(() => other.api.assertSelection(selected)).toThrow('Choose again');
     await session.reconnect('token');
-    expect(() => api.assertSelection(selected)).toThrow('Select again');
+    expect(() => api.assertSelection(selected)).toThrow('Choose again');
   });
   it.each([
     '',
@@ -320,18 +320,18 @@ describe('scoped daemon catalogues', () => {
     expect(selected.path).toBe(path);
     expect(Object.isFrozen(selected)).toBe(true);
     new CatalogApi(session).assertSelection(selected);
-    expect(() => api.assertSelection({ ...selected })).toThrow('Select again');
+    expect(() => api.assertSelection({ ...selected })).toThrow('Choose again');
     session.detach();
-    expect(() => api.assertSelection(selected)).toThrow('Select again');
+    expect(() => api.assertSelection(selected)).toThrow('Choose again');
   });
   it('rejects reused selections after same-daemon reconnection or in another session', async () => {
     const fixture = { root: 'data', relative_path: 'a.npz', path: '/srv/a.npz', kind: 'file' };
     const first = await setup(fixture);
     const second = await setup(fixture);
     const selected = await first.api.resolve('data', 'a.npz');
-    expect(() => second.api.assertSelection(selected)).toThrow('Select again');
+    expect(() => second.api.assertSelection(selected)).toThrow('Choose again');
     await first.session.reconnect('token');
-    expect(() => first.api.assertSelection(selected)).toThrow('Select again');
+    expect(() => first.api.assertSelection(selected)).toThrow('Choose again');
   });
   it('fails closed on forwarded-port daemon replacement before reading a catalogue', async () => {
     const { api, session, skew, fetcher } = await setup({ roots: [] });

@@ -2,6 +2,7 @@
 import { Field as VeeField, useForm } from 'vee-validate';
 import {
   appearanceSchema,
+  defaultAppearance,
   loadAppearance,
   saveAppearance,
   applyAppearance,
@@ -12,43 +13,33 @@ import { appearanceControlMessageKeys } from '../../i18n/dynamic-keys';
 const props = defineProps<{ appearance?: AppearancePreferences }>();
 const emit = defineEmits<{ changed: [value: AppearancePreferences] }>();
 const { clientMessage } = useClientMessages();
-const message = shallowRef('');
-
-const { handleSubmit, resetForm } = useForm({
+const { t } = useI18n({ useScope: 'global' });
+const { values, resetForm } = useForm({
   validationSchema: appearanceSchema,
   initialValues: props.appearance ?? loadAppearance(),
 });
 
-let media: MediaQueryList | null = null;
-let applied = props.appearance ?? loadAppearance();
+const autosave = useAutosaveForm({
+  schema: appearanceSchema,
+  values: () => values,
+  save: (value) => {
+    const saved = saveAppearance(value);
+    applyAppearance(value, document.documentElement, window.matchMedia('(prefers-color-scheme: dark)').matches);
+    emit('changed', value);
 
-function applySystem() {
-  applyAppearance(applied, document.documentElement, media?.matches ?? false);
-}
+    return saved;
+  },
+});
+const { status } = autosave;
 
-function controlChange(name: string, value: string, change: (value: string | number) => void) {
+function controlChange(name: string, value: string, change: (value: string | number) => void): void {
   change(name === 'zoom' ? Number(value) : value);
+  autosave.queue(true);
 }
 
-onMounted(() => {
-  media = window.matchMedia('(prefers-color-scheme: dark)');
-  media.addEventListener('change', applySystem);
-});
-
-onUnmounted(() => media?.removeEventListener('change', applySystem));
-
-const submit = handleSubmit((value) => {
-  const parsed = appearanceSchema.parse(value);
-  applied = parsed;
-  const saved = saveAppearance(parsed);
-  applyAppearance(parsed, document.documentElement, media?.matches ?? false);
-  emit('changed', parsed);
-  message.value = saved ? 'shell.browserPreferencesSaved' : 'shell.appearanceSessionOnly';
-});
-
-function reload() {
-  resetForm({ values: applied });
-  message.value = '';
+function resetDefaults(): void {
+  resetForm({ values: { ...defaultAppearance } });
+  autosave.queue(true);
 }
 
 const controls = [
@@ -74,106 +65,84 @@ const controls = [
   {
     name: 'zoom',
     label: appearanceControlMessageKeys.interfaceScale,
+    options: [90, 100, 110, 125].map((value) => ({ value, label: 'shell.settingsScalePercent' })),
+  },
+  {
+    name: 'language',
+    label: 'shell.language',
     options: [
-      { value: 90, label: '90%' },
-      { value: 100, label: '100%' },
-      { value: 110, label: '110%' },
-      { value: 125, label: '125%' },
+      { value: 'en', label: 'shell.settingsEnglish' },
+      { value: 'vi', label: 'shell.settingsVietnamese' },
     ],
   },
 ];
-
-const { t } = useI18n({ useScope: 'global' });
 </script>
+
 <template>
-  <section aria-labelledby="appearance-heading" class="flex flex-col gap-4">
-    <div class="flex items-center justify-between gap-2">
-      <h2 id="appearance-heading" class="font-medium">
-        {{ t('shell.appearanceAndGuidance') }}
-      </h2>
-      <ShellInfo :label="t('shell.appearanceAndGuidance')" :text="t('shell.appearanceHelp')" />
-    </div>
-    <p class="text-sm text-muted-foreground">{{ t('shell.appearanceSummary') }}</p>
-    <form class="flex flex-col gap-4" @submit.prevent="submit">
-      <FieldGroup>
-        <VeeField
-          v-for="control in controls"
-          :key="control.name"
-          v-slot="{ field, errors }"
-          :name="control.name"
-        >
-          <Field :data-invalid="!!errors.length">
-            <FieldLabel :for="`preference-${control.name}`">{{ t(control.label) }}</FieldLabel>
-            <Select
-              :model-value="String(field.value)"
-              @update:model-value="
-                controlChange(control.name, String($event ?? ''), field.onChange)
-              "
-            >
-              <SelectTrigger
-                :id="`preference-${control.name}`"
-                :name="field.name"
-                :aria-invalid="!!errors.length"
-                class="w-full"
-                @blur="field.onBlur"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem
-                    v-for="option in control.options"
-                    :key="option.value"
-                    :value="String(option.value)"
-                    :data-value="String(option.value)"
-                  >
-                    {{ option.label.includes('.') ? t(option.label) : option.label }}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
-          </Field>
-        </VeeField>
-        <VeeField v-slot="{ field, errors }" name="language">
-          <Field :data-invalid="!!errors.length">
-            <FieldLabel for="preference-language">{{ t('shell.language') }}</FieldLabel>
-            <Select
-              :model-value="String(field.value)"
-              @update:model-value="controlChange('language', String($event ?? ''), field.onChange)"
-            >
-              <SelectTrigger
-                id="preference-language"
-                :name="field.name"
-                :aria-invalid="!!errors.length"
-                class="w-full"
-                @blur="field.onBlur"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="en" data-value="en">English</SelectItem>
-                  <SelectItem value="vi" data-value="vi">Tiếng Việt</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldDescription>{{ t('shell.languageHelp') }}</FieldDescription>
-          </Field>
-        </VeeField>
-      </FieldGroup>
-      <div class="flex flex-wrap gap-2">
-        <Button type="submit">{{ t('shell.saveAppearance') }}</Button
-        ><Button type="button" variant="outline" @click="reload">{{
-          t('shell.discardChanges')
-        }}</Button>
+  <section aria-labelledby="appearance-heading" class="flex flex-col gap-6">
+    <header class="flex flex-wrap items-start justify-between gap-3">
+      <div class="space-y-1.5">
+        <h2 id="appearance-heading" class="text-xl font-semibold tracking-tight">
+          {{ t('shell.settingsGeneral') }}
+        </h2>
+        <p class="text-sm text-muted-foreground">{{ t('shell.appearanceSummary') }}</p>
       </div>
-      <p role="status" class="text-sm text-muted-foreground">
-        {{ message ? t(message) : '' }}
-      </p>
-      <p class="text-sm text-muted-foreground">
-        {{ t('shell.appearanceHelp') }}
-      </p>
-    </form>
+      <SettingsSaveStatus :status="status" />
+    </header>
+    <Card>
+      <CardContent>
+        <form @submit.prevent @focusout="autosave.flush">
+          <FieldGroup class="gap-0">
+            <VeeField
+              v-for="control in controls"
+              :key="control.name"
+              v-slot="{ field, errors }"
+              :name="control.name"
+            >
+              <Field
+                :data-invalid="!!errors.length"
+                class="gap-3 border-b py-5 first:pt-0 last:border-0 last:pb-0 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(10rem,16rem)] sm:items-center"
+              >
+                <div class="space-y-1">
+                  <FieldLabel :for="`preference-${control.name}`">{{ t(control.label) }}</FieldLabel>
+                  <FieldDescription v-if="control.name === 'language'">{{ t('shell.languageHelp') }}</FieldDescription>
+                </div>
+                <div class="space-y-2">
+                  <Select
+                    :model-value="String(field.value)"
+                    @update:model-value="controlChange(control.name, String($event ?? ''), field.onChange)"
+                  >
+                    <SelectTrigger
+                      :id="`preference-${control.name}`"
+                      :name="field.name"
+                      :aria-invalid="!!errors.length"
+                      class="min-h-11 w-full"
+                      @blur="field.onBlur"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem v-for="option in control.options" :key="option.value" :value="String(option.value)" class="min-h-11">
+                          {{ t(option.label, { value: option.value }) }}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" />
+                </div>
+              </Field>
+            </VeeField>
+          </FieldGroup>
+        </form>
+      </CardContent>
+    </Card>
+    <div>
+      <SettingsResetDialog
+        :label="t('shell.settingsResetDefaults')"
+        :description="t('shell.settingsResetAppearanceHelp')"
+        @confirm="resetDefaults"
+      />
+    </div>
   </section>
 </template>

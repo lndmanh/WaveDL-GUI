@@ -70,18 +70,17 @@ import type { ReadinessItem } from './PlanInspector.vue';
 import type { PipelineBlock } from './RunPipeline.vue';
 import type { DraftSummary } from './StartPanel.vue';
 
-const { locale, t } = useI18n({ useScope: 'global' });
+const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 
 function stateLabel(state: RunView['state']): string {
-  return locale.value === 'en' ? state : t(runStateMessageKeys[state]);
+  return t(runStateMessageKeys[state]);
 }
 
 const props = defineProps<{ session: ConnectionSession }>();
 
 const emit = defineEmits<{
   submitted: [run: RunView];
-  submittedPlan: [run: RunView, plan: PlanView];
 }>();
 
 const panelId = useId();
@@ -157,7 +156,7 @@ function announce(value: Omit<Notice, 'id'>) {
 
 const displayMessage = computed(() =>
   message.value === 'reported' && reportedRun.value
-    ? t('project.daemonReportsStateSubmission', {
+    ? t('project.reportedStatus', {
         state: stateLabel(reportedRun.value.state),
         submission: t(
           reportedRun.value.submission_requested
@@ -761,25 +760,21 @@ function preview(event?: Event) {
 
 function submit() {
   return work('submit', async (signal, isCurrent) => {
-    const approved = workflow.approved;
     const run = await workflow.submit(signal);
 
     if (!isCurrent()) return;
     acknowledged.value = run;
-    message.value = 'project.daemonAcknowledgedThisExactPlan';
+    message.value = 'project.runStarted';
     const id = daemonId();
 
     if (id) clearProjectDraft(id);
     submittedDraft = true;
     emit('submitted', run);
-
-    if (approved && isCurrent()) emit('submittedPlan', run, approved);
   });
 }
 
 function status() {
   return work('status', async (signal, isCurrent) => {
-    const approved = workflow.approved;
     const run = await workflow.status(signal);
 
     if (!isCurrent()) return;
@@ -789,8 +784,6 @@ function status() {
     if (run.submission_requested) {
       acknowledged.value = run;
       emit('submitted', run);
-
-      if (approved && isCurrent()) emit('submittedPlan', run, approved);
     }
   });
 }
@@ -1010,9 +1003,9 @@ const blocks = computed<PipelineBlock[]>(() => [
     value: planSubmitted.value
       ? t('builder.submitted')
       : plan.value
-        ? t('project.readyToStart')
+        ? t('builder.planReady')
         : canPreview.value
-          ? t('project.readyToReview')
+          ? t('builder.readyToPlan')
           : t('builder.planPending'),
     detail:
       planSubmitted.value && acknowledged.value
@@ -1026,10 +1019,10 @@ const blocks = computed<PipelineBlock[]>(() => [
 
 const reviewLabel = computed(() =>
   planSubmitted.value
-    ? t('project.viewTrainingRun')
+    ? t('project.viewRun')
     : plan.value
       ? t('builder.reviewPlan')
-      : t('project.reviewTraining'),
+      : t('builder.createPlan'),
 );
 
 const readiness = computed<ReadinessItem[]>(() =>
@@ -1368,7 +1361,6 @@ const projectStyles = {
           :can-preview="canPreview"
           :busy="busy"
           :connected="connected"
-          :state-label="acknowledged ? stateLabel(acknowledged.state) : ''"
           @submit="submit"
           @status="status"
           @open="openAcknowledged"

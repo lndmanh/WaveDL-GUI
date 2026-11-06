@@ -92,31 +92,29 @@ function restoreFocus(event: Event) {
       :show-close-button="false"
       @close-auto-focus="restoreFocus"
     >
-      <DialogTitle class="sr-only">{{ t('shell.commandPalette') }}</DialogTitle>
-      <DialogClose as-child
-        ><Button
-          class="shell-overlay-close"
-          variant="ghost"
-          size="icon"
-          :aria-label="t('shell.closeOverlay')"
-          ><X aria-hidden="true" /></Button
-      ></DialogClose>
-      <DialogDescription class="sr-only">{{
-        t('shell.commandPaletteNavigation')
-      }}</DialogDescription>
-      <Input
-        id="shell-command-input"
-        v-model="query"
-        type="search"
-        role="combobox"
-        :aria-label="t('shell.commandPalette')"
-        :aria-expanded="open"
-        :aria-activedescendant="activeOptionId"
-        aria-autocomplete="list"
-        aria-controls="shell-command-results"
-        :placeholder="t('shell.commandPalettePlaceholder')"
-        @keydown="keydown"
-      />
+      <div class="flex flex-row gap-2">
+        <Input
+          id="shell-command-input"
+          v-model="query"
+          type="search"
+          role="combobox"
+          :aria-label="t('shell.commandPalette')"
+          :aria-expanded="open"
+          :aria-activedescendant="activeOptionId"
+          aria-autocomplete="list"
+          aria-controls="shell-command-results"
+          :placeholder="t('shell.commandPalettePlaceholder')"
+          @keydown="keydown"
+        />
+        <DialogClose as-child
+          ><Button
+            class="shell-overlay-close"
+            variant="ghost"
+            size="icon"
+            :aria-label="t('shell.closeOverlay')"
+            ><X aria-hidden="true" /></Button
+        ></DialogClose>
+      </div>
       <div id="shell-command-results" role="listbox" class="shell-command-results">
         <Button
           v-for="(item, index) in filtered"

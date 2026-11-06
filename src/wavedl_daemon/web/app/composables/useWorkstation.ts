@@ -2,19 +2,15 @@ import type { ShallowRef } from 'vue';
 import type { DaemonApiError } from '../lib/daemon-api';
 import type { ConnectionSession } from '../lib/connection-session';
 import type { AppearancePreferences } from '../lib/preferences';
-import type { useAutomaticPlots } from './useAutomaticPlots';
 import type { useDaemonConnection } from './useDaemonConnection';
 
 export type WorkstationConnection = ReturnType<typeof useDaemonConnection>;
-
-export type WorkstationAutomaticPlots = ReturnType<typeof useAutomaticPlots>;
 
 export interface WorkstationContext {
   connection: WorkstationConnection;
   state: WorkstationConnection['state'];
   api: WorkstationConnection['api'];
   session: ConnectionSession;
-  automaticPlots: WorkstationAutomaticPlots;
   reportFailure: ComputedRef<(error: DaemonApiError) => void>;
   revision: ComputedRef<number>;
   appearance: ShallowRef<AppearancePreferences>;
