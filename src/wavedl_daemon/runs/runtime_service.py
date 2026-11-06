@@ -135,13 +135,7 @@ class ServiceSession:
                 if self.browse_roots is not None
                 else {"runs": self.settings.run_root}
             )
-            self.inspector = DatasetInspector(
-                sys.executable,
-                Path.cwd(),
-                self.pool,
-                budget=self.budget,
-                catalog=self.catalog,
-            )
+            self.inspector = DatasetInspector(self.pool, catalog=self.catalog)
             self.previewer = DatasetPreviewService(
                 sys.executable, Path.cwd(), self.pool, self.catalog
             )
@@ -176,6 +170,7 @@ class ServiceSession:
         self.errors[source] = failure
 
     async def stop(self):
+        await self.previewer.close()
         if self._pump_task is not None:
             self._pump_task.cancel()
             await asyncio.gather(self._pump_task, return_exceptions=True)
