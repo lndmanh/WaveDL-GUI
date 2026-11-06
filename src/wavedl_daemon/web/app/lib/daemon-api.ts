@@ -12,89 +12,21 @@ import {
   isUuid,
 } from './daemon-api-schemas';
 import { runEvidenceSchema } from '../../shared/schemas/run-evidence';
-import { clientError, type ClientErrorKey, type ClientErrorParams } from '../i18n/client-messages';
-
-import type { Json, JsonObject } from '../../shared/schemas/json';
-
-export type { Json, JsonObject } from '../../shared/schemas/json';
-
-export interface Health {
-  daemon_id: string;
-  build_id: string;
-  protocol_min: number;
-  protocol_max: number;
-}
-
-export interface SessionGrant {
-  access_token: string;
-  token_type: 'Bearer';
-  expires_at: number;
-  daemon_id: string;
-}
-
-export interface IdentityPins {
-  daemonId?: string;
-  buildId?: string;
-  protocolVersion?: number;
-}
+import { clientError } from '../i18n/client-messages';
+import type { ClientErrorKey, MessageParams } from '~~/types/i18n';
+import type { Json, JsonObject } from '~~/types/json';
+import type {
+  Health,
+  SessionGrant,
+  IdentityPins,
+  RunState,
+  RunView,
+  PlanView,
+  ApiErrorCode,
+  DaemonApiErrorOptions,
+} from '~~/types/daemon-api';
 
 export { RUN_STATES };
-
-export type RunState = (typeof RUN_STATES)[number];
-
-export interface RunProgress {
-  epoch: number;
-  totalEpochs: number;
-  fraction: number;
-}
-
-export interface RunView {
-  plan_id: string;
-  run_id: string;
-  request_id: string;
-  backend: string;
-  operation: 'train' | 'test' | 'plot';
-  attempt: number | null;
-  state: RunState;
-  uncertainty: boolean;
-  submission_requested: boolean;
-  cancellation_requested: boolean;
-  evidence: z.output<typeof runEvidenceSchema> | null;
-  created_at?: string | null;
-  summary?: RunSummary | null;
-  progress?: RunProgress | null;
-  auto_plot?: {
-    status: 'pending' | 'submitted' | 'failed';
-    run_id: string | null;
-    failure: string | null;
-  } | null;
-}
-
-/** The approved inputs that name a run; never live state. */
-export interface RunSummary {
-  name: string | null;
-  model: string | null;
-  data_path: string | null;
-  epochs: number | null;
-  cv: number | null;
-  source_run_id: string | null;
-}
-
-export interface PlanView {
-  plan_id: string;
-  run_id: string;
-  request_id: string;
-  preview: z.output<typeof planPreviewSchema>;
-}
-
-export type ApiErrorCode = 'authentication' | 'identity' | 'protocol' | 'response' | 'http';
-
-export interface DaemonApiErrorOptions {
-  status?: number;
-  buildMismatch?: boolean;
-  daemonIdentityChanged?: boolean;
-  params?: ClientErrorParams;
-}
 
 export class DaemonApiError extends Error {
   constructor(
@@ -104,7 +36,7 @@ export class DaemonApiError extends Error {
     public readonly buildMismatch = false,
     public readonly daemonIdentityChanged = false,
     public readonly clientMessageKey?: ClientErrorKey,
-    public readonly clientMessageParams?: ClientErrorParams,
+    public readonly clientMessageParams?: MessageParams,
   ) {
     super(message);
     this.name = 'DaemonApiError';
