@@ -1,6 +1,6 @@
-import type { RunView } from '../lib/daemon-api';
 import { pathName, relativeTime, runCreatedAt } from '../lib/run-overview';
 import { runOperationMessageKeys } from '../i18n/dynamic-keys';
+import type { RunView } from '~~/types/daemon-api';
 
 /** One naming rule for a run everywhere it is listed or opened. */
 export function useRunLabels() {

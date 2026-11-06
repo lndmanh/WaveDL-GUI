@@ -1,38 +1,13 @@
-import { clientError, type ClientMessage } from '../i18n/client-messages';
-import { DaemonApiError, type RunView } from './daemon-api';
-import {
-  CursorStore,
-  EventStreamParser,
-  INITIAL_CURSOR,
-  type Cursor,
-  type RunEvent,
-} from './event-stream';
-import { MetricHistory, type MetricRecord, type MetricSummary } from './metric-history';
+import { clientError } from '../i18n/client-messages';
+import { DaemonApiError } from './daemon-api';
+import { CursorStore, EventStreamParser, INITIAL_CURSOR } from './event-stream';
+import { MetricHistory } from './metric-history';
 
 import { diagnosticPayloadSchema } from '../../shared/schemas/run-monitor';
-
-export interface RunTransport {
-  getRun(runId: string, signal: AbortSignal): Promise<RunView>;
-  openEvents(runId: string, cursor: Cursor, signal: AbortSignal): Promise<Response>;
-  cancelRun(runId: string, signal: AbortSignal): Promise<RunView>;
-  retryAutomaticPlots?(runId: string, signal: AbortSignal): Promise<RunView>;
-}
-
-export interface RunMonitorSnapshot {
-  run: RunView | null;
-  freshness: 'unconfirmed' | 'fresh' | 'stale';
-  events: readonly RunEvent[];
-  liveEvents: readonly RunEvent[];
-  stream: 'connecting' | 'live' | 'reconnecting' | 'stopped' | 'error';
-  message: ClientMessage | Error;
-  cancellation: 'idle' | 'sending' | 'requested' | 'unknown';
-  automaticPlotRetry: boolean;
-  truncated: boolean;
-  metrics: readonly MetricRecord[];
-  summary: MetricSummary;
-}
-
-export type ReplayTargetStatus = 'none' | 'pending' | 'verified' | 'invalidated';
+import type { ClientMessage } from '~~/types/i18n';
+import type { RunView } from '~~/types/daemon-api';
+import type { Cursor, RunEvent } from '~~/types/event-stream';
+import type { RunTransport, RunMonitorSnapshot, ReplayTargetStatus } from '~~/types/run-monitor';
 
 export function terminalRun(run: RunView): boolean {
   return !run.uncertainty && ['completed', 'failed', 'cancelled'].includes(run.state);
