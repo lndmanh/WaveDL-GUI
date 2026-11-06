@@ -6,7 +6,7 @@ import sqlite3
 import threading
 import time
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID, uuid4
 
 import httpx
@@ -66,15 +66,16 @@ def environment(tmp_path):
             owner="tester",
             dispatch_lock=lock,
         )
+        pool = BoundedThreadPool(WorkBudget())
+        controller = RunController(log, plans, pool, local=local)
         service = RunService(
             settings,
             plans,
             log,
             {"local": local, "slurm": slurm},
             automatic_plots=AutomaticPlotStore(connection),
+            training_complete=controller.training_complete,
         )
-        pool = BoundedThreadPool(WorkBudget())
-        controller = RunController(log, plans, pool, local=local)
         app = create_app(
             settings, token="lifecycle-test-token", daemon_id="test", build_id="test"
         )
@@ -835,12 +836,14 @@ def test_list_and_get_share_current_running_progress(environment, stats, expecte
     listed = request(environment.app, "GET", "/api/runs")
     assert got.status_code == listed.status_code == 200
     assert got.json()["progress"] == expected
+    assert got.json()["activity"] == "training"
     assert listed.json()["runs"] == [got.json()]
     assert got.json()["summary"]["epochs"] == 2
     cancelled = request(environment.app, "POST", f"/api/runs/{run_id}/cancel")
     assert cancelled.status_code == 202
     assert cancelled.json()["state"] == "stopping"
     assert cancelled.json()["progress"] == expected
+    assert cancelled.json()["activity"] is None
 
 
 def test_progress_fallback_never_uses_a_previous_metrics_total(environment):
@@ -1180,3 +1183,31 @@ def test_response_models_preserve_populated_evidence_bodies(environment):
         "restart_count",
     }
     assert expected["evidence"]["phase"] == "running"
+
+
+@pytest.mark.parametrize("operation", ["test", "plot"])
+def test_non_training_activity_is_null_even_with_metrics(environment, operation):
+    run_id = planned_and_submitted(environment, "other-operation")["run_id"]
+    view = tick_until(environment, run_id, lambda view: view.state == "running")
+    environment.log.append(
+        RunId(run_id), [Metric(1, {}, 20)], expect=Expect(offset=(view.attempt, 0))
+    )
+    assert (
+        environment.service._with_progress(replace(view, operation=operation)).activity
+        is None
+    )
+
+
+def test_activity_is_starting_before_metrics_and_null_after_exit(environment):
+    app = environment.app
+    plan = request(app, "POST", "/api/runs/plan", body=payload(), key="activity").json()
+    run_id = plan["run_id"]
+    assert request(app, "GET", f"/api/runs/{run_id}").json()["activity"] is None
+    submitted = request(app, "POST", "/api/runs", body={"plan_id": plan["plan_id"]})
+    assert submitted.json()["activity"] is None
+    tick_until(environment, run_id, lambda view: view.state == "running")
+    assert request(app, "GET", f"/api/runs/{run_id}").json()["activity"] == "starting"
+    assert request(app, "GET", "/api/runs").json()["runs"][0]["activity"] == "starting"
+    environment.supervisor.launches[-1].finish(0)
+    tick_until(environment, run_id, lambda view: view.state == "completed")
+    assert request(app, "GET", f"/api/runs/{run_id}").json()["activity"] is None

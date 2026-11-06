@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { jsonObjectSchema, jsonSchema } from '../../shared/schemas/json';
+import { cursorSchema, runEventSchema } from '../../shared/schemas/event-stream';
 
 // Run only after boundedJson/parseJson validate the JSON domain. All response
 // objects historically permit additive fields; DTO schemas strip only at return.
@@ -30,6 +31,7 @@ export function isUuid(value: unknown): value is string {
 
 const integer = z.number().refine(Number.isSafeInteger);
 const positive = integer.refine((value) => value > 0);
+const nonnegative = integer.refine((value) => value >= 0);
 const printable = z.string().regex(/^[\x21-\x7e]{1,256}$/);
 
 export const planPreviewSchema = jsonObjectSchema.and(
@@ -56,6 +58,7 @@ export const runViewSchema = z.object({
   cancellation_requested: z.boolean(),
   evidence: jsonObjectSchema.nullable(),
   progress: runProgressSchema.nullable().optional(),
+  activity: z.enum(['starting', 'training', 'finalizing']).nullable().optional(),
   auto_plot: z
     .object({
       status: z.enum(['pending', 'submitted', 'failed']),
@@ -101,3 +104,26 @@ export const planSchema = z.object({
 });
 
 export const runListSchema = z.object({ runs: z.array(jsonSchema) });
+
+export const outputChunkSchema = z
+  .object({
+    attempt: positive,
+    offset: nonnegative,
+    next_offset: nonnegative,
+    size: nonnegative,
+    text: z.string().max(64 * 1024),
+    eof: z.boolean(),
+  })
+  .refine(
+    (chunk) =>
+      chunk.offset <= chunk.next_offset &&
+      chunk.next_offset <= chunk.size &&
+      chunk.next_offset - chunk.offset <= 64 * 1024 &&
+      chunk.eof === (chunk.next_offset >= chunk.size),
+  );
+
+export const eventPageSchema = z.object({
+  events: z.array(runEventSchema).max(256),
+  next_cursor: cursorSchema,
+  more: z.boolean(),
+});

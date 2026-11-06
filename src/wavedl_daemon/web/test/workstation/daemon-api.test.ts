@@ -67,6 +67,271 @@ const matrixEvidence = {
 
 const matrixPlan = { plan_id: matrixId, run_id: matrixId, request_id: matrixId, preview: {} };
 
+describe('trainer output transport', () => {
+  const chunk = { attempt: 2, offset: 10, next_offset: 16, size: 16, text: 'hello\n', eof: true };
+
+  it('requests the current tail without query parameters and preserves byte cursors', async () => {
+    const body = { attempt: 1, offset: 2, next_offset: 5, size: 5, text: 'ế', eof: true };
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : body),
+    );
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    await expect(api.getOutput(matrixId)).resolves.toEqual(body);
+    const request = fetcher.mock.calls[1];
+    expect(String(request?.[0])).toBe(`${origin}/api/runs/${matrixId}/output`);
+    expect(new Headers(request?.[1]?.headers).get('Authorization')).toBe(`Bearer ${token}`);
+    expect(new Headers(request?.[1]?.headers).get('X-WaveDL-Daemon-ID')).toBe(health.daemon_id);
+    expect(request?.[1]?.cache).toBe('no-store');
+    expect(request?.[1]?.credentials).toBe('omit');
+  });
+
+  it('sends optional attempt and offset, including an explicit zero offset', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : chunk),
+    );
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    await expect(api.getOutput(matrixId, { attempt: 2, offset: 10 }, undefined, health.daemon_id))
+      .resolves.toEqual(chunk);
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(`${origin}/api/runs/${matrixId}/output?attempt=2&offset=10`);
+    await api.getOutput(matrixId, { offset: 0 });
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(`${origin}/api/runs/${matrixId}/output?offset=0`);
+    await api.getOutput(matrixId, { attempt: 2 });
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(`${origin}/api/runs/${matrixId}/output?attempt=2`);
+  });
+
+  it.each([
+    { attempt: 1, offset: 0, next_offset: 0, size: 0, text: '', eof: true },
+    { attempt: 1, offset: 0, next_offset: 0, size: 1, text: '', eof: false },
+    { attempt: 1, offset: 0, next_offset: 2, size: 4, text: 'ok', eof: false },
+  ])('accepts missing files, held-back UTF-8 and partial windows %j', async (body) => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : body),
+    );
+    api.setToken(token);
+    await expect(api.getOutput(matrixId)).resolves.toEqual(body);
+  });
+
+  it.each([
+    {},
+    { ...chunk, attempt: 0 },
+    { ...chunk, attempt: 1 },
+    { ...chunk, offset: -1 },
+    { ...chunk, offset: 1.5 },
+    { ...chunk, next_offset: 9 },
+    { ...chunk, size: 15 },
+    { ...chunk, size: Number.MAX_SAFE_INTEGER + 1 },
+    { ...chunk, text: null },
+    { ...chunk, text: 'a'.repeat(64 * 1024 + 1) },
+    { ...chunk, next_offset: 70_000, size: 70_000 },
+    { ...chunk, eof: 'true' },
+    { ...chunk, eof: false },
+  ])('rejects malformed or wrong-attempt output %j', async (body) => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : body),
+    );
+    api.setToken(token);
+    await expect(api.getOutput(matrixId, { attempt: 2 })).rejects.toMatchObject({ code: 'response' });
+  });
+
+  it('rejects invalid requests before fetching and pins the expected daemon', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => json(health));
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    await expect(api.getOutput('../other')).rejects.toMatchObject({ code: 'response' });
+
+    for (const attempt of [0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])
+      await expect(api.getOutput(matrixId, { attempt })).rejects.toMatchObject({ code: 'response' });
+
+    for (const offset of [-1, 0.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
+      await expect(api.getOutput(matrixId, { offset })).rejects.toMatchObject({ code: 'response' });
+    expect(fetcher).not.toHaveBeenCalled();
+    await expect(api.getOutput(matrixId, {}, undefined, 'another-daemon'))
+      .rejects.toMatchObject({ code: 'identity' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires authentication and forwards HTTP errors, including a deleted run', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      new URL(String(url)).pathname === '/api/health' ? json(health) : json({ error: 'Missing run' }, 404),
+    );
+    const api = new DaemonApi(origin, {}, fetcher);
+    await expect(api.getOutput(matrixId)).rejects.toMatchObject({ code: 'authentication' });
+    expect(fetcher).not.toHaveBeenCalled();
+    api.setToken(token);
+    await expect(api.getOutput(matrixId)).rejects.toMatchObject({ code: 'http', status: 404 });
+  });
+
+  it('uses rotated credentials and rejects pre-aborted requests without fetching', async () => {
+    const replacement = grant(health.daemon_id, 'o');
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      const path = new URL(String(url)).pathname;
+
+      return json(path === '/api/health' ? health : path === '/api/session' ? replacement : chunk);
+    });
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    await api.getOutput(matrixId);
+    await api.rotateSession();
+    await api.getOutput(matrixId, { offset: 16 });
+    expect(new Headers(fetcher.mock.lastCall?.[1]?.headers).get('Authorization'))
+      .toBe(`Bearer ${replacement.access_token}`);
+    const abort = new AbortController();
+    abort.abort();
+    const requests = fetcher.mock.calls.length;
+    await expect(api.getOutput(matrixId, {}, abort.signal)).rejects.toBeInstanceOf(DaemonApiError);
+    expect(fetcher).toHaveBeenCalledTimes(requests);
+  });
+
+  it('forwards an in-flight abort to the output request', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      if (new URL(String(url)).pathname === '/api/health') return json(health);
+
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    const abort = new AbortController();
+    const pending = expect(api.getOutput(matrixId, {}, abort.signal)).rejects.toBeDefined();
+
+    for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+    const request = fetcher.mock.lastCall;
+    expect(String(request?.[0])).toBe(`${origin}/api/runs/${matrixId}/output`);
+    expect(request?.[1]?.signal?.aborted).toBe(false);
+    abort.abort();
+    expect(request?.[1]?.signal?.aborted).toBe(true);
+    await pending;
+  });
+
+  it('does not publish output after the connection credential is revoked', async () => {
+    let body: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const stream = new ReadableStream<Uint8Array>({ start(controller) { body = controller; } });
+    const api = new DaemonApi(origin, {}, async (url) =>
+      new URL(String(url)).pathname === '/api/health'
+        ? json(health)
+        : new Response(stream, { headers: { 'Content-Type': 'application/json' } }),
+    );
+    api.setToken(token);
+    const pending = expect(api.getOutput(matrixId)).rejects.toMatchObject({ code: 'authentication' });
+
+    for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+    api.clearToken();
+    body?.enqueue(new TextEncoder().encode(JSON.stringify(chunk)));
+    body?.close();
+    await pending;
+  });
+});
+
+describe('event page transport', () => {
+  const cursor = { attempt: 0, seq: -1 };
+  const event = {
+    protocol: 'wavedl-run',
+    version: 2,
+    run_id: matrixId,
+    attempt: 1,
+    seq: 0,
+    type: 'metric',
+    ts: '2026-10-07T00:00:00Z',
+    payload: { name: 'loss', value: 0.5, step: 1 },
+  };
+  const page = { events: [event], next_cursor: { attempt: 1, seq: 0 }, more: false };
+
+  it('validates shared event envelopes and sends bounded, authenticated cursor queries', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : page),
+    );
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    await expect(api.getEventPage(matrixId, cursor, undefined, health.daemon_id, 10)).resolves.toEqual(page);
+    const request = fetcher.mock.calls[1];
+    expect(String(request?.[0])).toBe(`${origin}/api/runs/${matrixId}/events/page?attempt=0&seq=-1&limit=10`);
+    expect(new Headers(request?.[1]?.headers).get('Authorization')).toBe(`Bearer ${token}`);
+    expect(request?.[1]?.cache).toBe('no-store');
+    expect(request?.[1]?.credentials).toBe('omit');
+  });
+
+  it.each([
+    {},
+    { ...page, events: null },
+    { ...page, more: 'false' },
+    { ...page, next_cursor: { attempt: 0, seq: 0 } },
+    { ...page, events: [{ ...event, version: 1 }] },
+    { ...page, events: [{ ...event, run_id: 'foreign' }] },
+    { ...page, events: [event, event] },
+    { ...page, next_cursor: { attempt: 1, seq: 1 } },
+    { events: [], next_cursor: cursor, more: true },
+  ])('rejects malformed or uncommitted page progress %j', async (body) => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : body),
+    );
+    api.setToken(token);
+    await expect(api.getEventPage(matrixId, cursor)).rejects.toBeInstanceOf(DaemonApiError);
+  });
+
+  it('keeps an empty page at the requested sparse cursor', async () => {
+    const after = { attempt: 2, seq: 100 };
+    const empty = { events: [], next_cursor: after, more: false };
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : empty),
+    );
+    api.setToken(token);
+    await expect(api.getEventPage(matrixId, after)).resolves.toEqual(empty);
+  });
+
+  it('rejects invalid limits and a cursor belonging to another daemon before fetching a page', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => json(health));
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+
+    for (const limit of [0, 257, 1.5, Number.NaN])
+      await expect(api.getEventPage(matrixId, cursor, undefined, undefined, limit)).rejects.toMatchObject({ code: 'response' });
+    expect(fetcher).not.toHaveBeenCalled();
+    await expect(api.getEventPage(matrixId, cursor, undefined, 'another-daemon')).rejects.toMatchObject({ code: 'identity' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses rotated session credentials on the next page and respects caller abort', async () => {
+    const replacement = grant(health.daemon_id, 'r');
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      const path = new URL(String(url)).pathname;
+
+      return json(path === '/api/health' ? health : path === '/api/session' ? replacement : page);
+    });
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    await api.getEventPage(matrixId, cursor);
+    await api.rotateSession();
+    await api.getEventPage(matrixId, cursor);
+    expect(new Headers(fetcher.mock.lastCall?.[1]?.headers).get('Authorization')).toBe(`Bearer ${replacement.access_token}`);
+    const abort = new AbortController();
+    abort.abort();
+    const requests = fetcher.mock.calls.length;
+    await expect(api.getEventPage(matrixId, cursor, abort.signal)).rejects.toBeInstanceOf(DaemonApiError);
+    expect(fetcher).toHaveBeenCalledTimes(requests);
+  });
+
+  it('does not publish a page after the connection credential is revoked', async () => {
+    let body: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const stream = new ReadableStream<Uint8Array>({ start(controller) { body = controller; } });
+    const api = new DaemonApi(origin, {}, async (url) =>
+      new URL(String(url)).pathname === '/api/health'
+        ? json(health)
+        : new Response(stream, { headers: { 'Content-Type': 'application/json' } }),
+    );
+    api.setToken(token);
+    const pending = expect(api.getEventPage(matrixId, cursor)).rejects.toMatchObject({ code: 'authentication' });
+
+    for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+    api.clearToken();
+    body?.enqueue(new TextEncoder().encode(JSON.stringify(page)));
+    body?.close();
+    await pending;
+  });
+});
+
 describe('plan preview boundary', () => {
   it('keeps additive preview fields but requires a present spec to be an object', () => {
     expect(planSchema.safeParse(matrixPlan).success).toBe(true);
@@ -255,6 +520,38 @@ describe.each(['get', 'list'])('run progress through %s', (method) => {
     api.setToken(token);
     const run = method === 'list' ? (await api.listRuns())[0] : await api.getRun(matrixId);
     expect(run?.progress).toEqual(expected);
+  });
+});
+
+describe.each(['get', 'list'])('run activity through %s', (method) => {
+  it.each([
+    { label: 'omitted', fields: {}, expected: undefined },
+    { label: 'null', fields: { activity: null }, expected: null },
+    { label: 'starting', fields: { activity: 'starting' }, expected: 'starting' },
+    { label: 'training', fields: { activity: 'training' }, expected: 'training' },
+    { label: 'finalizing', fields: { activity: 'finalizing' }, expected: 'finalizing' },
+  ])('accepts $label activity', async ({ fields, expected }) => {
+    const body = { ...matrixRun, ...fields };
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
+    );
+
+    api.setToken(token);
+    const run = method === 'list' ? (await api.listRuns())[0] : await api.getRun(matrixId);
+    expect(run?.activity).toEqual(expected);
+  });
+
+  it.each(['running', 'completed', '', 42, true, {}])('rejects malformed activity %j', async (activity) => {
+    const body = { ...matrixRun, activity };
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
+    );
+
+    api.setToken(token);
+    await expect(method === 'list' ? api.listRuns() : api.getRun(matrixId)).rejects.toMatchObject({
+      code: 'response',
+      clientMessageKey: 'invalidRunResponse',
+    });
   });
 });
 

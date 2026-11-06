@@ -306,6 +306,7 @@ def create_app(
         from wavedl_daemon.http.events import event_routes
         from wavedl_daemon.http.host import host_routes
         from wavedl_daemon.http.inspection import inspection_routes
+        from wavedl_daemon.http.output import output_routes
         from wavedl_daemon.http.preview import preview_routes
         from wavedl_daemon.http.runs import lifecycle_routes
 
@@ -322,6 +323,7 @@ def create_app(
             )
         )
         routes.extend(artifact_routes(services.pool, services.run_service.layout))
+        routes.extend(output_routes(services.pool, services.run_service))
 
     from wavedl_daemon.http.static import static_routes
 

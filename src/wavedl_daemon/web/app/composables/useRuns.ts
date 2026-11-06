@@ -93,6 +93,7 @@ export function useRuns(
         getRun: (id, signal) =>
           api.getRun(id, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
         openEvents: (id, cursor, signal) => api.openEvents(id, cursor, signal, daemonId),
+        getEventPage: (id, cursor, signal) => api.getEventPage(id, cursor, signal, daemonId),
         cancelRun: (id, signal) =>
           api.cancelRun(id, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
         retryAutomaticPlots: (id, signal) =>

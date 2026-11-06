@@ -128,6 +128,7 @@ class RunResponse(WireModel):
     created_at: str | None
     summary: dict[str, JsonValue] | None
     progress: RunProgressView | None
+    activity: Literal["starting", "training", "finalizing"] | None
     auto_plot: AutomaticPlotView | None
 
 

@@ -34,7 +34,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 # The child records what it was started with next to the attempt file it was
-# given, because the supervisor keeps process output in memory only.
+# given, so the tests can inspect the exact launch arguments.
 STUB = """
 import json,os,signal,subprocess,sys,time
 if sys.argv[1] == '-c':
@@ -141,6 +141,8 @@ def test_spawn_claims_the_attempt_and_names_its_files(tmp_path, dispatch):
         assert exited(backend, handle) == LocalExit(0, None)
         paths = plan.spec.paths
         assert paths.attempt(1).stat().st_mode & 0o777 == 0o700
+        assert paths.output_log(1).is_file()
+        assert paths.output_log(1).stat().st_mode & 0o777 == 0o600
         assert paths.output.is_dir()
         started = child(plan)
         assert started["argv"][-4:] == [

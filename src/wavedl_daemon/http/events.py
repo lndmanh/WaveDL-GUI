@@ -6,6 +6,7 @@ Author: Ngo Duc Manh Le (manh@nnsvn.me)
 from __future__ import annotations
 
 import inspect
+import json
 import re
 from uuid import UUID
 
@@ -13,11 +14,12 @@ from fastapi import APIRouter
 from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import StreamingResponse
+from starlette.responses import JSONResponse, StreamingResponse
 
 from wavedl_daemon.events.streaming import EVENT_SERVICE_ERRORS, stream_events
-from wavedl_daemon.http.schemas.common import API_ERRORS
-from wavedl_daemon.storage.run_log import validate_cursor
+from wavedl_daemon.http.schemas.common import API_ERRORS, NO_STORE
+from wavedl_daemon.http.schemas.events import EventCursor, EventPage
+from wavedl_daemon.storage.run_log import encode, validate_cursor
 
 
 def _identity(request):
@@ -119,6 +121,50 @@ def event_routes(*, event_log, broker, resolve_plan):
                 broker.unsubscribe(subscription)
             raise
 
+    async def events_page(run_id: str, request: Request):
+        run_id = _identity(request)
+        try:
+            await resolve(resolve_plan(run_id))
+        except KeyError:
+            raise HTTPException(404, "Unknown run") from None
+        except EVENT_SERVICE_ERRORS:
+            raise HTTPException(503, "Event service unavailable") from None
+        try:
+            query = request.query_params
+            if any(len(query.getlist(key)) > 1 for key in ("attempt", "seq", "limit")):
+                raise ValueError("Duplicate event query")
+            if bool("attempt" in query) != bool("seq" in query):
+                raise ValueError("Both cursor coordinates required")
+            cursor = validate_cursor(
+                (
+                    _number(query.get("attempt", "0"), 0),
+                    _number(query.get("seq", "-1"), -1),
+                )
+            )
+            limit = _number(query.get("limit", "256"), 1)
+            if limit > 256:
+                raise ValueError("Invalid page limit")
+        except ValueError:
+            raise HTTPException(400, "Invalid event cursor or limit") from None
+        try:
+            events = await resolve(event_log.read_after(run_id, cursor, limit=limit))
+            next_cursor = (events[-1].attempt, events[-1].seq) if events else cursor
+            # read_after also imposes a byte budget, so len(events) < limit
+            # does not establish exhaustion. A one-row lookahead does.
+            more = (
+                bool(await resolve(event_log.read_after(run_id, next_cursor, limit=1)))
+                if events
+                else False
+            )
+            page = EventPage(
+                events=[json.loads(encode(event)) for event in events],
+                next_cursor=EventCursor(attempt=next_cursor[0], seq=next_cursor[1]),
+                more=more,
+            )
+            return JSONResponse(page.model_dump(), headers=NO_STORE)
+        except EVENT_SERVICE_ERRORS:
+            raise HTTPException(503, "Event service unavailable") from None
+
     router = APIRouter()
     router.add_api_route(
         "/api/runs/{run_id}/events",
@@ -128,5 +174,13 @@ def event_routes(*, event_log, broker, resolve_plan):
         methods=["GET", "HEAD"],
         response_class=StreamingResponse,
         response_model=None,
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}/events/page",
+        events_page,
+        operation_id="read_event_page",
+        responses=API_ERRORS,
+        methods=["GET", "HEAD"],
+        response_model=EventPage,
     )
     return [route for route in router.routes if isinstance(route, APIRoute)]

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from wavedl_daemon.runs.layout import RunPaths
+    from wavedl_daemon.runs.output import OutputSource
     from wavedl_daemon.runs.service import PlanResponse, RunResponse
 
 
@@ -288,3 +289,13 @@ class AsyncRunService:
 
     async def layout(self, run_id: str) -> RunPaths:
         return await self._call("layout", run_id)
+
+    async def output_source(
+        self, run_id: str, attempt: int | None = None
+    ) -> OutputSource:
+        from wavedl_daemon.runs.output import resolve_output
+
+        def invoke(session):
+            return resolve_output(getattr(session, "runs", session), run_id, attempt)
+
+        return await self.host.call(invoke)

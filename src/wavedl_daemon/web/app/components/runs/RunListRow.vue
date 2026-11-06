@@ -2,7 +2,7 @@
 import { cn } from '@/lib/utils';
 import { CircleX } from '@lucide/vue';
 import { relativeTime, runCreatedAt } from '../../lib/run-overview';
-import { runStateMessageKeys } from '../../i18n/dynamic-keys';
+import { runActivityMessageKeysFor, runStateMessageKeys } from '../../i18n/dynamic-keys';
 import type { RunView } from '~~/types/daemon-api';
 import type { RunColumn } from '~~/types/run-overview';
 
@@ -66,9 +66,12 @@ const longTime = computed(() =>
   created.value ? relativeTime(created.value, props.now, locale.value) : '–',
 );
 
+const activity = computed(() => runActivityMessageKeysFor(props.run));
+const activityLabel = computed(() => (activity.value ? t(activity.value.label) : null));
+
 const stateLabel = computed(
   () =>
-    `${t(runStateMessageKeys[props.run.state])}${props.stale ? t('runs.stale') : ''}${props.run.uncertainty ? t('runs.uncertain') : ''}`,
+    `${t(runStateMessageKeys[props.run.state])}${activityLabel.value ? ` · ${activityLabel.value}` : ''}${props.stale ? t('runs.stale') : ''}${props.run.uncertainty ? t('runs.uncertain') : ''}`,
 );
 
 const progressLabel = computed(() =>
@@ -123,6 +126,13 @@ function selectCell(event: MouseEvent) {
             )
           "
         >
+          <span
+            v-if="folded && activityLabel"
+            class="max-w-32 truncate"
+            :title="activityLabel"
+            aria-live="polite"
+          >{{ activityLabel }}</span
+          >
           <time
             class="shrink-0 whitespace-nowrap"
             :datetime="created?.toISOString()"
@@ -183,7 +193,7 @@ function selectCell(event: MouseEvent) {
       :inert="folded"
     >
       <div v-if="column.id === 'state'" :class="cn(styles.cell, styles.state)">
-        <RunStateChip :run="run" :stale="stale" />
+        <RunStateChip :run="run" :stale="stale" compact />
       </div>
       <div v-else :class="cn(styles.cell, 'flex items-center text-muted-foreground')">
         <time

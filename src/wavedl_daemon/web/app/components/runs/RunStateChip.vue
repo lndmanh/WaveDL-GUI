@@ -17,7 +17,7 @@ import {
   WifiOff,
 } from '@lucide/vue';
 
-import { runStateMessageKeys } from '../../i18n/dynamic-keys';
+import { runActivityMessageKeysFor, runStateMessageKeys } from '../../i18n/dynamic-keys';
 import type { RunState, RunView } from '~~/types/daemon-api';
 import type { MetricSummary } from '~~/types/metric-history';
 
@@ -66,16 +66,24 @@ const props = defineProps<{
   stale?: boolean;
   progress?: StateProgress | null;
   explanation?: string;
+  compact?: boolean;
 }>();
 
 const { t } = useI18n({ useScope: 'global' });
 const tooltipOpen = shallowRef(false);
 const metadata = computed(() => stateMeta[props.run.state]);
 const uncertain = computed(() => Boolean(props.run.uncertainty || metadata.value.dashed));
+const activity = computed(() => runActivityMessageKeysFor(props.run));
+const activityLabel = computed(() => (activity.value ? t(activity.value.label) : null));
+const activityHint = computed(() => (activity.value?.hint ? t(activity.value.hint) : null));
 const label = computed(() => t(runStateMessageKeys[props.run.state]));
+const accessibleLabel = computed(() =>
+  [label.value, activityLabel.value, activityHint.value].filter(Boolean).join(' · '),
+);
 
+const currentProgress = computed(() => props.progress ?? props.run.progress);
 const progressPercent = computed(() => {
-  const fraction = props.progress?.fraction;
+  const fraction = currentProgress.value?.fraction;
 
   if (fraction === null || fraction === undefined || !Number.isFinite(fraction)) return 0;
 
@@ -83,7 +91,7 @@ const progressPercent = computed(() => {
 });
 
 const hasProgress = computed(
-  () => props.run.state === 'running' && props.progress !== null && props.progress !== undefined,
+  () => !props.compact && props.run.state === 'running' && Boolean(currentProgress.value),
 );
 
 const chipClasses = computed(() => ({
@@ -100,23 +108,29 @@ const badgeVariant = computed<'outline' | Exclude<StateTone, 'blue'>>(() =>
 );
 
 const tooltipNeeded = computed(
-  () => uncertain.value || props.stale === true || Boolean(props.explanation),
+  () => uncertain.value || props.stale === true || Boolean(props.explanation || activityHint.value),
 );
 
 const tooltipNotes = computed(() => [
   ...(uncertain.value || props.stale ? [t('runs.lifecycleNote')] : []),
   ...(props.explanation ? [props.explanation] : []),
+  ...(activityHint.value ? [activityHint.value] : []),
 ]);
 </script>
 <template>
   <TooltipProvider>
     <span class="inline-flex flex-col items-start gap-1 min-w-0 max-w-full">
+      <!-- Announce only activity transitions, not every epoch tick or every list row. -->
+      <span v-if="!compact" class="sr-only" aria-live="polite" aria-atomic="true">{{
+        activityLabel ?? ''
+      }}</span>
       <Tooltip :open="tooltipOpen" @update:open="tooltipOpen = $event">
         <TooltipTrigger as-child>
           <Badge
             :variant="badgeVariant"
             :class="chipClasses"
             :data-run-state="run.state"
+            :title="accessibleLabel"
             :data-run-icon="metadata.iconName"
             :data-effective-icon="
               run.uncertainty && run.state !== 'running' ? 'circle-help' : metadata.iconName
@@ -133,7 +147,7 @@ const tooltipNotes = computed(() => [
             @keydown.enter.prevent.stop="tooltipOpen = !tooltipOpen"
             @keydown.space.prevent.stop="tooltipOpen = !tooltipOpen"
             :tabindex="tooltipNeeded ? 0 : undefined"
-            :aria-label="`${label}${stale ? t('runs.stale') : ''}${run.uncertainty ? t('runs.uncertain') : ''}`"
+            :aria-label="`${accessibleLabel}${stale ? t('runs.stale') : ''}${run.uncertainty ? t('runs.uncertain') : ''}`"
           >
             <WifiOff v-if="stale" data-lucide-icon="wifi-off" aria-hidden="true" />
             <component
@@ -151,7 +165,8 @@ const tooltipNotes = computed(() => [
               data-lucide-icon="circle-help"
               aria-hidden="true"
             />
-            <span>{{ label }}</span>
+            <span>{{ compact && activityLabel ? activityLabel : label }}</span>
+            <span v-if="activityLabel && !compact">· {{ activityLabel }}</span>
             <span v-if="stale">{{ t('runs.stale') }}</span>
             <span v-if="run.uncertainty">{{ t('runs.uncertain') }}</span>
           </Badge>
@@ -160,6 +175,9 @@ const tooltipNotes = computed(() => [
           <p v-for="note in tooltipNotes" :key="note">{{ note }}</p>
         </TooltipContent>
       </Tooltip>
+      <span v-if="activityHint && !compact" class="text-xs text-muted-foreground wrap-anywhere">
+        {{ activityHint }}
+      </span>
       <div
         v-if="hasProgress"
         class="flex items-center gap-[0.4rem] text-muted-foreground text-[0.7rem]"
@@ -169,7 +187,9 @@ const tooltipNotes = computed(() => [
           class="w-20 min-w-20"
           :aria-label="t('runs.epochProgress')"
         />
-        <span>{{ t('runs.epoch', { epoch: progress?.epoch, total: progress?.totalEpochs }) }}</span>
+        <span>{{
+          t('runs.epoch', { epoch: currentProgress?.epoch, total: currentProgress?.totalEpochs })
+        }}</span>
       </div>
     </span>
   </TooltipProvider>

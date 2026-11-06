@@ -291,7 +291,13 @@ class LocalExecution:
                 if self._closed:
                     raise RuntimeError("Local backend closed during the probe")
                 process = self._supervisor.start(
-                    ProcessSpec(argv, cwd, environment, inherit_environment=False),
+                    ProcessSpec(
+                        argv,
+                        cwd,
+                        environment,
+                        inherit_environment=False,
+                        output_log=plan.spec.paths.output_log(attempt),
+                    ),
                     output_limit=self._output_limit,
                 )
                 handle = LocalHandle(process.pid, secrets.token_urlsafe(32))

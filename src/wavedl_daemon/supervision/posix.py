@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import TYPE_CHECKING
 
 from .base import (
     ProcessResult,
@@ -26,15 +27,33 @@ from .base import (
     validate_output_limit,
     validate_seconds,
 )
+from .output import OutputLog
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+# torch_shm_manager starts a separate session and holds inherited stderr for
+# about two seconds after its clients exit. Allow shutdown, not indefinite escape.
+POST_EXIT_DRAIN_SECONDS = 10
+CANCEL_DRAIN_SECONDS = 1
 
 
 class POSIXSupervisor:
-    def start(self, spec: ProcessSpec, *, output_limit: int = 1048576) -> POSIXProcess:
+    def start(
+        self,
+        spec: ProcessSpec,
+        *,
+        output_limit: int = 1048576,
+        post_exit_drain_seconds: float = POST_EXIT_DRAIN_SECONDS,
+    ) -> POSIXProcess:
         if os.name != "posix":
             raise OSError("POSIX supervision requires POSIX")
         if not isinstance(spec, ProcessSpec):
             raise ValueError("spec must be a ProcessSpec")
         validate_output_limit(output_limit)
+        validate_seconds(post_exit_drain_seconds, "post_exit_drain_seconds")
         environment = os.environ.copy() if spec.inherit_environment else {}
         if spec.environment is not None:
             environment.update(spec.environment)
@@ -49,15 +68,25 @@ class POSIXSupervisor:
             start_new_session=True,
             shell=False,
         )
-        return POSIXProcess(process, output_limit)
+        return POSIXProcess(
+            process, output_limit, spec.output_log, post_exit_drain_seconds
+        )
 
 
 class POSIXProcess:
     """A single worker owns signalling, draining, reaping, and finalization."""
 
-    def __init__(self, process: subprocess.Popen, output_limit: int):
+    def __init__(
+        self,
+        process: subprocess.Popen,
+        output_limit: int,
+        output_log: Path | None = None,
+        post_exit_drain_seconds: float = POST_EXIT_DRAIN_SECONDS,
+    ):
         self._process = process
+        self._output_log = OutputLog(output_log)
         self._output_limit = output_limit
+        self._post_exit_drain_seconds = post_exit_drain_seconds
         self._condition = threading.Condition()
         self._deadline: float | None = None
         self._cancelled = False
@@ -290,8 +319,23 @@ class POSIXProcess:
                     ):
                         self._signal_group(signal.SIGKILL)
                         killed = True
-                    if killed and leader_exited and drain_deadline is None:
-                        drain_deadline = time.monotonic() + 1
+                    if killed and leader_exited:
+                        with self._condition:
+                            cancelled = self._cancelled
+                        if drain_deadline is None:
+                            drain_seconds = CANCEL_DRAIN_SECONDS
+                            # Linux's reserved zombie keeps killpg(0) succeeding:
+                            # retain its existing KILL-dispatched cleanup proof.
+                            # Darwin can additionally prove the group all-dead.
+                            if not cancelled and (
+                                sys.platform != "darwin" or not self._signal_group(0)
+                            ):
+                                drain_seconds = self._post_exit_drain_seconds
+                            drain_deadline = time.monotonic() + drain_seconds
+                        if cancelled:
+                            drain_deadline = min(
+                                drain_deadline, time.monotonic() + CANCEL_DRAIN_SECONDS
+                            )
                     if (
                         drain_deadline is not None
                         and selector.get_map()
@@ -317,6 +361,7 @@ class POSIXProcess:
                             selector.unregister(key.fileobj)
                             key.fileobj.close()
                             continue
+                        self._output_log.write(chunk)
                         index = key.data
                         available = self._output_limit - len(captured[index])
                         captured[index].extend(chunk[:available])
@@ -359,3 +404,5 @@ class POSIXProcess:
                     with self._condition:
                         self._error = error
                         self._condition.notify_all()
+        finally:
+            self._output_log.close()

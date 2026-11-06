@@ -540,3 +540,53 @@ def test_native_daemon_death_closes_job_and_kills_descendant(tmp_path):
             assert _winapi.WaitForSingleObject(handle, 5000) == _winapi.WAIT_OBJECT_0
         finally:
             _winapi.CloseHandle(handle)
+
+
+def test_portable_output_log_tees_both_streams_with_bounded_capture(tmp_path):
+    api = FakeAPI()
+    output = tmp_path / "output.log"
+    process = WindowsSupervisor(_api=api).start(
+        ProcessSpec(("unused",), tmp_path, output_log=output), output_limit=2
+    )
+    api.members = 0
+    result = process.wait(2)
+    assert result.stdout == b"st" and result.stderr == b"st"
+    assert result.stdout_truncated and result.stderr_truncated
+    assert output.read_bytes() in (b"stdoutstderr", b"stderrstdout")
+
+
+@pytest.mark.parametrize("failure", ["open", "write"])
+def test_portable_output_log_failure_keeps_drains_alive(tmp_path, monkeypatch, failure):
+    api = FakeAPI()
+    output = tmp_path / "absent" / "output.log"
+    if failure == "write":
+        output = tmp_path / "output.log"
+
+        def fail(self, chunk):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("wavedl_daemon.supervision.output.OutputLog._write", fail)
+    process = WindowsSupervisor(_api=api).start(
+        ProcessSpec(("unused",), tmp_path, output_log=output)
+    )
+    api.members = 0
+    result = process.wait(2)
+    assert result.stdout == b"stdout" and result.stderr == b"stderr"
+
+
+def test_portable_output_log_cap_is_shared_by_both_drains(tmp_path, monkeypatch):
+    from wavedl_daemon.supervision.output import OUTPUT_LOG_TRUNCATED
+
+    monkeypatch.setattr("wavedl_daemon.supervision.output.OUTPUT_LOG_LIMIT", 5)
+    api = FakeAPI()
+    output = tmp_path / "output.log"
+    process = WindowsSupervisor(_api=api).start(
+        ProcessSpec(("unused",), tmp_path, output_log=output), output_limit=0
+    )
+    api.members = 0
+    result = process.wait(2)
+    content = output.read_bytes()
+    assert len(content) == 5 + len(OUTPUT_LOG_TRUNCATED)
+    assert content.endswith(OUTPUT_LOG_TRUNCATED)
+    assert content.count(OUTPUT_LOG_TRUNCATED) == 1
+    assert result.stdout_truncated and result.stderr_truncated
