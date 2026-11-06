@@ -1,9 +1,11 @@
 """
-Dataset selections and validated views of child-process responses.
+Dataset selections, metadata and sampled preview responses.
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import JsonValue
 
@@ -16,8 +18,7 @@ class InspectRequest(WireModel):
 
 
 class PreviewRequest(InspectRequest):
-    # Domain view selection remains in DatasetPreviewService.
-    view: str
+    allow_pickle: bool = False
 
 
 class DatasetVariable(WireModel):
@@ -32,13 +33,6 @@ class InspectionResponse(WireModel):
     schema_version: int
     format: str
     variables: list[DatasetVariable]
-
-
-class DatasetIdentity(WireModel):
-    st_dev: int
-    st_ino: int
-    st_size: int
-    st_mtime_ns: int
 
 
 class Histogram(WireModel):
@@ -74,19 +68,22 @@ class PreviewSample(WireModel):
 
 class PreviewResponse(WireModel):
     schema_version: int
-    identity: DatasetIdentity
     format: str
     input_key: str
     output_key: str
     input_shape: list[int]
     output_shape: list[int]
     sample_indices: list[int]
+    # Input summaries/scatter can use fewer rows than output summaries.
+    input_sample_indices: list[int]
     input_histograms: list[Histogram]
     output_histograms: list[Histogram]
     correlation: Correlation
     input_statistics: InputStatistics
     scatter: Scatter
     samples: list[PreviewSample]
-    limits: dict[str, int]
     selection: InspectRequest
-    view: str
+
+
+class PreviewPending(WireModel):
+    status: Literal["pending"]
