@@ -316,7 +316,19 @@ export const plotMetricMessageKeys = {
   lr: 'runs.lr',
 } as const;
 
+export const settingsSectionMessageKeys = {
+  general: 'shell.settingsGeneral',
+  training: 'shell.settingsTraining',
+  storage: 'shell.settingsDataStorage',
+  about: 'shell.aboutWavedl',
+};
+
 export const dynamicMessageKeys: readonly string[] = [
+  ...Object.values(settingsSectionMessageKeys),
+  'shell.settingsScalePercent',
+  'shell.settingsEnglish',
+  'shell.settingsVietnamese',
+  'shell.language',
   ...Object.values(workstationNavigationMessageKeys),
   ...Object.values(datasetPreviewTabMessageKeys),
   ...Object.values(projectBlockMessageKeys),
