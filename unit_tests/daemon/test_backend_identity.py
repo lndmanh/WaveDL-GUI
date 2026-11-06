@@ -83,6 +83,8 @@ def test_existing_schema_one_database_acquires_a_stable_generation(tmp_path):
         try:
             original = database_generation(connection)
             connection.execute("DROP TABLE database_identity")
+            connection.execute("DROP TABLE automatic_plots")
+            connection.execute("PRAGMA user_version=1")
         finally:
             connection.close()
         connection = open_database(path, dispatch_lock=lock)
@@ -91,7 +93,7 @@ def test_existing_schema_one_database_acquires_a_stable_generation(tmp_path):
             assert generation != original
             version = connection.execute("PRAGMA user_version").fetchone()
             assert version is not None
-            assert version[0] == 1
+            assert version[0] == 2
         finally:
             connection.close()
         connection = open_database(path, dispatch_lock=lock)

@@ -1,7 +1,7 @@
 """
-Opens the daemon database at schema 1, created fresh.
+Opens the daemon database at schema 2, upgrading schema 1 in place.
 
-Databases from earlier daemons are refused, not imported, because their runs
+Pre-schema-1 databases are refused, not imported, because their runs
 came from a trainer protocol that no longer exists.
 
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
@@ -14,6 +14,7 @@ from pathlib import Path
 from secrets import token_hex
 from typing import TYPE_CHECKING
 
+from wavedl_daemon.storage.automatic_plots import AUTOMATIC_PLOTS_SCHEMA
 from wavedl_daemon.storage.ownership import DispatchRequired, require_dispatch
 from wavedl_daemon.storage.run_log import RUN_LOG_SCHEMA
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from wavedl_daemon.storage.ownership import DispatchLock
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _PLANS_SCHEMA = (
     "CREATE TABLE plans ("
@@ -38,11 +39,11 @@ _TABLES = frozenset({"plans", "run_events", "run_heads"})
 
 
 class UnsupportedDatabase(RuntimeError):
-    """The file is not a schema 1 daemon database."""
+    """The file is not a supported daemon database."""
 
 
 def _check(connection: sqlite3.Connection, path: Path) -> bool:
-    """True for an empty file, False for schema 1; anything else is refused."""
+    """True for an empty file, False for schema 1 or 2; else refuse."""
     version_row = connection.execute("PRAGMA user_version").fetchone()
     if version_row is None:
         raise UnsupportedDatabase(f"{path} has no schema version")
@@ -55,7 +56,8 @@ def _check(connection: sqlite3.Connection, path: Path) -> bool:
     }
     if version == 0 and not tables:
         return True
-    if version != SCHEMA_VERSION or not tables >= _TABLES:
+    required = _TABLES | ({"automatic_plots"} if version == SCHEMA_VERSION else set())
+    if version not in (1, SCHEMA_VERSION) or not tables >= required:
         raise UnsupportedDatabase(
             f"{path} is not a schema {SCHEMA_VERSION} daemon database; "
             "move it aside to start fresh"
@@ -91,8 +93,20 @@ def open_database(path: Path, *, dispatch_lock: DispatchLock) -> sqlite3.Connect
         if fresh:
             if not _check(connection, path):
                 raise UnsupportedDatabase(f"{path} changed while it was created")
-            for statement in (*_PLANS_SCHEMA, *RUN_LOG_SCHEMA):
+            for statement in (*_PLANS_SCHEMA, *RUN_LOG_SCHEMA, *AUTOMATIC_PLOTS_SCHEMA):
                 connection.execute(statement)
+            connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+        elif connection.execute("PRAGMA user_version").fetchone()[0] == 1:
+            for statement in AUTOMATIC_PLOTS_SCHEMA:
+                connection.execute(statement)
+            # Completed history is never automatic-plot work after an upgrade.
+            connection.execute(
+                "INSERT INTO automatic_plots "
+                "(source_run_id, source_attempt, status, created_at, updated_at) "
+                "SELECT run_id, attempt, 'skipped', updated_at, updated_at "
+                "FROM run_heads WHERE state = 'completed' "
+                "AND json_extract(head_json, '$.operation') = 'train'"
+            )
             connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         # Supplemental metadata lets existing schema 1 databases acquire an
         # identity without changing or invalidating their run/plan schema.
