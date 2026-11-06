@@ -1,6 +1,6 @@
 import { clientError } from '../i18n/client-messages';
-import type { Artifact } from './artifact-client';
 import { isUuid } from './daemon-api';
+import type { Artifact } from '~~/types/artifact-client';
 
 const encoder = new TextEncoder();
 

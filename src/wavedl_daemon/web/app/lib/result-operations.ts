@@ -1,10 +1,13 @@
 import { clientError } from '../i18n/client-messages';
 import { resultRequestSchema, type ResultRequest } from '../../shared/schemas/result-request';
 import { toRaw } from 'vue';
-import { ArtifactClient, type Checkpoint } from './artifact-client';
-import { CatalogApi, type DataSelection } from './catalog-api';
+import { ArtifactClient } from './artifact-client';
+import { CatalogApi } from './catalog-api';
 import type { ConnectionSession } from './connection-session';
-import { DaemonApiError, type PlanView, type RunView } from './daemon-api';
+import { DaemonApiError } from './daemon-api';
+import type { Checkpoint } from '~~/types/artifact-client';
+import type { DataSelection } from '~~/types/catalog-api';
+import type { PlanView, RunView } from '~~/types/daemon-api';
 
 /** Explicit checkpoint source; no filename, last attempt or host-path inference. */
 export class ResultOperations {

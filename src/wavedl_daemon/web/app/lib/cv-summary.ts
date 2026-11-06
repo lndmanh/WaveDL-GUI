@@ -1,17 +1,13 @@
 import { clientError } from '../i18n/client-messages';
-import { ArtifactClient, type Artifact } from './artifact-client';
+import { ArtifactClient } from './artifact-client';
 import type { ConnectionSession } from './connection-session';
-import { parseJson, type Json } from './daemon-api';
+import { parseJson } from './daemon-api';
 import { cvSummarySchema } from '../../shared/schemas/cv-summary';
-import type { z } from 'zod';
+import type { Artifact } from '~~/types/artifact-client';
+import type { Json } from '~~/types/json';
+import type { CvSummary } from '~~/types/cv-summary';
 
 export const CV_SUMMARY_BUDGET = 1024 * 1024;
-
-export type CvMetric = number | null;
-
-export type CvSummary = z.output<typeof cvSummarySchema>;
-
-export type CvFold = CvSummary['fold_results'][number];
 
 /** Exact current Python producer schema; target labels are indices, not inferred names. */
 export function parseCvSummary(input: Json): CvSummary {

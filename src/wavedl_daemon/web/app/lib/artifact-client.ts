@@ -1,26 +1,11 @@
 import { clientError } from '../i18n/client-messages';
 import { ConnectionSession, ConnectionSessionError } from './connection-session';
 import { toRaw } from 'vue';
-import { DaemonApiError, isUuid, type Json } from './daemon-api';
+import { DaemonApiError, isUuid } from './daemon-api';
 
 import { inventorySchema } from '../../shared/schemas/artifacts';
-
-export interface Artifact {
-  readonly runId: string;
-  readonly path: string;
-  readonly size: number;
-  readonly modified: string;
-}
-
-export interface Checkpoint {
-  readonly runId: string;
-  readonly name: string;
-}
-
-export interface Inventory {
-  readonly files: readonly Artifact[];
-  readonly checkpoints: readonly Checkpoint[];
-}
+import type { Json } from '~~/types/json';
+import type { Artifact, Checkpoint, Inventory } from '~~/types/artifact-client';
 
 export const BLOB_BUDGET = 64 * 1024 * 1024;
 

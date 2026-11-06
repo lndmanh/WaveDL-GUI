@@ -1,6 +1,8 @@
-import { object, type JsonObject, type RunView } from './daemon-api';
+import { object } from './daemon-api';
 import { toRaw } from 'vue';
-import type { RunEvent } from './event-stream';
+import type { JsonObject } from '~~/types/json';
+import type { RunView } from '~~/types/daemon-api';
+import type { RunEvent } from '~~/types/event-stream';
 
 /** Only the exact current runtime's structured evaluation events are results. */
 export function evaluationResults(view: RunView, events: readonly RunEvent[]): JsonObject | null {
