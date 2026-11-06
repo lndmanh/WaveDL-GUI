@@ -87,6 +87,19 @@ export function trainingChoiceLabel(
   return Object.entries(technicalChoiceLabels).find(([name]) => name === choice)?.[1] ?? choice;
 }
 
+export const planRuntimeMessageKeys = {
+  local: 'builder.backendLocal',
+  slurm: 'builder.backendSlurm',
+  cpu: 'builder.deviceCpu',
+  mps: 'builder.deviceMps',
+  cuda: 'builder.deviceCuda',
+  auto: 'builder.deviceAuto',
+  existing: 'project.currentPythonEnvironment',
+  selected: 'project.chosenPythonEnvironment',
+  bundled: 'project.managedPythonEnvironment',
+  container: 'project.containerEnvironment',
+};
+
 export const runtimeFieldMessageKeys = {
   pythonInterpreter: 'project.pythonInterpreter',
   interpreterDescription: 'project.interpreterHelp',
@@ -335,6 +348,7 @@ export const dynamicMessageKeys: readonly string[] = [
   ...Object.values(trainingSectionMessageKeys),
   ...Object.values(trainingChoiceMessageKeys),
   ...Object.values(runtimeFieldMessageKeys),
+  ...Object.values(planRuntimeMessageKeys),
   ...Object.values(inferenceFieldMessageKeys),
   ...Object.values(appearanceControlMessageKeys),
   ...Object.values(datasetPreviewMessageKeys),

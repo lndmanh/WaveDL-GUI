@@ -1,94 +1,15 @@
-import { type Json, type PlanView } from '../lib/daemon-api';
-import { planManifestSchema, planPreviewContextSchema } from '../../shared/schemas/plan-summary';
-import { trainingDefaults } from '../../shared/schemas/training-request';
-import { inferenceDefaults } from '../../shared/schemas/result-request';
-import { runOperationMessageKeys, trainingFieldMessageKeys } from '../i18n/dynamic-keys';
+import type { PlanView } from '../lib/daemon-api';
+import { buildPlanSummary } from '../lib/plan-summary';
 
-function equal(left: Json, right: Json | undefined): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-/** Reads a persisted plan for review: its run spec, context and non-default values. */
 export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
   const { t } = useI18n({ useScope: 'global' });
-
-  function display(value: Json | undefined): string {
-    if (value === undefined || value === null) return t('project.none');
-
-    if (Array.isArray(value))
-      return value.length ? value.map((item) => display(item)).join(', ') : t('project.none');
-
-    if (value instanceof Object) return JSON.stringify(value);
-
-    return String(value);
-  }
-
-  function text(value: string | undefined): string {
-    return value ?? t('project.notAvailable');
-  }
-
-  function backend(value: string | undefined): string {
-    if (value === 'local') return t('builder.backendLocal');
-    if (value === 'slurm') return t('builder.backendSlurm');
-
-    return text(value);
-  }
-
-  function operation(value: string | undefined): string {
-    if (value === 'train' || value === 'test' || value === 'plot')
-      return t(runOperationMessageKeys[value]);
-
-    return text(value);
-  }
-
-  const document = computed(() => {
-    const parsed = planManifestSchema.safeParse(toValue(source)?.preview.spec);
-
-    return parsed.success ? parsed.data : null;
-  });
-
-  const manifest = computed(() => document.value?.manifest ?? null);
-  const config = computed(() => document.value?.review.resolved_config ?? {});
-
-  const differences = computed(() => {
-    const defaults = Object.entries(
-      manifest.value?.operation === 'train' ? trainingDefaults : inferenceDefaults,
-    );
-
-    return Object.entries(config.value).flatMap(([name, value]) => {
-      const fallback = defaults.find(([key]) => key === name);
-
-      if (!fallback || equal(value, fallback[1])) return [];
-
-      return [
-        {
-          name,
-          label: trainingFieldMessageKeys[name] ? t(trainingFieldMessageKeys[name].label) : name,
-          value: display(value),
-          defaultValue: display(fallback[1]),
-        },
-      ];
-    });
-  });
-
-  const context = computed(() => {
-    const plan = toValue(source);
-    const preview = planPreviewContextSchema.parse(plan?.preview ?? {});
-    const runtime = document.value?.review.runtime;
-    const topology = preview.topology;
-
-    return [
-      { label: t('project.contextBackend'), value: backend(preview.target) },
-      { label: t('project.contextOperation'), value: operation(document.value?.review.operation) },
-      { label: t('project.contextDevice'), value: text(runtime?.device) },
-      {
-        label: t('project.contextTopology'),
-        value: `${display(topology.num_machines)} × ${display(topology.processes_per_machine)}`,
-      },
-    ];
-  });
-
+  const summary = computed(() => buildPlanSummary(toValue(source), t));
+  const manifest = computed(() => summary.value.manifest);
+  const differences = computed(() => summary.value.differences);
+  const context = computed(() => summary.value.context);
+  const sections = computed(() => summary.value.sections);
+  const warnings = computed(() => summary.value.warnings);
   const rawPlan = computed(() => JSON.stringify(toValue(source)?.preview ?? null, null, 2));
 
-  return { manifest, differences, context, rawPlan };
+  return { manifest, differences, context, sections, warnings, rawPlan };
 }

@@ -10,9 +10,11 @@ import {
   LoaderCircle,
   Play,
   RefreshCw,
+  TriangleAlert,
 } from '@lucide/vue';
 import type { ProjectBlock } from '../../../shared/schemas/project-draft';
 import type { PlanView, RunView } from '../../lib/daemon-api';
+import type { PlanCommand } from '../../lib/plan-summary';
 import { pathName } from '../../lib/run-overview';
 
 export interface ReadinessItem {
@@ -24,6 +26,7 @@ export interface ReadinessItem {
 
 const props = defineProps<{
   plan: PlanView | null;
+  command: PlanCommand | null;
   acknowledged: RunView | null;
   readiness: readonly ReadinessItem[];
   canPreview: boolean;
@@ -41,11 +44,13 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n({ useScope: 'global' });
-const rawId = useId();
+const titleId = useId();
+const settingsId = useId();
+const terminalId = useId();
 const startedId = useId();
 const labels = useRunLabels();
 const { copy, copied, isSupported: canCopy } = useClipboard({ copiedDuring: 1600 });
-const { manifest, differences, context, rawPlan } = usePlanSummary(() => props.plan);
+const { differences, context, sections, warnings } = usePlanSummary(() => props.plan);
 
 /** Only the exact plan the daemon acknowledged is locked; an edited draft plans anew. */
 const submitted = computed(
@@ -74,29 +79,31 @@ const projectStyles = {
     '[&_dt]:text-muted-foreground [&_dt]:text-[0.7rem] [&_dd]:m-[0.15rem_0_0] [&_dd]:text-[0.92rem] [&_dd]:font-semibold',
     '[&_dd]:[overflow-wrap:anywhere]',
   ),
+  planFact: cn(
+    'min-w-0 py-2',
+    '[&_dt]:text-muted-foreground [&_dt]:text-[0.7rem] [&_dd]:m-[0.15rem_0_0] [&_dd]:text-[0.92rem] [&_dd]:font-semibold',
+    '[&_dd]:[overflow-wrap:anywhere]',
+  ),
   planDifferences: cn(
-    'flex flex-col p-[0_0.5rem_0.75rem] [&_li]:flex [&_li]:items-center [&_li]:gap-[0.6rem] [&_li]:py-[0.45rem]',
+    'flex flex-col p-[0_0.5rem_0.75rem] [&_li]:grid [&_li]:items-center [&_li]:gap-[0.6rem] [&_li]:py-[0.45rem]',
+    '[&_li]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:[&_li]:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_auto_minmax(0,0.8fr)]',
     '[&_li]:px-3 [&_li]:rounded-[0.6rem] [&_li]:text-[0.85rem]',
     '[&_li:nth-child(odd)]:[background:color-mix(in_srgb,_var(--foreground)_3%,_transparent)]',
   ),
   planDefault: cn(
-    "max-w-[30%] overflow-hidden text-muted-foreground [font-family:ui-monospace,_'SF_Mono',_monospace] text-xs/[inherit]",
+    "min-w-0 overflow-hidden text-muted-foreground [font-family:ui-monospace,_'SF_Mono',_monospace] text-xs/[inherit]",
     'line-through text-ellipsis whitespace-nowrap',
   ),
   planValue: cn(
-    "max-w-[40%] overflow-hidden [font-family:ui-monospace,_'SF_Mono',_monospace] text-[0.78rem] font-semibold",
+    "min-w-0 overflow-hidden [font-family:ui-monospace,_'SF_Mono',_monospace] text-[0.78rem] font-semibold",
     'text-ellipsis whitespace-nowrap',
   ),
-  planRawTrigger: cn(
+  planSettingsTrigger: cn(
     'flex w-full items-center gap-[0.6rem] py-[0.8rem] px-5 text-[0.85rem] font-medium',
-    "[&[data-state='open']_.plan-raw-chevron]:[transform:rotate(90deg)]",
+    "[&[data-state='open']_.plan-settings-chevron]:[transform:rotate(90deg)]",
   ),
-  planRawChevron: cn(
+  planSettingsChevron: cn(
     'size-4 text-muted-foreground [transition:transform_260ms_cubic-bezier(0.22,_1,_0.36,_1)]',
-  ),
-  planCode: cn(
-    "max-h-72 overflow-auto py-[0.9rem] px-4 rounded-lg [font-family:ui-monospace,_'SF_Mono',_monospace] text-[0.72rem]",
-    'whitespace-pre-wrap [background:color-mix(in_srgb,_var(--foreground)_5%,_transparent)]',
   ),
   planApprove: cn(
     'min-w-48 h-[2.9rem] rounded-[0.9rem] max-sm:w-full',
@@ -218,27 +225,39 @@ const projectStyles = {
       </div>
     </section>
 
-    <!-- Planned: review exactly what will run, then start it. -->
     <template v-else-if="plan">
-      <section class="surface-group overflow-hidden" aria-labelledby="approved-plan-title">
-        <header class="px-5 pt-5">
-          <p class="flex items-center gap-1.5 text-xs font-semibold text-success">
-            <Check class="size-3.5" aria-hidden="true" />{{ t('builder.planReady') }}
-          </p>
-          <h3 id="approved-plan-title" class="mt-1 text-[1.15rem] font-semibold">
-            {{ t('project.persistedPlanForApproval') }}
-          </h3>
-          <p class="mt-1 text-sm text-muted-foreground">{{ t('project.planManifestHelp') }}</p>
+      <section class="surface-group overflow-hidden" :aria-labelledby="titleId">
+        <header class="flex flex-wrap items-start justify-between gap-4 px-5 pt-5">
+          <div class="min-w-0">
+            <p class="flex items-center gap-1.5 text-xs font-semibold text-success">
+              <Check class="size-3.5" aria-hidden="true" />{{ t('builder.planReady') }}
+            </p>
+            <h3 :id="titleId" class="mt-1 text-[1.15rem] font-semibold">
+              {{ t('project.persistedPlanForApproval') }}
+            </h3>
+          </div>
         </header>
         <dl
-          class="grid grid-cols-2 gap-2 px-5 pt-4 sm:grid-cols-4"
+          class="grid grid-cols-1 gap-x-5 px-5 pt-3 min-[400px]:grid-cols-2 lg:grid-cols-3"
           :aria-label="t('project.planContext')"
         >
-          <div v-for="item in context" :key="item.label" :class="projectStyles.planStat">
+          <div v-for="item in context" :key="item.label" :class="projectStyles.planFact">
             <dt>{{ item.label }}</dt>
-            <dd>{{ item.value }}</dd>
+            <dd :title="item.fullValue">
+              <span :aria-hidden="item.fullValue ? true : undefined">{{ item.value }}</span>
+              <span v-if="item.fullValue" class="sr-only">{{ item.fullValue }}</span>
+            </dd>
           </div>
         </dl>
+        <Alert v-if="warnings.length" variant="warning" class="mx-5 mt-4 w-auto min-w-0">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{{ t('project.beforeYouStart') }}</AlertTitle>
+          <AlertDescription>
+            <ul class="list-disc space-y-1 pl-4 [overflow-wrap:anywhere]">
+              <li v-for="(warning, index) in warnings" :key="index">{{ warning }}</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
         <div class="px-5 pt-5 pb-2">
           <h4 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             {{ t('builder.changesFromDefaults') }}
@@ -246,52 +265,88 @@ const projectStyles = {
         </div>
         <ul v-if="differences.length" :class="projectStyles.planDifferences">
           <li v-for="item in differences" :key="item.name">
-            <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-            <span :class="projectStyles.planDefault">{{ item.defaultValue }}</span>
+            <span class="col-span-3 min-w-0 [overflow-wrap:anywhere] sm:col-span-1">{{ item.label }}</span>
+            <span :class="projectStyles.planDefault" :title="item.defaultValue">{{
+              item.defaultValue
+            }}</span>
             <ArrowRight class="size-3.5 flex-none text-muted-foreground" aria-hidden="true" />
-            <span :class="projectStyles.planValue">{{ item.value }}</span>
+            <span :class="projectStyles.planValue" :title="item.value">{{ item.value }}</span>
           </li>
         </ul>
         <p v-else class="px-5 pb-4 text-sm text-muted-foreground">
           {{ t('project.noPlanDifferences') }}
         </p>
-        <Collapsible :class="projectStyles.planDivider">
-          <CollapsibleTrigger
-            :id="rawId"
-            :class="projectStyles.planRawTrigger"
-            data-testid="plan-raw-disclosure"
-          >
+        <section
+          v-if="command"
+          class="mx-5 mb-5 min-w-0 rounded-xl border p-3"
+          :aria-labelledby="terminalId"
+        >
+          <h4 :id="terminalId" class="text-sm font-medium">{{ t('project.runItFromATerminal') }}</h4>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {{ t('project.sameTrainingWithWavedlCommandLine') }}
+          </p>
+          <div v-if="command.ok" class="mt-3 flex min-w-0 items-center gap-2">
+            <code class="min-w-0 flex-1 truncate text-xs" :title="command.text">{{
+              command.text
+            }}</code>
+            <Button
+              v-if="canCopy"
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="size-8 shrink-0"
+              :aria-label="t('project.copyStandaloneCliCommand')"
+              @click="copy(command.text)"
+            >
+              <Check v-if="copied" aria-hidden="true" /><Copy v-else aria-hidden="true" />
+            </Button>
+          </div>
+          <p v-else class="mt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {{ command.reason }}
+          </p>
+          <span class="sr-only" aria-live="polite" role="status">{{
+            copied ? t('project.copied') : ''
+          }}</span>
+        </section>
+        <Collapsible v-if="sections.length" :class="projectStyles.planDivider">
+          <CollapsibleTrigger :id="settingsId" :class="projectStyles.planSettingsTrigger">
             <ChevronRight
-              :class="cn('plan-raw-chevron', projectStyles.planRawChevron)"
+              :class="cn('plan-settings-chevron', projectStyles.planSettingsChevron)"
               aria-hidden="true"
             />
-            {{ t('project.fullPersistedExecutionPlan') }}
+            {{ t('project.allSettings') }}
           </CollapsibleTrigger>
-          <CollapsibleContent class="collapsible-motion">
-            <div class="flex flex-col gap-3 px-5 pb-5">
-              <p class="font-mono text-[0.68rem] break-all text-muted-foreground">
-                {{
-                  t('project.runRunRequestRequestPlanPlan', {
-                    run: plan.run_id,
-                    request: plan.request_id,
-                    plan: plan.plan_id,
-                  })
-                }}
-              </p>
-              <div
-                v-if="manifest"
-                :class="projectStyles.planCode"
-                tabindex="0"
-                :aria-label="t('project.approvedNormalizedManifest')"
-                data-testid="approved-manifest"
+          <CollapsibleContent class="collapsible-motion" :aria-labelledby="settingsId">
+            <div class="flex min-w-0 flex-col gap-5 px-5 pb-5">
+              <section
+                v-for="section in sections"
+                :key="section.id"
+                :aria-labelledby="`${settingsId}-${section.id}`"
               >
-                {{ JSON.stringify(manifest, null, 2) }}
-              </div>
-              <pre
-                :class="projectStyles.planCode"
-                tabindex="0"
-                :aria-label="t('project.persistedExecutionPlan')"
-                >{{ rawPlan }}</pre>
+                <h4 :id="`${settingsId}-${section.id}`" class="mb-2 text-sm font-semibold">
+                  {{ section.title }}
+                </h4>
+                <dl class="min-w-0 divide-y divide-border">
+                  <div
+                    v-for="row in section.rows"
+                    :key="row.name"
+                    class="grid min-w-0 gap-1 py-2 text-sm sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:gap-4"
+                  >
+                    <dt class="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+                      {{ row.label }}
+                    </dt>
+                    <dd class="min-w-0 [overflow-wrap:anywhere]">
+                      {{ row.value }}
+                      <span
+                        v-if="row.changed"
+                        class="ml-1 inline-flex items-center gap-1 text-xs text-muted-foreground"
+                      >
+                        <span class="size-1.5 rounded-full bg-primary" aria-hidden="true" />{{ t('project.changed') }}
+                      </span>
+                    </dd>
+                  </div>
+                </dl>
+              </section>
             </div>
           </CollapsibleContent>
         </Collapsible>
