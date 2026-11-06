@@ -31,18 +31,21 @@ const integerFields = {
   max_patience: integer.optional(),
 };
 
-const parameterMetrics = jsonObjectSchema.transform((value) => Object.entries(value))
+const parameterMetrics = jsonObjectSchema
+  .transform((value) => Object.entries(value))
   .pipe(z.array(z.tuple([z.string(), metricValueSchema])))
   .transform((entries) => Object.fromEntries(entries));
 
 const metricParameterListSchema = z.array(z.tuple([z.string(), metricValueSchema]));
 
-const metricDetailsFieldsSchema = z.object({
-  ...numericFields,
-  ...integerFields,
-  mae_per_param: z.array(metricValueSchema).optional(),
-  per_param_mae: parameterMetrics.optional(),
-}).catchall(jsonSchema);
+const metricDetailsFieldsSchema = z
+  .object({
+    ...numericFields,
+    ...integerFields,
+    mae_per_param: z.array(metricValueSchema).optional(),
+    per_param_mae: parameterMetrics.optional(),
+  })
+  .catchall(jsonSchema);
 
 export const metricDetailsSchema = jsonObjectSchema.transform((value, ctx) => {
   const fields = metricDetailsFieldsSchema.safeParse(value);
@@ -87,7 +90,10 @@ export const metricDetailsSchema = jsonObjectSchema.transform((value, ctx) => {
 
   if (Object.hasOwn(value, '__proto__')) {
     Object.defineProperty(fields.data, '__proto__', {
-      value: value['__proto__'], enumerable: true, writable: true, configurable: true,
+      value: value['__proto__'],
+      enumerable: true,
+      writable: true,
+      configurable: true,
     });
   }
 
@@ -102,20 +108,24 @@ const metricHeader = z.object({
   metrics: z.unknown().optional(),
 });
 
-export const metricPayloadSchema = metricHeader.pipe(z.object({
-  ...metricHeader.shape,
-  metrics: z.preprocess((value) => value ?? {}, metricDetailsSchema),
-})).transform((payload) => {
-  const numeric = new Map<string, z.output<typeof metricValueSchema>>();
+export const metricPayloadSchema = metricHeader
+  .pipe(
+    z.object({
+      ...metricHeader.shape,
+      metrics: z.preprocess((value) => value ?? {}, metricDetailsSchema),
+    }),
+  )
+  .transform((payload) => {
+    const numeric = new Map<string, z.output<typeof metricValueSchema>>();
 
-  for (const [name, value] of Object.entries(payload.metrics)) {
-    const parsed = metricValueSchema.safeParse(value);
+    for (const [name, value] of Object.entries(payload.metrics)) {
+      const parsed = metricValueSchema.safeParse(value);
 
-    if (parsed.success) numeric.set(name, parsed.data);
-  }
+      if (parsed.success) numeric.set(name, parsed.data);
+    }
 
-  return { ...payload, numeric };
-});
+    return { ...payload, numeric };
+  });
 
 export const metricEventScopeSchema = z.object({
   run_id: z.string(),

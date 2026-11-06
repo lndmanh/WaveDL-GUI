@@ -1,29 +1,21 @@
-import {
-  clientRangeError,
-  type ClientErrorKey,
-  type ClientErrorParams,
-} from '../i18n/client-messages';
-import { DaemonApiError, type JsonObject, type RunProgress, type RunView } from './daemon-api';
+import { clientRangeError } from '../i18n/client-messages';
+import { DaemonApiError } from './daemon-api';
 import {
   metricPayloadSchema,
   metricEventScopeSchema,
-  type MetricDetails,
   type RuntimeMetricField,
   type NumericMetrics,
 } from '../../shared/schemas/metric-history';
-import type { RunEvent } from './event-stream';
-
-export interface MetricRecord {
-  runId: string;
-  attempt: number;
-  seq: number;
-  step: number;
-  name: string;
-  value: number | null;
-  unit: string;
-  metrics: MetricDetails;
-  active: boolean;
-}
+import type { ClientErrorKey, MessageParams } from '~~/types/i18n';
+import type { JsonObject } from '~~/types/json';
+import type { RunView } from '~~/types/daemon-api';
+import type { RunEvent } from '~~/types/event-stream';
+import type {
+  MetricRecord,
+  MetricSummary,
+  RuntimeMetricSummary,
+  NumericPoint,
+} from '~~/types/metric-history';
 
 interface StoredMetricRecord extends MetricRecord {
   numeric: NumericMetrics;
@@ -35,45 +27,7 @@ function snapshotMetric(record: StoredMetricRecord): MetricRecord {
   return structuredClone(metric);
 }
 
-export interface MetricSummary {
-  progress: RunProgress | null;
-  best: number | null;
-  latest: MetricRecord | null;
-  /** Present only when the selected runtime has emitted metrics. */
-  current?: RuntimeMetricSummary;
-}
-
-export interface MetricHealth {
-  label: string;
-  value: string;
-  status: string;
-  severity: 'good' | 'warning' | 'error';
-}
-
-export interface RuntimeMetricSummary {
-  trainLoss: number | null;
-  validationLoss: number | null;
-  r2: number | null;
-  bestR2: number | null;
-  learningRate: number | null;
-  pearson: number | null;
-  gradientNorm: number | null;
-  mae: number | null;
-  epochSeconds: number | null;
-  elapsedSeconds: number | null;
-  patience: { used: number; maximum: number; fraction: number } | null;
-  parameters: { name: string; value: number | null }[];
-  health: MetricHealth[];
-}
-
-export interface NumericPoint {
-  attempt: number;
-  seq: number;
-  step: number;
-  value: number | null;
-}
-
-function fail(clientMessageKey: ClientErrorKey, clientMessageParams?: ClientErrorParams): never {
+function fail(clientMessageKey: ClientErrorKey, clientMessageParams?: MessageParams): never {
   throw DaemonApiError.fromKey('protocol', clientMessageKey, { params: clientMessageParams });
 }
 

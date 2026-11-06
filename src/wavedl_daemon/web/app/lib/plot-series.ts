@@ -1,8 +1,7 @@
 import { clientRangeError } from '../i18n/client-messages';
-import type { MetricRecord } from './metric-history';
 import type { RuntimeMetricField } from '../../shared/schemas/metric-history';
-
-export type PlotChannel = 'loss' | 'r2' | 'lr';
+import type { MetricRecord } from '~~/types/metric-history';
+import type { PlotChannel, PlotPoint, PlotSeries } from '~~/types/plot-series';
 
 export const PLOT_CHANNELS = ['loss', 'r2', 'lr'] as const;
 export const MAX_PLOT_RECORDS = 200_000;
@@ -20,17 +19,6 @@ export const PLOT_LABELS = {
   val_r2: 'Validation R²',
   lr: 'Learning rate',
 } satisfies Record<string, string>;
-
-export interface PlotPoint {
-  step: number;
-  values: Partial<Record<RuntimeMetricField, number | null>>;
-}
-
-export interface PlotSeries {
-  points: readonly PlotPoint[];
-  fields: readonly RuntimeMetricField[];
-  pointCount: number;
-}
 
 interface Cell {
   value: number | null;

@@ -1,21 +1,8 @@
-import { DaemonApi, DaemonApiError, object, parseJson, type Json } from './daemon-api';
+import { DaemonApi, DaemonApiError, object, parseJson } from './daemon-api';
 
 import { cursorSchema, runEventSchema } from '../../shared/schemas/event-stream';
-import type { z } from 'zod';
-
-export type Cursor = z.infer<typeof cursorSchema>;
-
-export type RunEvent = z.infer<typeof runEventSchema>;
-
-export interface StreamControl {
-  type: 'overflow' | 'error';
-  resumePosition: Cursor;
-}
-
-export interface CursorStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
+import type { Json } from '~~/types/json';
+import type { Cursor, RunEvent, StreamControl, CursorStorage } from '~~/types/event-stream';
 
 export const INITIAL_CURSOR: Readonly<Cursor> = Object.freeze({ attempt: 0, seq: -1 });
 const MAX_LINE = 1024 * 1024;
