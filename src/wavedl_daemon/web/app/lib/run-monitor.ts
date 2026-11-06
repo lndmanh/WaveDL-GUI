@@ -364,7 +364,7 @@ export class RunMonitor {
       reader?.releaseLock();
     }
   }
-  #canPollEvents(error: unknown): boolean {
+  #canPollEvents(error: Error | DOMException): boolean {
     if (!this.transport.getEventPage) return false;
 
     if (error instanceof DaemonApiError)
@@ -391,6 +391,7 @@ export class RunMonitor {
         await this.#refresh();
         this.#loadTarget();
         this.#flushCursor();
+
         const parser = new EventStreamParser(
           this.runId,
           this.#cursor,
@@ -419,6 +420,7 @@ export class RunMonitor {
             );
 
             if (this.#abort.signal.aborted) break;
+
             // Use the same bounded parser, validation, dedupe, commit and
             // cursor-advance path as SSE, including sparse journal positions.
             for (const event of page.events) {
@@ -440,7 +442,11 @@ export class RunMonitor {
           } catch (error) {
             if (this.#abort.signal.aborted) break;
 
-            if (!this.#canPollEvents(error)) throw error;
+            if (
+              !(error instanceof Error || error instanceof DOMException) ||
+              !this.#canPollEvents(error)
+            )
+              throw error;
             pollingEvents = true;
             this.#publish({ stream: 'reconnecting', message: '' });
             continue;

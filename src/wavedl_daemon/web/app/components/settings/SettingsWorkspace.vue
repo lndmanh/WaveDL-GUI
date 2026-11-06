@@ -2,6 +2,7 @@
 import { Database, Info, Palette, SlidersHorizontal } from '@lucide/vue';
 import { settingsSectionMessageKeys } from '../../i18n/dynamic-keys';
 import type { AppearancePreferences } from '~~/types/preferences';
+import type { AcceptableValue } from 'reka-ui';
 
 const props = defineProps<{ daemonId: string | null; appearance?: AppearancePreferences }>();
 const emit = defineEmits<{ appearanceChanged: [value: AppearancePreferences] }>();
@@ -22,9 +23,11 @@ const activeSection = computed(
 
 const selectId = useId();
 
-function selectSection(value: unknown): void {
-  if (typeof value !== 'string' || !sections.some((section) => section.id === value)) return;
-  void router.replace({ query: { ...route.query, section: value } });
+function selectSection(value: AcceptableValue): void {
+  const section = sections.find((section) => section.id === value);
+
+  if (!section) return;
+  void router.replace({ query: { ...route.query, section: section.id } });
 }
 </script>
 

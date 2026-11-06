@@ -349,16 +349,22 @@ describe('run monitoring', () => {
     const h = harness();
     const getEventPage = vi.fn<NonNullable<RunTransport['getEventPage']>>();
     h.transport.getEventPage = getEventPage;
-    const event = (seq: number) => metricEvent({ name: 'loss', value: 1 / (seq + 1), step: seq }, 'metric', 1, seq);
-    getEventPage.mockResolvedValueOnce({
-      events: [event(0), event(1), event(2)],
-      next_cursor: { attempt: 1, seq: 2 },
-      more: true,
-    }).mockResolvedValueOnce({
-      events: [event(3)],
-      next_cursor: { attempt: 1, seq: 3 },
-      more: false,
-    }).mockResolvedValue({ events: [], next_cursor: { attempt: 1, seq: 3 }, more: false });
+
+    const event = (seq: number) =>
+      metricEvent({ name: 'loss', value: 1 / (seq + 1), step: seq }, 'metric', 1, seq);
+
+    getEventPage
+      .mockResolvedValueOnce({
+        events: [event(0), event(1), event(2)],
+        next_cursor: { attempt: 1, seq: 2 },
+        more: true,
+      })
+      .mockResolvedValueOnce({
+        events: [event(3)],
+        next_cursor: { attempt: 1, seq: 3 },
+        more: false,
+      })
+      .mockResolvedValue({ events: [], next_cursor: { attempt: 1, seq: 3 }, more: false });
     const task = h.monitor.start();
     await flush();
     h.send(0);
@@ -389,19 +395,26 @@ describe('run monitoring', () => {
     vi.useFakeTimers();
     const h = harness();
     let pageSignal: AbortSignal | undefined;
+
     const getEventPage = vi.fn<NonNullable<RunTransport['getEventPage']>>(
       async (_runId, _cursor, signal) => {
         pageSignal = signal;
 
         return new Promise((resolve) => {
-          signal.addEventListener('abort', () => resolve({
-            events: [metricEvent({ message: 'late' }, 'warning')],
-            next_cursor: { attempt: 1, seq: 0 },
-            more: false,
-          }), { once: true });
+          signal.addEventListener(
+            'abort',
+            () =>
+              resolve({
+                events: [metricEvent({ message: 'late' }, 'warning')],
+                next_cursor: { attempt: 1, seq: 0 },
+                more: false,
+              }),
+            { once: true },
+          );
         });
       },
     );
+
     h.transport.getEventPage = getEventPage;
     const task = h.monitor.start();
     await vi.advanceTimersByTimeAsync(5000);
@@ -435,14 +448,22 @@ describe('run monitoring', () => {
     vi.useFakeTimers();
     const h = harness(view({ state: 'completed' }));
     vi.mocked(h.transport.openEvents).mockRejectedValueOnce(new TypeError('network disconnected'));
-    const events = Array.from({ length: 1010 }, (_, seq) => metricEvent({ message: 'diagnostic' }, 'warning', 1, seq));
+
+    const events = Array.from({ length: 1010 }, (_, seq) =>
+      metricEvent({ message: 'diagnostic' }, 'warning', 1, seq),
+    );
+
     const getEventPage = vi.fn<NonNullable<RunTransport['getEventPage']>>();
     let offset = 0;
     getEventPage.mockImplementation(async () => {
       const page = events.slice(offset, offset + 256);
       offset += page.length;
 
-      return { events: page, next_cursor: { attempt: 1, seq: offset - 1 }, more: offset < events.length };
+      return {
+        events: page,
+        next_cursor: { attempt: 1, seq: offset - 1 },
+        more: offset < events.length,
+      };
     });
     h.transport.getEventPage = getEventPage;
     const task = h.monitor.start();
@@ -461,7 +482,10 @@ describe('run monitoring', () => {
     const h = harness();
     h.transport.getEventPage = vi.fn();
     vi.mocked(h.transport.openEvents).mockRejectedValue(
-      DaemonApiError.fromKey(status === 401 ? 'authentication' : 'http', 'daemonRequestFailed', { status, params: { status } }),
+      DaemonApiError.fromKey(status === 401 ? 'authentication' : 'http', 'daemonRequestFailed', {
+        status,
+        params: { status },
+      }),
     );
     const task = h.monitor.start();
     await vi.advanceTimersByTimeAsync(3000);

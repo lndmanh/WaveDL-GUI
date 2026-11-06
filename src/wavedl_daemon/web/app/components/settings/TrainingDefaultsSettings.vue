@@ -16,6 +16,7 @@ const props = defineProps<{ daemonId: string | null }>();
 const { t } = useI18n({ useScope: 'global' });
 const search = shallowRef('');
 const searchId = useId();
+
 const { values, resetForm } = useForm({
   validationSchema: trainingDefaultsFormSchema,
   initialValues: {
@@ -29,6 +30,7 @@ const autosave = useAutosaveForm({
   values: () => values,
   save: (value) => !!props.daemonId && saveTrainingPreferences(props.daemonId, value.config),
 });
+
 const { status } = autosave;
 
 watch(
@@ -45,6 +47,7 @@ watch(
 
 const groups = computed(() => {
   const needle = search.value.trim().toLocaleLowerCase();
+
   const matches = (name: string) => {
     const keys = trainingFieldMessageKeys[name];
 
@@ -54,6 +57,7 @@ const groups = computed(() => {
       (keys && t(keys.label).toLocaleLowerCase().includes(needle))
     );
   };
+
   const sections = [
     {
       id: 'essentials',
@@ -71,9 +75,11 @@ const groups = computed(() => {
     })),
   ];
 
-  return sections
-    .map((section) => ({ ...section, fields: section.fields.filter(matches) }))
-    .filter((section) => section.fields.length);
+  return sections.flatMap((section) => {
+    const fields = section.fields.filter(matches);
+
+    return fields.length ? [{ ...section, fields }] : [];
+  });
 });
 
 function resetDefaults(): void {

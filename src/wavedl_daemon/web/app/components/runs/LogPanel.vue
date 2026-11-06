@@ -22,6 +22,7 @@ const styles = {
 };
 
 const { t } = useI18n({ useScope: 'global' });
+
 const props = withDefaults(
   defineProps<{
     run: RunView | null;
@@ -32,6 +33,7 @@ const props = withDefaults(
   }>(),
   { panel: false, active: true },
 );
+
 const tab = shallowRef('output');
 const diagnostics = computed(() => props.events.map(eventDiagnostic));
 const text = computed(() => diagnostics.value.map((event) => event.text).join('\n'));
@@ -44,8 +46,12 @@ const shortened = computed(() => diagnostics.value.some((event) => event.truncat
   >
     <Tabs v-model="tab" :unmount-on-hide="false" :class="styles.tabs">
       <TabsList :class="styles.tabList" :aria-label="t('runs.runtimeDiagnostics')">
-        <TabsTrigger value="output" :class="styles.tabTrigger">{{ t('runs.trainerOutput') }}</TabsTrigger>
-        <TabsTrigger value="events" :class="styles.tabTrigger">{{ t('runs.runEvents') }}</TabsTrigger>
+        <TabsTrigger value="output" :class="styles.tabTrigger">{{
+          t('runs.trainerOutput')
+        }}</TabsTrigger>
+        <TabsTrigger value="events" :class="styles.tabTrigger">{{
+          t('runs.runEvents')
+        }}</TabsTrigger>
       </TabsList>
       <TabsContent value="output" :class="styles.content">
         <TrainerOutput :run="run" :active="active && tab === 'output'" />

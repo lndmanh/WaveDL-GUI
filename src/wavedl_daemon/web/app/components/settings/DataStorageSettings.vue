@@ -16,15 +16,18 @@ const { connection } = useWorkstation();
 const shellPreferences = useShellPreferencesStore();
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+
 const { values, resetForm } = useForm({
   validationSchema: dataPreferencesSchema,
   initialValues: { keepSignedIn: loadKeepSignedIn() },
 });
+
 const autosave = useAutosaveForm({
   schema: dataPreferencesSchema,
   values: () => values,
   save: (value) => connection.setKeepSignedIn(value.keepSignedIn),
 });
+
 const { status } = autosave;
 
 watch(connection.keepSignedIn, (value) => resetForm({ values: { keepSignedIn: value } }));

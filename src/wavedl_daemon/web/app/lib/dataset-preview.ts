@@ -186,6 +186,7 @@ export class DatasetPreviewApi {
           for (;;) {
             requestSignal.throwIfAborted();
             new CatalogApi(this.session).assertSelection(selection);
+
             const result = await api.mutate('/api/datasets/preview', body, {
               signal: requestSignal,
               timeoutMs: 45000,

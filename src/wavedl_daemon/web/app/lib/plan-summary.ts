@@ -1,4 +1,5 @@
 import { planManifestSchema, planPreviewContextSchema } from '../../shared/schemas/plan-summary';
+import { jsonNumberSchema, jsonObjectSchema, jsonStringSchema } from '../../shared/schemas/json';
 import {
   trainingConfigSchema,
   trainingDefaults,
@@ -37,18 +38,26 @@ export function buildPlanSummary(
 ) {
   function display(value: Json | undefined, name = ''): string {
     if (value === undefined || value === null) return t('project.none');
-    if (typeof value === 'boolean') return t(value ? 'builder.on' : 'builder.off');
-    if (typeof value === 'number') return compactNumber(value);
+
+    if (value === true || value === false) return t(value ? 'builder.on' : 'builder.off');
+
+    const number = jsonNumberSchema.safeParse(value);
+
+    if (number.success) return compactNumber(number.data);
+
     if (Array.isArray(value))
       return value.length ? value.map((item) => display(item, name)).join(', ') : t('project.none');
-    if (typeof value === 'object')
-      return Object.entries(value)
-        .map(([key, item]) => `${key} = ${display(item)}`)
-        .join(', ');
 
-    return trainingFieldMetadata.some((field) => field.name === name && field.choices.length)
-      ? trainingChoiceLabel(name, value, t)
-      : value;
+    const string = jsonStringSchema.safeParse(value);
+
+    if (string.success)
+      return trainingFieldMetadata.some((field) => field.name === name && field.choices.length)
+        ? trainingChoiceLabel(name, string.data, t)
+        : string.data;
+
+    return Object.entries(jsonObjectSchema.parse(value))
+      .map(([key, item]) => `${key} = ${display(item)}`)
+      .join(', ');
   }
 
   function text(value: string | undefined | null): string {
@@ -78,11 +87,13 @@ export function buildPlanSummary(
   const preview = planPreviewContextSchema.parse(plan?.preview ?? {});
   const runtime = review?.runtime;
   const topology = preview.topology;
+
   const changed = (name: string, value: Json) => {
     const fallback = defaults.find(([key]) => key === name);
 
     return !!fallback && JSON.stringify(value) !== JSON.stringify(fallback[1]);
   };
+
   const differences = Object.entries(config).flatMap(([name, value]) => {
     const fallback = defaults.find(([key]) => key === name);
 
@@ -104,7 +115,9 @@ export function buildPlanSummary(
       count: topology.processes_per_machine ?? t('project.notAvailable'),
     }),
   ].join(', ');
-  const dataset = typeof config.data_path === 'string' ? config.data_path : undefined;
+
+  const dataset = jsonStringSchema.safeParse(config.data_path).data;
+
   const context: readonly PlanFact[] = training
     ? [
         {
@@ -126,6 +139,7 @@ export function buildPlanSummary(
       ];
 
   const validatedConfig = trainingConfigSchema.safeParse(config);
+
   function trainingRow(name: PlanTrainingFieldName): PlanRow[] {
     const value = config[name];
 
@@ -136,6 +150,7 @@ export function buildPlanSummary(
       (Array.isArray(value) && !value.length)
     )
       return [];
+
     if (
       name !== 'model' &&
       name !== 'data_path' &&
@@ -169,12 +184,14 @@ export function buildPlanSummary(
       title: t(trainingSectionMessageKeys[section.id]),
     })),
   ];
+
   const environmentNames = [
     ...new Set([
       ...Object.keys(runtime?.environment ?? {}),
       ...(preview.environment ?? []).map(([name]) => name),
     ]),
   ].join(', ');
+
   const runtimeRows: readonly {
     readonly name: string;
     readonly label: string;
@@ -211,6 +228,7 @@ export function buildPlanSummary(
     { name: 'run_id', label: t('runs.configRunId'), value: plan?.run_id },
     { name: 'plan_id', label: t('project.planId'), value: plan?.plan_id },
   ];
+
   const sections: readonly PlanSection[] = training
     ? [
         ...sectionTable.map(({ id, title, fields }) => ({

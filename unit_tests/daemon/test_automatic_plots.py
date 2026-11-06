@@ -35,6 +35,7 @@ from wavedl_daemon.storage.plans import PlanStore
 from wavedl_daemon.storage.run_log import Expect, RunLog
 from wavedl_daemon.storage.settings import Settings
 
+from . import test_lifecycle_api, test_run_log
 from .test_hosted_app import (
     AUTH,
     TOKEN,
@@ -48,6 +49,11 @@ from .test_lifecycle_api import (
     from_checkpoint,
     request,
 )
+
+
+# Shared fixtures, bound by name so pytest discovers them in this module.
+environment = test_lifecycle_api.environment
+state = test_run_log.state
 
 
 @pytest.fixture

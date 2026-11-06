@@ -21,6 +21,7 @@ export function useTrainerOutput(options: {
   const delay = shallowRef(POLL_INTERVAL);
   const run = computed(() => toValue(options.run));
   const terminal = computed(() => run.value !== null && terminalRun(run.value));
+
   const enabled = computed(
     () =>
       mounted.value &&
@@ -31,6 +32,7 @@ export function useTrainerOutput(options: {
       api.value !== null &&
       run.value !== null,
   );
+
   let buffer = new TrainerOutputBuffer();
   let offset: number | undefined;
   let controller: AbortController | null = null;

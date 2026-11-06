@@ -72,9 +72,11 @@ describe('trainer output transport', () => {
 
   it('requests the current tail without query parameters and preserves byte cursors', async () => {
     const body = { attempt: 1, offset: 2, next_offset: 5, size: 5, text: 'ế', eof: true };
+
     const fetcher = vi.fn<typeof fetch>(async (url) =>
       json(new URL(String(url)).pathname === '/api/health' ? health : body),
     );
+
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
     await expect(api.getOutput(matrixId)).resolves.toEqual(body);
@@ -90,15 +92,23 @@ describe('trainer output transport', () => {
     const fetcher = vi.fn<typeof fetch>(async (url) =>
       json(new URL(String(url)).pathname === '/api/health' ? health : chunk),
     );
+
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
-    await expect(api.getOutput(matrixId, { attempt: 2, offset: 10 }, undefined, health.daemon_id))
-      .resolves.toEqual(chunk);
-    expect(String(fetcher.mock.lastCall?.[0])).toBe(`${origin}/api/runs/${matrixId}/output?attempt=2&offset=10`);
+    await expect(
+      api.getOutput(matrixId, { attempt: 2, offset: 10 }, undefined, health.daemon_id),
+    ).resolves.toEqual(chunk);
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(
+      `${origin}/api/runs/${matrixId}/output?attempt=2&offset=10`,
+    );
     await api.getOutput(matrixId, { offset: 0 });
-    expect(String(fetcher.mock.lastCall?.[0])).toBe(`${origin}/api/runs/${matrixId}/output?offset=0`);
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(
+      `${origin}/api/runs/${matrixId}/output?offset=0`,
+    );
     await api.getOutput(matrixId, { attempt: 2 });
-    expect(String(fetcher.mock.lastCall?.[0])).toBe(`${origin}/api/runs/${matrixId}/output?attempt=2`);
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(
+      `${origin}/api/runs/${matrixId}/output?attempt=2`,
+    );
   });
 
   it.each([
@@ -109,6 +119,7 @@ describe('trainer output transport', () => {
     const api = new DaemonApi(origin, {}, async (url) =>
       json(new URL(String(url)).pathname === '/api/health' ? health : body),
     );
+
     api.setToken(token);
     await expect(api.getOutput(matrixId)).resolves.toEqual(body);
   });
@@ -131,8 +142,11 @@ describe('trainer output transport', () => {
     const api = new DaemonApi(origin, {}, async (url) =>
       json(new URL(String(url)).pathname === '/api/health' ? health : body),
     );
+
     api.setToken(token);
-    await expect(api.getOutput(matrixId, { attempt: 2 })).rejects.toMatchObject({ code: 'response' });
+    await expect(api.getOutput(matrixId, { attempt: 2 })).rejects.toMatchObject({
+      code: 'response',
+    });
   });
 
   it('rejects invalid requests before fetching and pins the expected daemon', async () => {
@@ -142,20 +156,26 @@ describe('trainer output transport', () => {
     await expect(api.getOutput('../other')).rejects.toMatchObject({ code: 'response' });
 
     for (const attempt of [0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])
-      await expect(api.getOutput(matrixId, { attempt })).rejects.toMatchObject({ code: 'response' });
+      await expect(api.getOutput(matrixId, { attempt })).rejects.toMatchObject({
+        code: 'response',
+      });
 
     for (const offset of [-1, 0.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
       await expect(api.getOutput(matrixId, { offset })).rejects.toMatchObject({ code: 'response' });
     expect(fetcher).not.toHaveBeenCalled();
-    await expect(api.getOutput(matrixId, {}, undefined, 'another-daemon'))
-      .rejects.toMatchObject({ code: 'identity' });
+    await expect(api.getOutput(matrixId, {}, undefined, 'another-daemon')).rejects.toMatchObject({
+      code: 'identity',
+    });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it('requires authentication and forwards HTTP errors, including a deleted run', async () => {
     const fetcher = vi.fn<typeof fetch>(async (url) =>
-      new URL(String(url)).pathname === '/api/health' ? json(health) : json({ error: 'Missing run' }, 404),
+      new URL(String(url)).pathname === '/api/health'
+        ? json(health)
+        : json({ error: 'Missing run' }, 404),
     );
+
     const api = new DaemonApi(origin, {}, fetcher);
     await expect(api.getOutput(matrixId)).rejects.toMatchObject({ code: 'authentication' });
     expect(fetcher).not.toHaveBeenCalled();
@@ -165,18 +185,21 @@ describe('trainer output transport', () => {
 
   it('uses rotated credentials and rejects pre-aborted requests without fetching', async () => {
     const replacement = grant(health.daemon_id, 'o');
+
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       const path = new URL(String(url)).pathname;
 
       return json(path === '/api/health' ? health : path === '/api/session' ? replacement : chunk);
     });
+
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
     await api.getOutput(matrixId);
     await api.rotateSession();
     await api.getOutput(matrixId, { offset: 16 });
-    expect(new Headers(fetcher.mock.lastCall?.[1]?.headers).get('Authorization'))
-      .toBe(`Bearer ${replacement.access_token}`);
+    expect(new Headers(fetcher.mock.lastCall?.[1]?.headers).get('Authorization')).toBe(
+      `Bearer ${replacement.access_token}`,
+    );
     const abort = new AbortController();
     abort.abort();
     const requests = fetcher.mock.calls.length;
@@ -192,6 +215,7 @@ describe('trainer output transport', () => {
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
       });
     });
+
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
     const abort = new AbortController();
@@ -208,14 +232,24 @@ describe('trainer output transport', () => {
 
   it('does not publish output after the connection credential is revoked', async () => {
     let body: ReadableStreamDefaultController<Uint8Array> | undefined;
-    const stream = new ReadableStream<Uint8Array>({ start(controller) { body = controller; } });
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        body = controller;
+      },
+    });
+
     const api = new DaemonApi(origin, {}, async (url) =>
       new URL(String(url)).pathname === '/api/health'
         ? json(health)
         : new Response(stream, { headers: { 'Content-Type': 'application/json' } }),
     );
+
     api.setToken(token);
-    const pending = expect(api.getOutput(matrixId)).rejects.toMatchObject({ code: 'authentication' });
+
+    const pending = expect(api.getOutput(matrixId)).rejects.toMatchObject({
+      code: 'authentication',
+    });
 
     for (let turn = 0; turn < 20; turn++) await Promise.resolve();
     api.clearToken();
@@ -227,6 +261,7 @@ describe('trainer output transport', () => {
 
 describe('event page transport', () => {
   const cursor = { attempt: 0, seq: -1 };
+
   const event = {
     protocol: 'wavedl-run',
     version: 2,
@@ -237,17 +272,23 @@ describe('event page transport', () => {
     ts: '2026-10-07T00:00:00Z',
     payload: { name: 'loss', value: 0.5, step: 1 },
   };
+
   const page = { events: [event], next_cursor: { attempt: 1, seq: 0 }, more: false };
 
   it('validates shared event envelopes and sends bounded, authenticated cursor queries', async () => {
     const fetcher = vi.fn<typeof fetch>(async (url) =>
       json(new URL(String(url)).pathname === '/api/health' ? health : page),
     );
+
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
-    await expect(api.getEventPage(matrixId, cursor, undefined, health.daemon_id, 10)).resolves.toEqual(page);
+    await expect(
+      api.getEventPage(matrixId, cursor, undefined, health.daemon_id, 10),
+    ).resolves.toEqual(page);
     const request = fetcher.mock.calls[1];
-    expect(String(request?.[0])).toBe(`${origin}/api/runs/${matrixId}/events/page?attempt=0&seq=-1&limit=10`);
+    expect(String(request?.[0])).toBe(
+      `${origin}/api/runs/${matrixId}/events/page?attempt=0&seq=-1&limit=10`,
+    );
     expect(new Headers(request?.[1]?.headers).get('Authorization')).toBe(`Bearer ${token}`);
     expect(request?.[1]?.cache).toBe('no-store');
     expect(request?.[1]?.credentials).toBe('omit');
@@ -267,6 +308,7 @@ describe('event page transport', () => {
     const api = new DaemonApi(origin, {}, async (url) =>
       json(new URL(String(url)).pathname === '/api/health' ? health : body),
     );
+
     api.setToken(token);
     await expect(api.getEventPage(matrixId, cursor)).rejects.toBeInstanceOf(DaemonApiError);
   });
@@ -274,9 +316,11 @@ describe('event page transport', () => {
   it('keeps an empty page at the requested sparse cursor', async () => {
     const after = { attempt: 2, seq: 100 };
     const empty = { events: [], next_cursor: after, more: false };
+
     const api = new DaemonApi(origin, {}, async (url) =>
       json(new URL(String(url)).pathname === '/api/health' ? health : empty),
     );
+
     api.setToken(token);
     await expect(api.getEventPage(matrixId, after)).resolves.toEqual(empty);
   });
@@ -287,42 +331,62 @@ describe('event page transport', () => {
     api.setToken(token);
 
     for (const limit of [0, 257, 1.5, Number.NaN])
-      await expect(api.getEventPage(matrixId, cursor, undefined, undefined, limit)).rejects.toMatchObject({ code: 'response' });
+      await expect(
+        api.getEventPage(matrixId, cursor, undefined, undefined, limit),
+      ).rejects.toMatchObject({ code: 'response' });
     expect(fetcher).not.toHaveBeenCalled();
-    await expect(api.getEventPage(matrixId, cursor, undefined, 'another-daemon')).rejects.toMatchObject({ code: 'identity' });
+    await expect(
+      api.getEventPage(matrixId, cursor, undefined, 'another-daemon'),
+    ).rejects.toMatchObject({ code: 'identity' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it('uses rotated session credentials on the next page and respects caller abort', async () => {
     const replacement = grant(health.daemon_id, 'r');
+
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       const path = new URL(String(url)).pathname;
 
       return json(path === '/api/health' ? health : path === '/api/session' ? replacement : page);
     });
+
     const api = new DaemonApi(origin, {}, fetcher);
     api.setToken(token);
     await api.getEventPage(matrixId, cursor);
     await api.rotateSession();
     await api.getEventPage(matrixId, cursor);
-    expect(new Headers(fetcher.mock.lastCall?.[1]?.headers).get('Authorization')).toBe(`Bearer ${replacement.access_token}`);
+    expect(new Headers(fetcher.mock.lastCall?.[1]?.headers).get('Authorization')).toBe(
+      `Bearer ${replacement.access_token}`,
+    );
     const abort = new AbortController();
     abort.abort();
     const requests = fetcher.mock.calls.length;
-    await expect(api.getEventPage(matrixId, cursor, abort.signal)).rejects.toBeInstanceOf(DaemonApiError);
+    await expect(api.getEventPage(matrixId, cursor, abort.signal)).rejects.toBeInstanceOf(
+      DaemonApiError,
+    );
     expect(fetcher).toHaveBeenCalledTimes(requests);
   });
 
   it('does not publish a page after the connection credential is revoked', async () => {
     let body: ReadableStreamDefaultController<Uint8Array> | undefined;
-    const stream = new ReadableStream<Uint8Array>({ start(controller) { body = controller; } });
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        body = controller;
+      },
+    });
+
     const api = new DaemonApi(origin, {}, async (url) =>
       new URL(String(url)).pathname === '/api/health'
         ? json(health)
         : new Response(stream, { headers: { 'Content-Type': 'application/json' } }),
     );
+
     api.setToken(token);
-    const pending = expect(api.getEventPage(matrixId, cursor)).rejects.toMatchObject({ code: 'authentication' });
+
+    const pending = expect(api.getEventPage(matrixId, cursor)).rejects.toMatchObject({
+      code: 'authentication',
+    });
 
     for (let turn = 0; turn < 20; turn++) await Promise.resolve();
     api.clearToken();
@@ -532,6 +596,7 @@ describe.each(['get', 'list'])('run activity through %s', (method) => {
     { label: 'finalizing', fields: { activity: 'finalizing' }, expected: 'finalizing' },
   ])('accepts $label activity', async ({ fields, expected }) => {
     const body = { ...matrixRun, ...fields };
+
     const api = new DaemonApi(origin, {}, async (url) =>
       json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
     );
@@ -541,18 +606,26 @@ describe.each(['get', 'list'])('run activity through %s', (method) => {
     expect(run?.activity).toEqual(expected);
   });
 
-  it.each(['running', 'completed', '', 42, true, {}])('rejects malformed activity %j', async (activity) => {
-    const body = { ...matrixRun, activity };
-    const api = new DaemonApi(origin, {}, async (url) =>
-      json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
-    );
+  it.each(['running', 'completed', '', 42, true, {}])(
+    'rejects malformed activity %j',
+    async (activity) => {
+      const body = { ...matrixRun, activity };
 
-    api.setToken(token);
-    await expect(method === 'list' ? api.listRuns() : api.getRun(matrixId)).rejects.toMatchObject({
-      code: 'response',
-      clientMessageKey: 'invalidRunResponse',
-    });
-  });
+      const api = new DaemonApi(origin, {}, async (url) =>
+        json(
+          String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body,
+        ),
+      );
+
+      api.setToken(token);
+      await expect(method === 'list' ? api.listRuns() : api.getRun(matrixId)).rejects.toMatchObject(
+        {
+          code: 'response',
+          clientMessageKey: 'invalidRunResponse',
+        },
+      );
+    },
+  );
 });
 
 describe.each(['get', 'list'])('automatic plot metadata through %s', (method) => {
@@ -576,6 +649,7 @@ describe.each(['get', 'list'])('automatic plot metadata through %s', (method) =>
     },
   ])('accepts $label metadata', async ({ fields, expected }) => {
     const body = { ...matrixRun, ...fields };
+
     const api = new DaemonApi(origin, {}, async (url) =>
       json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
     );
@@ -593,6 +667,7 @@ describe.each(['get', 'list'])('automatic plot metadata through %s', (method) =>
     { status: 'failed', run_id: null },
   ])('rejects malformed metadata %j', async (auto_plot) => {
     const body = { ...matrixRun, auto_plot };
+
     const api = new DaemonApi(origin, {}, async (url) =>
       json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
     );
@@ -612,9 +687,11 @@ describe('automatic plot retry', () => {
       state: 'completed',
       auto_plot: { status: 'pending', run_id: null, failure: null },
     };
+
     const fetcher = vi.fn<typeof fetch>(async (url) =>
       String(url).endsWith('/health') ? json(health) : json(body, 202),
     );
+
     const api = new DaemonApi(origin, {}, fetcher);
     const controller = new AbortController();
 
@@ -623,9 +700,11 @@ describe('automatic plot retry', () => {
       ...body,
       progress: null,
     });
+
     const request = fetcher.mock.calls.find(([url]) =>
       String(url).endsWith(`/api/runs/${matrixId}/automatic-plots/retry`),
     );
+
     expect(request?.[1]?.method).toBe('POST');
     expect(request?.[1]?.body).toBeUndefined();
     expect(request?.[1]?.signal?.aborted).toBe(false);

@@ -470,7 +470,9 @@ const configuration = computed(() => {
           :run="snapshot.run"
           :events="snapshot.events"
           :truncated="snapshot.truncated"
-          :active="shellLayout.isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'logs'"
+          :active="
+            shellLayout.isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'logs'
+          "
           panel
         />
       </Teleport>

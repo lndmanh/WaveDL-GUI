@@ -3,6 +3,7 @@ import { Check, CircleAlert, LoaderCircle } from '@lucide/vue';
 import type { AutosaveStatus } from '~~/types/common';
 
 defineProps<{ status: AutosaveStatus }>();
+
 const { t } = useI18n({ useScope: 'global' });
 </script>
 

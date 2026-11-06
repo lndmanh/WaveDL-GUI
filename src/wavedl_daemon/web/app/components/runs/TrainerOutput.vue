@@ -12,10 +12,12 @@ const styles = {
 
 const props = defineProps<{ run: RunView | null; active: boolean }>();
 const { t } = useI18n({ useScope: 'global' });
+
 const { output, error, terminal } = useTrainerOutput({
   run: () => props.run,
   active: () => props.active,
 });
+
 const reader = useTemplateRef<HTMLPreElement>('reader');
 const following = shallowRef(true);
 
@@ -34,15 +36,13 @@ watch(
   },
   { flush: 'sync' },
 );
-watch(
-  [() => output.value.text, () => props.active],
-  async () => {
-    await nextTick();
-    const element = reader.value;
 
-    if (element && props.active && following.value) element.scrollTop = element.scrollHeight;
-  },
-);
+watch([() => output.value.text, () => props.active], async () => {
+  await nextTick();
+  const element = reader.value;
+
+  if (element && props.active && following.value) element.scrollTop = element.scrollHeight;
+});
 </script>
 
 <template>
@@ -66,6 +66,8 @@ watch(
       aria-live="off"
       :aria-label="t('runs.trainerOutput')"
       @scroll="trackScroll"
-      >{{ output.text || (terminal ? t('runs.noTrainerOutput') : t('runs.waitingTrainerOutput')) }}</pre>
+      >{{
+        output.text || (terminal ? t('runs.noTrainerOutput') : t('runs.waitingTrainerOutput'))
+      }}</pre>
   </div>
 </template>

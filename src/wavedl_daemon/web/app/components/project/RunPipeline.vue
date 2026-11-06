@@ -64,6 +64,7 @@ function updateCondensed(event: Event) {
   const target = event.target;
 
   if (!strip) return;
+
   const scroller =
     target instanceof Element && target.contains(strip)
       ? { top: target.getBoundingClientRect().top, offset: target.scrollTop }

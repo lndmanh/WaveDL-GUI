@@ -1,4 +1,7 @@
+import type { TrainerOutputSnapshot } from '~~/types/trainer-output';
+
 const MAX_LINES = 5000;
+
 // UTF-16 strings use up to two bytes per code unit: keep roughly 1 MiB.
 const MAX_CHARACTERS = 512 * 1024;
 
@@ -40,7 +43,7 @@ export class TrainerOutputBuffer {
     this.#trim();
   }
 
-  snapshot(): { text: string; omitted: boolean } {
+  snapshot(): TrainerOutputSnapshot {
     return {
       text: this.#lines.length > 0 ? `${this.#lines.join('\n')}\n${this.#line}` : this.#line,
       omitted: this.#omitted,

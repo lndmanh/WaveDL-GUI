@@ -77,11 +77,13 @@ const activity = computed(() => runActivityMessageKeysFor(props.run));
 const activityLabel = computed(() => (activity.value ? t(activity.value.label) : null));
 const activityHint = computed(() => (activity.value?.hint ? t(activity.value.hint) : null));
 const label = computed(() => t(runStateMessageKeys[props.run.state]));
+
 const accessibleLabel = computed(() =>
   [label.value, activityLabel.value, activityHint.value].filter(Boolean).join(' · '),
 );
 
 const currentProgress = computed(() => props.progress ?? props.run.progress);
+
 const progressPercent = computed(() => {
   const fraction = currentProgress.value?.fraction;
 

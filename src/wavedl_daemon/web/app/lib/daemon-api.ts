@@ -7,7 +7,6 @@ import {
   planSchema,
   runListSchema,
   runViewSchema,
-  planPreviewSchema,
   sessionGrantSchema,
   eventPageSchema,
   outputChunkSchema,
@@ -661,6 +660,7 @@ export class DaemonApi {
 
     if (offset !== undefined) query.set('offset', String(offset));
     const suffix = query.size > 0 ? `?${query}` : '';
+
     const result = outputChunkSchema.safeParse(
       await this.#json(
         await this.#request(`/api/runs/${runId}/output${suffix}`, 'GET', undefined, signal),
@@ -691,6 +691,7 @@ export class DaemonApi {
 
     if (expectedDaemonId !== undefined && expectedDaemonId !== this.#daemonId)
       throw DaemonApiError.fromKey('identity', 'cursorDaemonMismatch');
+
     const result = eventPageSchema.safeParse(
       await this.#json(
         await this.#request(

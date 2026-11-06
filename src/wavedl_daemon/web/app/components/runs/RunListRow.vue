@@ -131,7 +131,7 @@ function selectCell(event: MouseEvent) {
             class="max-w-32 truncate"
             :title="activityLabel"
             aria-live="polite"
-          >{{ activityLabel }}</span
+            >{{ activityLabel }}</span
           >
           <time
             class="shrink-0 whitespace-nowrap"

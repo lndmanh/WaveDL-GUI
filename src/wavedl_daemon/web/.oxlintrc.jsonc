@@ -42,6 +42,7 @@
       "app/components/catalog/model-facets.ts",
       "app/i18n/dynamic-keys.ts",
       "test/workstation/catalog-api.test.ts",
+      "test/workstation/dataset-preview.test.ts",
       "types/model-shape-guidance.ts",
       "types/dataset-inspection.ts",
       "shared/schemas/dataset-inspection.ts",

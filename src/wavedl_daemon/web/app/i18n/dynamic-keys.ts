@@ -240,13 +240,16 @@ export const runActivityMessageKeys = {
   plotsSubmitted: { label: 'runs.automaticPlotsSubmitted', hint: null },
 };
 
-export function runActivityMessageKeysFor(run: RunView): { label: string; hint: string | null } | null {
+export function runActivityMessageKeysFor(
+  run: RunView,
+): { label: string; hint: string | null } | null {
   if (run.state === 'running' && run.operation === 'train' && run.activity) {
     return runActivityMessageKeys[run.activity];
   }
 
   if (run.state === 'completed') {
     if (run.auto_plot?.status === 'pending') return runActivityMessageKeys.plotsPending;
+
     if (run.auto_plot?.status === 'submitted') return runActivityMessageKeys.plotsSubmitted;
   }
 

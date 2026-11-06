@@ -119,7 +119,7 @@ export const outputChunkSchema = z
       chunk.offset <= chunk.next_offset &&
       chunk.next_offset <= chunk.size &&
       chunk.next_offset - chunk.offset <= 64 * 1024 &&
-      chunk.eof === (chunk.next_offset >= chunk.size),
+      chunk.eof === chunk.next_offset >= chunk.size,
   );
 
 export const eventPageSchema = z.object({
