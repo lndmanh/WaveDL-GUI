@@ -11,7 +11,7 @@ const { state, appearance, appearanceChanged } = useWorkstation();
 </script>
 
 <template>
-  <ShellPage data-settings-page>
+  <ShellPage :panel-tabs="[]" data-settings-page>
     <SettingsWorkspace
       :daemon-id="state.health?.daemon_id ?? null"
       :appearance="appearance"

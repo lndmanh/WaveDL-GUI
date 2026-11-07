@@ -168,14 +168,9 @@ export function useRuns(
     if (disposed) return;
     paused = false;
 
-    if (
-      !loading.value &&
-      (lastRefreshed.value === null ||
-        (hasLiveRuns.value &&
-          Date.now() - Date.parse(lastRefreshed.value) >= LIST_REFRESH_INTERVAL))
-    ) {
-      void refresh(page.value);
-    }
+    // Runs can be submitted while this kept-alive page is hidden, even if its
+    // cached list has no live runs. Revalidate on every activation.
+    if (!loading.value) void refresh(page.value);
 
     syncRefreshTimer();
     const current = monitor;

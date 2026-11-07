@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computed, effectScope, onScopeDispose, shallowRef, watch } from 'vue';
+import { useIntervalFn } from '@vueuse/core';
+import { useRuns } from '../../app/composables/useRuns';
 import { canRequestCancellation, eventDiagnostic, RunMonitor } from '../../app/lib/run-monitor';
-import { DaemonApiError, parseJson } from '../../app/lib/daemon-api';
+import { DaemonApi, DaemonApiError, parseJson } from '../../app/lib/daemon-api';
 import { CursorStore } from '../../app/lib/event-stream';
 import { MetricHistory } from '../../app/lib/metric-history';
 import type { RunTransport } from '../../types/run-monitor';
@@ -1178,4 +1181,122 @@ describe('run monitoring', () => {
     expect(h.monitor.snapshot().stream).toBe('error');
     expect(h.transport.openEvents).not.toHaveBeenCalled();
   });
+});
+
+const existingId = '11111111-1111-1111-1111-111111111111';
+const submittedId = '22222222-2222-2222-2222-222222222222';
+
+function run(runId: string, state: RunView['state']): RunView {
+  return {
+    plan_id: runId,
+    run_id: runId,
+    request_id: runId,
+    backend: 'local',
+    operation: 'train',
+    attempt: 1,
+    state,
+    uncertainty: false,
+    submission_requested: true,
+    cancellation_requested: false,
+    evidence: null,
+  };
+}
+
+describe('kept-alive experiments list', () => {
+  beforeEach(() => {
+    vi.stubGlobal('computed', computed);
+    vi.stubGlobal('shallowRef', shallowRef);
+    vi.stubGlobal('watch', watch);
+    vi.stubGlobal('onScopeDispose', onScopeDispose);
+    vi.stubGlobal('useIntervalFn', useIntervalFn);
+    const cursors = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => cursors.get(key) ?? null,
+      setItem: (key: string, value: string) => cursors.set(key, value),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(['empty', 'completed', 'running'])(
+    'loads a submitted run on return to a recently refreshed %s list',
+    async (initial) => {
+      let available =
+        initial === 'empty'
+          ? []
+          : [run(existingId, initial === 'completed' ? 'completed' : 'running')];
+      const api = new DaemonApi('http://127.0.0.1:8765', {}, async (input, init) => {
+        const url = new URL(String(input));
+        const headers = { 'Content-Type': 'application/json' };
+
+        if (url.pathname === '/api/health')
+          return new Response(
+            JSON.stringify({
+              daemon_id: 'daemon-one',
+              build_id: 'build-one',
+              protocol_min: 1,
+              protocol_max: 1,
+            }),
+            { headers },
+          );
+
+        if (url.pathname === `/api/runs/${submittedId}/events`)
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                init?.signal?.addEventListener('abort', () => controller.close(), { once: true });
+              },
+            }),
+            { headers: { 'Content-Type': 'text/event-stream' } },
+          );
+
+        if (url.pathname === `/api/runs/${submittedId}`)
+          return new Response(JSON.stringify(run(submittedId, 'running')), { headers });
+
+        if (url.pathname === '/api/runs')
+          return new Response(JSON.stringify({ runs: available }), { headers });
+
+        throw new Error(`Unexpected request: ${url.pathname}`);
+      });
+      api.setToken('test-session');
+      const scope = effectScope();
+      const runs = scope.run(() =>
+        useRuns(
+          api,
+          (error) => {
+            throw error;
+          },
+          true,
+        ),
+      );
+
+      if (!runs) throw new Error('Missing runs scope');
+
+      try {
+        runs.resume();
+        await vi.waitFor(() => expect(runs.loading.value).toBe(false));
+        expect(runs.message.value).toBe('');
+        expect(runs.runs.value.map((item) => item.run_id)).toEqual(
+          initial === 'empty' ? [] : [existingId],
+        );
+
+        runs.pause();
+        available = [...available, run(submittedId, 'running')];
+        runs.select(submittedId);
+        expect(runs.selected.value?.run).toBeNull();
+        runs.resume();
+        await vi.waitFor(() => expect(runs.loading.value).toBe(false));
+        await vi.waitFor(() => expect(runs.selected.value?.freshness).toBe('fresh'));
+
+        expect(runs.runs.value.map((item) => item.run_id)).toEqual(
+          initial === 'empty' ? [submittedId] : [existingId, submittedId],
+        );
+        expect(runs.selected.value?.run?.run_id).toBe(submittedId);
+      } finally {
+        scope.stop();
+      }
+    },
+  );
 });

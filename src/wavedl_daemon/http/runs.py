@@ -101,6 +101,11 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
         response.headers.update(NO_STORE)
         return result.to_dict()
 
+    async def get_plan(run_id: str, response: Response):
+        result = await _call(service.get_plan, run_id)
+        response.headers.update(NO_STORE)
+        return result.to_dict()
+
     async def list_runs(
         response: Response,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -157,6 +162,14 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
         methods=["POST"],
         response_model=RunResponse,
         status_code=202,
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}/plan",
+        get_plan,
+        operation_id="get_run_plan",
+        responses=API_ERRORS,
+        methods=["GET", "HEAD"],
+        response_model=PlanView,
     )
     router.add_api_route(
         "/api/runs/{run_id}",

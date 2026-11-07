@@ -15,7 +15,7 @@ const { state, api, session } = useWorkstation();
 </script>
 
 <template>
-  <ShellPage data-work-page="datasets">
+  <ShellPage :panel-tabs="[]" data-work-page="datasets">
     <DatasetsWorkspace
       v-if="!!api"
       :key="`${state.health?.daemon_id}:${state.revision}`"

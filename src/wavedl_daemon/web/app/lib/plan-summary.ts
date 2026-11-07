@@ -35,15 +35,17 @@ interface PlanFact {
 export function buildPlanSummary(
   plan: PlanView | null,
   t: (key: string, values?: Record<string, string | number>) => string,
+  fullSettings = false,
 ) {
   function display(value: Json | undefined, name = ''): string {
+    if (fullSettings && value !== undefined && (value === null || typeof value === 'object' || value === ''))
+      return JSON.stringify(value);
     if (value === undefined || value === null) return t('project.none');
-
     if (value === true || value === false) return t(value ? 'builder.on' : 'builder.off');
 
     const number = jsonNumberSchema.safeParse(value);
 
-    if (number.success) return compactNumber(number.data);
+    if (number.success) return fullSettings ? String(number.data) : compactNumber(number.data);
 
     if (Array.isArray(value))
       return value.length ? value.map((item) => display(item, name)).join(', ') : t('project.none');
@@ -62,6 +64,12 @@ export function buildPlanSummary(
 
   function text(value: string | undefined | null): string {
     return value || t('project.notAvailable');
+  }
+
+  function fieldLabel(name: string): string {
+    const keys = Object.hasOwn(trainingFieldMessageKeys, name) ? trainingFieldMessageKeys[name] : undefined;
+
+    return keys ? t(keys.label) : name;
   }
 
   function runtimeLabel(value: string | undefined): string {
@@ -102,7 +110,7 @@ export function buildPlanSummary(
     return [
       {
         name,
-        label: trainingFieldMessageKeys[name] ? t(trainingFieldMessageKeys[name].label) : name,
+        label: fieldLabel(name),
         value: display(value, name),
         defaultValue: display(fallback[1], name),
       },
@@ -162,7 +170,7 @@ export function buildPlanSummary(
     return [
       {
         name,
-        label: trainingFieldMessageKeys[name] ? t(trainingFieldMessageKeys[name].label) : name,
+        label: fieldLabel(name),
         value: display(value, name),
         changed: changed(name, value),
       },
@@ -246,5 +254,20 @@ export function buildPlanSummary(
       ].filter((section) => section.rows.length > 0)
     : [];
 
-  return { manifest, differences, context, sections, warnings: preview.warnings ?? [] };
+  // Curated review sections deliberately hide inactive fields. Run history must not:
+  // retain every resolved key, including null, empty, inactive and future settings.
+  const presented = new Set(sections.filter((section) => section.id !== 'runtime').flatMap((section) => section.rows.map((row) => row.name)));
+  const remaining = fullSettings
+    ? Object.entries(config).filter(([name]) => !presented.has(name)).map(([name, value]) => ({
+        name,
+        label: fieldLabel(name),
+        value: display(value, name),
+        changed: changed(name, value),
+      }))
+    : [];
+  const completeSections: readonly PlanSection[] = remaining.length
+    ? [...sections, { id: 'resolved', title: t('project.resolvedSettings'), rows: remaining }]
+    : sections;
+
+  return { manifest, differences, context, sections: completeSections, warnings: preview.warnings ?? [] };
 }

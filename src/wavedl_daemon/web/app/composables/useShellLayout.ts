@@ -2,7 +2,6 @@ import {
   SHELL_PANEL_DEFAULT_WIDTH,
   SHELL_PANEL_MAX_WIDTH,
   SHELL_PANEL_MIN_WIDTH,
-  SHELL_PANEL_TABS,
 } from '../shell/constants';
 
 import { sectionForPath } from '../shell/sections';
@@ -40,13 +39,12 @@ export function createShellLayoutState(
   const isDockedLayout = ref(true);
   const panelWidth = ref(SHELL_PANEL_DEFAULT_WIDTH);
   const isFocusMode = ref(false);
-  const activeTab = ref<ShellPanelTabId>('logs');
+  const activeTab = ref<ShellPanelTabId>('metrics');
   /*
-   * Empty means the stored tab is used as-is (the reader did this before tabs were
-   * registered). A non-empty set is the current route's contribution; the stored
-   * tab is remembered across routes so returning to the reader lands on the same one.
+   * Pages opt into the companion; an empty contribution leaves the canvas full-width.
+   * Remember the chosen tab across routes without reserving space on other pages.
    */
-  const panelTabs = shallowRef<readonly ShellPanelTabDefinition[]>(SHELL_PANEL_TABS);
+  const panelTabs = shallowRef<readonly ShellPanelTabDefinition[]>([]);
 
   const isRailVisible = computed(() => !isFocusMode.value);
 
@@ -85,9 +83,9 @@ export function createShellLayoutState(
    * consult the set from the call that just selected the tab.
    */
   watch(
-    resolvedActiveTab,
-    (tabId) => {
-      visitedTabIds.add(tabId);
+    [resolvedActiveTab, panelTabs],
+    ([tabId, tabs]) => {
+      if (tabs.some((tab) => tab.id === tabId)) visitedTabIds.add(tabId);
     },
     { immediate: true, flush: 'sync' },
   );
@@ -109,6 +107,7 @@ export function createShellLayoutState(
    * a tab, and the mobile bar's companion slot must reopen on the tab already chosen.
    */
   const openPanel = () => {
+    if (panelTabs.value.length === 0) return;
     isFocusMode.value = false;
     isPanelOpen.value = true;
     hasSummonedPanel.value = true;
@@ -129,6 +128,7 @@ export function createShellLayoutState(
   };
 
   const togglePanel = () => {
+    if (panelTabs.value.length === 0) return;
     // Asking for the panel while immersed means you want it, not that you want
     // to toggle a preference you cannot currently see.
     if (isFocusMode.value) {
@@ -234,8 +234,15 @@ export function useShellPanelTabs(
   tabs: MaybeRefOrGetter<readonly ShellPanelTabDefinition[]>,
 ): void {
   const layout = useShellLayout();
-  const apply = () => layout.setPanelTabs(toValue(tabs));
-  onMounted(apply);
-  onActivated(apply);
-  watch(() => toValue(tabs), apply, { deep: true, immediate: true });
+  const { isActive } = usePageActive();
+
+  // Cached pages still react to run and connection changes while hidden. Only
+  // the active page may replace the companion contribution, including on re-entry.
+  watch(
+    [isActive, () => toValue(tabs)],
+    ([active, value]) => {
+      if (active) layout.setPanelTabs(value);
+    },
+    { deep: true, immediate: true },
+  );
 }

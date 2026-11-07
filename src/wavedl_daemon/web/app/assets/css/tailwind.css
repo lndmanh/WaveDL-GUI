@@ -113,7 +113,16 @@ button:disabled {
 }
 * {
   box-sizing: border-box;
-  border-color: var(--border);
+}
+/*
+ * Unlayered rules beat every Tailwind utility, so the default border colour
+ * lives in the base layer. Otherwise `border-transparent` and friends are
+ * silently overridden and borderless-looking controls (tab triggers) show a border.
+ */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   *,

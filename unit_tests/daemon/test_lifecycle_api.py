@@ -505,6 +505,77 @@ def test_preview_uuid_owned_pure_and_idempotent(environment, monkeypatch):
     )
 
 
+@pytest.mark.parametrize("backend", ["local", "slurm"])
+def test_get_run_plan_returns_the_original_stored_preview(
+    environment, monkeypatch, backend
+):
+    app = environment.app
+    body = payload()
+    body["backend"] = backend
+    if backend == "slurm":
+        body["storage_map"] = [
+            {
+                "host_root": str(environment.service.settings.run_root),
+                "execution_root": "/cluster/runs",
+            }
+        ]
+    planned = request(app, "POST", "/api/runs/plan", body=body, key="stored-plan")
+    assert planned.status_code == 200, planned.text
+    original = planned.json()
+    run_id = original["run_id"]
+    if backend == "local":
+        submitted = request(
+            app, "POST", "/api/runs", body={"plan_id": original["plan_id"]}
+        )
+        assert submitted.status_code == 202
+    run_before = environment.service.get(run_id).to_dict()
+    monkeypatch.setattr(
+        environment.service.backends[backend],
+        "plan",
+        lambda *args, **kwargs: pytest.fail("Stored plan was replanned"),
+    )
+
+    response = request(app, "GET", f"/api/runs/{run_id}/plan")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == original
+    assert response.json() == environment.service.get_plan(run_id).to_dict()
+    assert environment.service.get(run_id).to_dict() == run_before
+    assert len(all_plans(environment.plans)) == 1
+    assert environment.supervisor.launches == []
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+@pytest.mark.parametrize(
+    ("run_id", "status"),
+    [
+        ("11111111-1111-1111-1111-111111111111", 404),
+        ("not-a-uuid", 400),
+        ("ABCDEFAB-1234-1234-1234-123456789ABC", 400),
+    ],
+)
+def test_get_run_plan_uses_the_run_lookup_errors(environment, method, run_id, status):
+    existing = request(environment.app, method, f"/api/runs/{run_id}")
+    response = request(environment.app, method, f"/api/runs/{run_id}/plan")
+
+    assert response.status_code == existing.status_code == status
+    assert response.headers.get("cache-control") == existing.headers.get(
+        "cache-control"
+    )
+    assert response.content == existing.content
+
+
+def test_get_run_plan_requires_authentication(environment):
+    planned = request(
+        environment.app, "POST", "/api/runs/plan", body=payload(), key="plan-auth"
+    ).json()
+    response = request(
+        environment.app, "GET", f"/api/runs/{planned['run_id']}/plan", headers={}
+    )
+    assert response.status_code == 401
+
+
 def test_repeated_submit_starts_one_attempt_and_one_process(environment):
     plan = planned_and_submitted(environment, "repeat")
     run_id = plan["run_id"]
@@ -1050,11 +1121,16 @@ def test_lifecycle_get_routes_support_head(environment):
 
     list_response = request(app, "HEAD", "/api/runs")
     run_response = request(app, "HEAD", f"/api/runs/{run_id}")
+    plan_response = request(app, "HEAD", f"/api/runs/{run_id}/plan")
 
     assert list_response.status_code == 200
     assert list_response.content == b""
     assert run_response.status_code == 200
     assert run_response.content == b""
+    assert plan_response.status_code == 200
+    assert plan_response.content == b""
+    assert plan_response.headers["cache-control"] == "no-store"
+    assert plan_response.headers["content-length"] == planned.headers["content-length"]
 
 
 def test_plan_request_round_trip_preserves_json_values_and_omissions():

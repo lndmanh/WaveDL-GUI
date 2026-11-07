@@ -1,9 +1,12 @@
 import { buildPlanSummary } from '../lib/plan-summary';
 import type { PlanView } from '~~/types/daemon-api';
 
-export function usePlanSummary(source: MaybeRefOrGetter<PlanView | null>) {
+export function usePlanSummary(
+  source: MaybeRefOrGetter<PlanView | null>,
+  fullSettings: MaybeRefOrGetter<boolean> = false,
+) {
   const { t } = useI18n({ useScope: 'global' });
-  const summary = computed(() => buildPlanSummary(toValue(source), t));
+  const summary = computed(() => buildPlanSummary(toValue(source), t, toValue(fullSettings)));
   const manifest = computed(() => summary.value.manifest);
   const differences = computed(() => summary.value.differences);
   const context = computed(() => summary.value.context);

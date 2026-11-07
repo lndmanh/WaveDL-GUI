@@ -7,7 +7,7 @@ const navigate = useShellActions();
 const layout = useShellLayout();
 const { state } = useWorkstation();
 
-const { activeSection, isDockedLayout, isCompanionShowing, isFocusMode, commandPaletteOpen } =
+const { panelTabs, isDockedLayout, isCompanionShowing, isFocusMode, commandPaletteOpen } =
   layout;
 
 const statusLabel = computed(() => t(connectionStatusKey[state.value.status]));
@@ -44,6 +44,7 @@ const statusLabel = computed(() => t(connectionStatusKey[state.value.status]));
     <Minimize2 v-if="isFocusMode" aria-hidden="true" /><Maximize2 v-else aria-hidden="true" />
   </Button>
   <Button
+    v-if="panelTabs.length > 0"
     variant="ghost"
     size="icon"
     :aria-label="t('shell.openCompanionPanel')"

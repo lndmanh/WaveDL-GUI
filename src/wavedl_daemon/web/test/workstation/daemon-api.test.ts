@@ -1288,6 +1288,80 @@ describe('daemon transport', () => {
     api.setToken(token);
     await expect(api.health()).rejects.toMatchObject({ code: 'response' });
   });
+  it('reads the stored plan with authentication without granting submission approval', async () => {
+    const stored = {
+      ...matrixPlan,
+      preview: {
+        target: 'slurm',
+        argv: [],
+        script: '#!/bin/sh\npython -m wavedl.train\n',
+        spec: { resolved_config: { epochs: 2, additive: true } },
+      },
+    };
+    const transport = vi.fn<typeof fetch>(async (url) =>
+      json(String(url).endsWith('/health') ? health : stored),
+    );
+    const api = new DaemonApi(origin, {}, transport);
+    api.setToken(token);
+    const controller = new AbortController();
+
+    const plan = await api.getRunPlan(matrixId, controller.signal);
+
+    expect(plan).toEqual(stored);
+    expect(transport).toHaveBeenCalledTimes(2);
+    const call = transport.mock.calls.find(([url]) => String(url).endsWith(`/${matrixId}/plan`));
+    expect(call).toBeDefined();
+    const init = call?.[1];
+    expect(init?.method).toBe('GET');
+    expect(new Headers(init?.headers).get('Authorization')).toBe(`Bearer ${token}`);
+    expect(init?.body).toBeUndefined();
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect(new Headers(init?.headers).has('Idempotency-Key')).toBe(false);
+    expect(() => api.approvedRequest(plan)).toThrow();
+    await expect(api.submit(plan)).rejects.toMatchObject({ code: 'identity' });
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+  it.each(['not-a-uuid', 'ABCDEFAB-1234-1234-1234-123456789ABC'])(
+    'rejects invalid stored-plan identity %s before making requests',
+    async (runId) => {
+      const transport = vi.fn<typeof fetch>();
+      const api = new DaemonApi(origin, {}, transport);
+      api.setToken(token);
+
+      await expect(api.getRunPlan(runId)).rejects.toMatchObject({
+        code: 'identity',
+        clientMessageKey: 'invalidRunIdentity',
+      });
+      expect(transport).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    null,
+    {},
+    { ...matrixPlan, preview: [] },
+    { ...matrixPlan, preview: { spec: null } },
+    { ...matrixPlan, plan_id: 'invalid' },
+    { ...matrixPlan, request_id: 'invalid' },
+    { ...matrixPlan, run_id: '22222222-2222-2222-2222-222222222222' },
+  ])('rejects malformed or foreign stored plans %j', async (body) => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(String(url).endsWith('/health') ? health : body),
+    );
+    api.setToken(token);
+
+    await expect(api.getRunPlan(matrixId)).rejects.toMatchObject({
+      code: 'response',
+      clientMessageKey: 'invalidPlanResponse',
+    });
+  });
+  it('preserves HTTP errors for missing stored plans', async () => {
+    const api = new DaemonApi(origin, {}, async (url) =>
+      String(url).endsWith('/health') ? json(health) : json({ error: 'Not found' }, 404),
+    );
+    api.setToken(token);
+
+    await expect(api.getRunPlan(matrixId)).rejects.toMatchObject({ code: 'http', status: 404 });
+  });
   it('submits only immutable plans approved on this connection and permits retry', async () => {
     const run = '11111111-1111-1111-1111-111111111111';
     const planned = { plan_id: run, run_id: run, request_id: run, preview: { argv: ['train'] } };

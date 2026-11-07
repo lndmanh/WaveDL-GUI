@@ -539,6 +539,10 @@ class RunService:
         self._guard()
         return self._view(self._owned(run_id))
 
+    def get_plan(self, run_id: str) -> PlanResponse:
+        self._guard()
+        return self._preview(self._owned(run_id))
+
     def layout(self, run_id: str) -> RunPaths:
         """Resolve persisted identity on the owner thread, without file probing."""
         self._guard()

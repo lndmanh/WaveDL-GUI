@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { SHELL_PANEL_TABS } from '../../shell/constants';
+
 defineOptions({ name: 'WorkstationExperimentsPage' });
 
 // The kept-alive root: descendants that mount while hidden inherit its state.
@@ -17,7 +19,7 @@ const { runId, select, unknown } = useRunRoute('experiments');
 </script>
 
 <template>
-  <ShellPage data-work-page="experiments">
+  <ShellPage :panel-tabs="runId && api ? SHELL_PANEL_TABS : []" data-work-page="experiments">
     <RunsWorkspace
       v-if="!!api"
       :key="`${state.health?.daemon_id}:${state.revision}`"

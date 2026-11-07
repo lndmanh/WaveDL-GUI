@@ -270,13 +270,30 @@ def test_http_async_adapter_awaits_typed_result_and_maps_deadline_503(tmp_path):
         "activity": None,
     }
 
+    plan_reply = {
+        "plan_id": "plan-one",
+        "run_id": "one",
+        "request_id": "request-one",
+        "preview": {"argv": ["python", "-m", "wavedl.train"]},
+    }
+    owner_threads = []
+
     class Reply:
         def to_dict(self):
             return reply
 
+    class PlanReply:
+        def to_dict(self):
+            return plan_reply
+
     class Service:
         def get(self, run_id):
             return Reply()
+
+        def get_plan(self, run_id):
+            owner_threads.append(threading.get_ident())
+            assert run_id == "one"
+            return PlanReply()
 
         def submit(self, plan_id):
             gate.wait(3)
@@ -304,6 +321,15 @@ def test_http_async_adapter_awaits_typed_result_and_maps_deadline_503(tmp_path):
                 response = await client.get("/api/runs/one")
                 assert response.status_code == 200
                 assert response.json() == reply
+                response = await client.get("/api/runs/one/plan")
+                assert response.status_code == 200
+                assert response.json() == plan_reply
+                assert response.headers["cache-control"] == "no-store"
+                response = await client.head("/api/runs/one/plan")
+                assert response.status_code == 200
+                assert response.content == b""
+                assert len(owner_threads) == 2
+                assert all(owner != threading.get_ident() for owner in owner_threads)
                 response = await client.post("/api/runs", json={"plan_id": "one"})
                 assert response.status_code == 503
                 assert host.outstanding == 1

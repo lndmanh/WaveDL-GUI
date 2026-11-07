@@ -21,7 +21,7 @@ function submitted(run: RunView): void {
 </script>
 
 <template>
-  <ShellPage data-work-page="project">
+  <ShellPage :panel-tabs="[]" data-work-page="project">
     <ProjectContainer v-show="!!api" :session="session" @submitted="submitted" />
   </ShellPage>
 </template>

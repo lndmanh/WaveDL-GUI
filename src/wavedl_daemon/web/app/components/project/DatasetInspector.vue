@@ -10,6 +10,7 @@ import type { DatasetInspection } from '~~/types/dataset-inspection';
 
 const props = defineProps<{
   session: ConnectionSession;
+  active: boolean;
   selection: DataSelection | null;
   inspection: DatasetInspection | null;
 }>();
@@ -23,6 +24,7 @@ const { t, locale } = useI18n({ useScope: 'global' });
 const editing = shallowRef(!props.selection);
 const root = useTemplateRef<HTMLElement>('root');
 const reduceMotion = useReducedMotion();
+const { isActive } = usePageActive();
 
 const {
   info: restoredInfo,
@@ -93,7 +95,8 @@ const styles = {
 <template>
   <InspectorPanel :title="t('builder.datasetTitle')" :description="t('builder.datasetDescription')">
     <div ref="root" class="min-w-0">
-      <AnimatePresence mode="wait" :initial="false">
+      <!-- Hidden mounts enter motion-v's exit state; recreate presence only when visible. -->
+      <AnimatePresence v-if="active && isActive" mode="wait" :initial="false">
         <motion.div
           v-if="editing"
           key="picker"

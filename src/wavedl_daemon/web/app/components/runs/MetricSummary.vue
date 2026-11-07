@@ -77,13 +77,7 @@ const metrics = computed(() => {
       />
       <InfoChip v-else :label="t('runs.currentRuntime')" :text="t('runs.latestNote')" uncertain />
     </header>
-    <div class="grid grid-cols-[repeat(auto-fit,_minmax(min(100%,_16rem),_1fr))] gap-6">
-      <PerParameterMetrics :parameters="summary.current?.parameters ?? []" />
-      <MetricHealthPanel
-        :health="summary.current?.health ?? []"
-        class="border-t pt-6 @min-[33.5rem]:border-t-0 @min-[33.5rem]:border-l @min-[33.5rem]:pt-0 @min-[33.5rem]:pl-6"
-      />
-    </div>
+    <PerParameterMetrics :parameters="summary.current?.parameters ?? []" />
     <section v-if="metrics.length" :aria-label="t('runs.allMetrics')">
       <h4 class="text-[0.85rem] font-[650]">{{ t('runs.allMetrics') }}</h4>
       <dl :class="cn(styles.metricSpecList)">

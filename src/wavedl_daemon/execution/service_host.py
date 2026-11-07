@@ -282,6 +282,9 @@ class AsyncRunService:
     async def get(self, run_id: str) -> RunResponse:
         return await self._call("get", run_id)
 
+    async def get_plan(self, run_id: str) -> PlanResponse:
+        return await self._call("get_plan", run_id)
+
     async def list(
         self, limit: int = 50, offset: int = 0, state: str | None = None
     ) -> list[RunResponse]:

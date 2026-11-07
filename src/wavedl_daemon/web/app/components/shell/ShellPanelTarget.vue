@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { shellPanelTabTargetId } from '../../shell/constants';
-import type { ShellPanelTabDefinition } from '~~/types/shell';
+import type { ShellPanelTabDefinition, ShellPanelTabId } from '~~/types/shell';
 
 const props = defineProps<{ tab: ShellPanelTabDefinition }>();
 const { t } = useI18n({ useScope: 'global' });
 const target = useTemplateRef<HTMLElement>('target');
 const empty = shallowRef(true);
+const emptyLabelKeys: Record<ShellPanelTabId, string> = {
+  metrics: 'shell.companionMetricsEmpty',
+  health: 'shell.companionHealthEmpty',
+  configuration: 'shell.companionConfigurationEmpty',
+  logs: 'shell.companionLogsEmpty',
+  artifacts: 'shell.companionArtifactsEmpty',
+};
 let observer: MutationObserver | null = null;
 
 function refresh() {
@@ -34,7 +41,7 @@ onScopeDispose(() => observer?.disconnect());
     <EmptyHeader>
       <EmptyMedia variant="icon"><component :is="props.tab.icon" aria-hidden="true" /></EmptyMedia>
       <EmptyDescription>{{
-        props.tab.id === 'logs' ? t('shell.companionLogsEmpty') : t('shell.companionArtifactsEmpty')
+        t(emptyLabelKeys[props.tab.id])
       }}</EmptyDescription>
     </EmptyHeader>
   </Empty>

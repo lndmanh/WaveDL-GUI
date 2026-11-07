@@ -64,6 +64,7 @@ import type { DatasetInspection } from '~~/types/dataset-inspection';
 import type { TrainingFieldName } from '~~/types/training-layout';
 import type { PlanCommand, ReadinessItem } from '~~/types/plan-summary';
 import type { PipelineBlock, DraftSummary } from '~~/types/project-draft';
+import type { PendingRunClone } from '~~/types/run-clone';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
@@ -1140,6 +1141,94 @@ const projectStyles = {
   runNoticeLeaveTo: cn('opacity-0 [transform:translateY(-6px)_scale(0.98)]'),
   runNoticeIcon: cn('size-[1.1rem] flex-none mt-[0.1rem] text-primary'),
 };
+// A run clone is a one-shot import, never an old approval or old catalogue selection.
+const runCloneImport = useRunClone();
+const { isActive: isClonePageActive } = usePageActive();
+
+async function consumeRunClone(value: PendingRunClone) {
+  offered.value = null;
+  retireScope();
+  setup.value = 'manual';
+  const fresh = draftRequest(value.draft, defaults());
+  resetForm({ values: {
+    ...fresh,
+    config: {
+      ...fresh.config,
+      data_path: value.imported.dataPath ?? '',
+      model: value.imported.model ?? '',
+    },
+  } });
+  active.value = 'plan';
+  const api = new CatalogApi(toRaw(props.session));
+  const missing: string[] = [];
+  const controller = new AbortController();
+  const cloneScope = scope.value;
+  const cancel = watch([scope, isClonePageActive], () => controller.abort(), { flush: 'sync' });
+
+  try {
+    if (value.imported.dataPath) {
+      const current = epoch;
+
+      try {
+        const selection = await api.locate(value.imported.dataPath, controller.signal);
+
+        if (controller.signal.aborted || current !== epoch || cloneScope !== scope.value) return;
+        if (selection?.kind === 'file') selectData(selection);
+        else missing.push(value.imported.dataPath);
+      } catch {
+        if (controller.signal.aborted || current !== epoch || cloneScope !== scope.value) return;
+        missing.push(value.imported.dataPath);
+      }
+    }
+
+    if (value.imported.model) {
+      const current = epoch;
+      const known = catalogue.models.value.find((item) => item.id === value.imported.model);
+
+      try {
+        const selection = known
+          ? catalogue.select(known)
+          : await api.selectCustomModel(value.imported.model, controller.signal);
+
+        if (controller.signal.aborted || current !== epoch || cloneScope !== scope.value) return;
+        if (selection) selectModel(selection);
+        else missing.push(value.imported.model);
+      } catch {
+        if (controller.signal.aborted || current !== epoch || cloneScope !== scope.value) return;
+        missing.push(value.imported.model);
+      }
+    }
+
+    if (controller.signal.aborted || cloneScope !== scope.value) return;
+    announce({
+      tone: missing.length || value.imported.skipped.length ? 'warning' : 'success',
+      title: () => t('project.clonedConfiguration'),
+      detail: () => [
+        t('project.cloneReviewHelp'),
+        missing.length ? t('builder.importMissing', { items: missing.join(', ') }) : '',
+        value.imported.skipped.length ? t('builder.importSkipped', { keys: value.imported.skipped.join(', ') }) : '',
+      ].filter(Boolean).join(' '),
+    });
+    // Normal review validates the new draft and asks the daemon for a fresh plan.
+    review();
+  } finally {
+    cancel();
+    controller.abort();
+  }
+}
+
+watch(
+  [connected, () => catalogue.busy.value, () => runCloneImport.pending.value, isClonePageActive],
+  ([online, loading, _pending, visible]) => {
+    const id = daemonId();
+
+    if (!visible || !online || loading || !id || !runCloneImport.pending.value) return;
+    const value = runCloneImport.consume(id);
+
+    if (value) void consumeRunClone(value);
+  },
+  { immediate: true },
+);
 </script>
 <template>
   <section
@@ -1314,6 +1403,7 @@ const projectStyles = {
       >
         <DatasetInspector
           v-show="active === 'dataset'"
+          :active="active === 'dataset'"
           :session="session"
           :selection="data"
           :inspection="datasetInspection"

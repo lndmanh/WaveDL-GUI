@@ -42,7 +42,8 @@ const connection = useDaemonConnection({
 const { state, api } = connection;
 const auth = useWorkstationAuth();
 const appearance = shallowRef(loadAppearance());
-const section = computed(() => sectionForPath(route.path));
+// The incoming page needs shell providers before Nuxt's deferred route updates.
+const section = computed(() => sectionForPath(router.currentRoute.value.path));
 
 provideWorkstationLocale(computed(() => appearance.value.language));
 

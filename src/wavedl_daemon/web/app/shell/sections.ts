@@ -3,13 +3,12 @@ import { isUuid } from '../lib/daemon-api-schemas';
 /**
  * Section integration contract:
  * - The router selects the active work page; activeSection is derived from its path.
- * - Teleport run logs to #shell-panel-tab-logs and results to
- *   #shell-panel-tab-artifacts. Both targets stay mounted while the panel is closed.
- * - Use Teleport's `defer` (or wait for onMounted) because targets are siblings of
- *   the canvas. Gate teleported bodies by activeSection, not the section's v-show.
- * - useShellLayout().setActiveTab('logs' | 'artifacts') selects and opens a tab;
- *   useShellPanelTabs() can register a section-specific subset of the real tabs.
- * - WorkstationShell exposes an `actions` slot. Connection and Settings are pages.
+ * - A selected Experiments run contributes companion tabs through ShellPage.panelTabs;
+ *   other pages contribute none. useShellLayout().setActiveTab() selects and opens a tab.
+ * - shellPanelTabTargetId() names permanent teleport targets, even while the panel is
+ *   closed. Use Teleport's `defer` (or wait for onMounted) because the targets are
+ *   siblings of the canvas. Park teleported content when usePageActive() is inactive.
+ * - Connection and Settings are pages.
  */
 import { FileChartColumn, Layers, Database, Plus, Cable, Settings2 } from '@lucide/vue';
 import { WORKSTATION_SECTIONS } from '../lib/shell-test-ids';

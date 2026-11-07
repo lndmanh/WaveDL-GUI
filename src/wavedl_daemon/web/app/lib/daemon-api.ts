@@ -526,6 +526,15 @@ export class DaemonApi {
 
     return runView(await this.read(`/api/runs/${runId}`, signal), runId);
   }
+  async getRunPlan(runId: string, signal?: AbortSignal): Promise<PlanView> {
+    if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
+    const result = planSchema.safeParse(await this.read(`/api/runs/${runId}/plan`, signal));
+
+    if (!result.success || result.data.run_id !== runId)
+      throw DaemonApiError.fromKey('response', 'invalidPlanResponse');
+
+    return result.data;
+  }
   async plan(request: JsonObject, idempotencyKey: string, signal?: AbortSignal): Promise<PlanView> {
     if (!idempotencyKey || idempotencyKey.length > 256 || /[\r\n]/.test(idempotencyKey))
       throw DaemonApiError.fromKey('response', 'invalidIdempotencyKey');

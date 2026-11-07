@@ -3,6 +3,8 @@ import { validatedNextPath } from '../lib/auth-routing';
 
 definePageMeta({ keepalive: false });
 
+useShellPanelTabs(() => []);
+
 const { state, connection } = useWorkstation();
 const { keepSignedIn } = connection;
 const route = useRoute();

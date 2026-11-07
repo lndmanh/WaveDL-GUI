@@ -46,7 +46,7 @@ export type WorkstationSection = (typeof WORKSTATION_SECTIONS)[keyof typeof WORK
 
 export type PrimaryWorkstationSection = (typeof PRIMARY_WORKSTATION_SECTION_IDS)[number];
 
-export type ShellPanelTabId = 'logs' | 'artifacts';
+export type ShellPanelTabId = 'metrics' | 'health' | 'configuration' | 'logs' | 'artifacts';
 
 export interface ShellPanelTabDefinition {
   id: ShellPanelTabId;
