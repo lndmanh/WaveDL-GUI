@@ -145,6 +145,26 @@ export function relativeTime(
   return format.format(0, 'second');
 }
 
+/** Decimal file sizes, capped at gigabytes, with at most one fractional digit. */
+export function formatBytes(bytes: number, locale: string): string {
+  const size = Number.isFinite(bytes) ? Math.max(0, bytes) : 0;
+  const [unit, divisor]: [string, number] =
+    size >= 1_000_000_000
+      ? ['gigabyte', 1_000_000_000]
+      : size >= 1_000_000
+        ? ['megabyte', 1_000_000]
+        : size >= 1_000
+          ? ['kilobyte', 1_000]
+          : ['byte', 1];
+
+  return new Intl.NumberFormat(locale, {
+    style: 'unit',
+    unit,
+    unitDisplay: 'short',
+    maximumFractionDigits: 1,
+  }).format(size / divisor);
+}
+
 /** Two most significant units of a duration, e.g. "1h 12m" or "4m 5s". */
 export function durationText(totalSeconds: number, locale: string): string {
   const seconds = Math.max(0, Math.round(totalSeconds));

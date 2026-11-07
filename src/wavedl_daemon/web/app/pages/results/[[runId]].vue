@@ -41,7 +41,7 @@ watch(
 </script>
 
 <template>
-  <ShellPage data-work-page="results">
+  <ShellPage :panel-tabs="[]" data-work-page="results">
     <ResultsContainer
       v-if="!!api"
       :key="`${state.health?.daemon_id}:${state.revision}`"
