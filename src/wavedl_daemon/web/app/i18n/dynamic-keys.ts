@@ -246,14 +246,6 @@ export const runBackendMessageKeys = {
   slurm: 'runs.backendSlurm',
 } as const;
 
-export const runStreamMessageKeys: Readonly<Record<RunMonitorSnapshot['stream'], string>> = {
-  connecting: 'runs.connecting',
-  live: 'runs.live',
-  reconnecting: 'runs.reconnecting',
-  stopped: 'runs.stopped',
-  error: 'runs.error',
-};
-
 export const runCancellationMessageKeys: Readonly<
   Record<RunMonitorSnapshot['cancellation'], string>
 > = {
