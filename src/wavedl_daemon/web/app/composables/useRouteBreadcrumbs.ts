@@ -5,13 +5,8 @@ import type { BreadcrumbItemType } from '~~/types/common';
 export function buildRouteBreadcrumbs(input: {
   path: string;
   homeTitle: string;
-  overrideItems: BreadcrumbItemType[] | null;
   titleForPath: (absolutePath: string, isCurrent: boolean) => string | null;
 }): BreadcrumbItemType[] {
-  if (input.overrideItems && input.overrideItems.length > 0) {
-    return input.overrideItems;
-  }
-
   const crumbs: BreadcrumbItemType[] = [{ title: input.homeTitle, href: '/' }];
 
   if (input.path === '/') return crumbs;
@@ -58,27 +53,15 @@ function titleFromMeta(
   return null;
 }
 
-/**
- * Auto-derived crumbs from the route, with `usePageBreadcrumbs()` as an
- * exact-path override — same rules AppLayout used, so migrating a page onto
- * the shell does not change what the header shows.
- */
 export function useRouteBreadcrumbs() {
   const router = useRouter();
   const route = useRoute();
   const { t } = useI18n({ useScope: 'global' });
-  const pageBreadcrumbs = useCurrentPageBreadcrumbs();
 
   const breadcrumbs = computed<BreadcrumbItemType[]>(() => {
-    const override = pageBreadcrumbs.value;
-
-    const overrideItems =
-      override && override.path === route.path && override.items.length > 0 ? override.items : null;
-
     return buildRouteBreadcrumbs({
       path: route.path,
       homeTitle: t('shell.workstation'),
-      overrideItems,
       titleForPath: (absolutePath, isCurrent) => {
         const runId = runIdForPath(absolutePath);
 
