@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { inferenceConfigSchema } from '../../shared/schemas/result-request';
 import { jsonNumberSchema, jsonStringSchema } from '../../shared/schemas/json';
 import { object } from './daemon-api';
 import { pathName } from './run-overview';
@@ -44,7 +44,7 @@ export function evaluationPlanContext(manifest: JsonObject | undefined) {
   const config = object(manifest?.resolved_config) ? manifest.resolved_config : {};
   const checkpoint = jsonStringSchema.safeParse(config.checkpoint).data ?? null;
   const dataset = jsonStringSchema.safeParse(config.data_path).data ?? null;
-  const names = z.array(jsonStringSchema).safeParse(config.param_names).data;
+  const names = inferenceConfigSchema.shape.param_names.safeParse(config.param_names).data;
   const parameterNames = names ?? [];
 
   return {
@@ -140,7 +140,9 @@ export function comparisonDelta(
   const value = test - validation;
   const relative = Math.abs(value) / Math.max(Math.abs(validation), 1e-12);
   const improvement = higherBetter ? value > 0 : value < 0;
-  const tone = improvement ? 'better' : relative - 0.01 > Number.EPSILON * 8 ? 'worse' : 'unchanged';
+  // Both directions share the 1% band, so a negligible change never reads as a win or a loss.
+  const significant = relative - 0.01 > Number.EPSILON * 8;
+  const tone = !significant ? 'unchanged' : improvement ? 'better' : 'worse';
 
   return { value, tone };
 }
@@ -157,7 +159,9 @@ export function parameterRanking(
     finite.length > 1 ? (field === 'r2' ? Math.min(...finite) : Math.max(...finite)) : null;
 
   const maximum = Math.max(0, ...finite.map(Math.abs));
-  const weakest = scaleFree && target !== null ? rows.find((row) => row[field] === target)?.index : undefined;
+
+  const weakest =
+    scaleFree && target !== null ? rows.find((row) => row[field] === target)?.index : undefined;
 
   const ranked = rows.map((row) => {
     const value = row[field];

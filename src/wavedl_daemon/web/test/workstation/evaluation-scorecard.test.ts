@@ -188,7 +188,10 @@ describe('validation baseline', () => {
     expect(comparisonDelta(101, 100, false)?.tone).toBe('unchanged');
     expect(comparisonDelta(0.891, 0.9, true)?.tone).toBe('unchanged');
     expect(comparisonDelta(101.01, 100, false)?.tone).toBe('worse');
-    expect(comparisonDelta(99.9, 100, false)?.tone).toBe('better');
+    expect(comparisonDelta(99.9, 100, false)?.tone).toBe('unchanged');
+    expect(comparisonDelta(98.9, 100, false)?.tone).toBe('better');
+    expect(comparisonDelta(0.909, 0.9, true)?.tone).toBe('unchanged');
+    expect(comparisonDelta(0.91, 0.9, true)?.tone).toBe('better');
     expect(comparisonDelta(-0.1, -0.2, true)?.tone).toBe('better');
     expect(comparisonDelta(0.1, 0, false)?.tone).toBe('worse');
     expect(comparisonDelta(null, 1, true)).toBeNull();
@@ -198,9 +201,14 @@ describe('validation baseline', () => {
 
 describe('per-parameter comparison', () => {
   it('does not label unavailable parameters or an unopposed score weakest', () => {
-    for (const metrics of [{ r2_p0: null, r2_p1: null }, { r2_p0: 0.9, r2_p1: null }]) {
+    for (const metrics of [
+      { r2_p0: null, r2_p1: null },
+      { r2_p0: 0.9, r2_p1: null },
+    ]) {
       const parsed = parameterScores(metrics);
-      expect(parameterRanking(parsed.parameters, 'r2', false).every((row) => !row.weakest)).toBe(true);
+      expect(parameterRanking(parsed.parameters, 'r2', false).every((row) => !row.weakest)).toBe(
+        true,
+      );
     }
   });
 
