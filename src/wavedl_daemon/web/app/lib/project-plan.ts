@@ -44,7 +44,10 @@ export class ProjectPlan {
     if (!request.storage_map?.length) delete request.storage_map;
     this.#approval.prepare(request);
   }
-  preview(signal?: AbortSignal): Promise<PlanView> {
+  preview(
+    signal?: AbortSignal,
+    binding?: { runId: string | null; bind: (runId: string | null) => void },
+  ): Promise<PlanView> {
     return this.#approval.preview(
       {
         requestRequired: 'validateTheTrainingDraftFirst',
@@ -52,6 +55,7 @@ export class ProjectPlan {
         draftChanged: 'planningDraftChanged',
       },
       signal,
+      binding,
     );
   }
   submit(signal?: AbortSignal): Promise<RunView> {

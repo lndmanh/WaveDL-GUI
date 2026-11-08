@@ -47,6 +47,7 @@ export class RequestApproval {
       draftChanged: ClientErrorKey;
     },
     signal?: AbortSignal,
+    binding?: { runId: string | null; bind: (runId: string | null) => void },
   ): Promise<PlanView> {
     if (!this.#request) throw clientError(errors.requestRequired, {});
 
@@ -57,9 +58,39 @@ export class RequestApproval {
     const epoch = this.#epoch;
     const revision = this.#revision;
 
-    const plan = await this.session.perform((api, scoped) => api.plan(request, key, scoped), {
-      signal,
-    });
+    const plan = await this.session.perform(
+      async (api, scoped) => {
+        if (binding?.runId) {
+          try {
+            return await api.replan(binding.runId, request, key, scoped);
+          } catch (error) {
+            if (!(error instanceof DaemonApiError) || error.daemonIdentityChanged) throw error;
+
+            if (error.status !== 404 && error.status !== 409) throw error;
+
+            if (error.status === 409) {
+              try {
+                const run = await api.getRun(binding.runId, scoped);
+
+                if (run.state === 'planned') throw error;
+              } catch (statusError) {
+                if (!(statusError instanceof DaemonApiError) || statusError.status !== 404)
+                  throw statusError;
+              }
+            }
+
+            binding.bind(null);
+          }
+        }
+
+        return api.plan(request, key, scoped);
+      },
+      { signal },
+    );
+
+    // Retain the row even if form edits invalidated this preview while it was in flight.
+    // The caller guards against a retired draft or connection scope.
+    binding?.bind(plan.run_id);
 
     if (
       epoch !== this.#epoch ||

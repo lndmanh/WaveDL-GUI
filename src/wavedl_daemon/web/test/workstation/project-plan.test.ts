@@ -99,6 +99,20 @@ async function setup(
 }
 
 describe('training request approval lifecycle', () => {
+  it('forwards a persisted draft binding to replan rather than creating another row', async () => {
+    const { workflow, draft, data, model, session, keys } = await setup();
+    const api = session.api;
+
+    if (!api) throw new Error('Missing connected API');
+    const replan = vi.spyOn(api, 'replan').mockResolvedValue({ ...ids, preview: {} });
+    const bind = vi.fn<(id: string | null) => void>();
+    workflow.prepare(draft, data, model);
+    await workflow.preview(undefined, { runId: ids.run_id, bind });
+    expect(replan).toHaveBeenCalledWith(ids.run_id, draft, workflow.key, expect.any(AbortSignal));
+    expect(bind).toHaveBeenCalledWith(ids.run_id);
+    expect(keys).toEqual([]);
+  });
+
   it('requires preparation and approval before daemon-facing actions', async () => {
     const { workflow, keys, submissions } = await setup();
 
