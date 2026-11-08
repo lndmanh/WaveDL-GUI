@@ -1,11 +1,27 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import { useReducedMotion } from 'motion-v';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search, SearchX } from '@lucide/vue';
+import { MotionConfig, motion, useReducedMotion } from 'motion-v';
+import { loadArtifactFileView, saveArtifactFileView } from '../../lib/preferences';
+import type { ArtifactImages } from '../../composables/useArtifactImages';
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  Grid2X2,
+  List,
+  Search,
+  SearchX,
+} from '@lucide/vue';
 import { artifactGroupOf } from '../../lib/artifact-list';
 import { pathName } from '../../lib/run-overview';
 import type { Artifact, Checkpoint } from '~~/types/artifact-client';
-import type { ArtifactColumnId, ArtifactGroupKey, ArtifactSort } from '~~/types/artifact-list';
+import type {
+  ArtifactColumnId,
+  ArtifactFileView,
+  ArtifactGroupKey,
+  ArtifactSort,
+} from '~~/types/artifact-list';
 
 const styles = {
   search: cn(
@@ -38,8 +54,8 @@ type ArtifactColumn = {
 const props = defineProps<{
   artifacts: readonly Artifact[];
   busy: boolean;
-  imageUrl?: string | null;
-  previewPath?: string | null;
+  images: ArtifactImages;
+  animateEntry?: boolean;
   checkpoints?: readonly Checkpoint[];
   checkpointActions?: boolean;
   /** Stretch to the parent's height and scroll inside, like the Experiments run table. */
@@ -49,12 +65,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   download: [artifact: Artifact];
   preview: [artifact: Artifact];
-  closePreview: [];
   evaluate: [checkpoint: string];
   export: [checkpoint: string];
 }>();
 
 const { t, locale } = useI18n({ useScope: 'global' });
+const animateEntry = props.animateEntry ?? false;
+const view = shallowRef<ArtifactFileView>(loadArtifactFileView());
+
+watch(view, (value) => saveArtifactFileView(value));
+
 const query = shallowRef('');
 const filter = shallowRef<ArtifactGroupKey | 'all'>('all');
 const sort = shallowRef<ArtifactSort>({ column: 'type', direction: 'asc' });
@@ -75,7 +95,6 @@ const { isActive } = usePageActive(() => {
 
 const now = clock.now;
 const skipEntrance = computed(() => reducedMotion.value || !isActive.value);
-let previewTrigger: HTMLElement | null = null;
 
 const groupDefinitions: readonly { key: ArtifactGroupKey; label: string }[] = [
   { key: 'checkpoints', label: 'results.groupCheckpoints' },
@@ -229,10 +248,6 @@ const rows = computed(() => {
 
 const filtered = computed(() => filter.value !== 'all' || query.value.trim() !== '');
 
-const previewArtifact = computed(() =>
-  props.artifacts.find((artifact) => artifact.path === props.previewPath),
-);
-
 function compareEntries(
   a: { artifact: Artifact; group: ArtifactGroupKey },
   b: { artifact: Artifact; group: ArtifactGroupKey },
@@ -282,205 +297,285 @@ function clearFilters() {
 }
 
 function preview(artifact: Artifact) {
-  previewTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   emit('preview', artifact);
-}
-
-function restorePreviewFocus(event: Event) {
-  if (!isActive.value) {
-    event.preventDefault();
-
-    return;
-  }
-
-  if (!previewTrigger?.isConnected || !previewTrigger.getClientRects().length) return;
-  event.preventDefault();
-  previewTrigger.focus({ preventScroll: true });
 }
 </script>
 
 <template>
-  <section
-    :aria-label="t('results.publications')"
-    :class="cn('@container flex min-w-0 max-w-full flex-col gap-3', fill && 'min-h-0 flex-1')"
-  >
-    <header v-if="artifacts.length" class="flex shrink-0 flex-wrap items-center gap-2">
-      <label class="relative flex min-w-0 flex-[1_1_13rem] items-center">
-        <Search
-          class="pointer-events-none absolute left-[0.7rem] size-4 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <span class="sr-only">{{ t('results.searchFiles') }}</span>
-        <input
-          v-model="query"
-          type="search"
-          :class="styles.search"
-          :placeholder="t('results.searchFilesPlaceholder')"
-        />
-      </label>
-      <div
-        class="min-w-0 max-w-full [&_.segmented-control-item]:shrink-0 [&_.segmented-control-item]:tabular-nums"
-      >
-        <SegmentedControl
-          v-model="filter"
-          :options="filterOptions"
-          :label="t('results.filterFileType')"
-        />
-      </div>
-    </header>
-    <div :class="cn(styles.card, fill && 'flex-1')">
-      <div
-        ref="viewport"
-        :class="
-          cn(
-            'min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-gutter:stable]',
-            fill ? 'flex-1' : 'max-h-[min(36rem,70vh)]',
-          )
-        "
-      >
-        <TooltipProvider :delay-duration="280">
-          <table class="w-full table-fixed border-collapse">
-            <caption class="sr-only">
-              {{
-                t('results.publications')
-              }}
-            </caption>
-            <thead :class="styles.header">
-              <tr class="h-8">
-                <th scope="col" class="h-8 w-9 p-0">
-                  <span class="sr-only">{{ t('results.columnType') }}</span>
-                </th>
-                <th
-                  v-for="column in columns"
-                  :key="column.id"
-                  scope="col"
-                  :class="cn('h-8 overflow-hidden p-0', column.class)"
-                  :aria-sort="
-                    sort.column === column.id
-                      ? sort.direction === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  "
-                >
-                  <button
-                    type="button"
-                    :class="styles.sortButton"
-                    :aria-label="sortLabel(column)"
-                    :title="sortLabel(column)"
-                    @click="changeSort(column)"
-                  >
-                    <span class="truncate">{{ t(column.labelKey) }}</span>
-                    <component
-                      :is="sort.direction === 'asc' ? ArrowUp : ArrowDown"
-                      v-if="sort.column === column.id"
-                      class="size-3 shrink-0"
-                      aria-hidden="true"
-                    />
-                  </button>
-                </th>
-                <th scope="col" class="h-8 w-16 p-0">
-                  <span class="sr-only">{{ t('results.actions') }}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody v-if="busy && !artifacts.length" aria-hidden="true">
-              <tr v-for="row in 4" :key="row" class="h-[38px]">
-                <td class="border-b border-border/50 p-0">
-                  <div class="flex justify-center"><Skeleton class="size-4" /></div>
-                </td>
-                <td class="border-b border-border/50 px-2">
-                  <Skeleton class="h-3 w-3/5" />
-                </td>
-                <td class="hidden border-b border-border/50 px-2 @min-[40rem]:table-cell">
-                  <Skeleton class="h-3 w-2/3" />
-                </td>
-                <td class="border-b border-border/50 px-2"><Skeleton class="h-3 w-2/3" /></td>
-                <td class="hidden border-b border-border/50 px-2 @min-[30rem]:table-cell">
-                  <Skeleton class="h-3 w-2/3" />
-                </td>
-                <td class="border-b border-border/50 px-2"><Skeleton class="ml-auto size-6" /></td>
-              </tr>
-            </tbody>
-            <tbody v-else>
-              <template v-for="row in rows" :key="row.artifact.path">
-                <tr v-if="row.heading" class="h-6">
-                  <td :colspan="columns.length + 2" class="h-6 p-0">
-                    <div :class="styles.groupRow">{{ row.heading }}</div>
-                  </td>
-                </tr>
-                <ArtifactFileRow
-                  :artifact="row.artifact"
-                  :group="row.group"
-                  :group-label="t(groupLabelKeys.get(row.group) ?? 'results.groupOther')"
-                  :busy="busy"
-                  :now="now"
-                  :reduced-motion="skipEntrance"
-                  :checkpoint="row.checkpoint"
-                  @evaluate="emit('evaluate', $event)"
-                  @export="emit('export', $event)"
-                  @download="emit('download', $event)"
-                  @preview="preview"
-                />
-              </template>
-            </tbody>
-          </table>
-        </TooltipProvider>
-        <p v-if="busy && !artifacts.length" role="status" class="sr-only">
-          {{ t('results.loadingFiles') }}
-        </p>
-        <Empty v-else-if="!artifacts.length" role="status" class="py-8">
-          <EmptyDescription>{{ t('results.noArtifacts') }}</EmptyDescription>
-        </Empty>
+  <MotionConfig reduced-motion="user">
+    <motion.section
+      :initial="animateEntry ? { opacity: 0, y: 6 } : false"
+      :animate="{ opacity: 1, y: 0 }"
+      :transition="{ duration: 0.3 }"
+      :aria-label="t('results.publications')"
+      :class="cn('@container flex min-w-0 max-w-full flex-col gap-3', fill && 'min-h-0 flex-1')"
+    >
+      <header v-if="artifacts.length" class="flex shrink-0 flex-wrap items-center gap-2">
+        <label class="relative flex min-w-0 flex-[1_1_13rem] items-center">
+          <Search
+            class="pointer-events-none absolute left-[0.7rem] size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <span class="sr-only">{{ t('results.searchFiles') }}</span>
+          <input
+            v-model="query"
+            type="search"
+            :class="styles.search"
+            :placeholder="t('results.searchFilesPlaceholder')"
+          />
+        </label>
         <div
-          v-else-if="!visible.length"
-          role="status"
-          class="flex flex-col items-center gap-2 px-3 py-8 text-center text-sm text-muted-foreground"
+          class="min-w-0 max-w-full [&_.segmented-control-item]:shrink-0 [&_.segmented-control-item]:tabular-nums"
         >
-          <SearchX class="size-6" aria-hidden="true" />
-          <p>{{ t('results.noMatchingFiles') }}</p>
-          <Button v-if="filtered" variant="link" size="sm" @click="clearFilters">
-            {{ t('results.clearFilters') }}
+          <SegmentedControl
+            v-model="filter"
+            :options="filterOptions"
+            :label="t('results.filterFileType')"
+          />
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button type="button" variant="outline" size="sm" :aria-label="t('results.sortFiles')">
+              <component
+                :is="sort.direction === 'asc' ? ArrowUp : ArrowDown"
+                class="size-3.5"
+                aria-hidden="true"
+              />
+              {{
+                t(
+                  columns.find((column) => column.id === sort.column)?.labelKey ??
+                    'results.columnType',
+                )
+              }}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              v-for="column in columns"
+              :key="column.id"
+              @select="changeSort(column)"
+            >
+              {{ t(column.labelKey) }}
+              <component
+                v-if="sort.column === column.id"
+                :is="sort.direction === 'asc' ? ArrowUp : ArrowDown"
+                class="ml-auto size-3.5"
+                aria-hidden="true"
+              />
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div
+          role="group"
+          :aria-label="t('results.fileViews')"
+          class="flex shrink-0 rounded-lg border p-0.5"
+        >
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            :aria-label="t('results.cardsView')"
+            :title="t('results.cardsView')"
+            :aria-pressed="view === 'cards'"
+            :class="view === 'cards' && 'bg-muted'"
+            @click="view = 'cards'"
+          >
+            <Grid2X2 class="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            :aria-label="t('results.listView')"
+            :title="t('results.listView')"
+            :aria-pressed="view === 'list'"
+            :class="view === 'list' && 'bg-muted'"
+            @click="view = 'list'"
+          >
+            <List class="size-4" aria-hidden="true" />
           </Button>
         </div>
+      </header>
+      <div :class="cn(styles.card, fill && 'flex-1')">
+        <div
+          ref="viewport"
+          :class="
+            cn(
+              'min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-gutter:stable]',
+              fill ? 'flex-1' : 'max-h-[min(36rem,70vh)]',
+            )
+          "
+        >
+          <TooltipProvider :delay-duration="280">
+            <div
+              v-if="view === 'cards'"
+              class="grid gap-3 p-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))]"
+            >
+              <template v-if="busy && !artifacts.length">
+                <Skeleton v-for="item in 6" :key="item" class="h-64 rounded-xl" />
+              </template>
+              <template v-for="row in rows" v-else :key="row.artifact.path">
+                <h4 v-if="row.heading" :class="cn(styles.groupRow, 'col-span-full px-0')">
+                  {{ row.heading }}
+                </h4>
+                <motion.div
+                  :layout="skipEntrance ? false : 'position'"
+                  :initial="false"
+                  :transition="{ duration: 0.2 }"
+                  class="min-w-0"
+                >
+                  <ArtifactFileCard
+                    :artifact="row.artifact"
+                    :group="row.group"
+                    :group-label="t(groupLabelKeys.get(row.group) ?? 'results.groupOther')"
+                    :busy="busy"
+                    :now="now"
+                    :images="images"
+                    :checkpoint="row.checkpoint"
+                    @evaluate="emit('evaluate', $event)"
+                    @export="emit('export', $event)"
+                    @download="emit('download', $event)"
+                    @preview="preview"
+                  />
+                </motion.div>
+              </template>
+            </div>
+            <table v-else class="w-full table-fixed border-collapse">
+              <caption class="sr-only">
+                {{
+                  t('results.publications')
+                }}
+              </caption>
+              <thead :class="styles.header">
+                <tr class="h-8">
+                  <th scope="col" class="h-8 w-9 p-0">
+                    <span class="sr-only">{{ t('results.columnType') }}</span>
+                  </th>
+                  <th
+                    v-for="column in columns"
+                    :key="column.id"
+                    scope="col"
+                    :class="cn('h-8 overflow-hidden p-0', column.class)"
+                    :aria-sort="
+                      sort.column === column.id
+                        ? sort.direction === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : 'none'
+                    "
+                  >
+                    <button
+                      type="button"
+                      :class="styles.sortButton"
+                      :aria-label="sortLabel(column)"
+                      :title="sortLabel(column)"
+                      @click="changeSort(column)"
+                    >
+                      <span class="truncate">{{ t(column.labelKey) }}</span>
+                      <component
+                        :is="sort.direction === 'asc' ? ArrowUp : ArrowDown"
+                        v-if="sort.column === column.id"
+                        class="size-3 shrink-0"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </th>
+                  <th scope="col" class="h-8 w-16 p-0">
+                    <span class="sr-only">{{ t('results.actions') }}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody v-if="busy && !artifacts.length" aria-hidden="true">
+                <tr v-for="row in 4" :key="row" class="h-[38px]">
+                  <td class="border-b border-border/50 p-0">
+                    <div class="flex justify-center"><Skeleton class="size-4" /></div>
+                  </td>
+                  <td class="border-b border-border/50 px-2">
+                    <Skeleton class="h-3 w-3/5" />
+                  </td>
+                  <td class="hidden border-b border-border/50 px-2 @min-[40rem]:table-cell">
+                    <Skeleton class="h-3 w-2/3" />
+                  </td>
+                  <td class="border-b border-border/50 px-2"><Skeleton class="h-3 w-2/3" /></td>
+                  <td class="hidden border-b border-border/50 px-2 @min-[30rem]:table-cell">
+                    <Skeleton class="h-3 w-2/3" />
+                  </td>
+                  <td class="border-b border-border/50 px-2">
+                    <Skeleton class="ml-auto size-6" />
+                  </td>
+                </tr>
+              </tbody>
+              <tbody v-else>
+                <template v-for="row in rows" :key="row.artifact.path">
+                  <tr v-if="row.heading" class="h-6">
+                    <td :colspan="columns.length + 2" class="h-6 p-0">
+                      <div :class="styles.groupRow">{{ row.heading }}</div>
+                    </td>
+                  </tr>
+                  <ArtifactFileRow
+                    :artifact="row.artifact"
+                    :group="row.group"
+                    :group-label="t(groupLabelKeys.get(row.group) ?? 'results.groupOther')"
+                    :busy="busy"
+                    :now="now"
+                    :reduced-motion="skipEntrance"
+                    :checkpoint="row.checkpoint"
+                    @evaluate="emit('evaluate', $event)"
+                    @export="emit('export', $event)"
+                    @download="emit('download', $event)"
+                    @preview="preview"
+                  />
+                </template>
+              </tbody>
+            </table>
+          </TooltipProvider>
+          <p v-if="busy && !artifacts.length" role="status" class="sr-only">
+            {{ t('results.loadingFiles') }}
+          </p>
+          <Empty v-else-if="!artifacts.length" role="status" class="py-8">
+            <EmptyDescription>{{ t('results.noArtifacts') }}</EmptyDescription>
+          </Empty>
+          <div
+            v-else-if="!visible.length"
+            role="status"
+            class="flex flex-col items-center gap-2 px-3 py-8 text-center text-sm text-muted-foreground"
+          >
+            <SearchX class="size-6" aria-hidden="true" />
+            <p>{{ t('results.noMatchingFiles') }}</p>
+            <Button v-if="filtered" variant="link" size="sm" @click="clearFilters">
+              {{ t('results.clearFilters') }}
+            </Button>
+          </div>
+        </div>
+        <footer
+          v-if="visible.length > pageSize"
+          class="flex shrink-0 items-center gap-1 border-t border-border/60 px-3 py-2 text-xs text-muted-foreground"
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-8"
+            :disabled="busy || page === 1"
+            :aria-label="t('runs.previous')"
+            :title="t('runs.previous')"
+            @click="page = Math.max(1, page - 1)"
+            ><ChevronLeft aria-hidden="true"
+          /></Button>
+          <span role="status" aria-live="polite" class="tabular-nums">{{
+            t('runs.page', { page })
+          }}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-8"
+            :disabled="busy || page === pageCount"
+            :aria-label="t('runs.next')"
+            :title="t('runs.next')"
+            @click="page = Math.min(pageCount, page + 1)"
+            ><ChevronRight aria-hidden="true"
+          /></Button>
+        </footer>
       </div>
-      <footer
-        v-if="visible.length > pageSize"
-        class="flex shrink-0 items-center gap-1 border-t border-border/60 px-3 py-2 text-xs text-muted-foreground"
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          class="size-8"
-          :disabled="busy || page === 1"
-          :aria-label="t('runs.previous')"
-          :title="t('runs.previous')"
-          @click="page = Math.max(1, page - 1)"
-          ><ChevronLeft aria-hidden="true"
-        /></Button>
-        <span role="status" aria-live="polite" class="tabular-nums">{{
-          t('runs.page', { page })
-        }}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="size-8"
-          :disabled="busy || page === pageCount"
-          :aria-label="t('runs.next')"
-          :title="t('runs.next')"
-          @click="page = Math.min(pageCount, page + 1)"
-          ><ChevronRight aria-hidden="true"
-        /></Button>
-      </footer>
-    </div>
-    <ArtifactPreviewDialog
-      :artifact="previewArtifact"
-      :busy="busy"
-      :image-url="imageUrl"
-      :preview-path="previewPath"
-      @download="emit('download', $event)"
-      @close-preview="emit('closePreview')"
-      @restore-focus="restorePreviewFocus"
-    />
-  </section>
+    </motion.section>
+  </MotionConfig>
 </template>
