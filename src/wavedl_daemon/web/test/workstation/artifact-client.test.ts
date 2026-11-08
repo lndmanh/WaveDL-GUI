@@ -1,5 +1,5 @@
 import type { FixtureResponse } from './fixture-schemas';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ArtifactClient,
   BLOB_BUDGET,
@@ -7,6 +7,7 @@ import {
   pngPreviewBlob,
 } from '../../app/lib/artifact-client';
 import { ConnectionSession } from './session-fixture';
+import { CV_SUMMARY_BUDGET, loadCvSummary } from '../../app/lib/cv-summary';
 import type { Json } from '../../types/json';
 
 const run = '22222222-2222-4222-8222-222222222222';
@@ -214,6 +215,23 @@ describe('published artifact authority', () => {
       'This file exceeds the 64 MiB browser limit. Use the command line to export it.',
     );
     expect(oversized.session.api).not.toBeNull();
+  });
+  it('rejects a CV summary that grew beyond its text budget after listing', async () => {
+    const bytes = new Uint8Array(CV_SUMMARY_BUDGET + 1);
+    const { client, session } = await setup(bytes, bytes.length, 'cv_summary.json', 1);
+    const artifact = (await client.list(run)).files[0];
+
+    if (!artifact) throw new Error('Missing artifact');
+    const text = vi.spyOn(Blob.prototype, 'text');
+
+    try {
+      await expect(loadCvSummary(session, artifact)).rejects.toThrow(
+        'Select a cross-validation summary within the 1 MiB limit.',
+      );
+      expect(text).not.toHaveBeenCalled();
+    } finally {
+      text.mockRestore();
+    }
   });
   it('refuses oversized allocation before issuing download and invalidates detached grants', async () => {
     const { client, calls, session } = await setup(new Uint8Array([1]), BLOB_BUDGET + 1);

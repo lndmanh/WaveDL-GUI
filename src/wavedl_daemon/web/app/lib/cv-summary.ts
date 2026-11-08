@@ -30,6 +30,8 @@ export async function loadCvSummary(
     throw clientError('cvSummaryTooLarge', {});
   const blob = await client.verifiedBlob(artifact, signal);
   signal?.throwIfAborted();
+
+  if (blob.size > CV_SUMMARY_BUDGET) throw clientError('cvSummaryTooLarge', {});
   const text = await blob.text();
   signal?.throwIfAborted();
   client.assertSelection(artifact);
