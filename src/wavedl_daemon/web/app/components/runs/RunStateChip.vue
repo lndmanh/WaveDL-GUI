@@ -19,11 +19,8 @@ import {
 
 import { runActivityMessageKeysFor, runStateMessageKeys } from '../../i18n/dynamic-keys';
 import type { RunState, RunView } from '~~/types/daemon-api';
-import type { MetricSummary } from '~~/types/metric-history';
 
 type StateTone = 'outline' | 'secondary' | 'blue' | 'warning' | 'success' | 'destructive';
-
-type StateProgress = NonNullable<MetricSummary['progress']>;
 
 // Utility bundles keep state and descendant styling beside their component.
 const styles = {
@@ -64,7 +61,6 @@ const stateMeta: Readonly<
 const props = defineProps<{
   run: RunView;
   stale?: boolean;
-  progress?: StateProgress | null;
   explanation?: string;
   compact?: boolean;
 }>();
@@ -80,20 +76,6 @@ const label = computed(() => t(runStateMessageKeys[props.run.state]));
 
 const accessibleLabel = computed(() =>
   [label.value, activityLabel.value, activityHint.value].filter(Boolean).join(' · '),
-);
-
-const currentProgress = computed(() => props.progress ?? props.run.progress);
-
-const progressPercent = computed(() => {
-  const fraction = currentProgress.value?.fraction;
-
-  if (fraction === null || fraction === undefined || !Number.isFinite(fraction)) return 0;
-
-  return Math.min(100, Math.max(0, fraction * 100));
-});
-
-const hasProgress = computed(
-  () => !props.compact && props.run.state === 'running' && Boolean(currentProgress.value),
 );
 
 const chipClasses = computed(() => ({
@@ -167,8 +149,7 @@ const tooltipNotes = computed(() => [
               data-lucide-icon="circle-help"
               aria-hidden="true"
             />
-            <span>{{ compact && activityLabel ? activityLabel : label }}</span>
-            <span v-if="activityLabel && !compact">· {{ activityLabel }}</span>
+            <span>{{ activityLabel ?? label }}</span>
             <span v-if="stale">{{ t('runs.stale') }}</span>
             <span v-if="run.uncertainty">{{ t('runs.uncertain') }}</span>
           </Badge>
@@ -177,22 +158,6 @@ const tooltipNotes = computed(() => [
           <p v-for="note in tooltipNotes" :key="note">{{ note }}</p>
         </TooltipContent>
       </Tooltip>
-      <span v-if="activityHint && !compact" class="text-xs text-muted-foreground wrap-anywhere">
-        {{ activityHint }}
-      </span>
-      <div
-        v-if="hasProgress"
-        class="flex items-center gap-[0.4rem] text-muted-foreground text-[0.7rem]"
-      >
-        <Progress
-          :model-value="progressPercent"
-          class="w-20 min-w-20"
-          :aria-label="t('runs.epochProgress')"
-        />
-        <span>{{
-          t('runs.epoch', { epoch: currentProgress?.epoch, total: currentProgress?.totalEpochs })
-        }}</span>
-      </div>
     </span>
   </TooltipProvider>
 </template>
