@@ -51,6 +51,7 @@
   "datasetTitle": "Which data should this run train on?",
   "datasetDescription": "Pick a suggested file or browse the server’s folders.",
   "modelTitle": "Model",
+  "modelDescription": "Pick an architecture for this run.",
   "searchModels": "Search models",
   "compatibility": "Compatibility",
   "fitsData": "Fits your data · {count}",

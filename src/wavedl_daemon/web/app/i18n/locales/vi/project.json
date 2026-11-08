@@ -1,4 +1,8 @@
 {
+  "stepBack": "Quay lại",
+  "stepNext": "Tiếp",
+  "stepIncomplete": "Hoàn tất bước này để tiếp tục. {detail}",
+  "stepNeedsReview": "Sửa các lỗi trong bước này để tiếp tục. {detail}",
   "storedConfiguration": "Cấu hình đã lưu",
   "resolvedSettings": "Các thiết lập đã phân giải khác",
   "loadingConfiguration": "Đang tải cấu hình đã lưu…",

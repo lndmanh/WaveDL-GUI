@@ -1,4 +1,8 @@
 {
+  "stepBack": "Back",
+  "stepNext": "Next",
+  "stepIncomplete": "Complete this step to continue. {detail}",
+  "stepNeedsReview": "Fix the issues in this step to continue. {detail}",
   "storedConfiguration": "Stored configuration",
   "resolvedSettings": "Other resolved settings",
   "loadingConfiguration": "Loading stored configuration…",

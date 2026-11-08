@@ -51,6 +51,7 @@
   "datasetTitle": "Lần chạy này nên học từ dữ liệu nào?",
   "datasetDescription": "Chọn tệp gợi ý hoặc duyệt các thư mục trên máy chủ.",
   "modelTitle": "Mô hình",
+  "modelDescription": "Chọn kiến trúc mô hình cho lần chạy này.",
   "searchModels": "Tìm mô hình",
   "compatibility": "Tương thích",
   "fitsData": "Hợp với dữ liệu · {count}",
