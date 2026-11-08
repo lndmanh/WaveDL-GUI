@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Field as VeeField, useForm } from 'vee-validate';
+import { appearanceSchema } from '../../../shared/schemas/preferences';
 import {
-  appearanceSchema,
   defaultAppearance,
   loadAppearance,
   saveAppearance,

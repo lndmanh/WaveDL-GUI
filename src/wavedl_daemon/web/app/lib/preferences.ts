@@ -1,5 +1,13 @@
 import { clientError } from '../i18n/client-messages';
-import { z } from 'zod';
+import {
+  appearanceSchema,
+  trainingPreferencesSchema,
+  appearanceEnvelope,
+  legacyAppearanceEnvelope,
+  legacyAppearancePreferencesSchema,
+  trainingEnvelope,
+  keepSignedInSchema,
+} from '../../shared/schemas/preferences';
 import { parseJson } from './daemon-api';
 import { resolveShellDockSlots } from '../constants/shellDock';
 import {
@@ -16,12 +24,7 @@ import type {
 
 export const PREFERENCES_LIMIT = 64 * 1024;
 
-export const appearanceSchema = z.strictObject({
-  theme: z.enum(['system', 'light', 'dark']),
-  accent: z.enum(['neutral', 'blue', 'violet', 'green']),
-  zoom: z.union([z.literal(90), z.literal(100), z.literal(110), z.literal(125)]),
-  language: z.enum(['en', 'vi']),
-});
+export { appearanceSchema, trainingPreferencesSchema } from '../../shared/schemas/preferences';
 
 export const defaultAppearance: AppearancePreferences = {
   theme: 'system',
@@ -29,22 +32,6 @@ export const defaultAppearance: AppearancePreferences = {
   zoom: 100,
   language: 'en',
 };
-
-/** No paths, executable code, credentials, model selection or submitted authority. */
-// Preferences are editable draft values, not a submission. Preserve existing
-// CV combinations so the form can explain incompatibilities without data loss.
-export const trainingPreferencesSchema = trainingConfigBaseSchema.omit({
-  model: true,
-  data_path: true,
-  import_modules: true,
-  resume: true,
-  constraint: true,
-  constraint_file: true,
-  constraint_weight: true,
-  constraint_reduction: true,
-  run_name: true,
-  project_name: true,
-});
 
 export const trainingPreferenceFields = trainingPreferencesSchema.keyof().options;
 
@@ -61,20 +48,6 @@ export function browserStorage(): PreferenceStorage | null {
     return null;
   }
 }
-
-const appearanceEnvelope = z.strictObject({ version: z.literal(1), preferences: appearanceSchema });
-
-// Saved before the guided project wizard was retired; the flag is read and dropped.
-const legacyAppearanceEnvelope = z.strictObject({
-  version: z.literal(1),
-  preferences: appearanceSchema.extend({ showProjectGuide: z.boolean() }),
-});
-
-const trainingEnvelope = z.strictObject({
-  version: z.literal(1),
-  daemonId: z.string().min(1).max(256),
-  preferences: trainingPreferencesSchema,
-});
 
 const appearanceKey = 'wavedl.appearance.v1';
 const keepSignedInKey = 'wavedl.keep-signed-in.v1';
@@ -101,8 +74,6 @@ export function saveShellDockSlots(value: ShellDockSlots, storage = browserStora
   }
 }
 
-const keepSignedInSchema = z.boolean();
-
 function trainingKey(daemonId: string): string {
   if (!daemonId || daemonId.length > 256 || [...daemonId].some((char) => char.charCodeAt(0) < 32))
     throw clientError('invalidDaemonIdentity', {});
@@ -127,10 +98,7 @@ export function loadAppearance(storage = browserStorage()): AppearancePreference
 
     if (current.success) return current.data.preferences;
 
-    // z.object strips the retired key that the strict schema would reject.
-    return z
-      .object(appearanceSchema.shape)
-      .parse(legacyAppearanceEnvelope.parse(value).preferences);
+    return legacyAppearancePreferencesSchema.parse(legacyAppearanceEnvelope.parse(value).preferences);
   } catch {
     return { ...defaultAppearance };
   }

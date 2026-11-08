@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { appearanceSchema, trainingPreferencesSchema } from '../app/lib/preferences';
+import type { appearanceSchema, trainingPreferencesSchema } from '../shared/schemas/preferences';
 
 export type AppearancePreferences = z.infer<typeof appearanceSchema>;
 

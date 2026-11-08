@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { trainingPreferencesSchema } from '../../app/lib/preferences';
+import { keepSignedInSchema, trainingPreferencesSchema } from './preferences';
 
 export const trainingDefaultsFormSchema = z.strictObject({ config: trainingPreferencesSchema });
 
-export const dataPreferencesSchema = z.strictObject({ keepSignedIn: z.boolean() });
+export const dataPreferencesSchema = z.strictObject({ keepSignedIn: keepSignedInSchema });
