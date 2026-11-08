@@ -594,14 +594,6 @@ export class DaemonApi {
 
     return runView(await this.mutate(`/api/runs/${runId}/cancel`, undefined, { signal }), runId);
   }
-  async retryAutomaticPlots(runId: string, signal?: AbortSignal): Promise<RunView> {
-    if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
-
-    return runView(
-      await this.mutate(`/api/runs/${runId}/automatic-plots/retry`, undefined, { signal }),
-      runId,
-    );
-  }
   async mutate(
     path: string,
     body: JsonObject | undefined,

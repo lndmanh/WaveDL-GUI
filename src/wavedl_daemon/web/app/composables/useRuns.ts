@@ -96,8 +96,6 @@ export function useRuns(
         getEventPage: (id, cursor, signal) => api.getEventPage(id, cursor, signal, daemonId),
         cancelRun: (id, signal) =>
           api.cancelRun(id, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
-        retryAutomaticPlots: (id, signal) =>
-          api.retryAutomaticPlots(id, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
       },
       2000,
       reportFailure,
@@ -141,10 +139,6 @@ export function useRuns(
 
   async function cancel(): Promise<void> {
     await monitor?.cancel();
-  }
-
-  async function retryAutomaticPlots(): Promise<void> {
-    if (!paused && !disposed) await monitor?.retryAutomaticPlots();
   }
 
   function close(): void {
@@ -202,7 +196,6 @@ export function useRuns(
     select,
     replay,
     cancel,
-    retryAutomaticPlots,
     close,
     pause,
     resume,

@@ -3,15 +3,6 @@ import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 import type { RunState, RunView } from '~~/types/daemon-api';
 import type { RuntimeValue } from '~~/types/i18n';
 
-export const workstationNavigationMessageKeys = {
-  experiments: 'shell.experiments',
-  project: 'shell.newTrainingRun',
-  datasets: 'shell.datasets',
-  results: 'shell.results',
-  connection: 'shell.connection',
-  settings: 'shell.settings',
-} as const;
-
 export const datasetPreviewTabMessageKeys = {
   input: 'datasets.inputDistribution',
   output: 'datasets.outputDistribution',
@@ -117,14 +108,10 @@ export const inferenceFieldMessageKeys = {
   workers: 'results.workers',
   inputChannels: 'results.inputChannels',
   outputSize: 'results.outputSize',
-  opset: 'results.opset',
   model: 'results.model',
   inputKey: 'results.inputKey',
   outputKey: 'results.outputKey',
-  predictions: 'results.predictions',
-  plot: 'results.plot',
   verbose: 'results.verbose',
-  normalized: 'results.normalized',
 } as const;
 
 export const appearanceControlMessageKeys = {
@@ -236,8 +223,6 @@ export const runActivityMessageKeys = {
   starting: { label: 'runs.activityStarting', hint: 'runs.activityStartingHint' },
   training: { label: 'runs.activityTraining', hint: null },
   finalizing: { label: 'runs.activityFinalizing', hint: 'runs.activityFinalizingHint' },
-  plotsPending: { label: 'runs.automaticPlotsPending', hint: null },
-  plotsSubmitted: { label: 'runs.automaticPlotsSubmitted', hint: null },
 };
 
 export function runActivityMessageKeysFor(
@@ -245,12 +230,6 @@ export function runActivityMessageKeysFor(
 ): { label: string; hint: string | null } | null {
   if (run.state === 'running' && run.operation === 'train' && run.activity) {
     return runActivityMessageKeys[run.activity];
-  }
-
-  if (run.state === 'completed') {
-    if (run.auto_plot?.status === 'pending') return runActivityMessageKeys.plotsPending;
-
-    if (run.auto_plot?.status === 'submitted') return runActivityMessageKeys.plotsSubmitted;
   }
 
   return null;
@@ -358,45 +337,3 @@ export const settingsSectionMessageKeys = {
   storage: 'shell.settingsDataStorage',
   about: 'shell.aboutWavedl',
 };
-
-export const dynamicMessageKeys: readonly string[] = [
-  ...Object.values(settingsSectionMessageKeys),
-  'shell.settingsScalePercent',
-  'shell.settingsEnglish',
-  'shell.settingsVietnamese',
-  'shell.language',
-  ...Object.values(workstationNavigationMessageKeys),
-  ...Object.values(datasetPreviewTabMessageKeys),
-  ...Object.values(projectBlockMessageKeys),
-  ...Object.values(trainingSectionMessageKeys),
-  ...Object.values(trainingChoiceMessageKeys),
-  ...Object.values(runtimeFieldMessageKeys),
-  ...Object.values(planRuntimeMessageKeys),
-  ...Object.values(inferenceFieldMessageKeys),
-  ...Object.values(appearanceControlMessageKeys),
-  ...Object.values(datasetPreviewMessageKeys),
-  ...Object.values(datasetExportMessageKeys),
-  ...Object.values(trainingPresetMessageKeys).flatMap(({ label, description }) => [
-    label,
-    description,
-  ]),
-  ...Object.values(trainingFieldMessageKeys).flatMap(({ label, description }) => [
-    label,
-    description,
-  ]),
-  ...Object.values(runtimeValueMessageKeys).filter((key): key is string => key !== null),
-  ...Object.values(runStateMessageKeys),
-  ...Object.values(runActivityMessageKeys).flatMap(({ label, hint }) =>
-    hint ? [label, hint] : [label],
-  ),
-  ...Object.values(runOperationMessageKeys),
-  ...Object.values(runBackendMessageKeys),
-  ...Object.values(runStreamMessageKeys),
-  ...Object.values(runCancellationMessageKeys),
-  ...Object.values(modelCategoryMessageKeys),
-  ...Object.values(shapeGuidanceMessageKeys),
-  ...Object.values(metricHealthLabelMessageKeys),
-  ...Object.values(metricHealthStatusMessageKeys),
-  ...Object.values(evaluationMetricMessageKeys),
-  ...Object.values(plotMetricMessageKeys),
-];
