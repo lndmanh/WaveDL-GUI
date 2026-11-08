@@ -50,8 +50,16 @@ def test_openapi_documents_run_lifecycle():
     }
     assert "post" in paths["/api/runs/plan"]
     assert {"get", "post"} <= paths["/api/runs"].keys()
-    assert "get" in paths["/api/runs/{run_id}"]
-    assert set(paths["/api/runs/{run_id}/plan"]) == {"get"}
+    assert set(paths["/api/runs/{run_id}"]) == {"get", "delete"}
+    assert set(paths["/api/runs/{run_id}/plan"]) == {"get", "put"}
+    replan = paths["/api/runs/{run_id}/plan"]["put"]
+    assert replan["operationId"] == "replan_run"
+    assert replan["requestBody"] == paths["/api/runs/plan"]["post"]["requestBody"]
+    assert replan["responses"] == paths["/api/runs/plan"]["post"]["responses"]
+    delete = paths["/api/runs/{run_id}"]["delete"]
+    assert delete["operationId"] == "delete_run"
+    assert "204" in delete["responses"]
+    assert "content" not in delete["responses"]["204"]
     assert (
         paths["/api/runs/{run_id}/plan"]["get"]["responses"]["200"]
         == (paths["/api/runs/plan"]["post"]["responses"]["200"])
@@ -169,6 +177,8 @@ def test_openapi_documents_daemon_errors_not_fastapi_422():
         ("get", "/api/runs"): "list_runs",
         ("get", "/api/runs/{run_id}"): "get_run",
         ("get", "/api/runs/{run_id}/plan"): "get_run_plan",
+        ("put", "/api/runs/{run_id}/plan"): "replan_run",
+        ("delete", "/api/runs/{run_id}"): "delete_run",
         ("post", "/api/runs/{run_id}/cancel"): "cancel_run",
     }
     error = {"$ref": "#/components/schemas/ErrorResponse"}
@@ -177,7 +187,11 @@ def test_openapi_documents_daemon_errors_not_fastapi_422():
         for status in ("400", "401", "404", "409", "503"):
             content = operation["responses"][status]["content"]
             assert content["application/json"]["schema"] == error
-    for key in (("post", "/api/runs/plan"), ("post", "/api/runs")):
+    for key in (
+        ("post", "/api/runs/plan"),
+        ("put", "/api/runs/{run_id}/plan"),
+        ("post", "/api/runs"),
+    ):
         assert {"408", "413", "415"} <= operations[key]["responses"].keys()
     schemas = spec["components"]["schemas"]
     assert schemas["ErrorResponse"]["required"] == ["error"]

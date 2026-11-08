@@ -1,4 +1,4 @@
-"""Real SQLite and ASGI exercise immutable plans and the run log behind them."""
+"""Real SQLite and ASGI exercise plan approval and the run log behind it."""
 
 import asyncio
 import json
@@ -1393,3 +1393,268 @@ def test_activity_is_starting_before_metrics_and_null_after_exit(environment):
     environment.supervisor.launches[-1].finish(0)
     tick_until(environment, run_id, lambda view: view.state == "completed")
     assert request(app, "GET", f"/api/runs/{run_id}").json()["activity"] is None
+
+
+def test_replan_rotates_approval_without_changing_run_identity(environment):
+    app, plans = environment.app, environment.plans
+    original = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="original"
+    ).json()
+    stored = plans.by_run(original["run_id"])
+    changed = payload()
+    changed["config"]["epochs"] = 7
+    path = f"/api/runs/{original['run_id']}/plan"
+    response = request(app, "PUT", path, body=changed, key="edited")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    edited = response.json()
+    current = plans.by_run(original["run_id"])
+    assert edited["run_id"] == original["run_id"]
+    assert edited["plan_id"] != original["plan_id"]
+    assert edited["request_id"] != original["request_id"]
+    assert current.created_at == stored.created_at
+    assert current.plan.spec.paths.run_dir == stored.plan.spec.paths.run_dir
+    assert current.plan.spec.resolved_config["epochs"] == 7
+    assert not current.plan.spec.paths.run_dir.exists()
+    assert request(app, "PUT", path, body=changed, key="edited").json() == edited
+    assert request(app, "GET", path).json() == edited
+    stale = request(app, "POST", "/api/runs", body={"plan_id": original["plan_id"]})
+    assert stale.status_code == 404
+    assert stale.json() == {"error": "Not found"}
+
+
+def test_unchanged_replan_never_writes_or_invokes_backend(environment, monkeypatch):
+    app, plans = environment.app, environment.plans
+    original = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="original"
+    ).json()
+    stored = plans.by_run(original["run_id"])
+    monkeypatch.setattr(
+        environment.local,
+        "plan",
+        lambda *args, **kwargs: pytest.fail("Unchanged request replanned"),
+    )
+    statements = []
+    connection = plans._connection
+    changes_before = connection.total_changes
+    connection.set_trace_callback(statements.append)
+    try:
+        for key in ("original", "unused-key"):
+            response = request(
+                app,
+                "PUT",
+                f"/api/runs/{original['run_id']}/plan",
+                body=payload(),
+                key=key,
+            )
+            assert response.status_code == 200
+            assert response.json() == original
+        assert connection.total_changes == changes_before
+    finally:
+        connection.set_trace_callback(None)
+    assert all(not sql.startswith(("UPDATE", "INSERT", "DELETE")) for sql in statements)
+    assert plans.by_run(original["run_id"]) == stored
+    assert plans.get_by_key("unused-key") is None
+
+
+def test_replan_key_conflicts_even_when_other_row_has_identical_content(environment):
+    app = environment.app
+    original = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="original"
+    ).json()
+    request(app, "POST", "/api/runs/plan", body=payload(), key="another-row")
+    path = f"/api/runs/{original['run_id']}/plan"
+    response = request(app, "PUT", path, body=payload(), key="another-row")
+    assert response.status_code == 409
+    assert response.json() == {"error": "Conflict"}
+    changed = payload()
+    changed["config"]["epochs"] = 9
+    assert request(app, "PUT", path, body=changed, key="original").status_code == 409
+    assert environment.service.get_plan(original["run_id"]).to_dict() == original
+
+
+@pytest.mark.parametrize("method", ["PUT", "DELETE"])
+def test_edit_delete_distinguish_started_missing_and_malformed_runs(
+    environment, method
+):
+    app = environment.app
+    original = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="original"
+    ).json()
+    request(app, "POST", "/api/runs", body={"plan_id": original["plan_id"]})
+    suffix = "/plan" if method == "PUT" else ""
+    for identity, expected in (
+        (original["run_id"], 409),
+        (str(uuid4()), 404),
+        ("bad-id", 400),
+    ):
+        response = request(
+            app,
+            method,
+            f"/api/runs/{identity}{suffix}",
+            body=payload() if method == "PUT" else None,
+            key="new-key" if method == "PUT" else None,
+        )
+        assert response.status_code == expected
+        assert set(response.json()) == {"error"}
+    assert environment.service.get_plan(original["run_id"]).to_dict() == original
+
+
+def test_delete_planned_is_empty_no_store_and_never_deletes_files(environment):
+    app = environment.app
+    original = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="original"
+    ).json()
+    run_dir = environment.service.settings.run_root / original["run_id"]
+    assert not run_dir.exists()
+    run_dir.mkdir()
+    unexpected = run_dir / "owner-file"
+    unexpected.write_text("do not remove")
+    path = f"/api/runs/{original['run_id']}"
+    response = request(app, "DELETE", path)
+    assert response.status_code == 204
+    assert response.content == b""
+    assert response.headers["cache-control"] == "no-store"
+    assert unexpected.read_text() == "do not remove"
+    assert request(app, "GET", path).status_code == 404
+    assert request(app, "DELETE", path).status_code == 404
+    assert request(app, "GET", path + "/plan").status_code == 404
+    assert environment.plans.get_by_key("original") is None
+
+
+def test_started_plan_is_immutable_even_to_direct_sql(environment):
+    original = environment.service.plan(payload(), "original")
+    environment.service.submit(original.plan_id)
+    connection = environment.plans._connection
+    with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+        connection.execute(
+            "UPDATE plans SET request_json='{}' WHERE run_id=?", (original.run_id,)
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+        connection.execute("DELETE FROM plans WHERE run_id=?", (original.run_id,))
+    assert not environment.plans.replace(
+        original.preview, idempotency_key="cannot-edit", request_payload=payload()
+    )
+    assert not environment.plans.delete(original.run_id)
+    assert environment.service.get_plan(original.run_id) == original
+
+
+def test_planned_runs_appear_in_unfiltered_list_and_are_not_uncertain(environment):
+    original = environment.service.plan(payload(), "original")
+    for query in ("", "?state=planned"):
+        response = request(environment.app, "GET", "/api/runs" + query)
+        assert response.status_code == 200
+        runs = response.json()["runs"]
+        assert len(runs) == 1
+        assert runs[0]["run_id"] == original.run_id
+        assert runs[0]["state"] == "planned"
+        assert runs[0]["uncertainty"] is False
+
+
+def test_replan_requires_exactly_one_key_and_strict_bounded_json(environment):
+    app = environment.app
+    original = environment.service.plan(payload(), "original")
+    path = f"/api/runs/{original.run_id}/plan"
+    assert request(app, "PUT", path, body=payload()).status_code == 400
+    assert request(app, "PUT", path, body=payload(), key="").status_code == 400
+    assert request(app, "PUT", path, body=payload(), key="k" * 257).status_code == 400
+    assert (
+        request(app, "PUT", path, body={"unexpected": True}, key="new").status_code
+        == 400
+    )
+    oversized = payload()
+    oversized["config"]["data_path"] = "a" * 65536
+    assert request(app, "PUT", path, body=oversized, key="new").status_code == 413
+    assert (
+        request(app, "PUT", path, body=payload(), key="new", headers={}).status_code
+        == 401
+    )
+
+    async def duplicate_key():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://localhost:8420"
+        ) as client:
+            return await client.put(
+                path,
+                json=payload(),
+                headers=[
+                    *AUTH.items(),
+                    ("Idempotency-Key", "a"),
+                    ("Idempotency-Key", "b"),
+                ],
+            )
+
+    assert asyncio.run(duplicate_key()).status_code == 400
+
+
+@pytest.mark.parametrize("action", ["submit", "delete", "replay", "key-conflict"])
+def test_replan_rechecks_changes_while_paths_resolve(environment, monkeypatch, action):
+    from wavedl_daemon.runs import service
+    from wavedl_daemon.storage.plans import IdempotencyConflict, RunAlreadyStarted
+
+    original = environment.service.plan(payload(), "original")
+    changed = payload()
+    changed["config"]["epochs"] = 5
+    entered, release = threading.Event(), threading.Event()
+    build_spec = service.build_spec
+    threads = []
+
+    def slow_paths(*args, **kwargs):
+        threads.append(threading.get_ident())
+        entered.set()
+        assert release.wait(5)
+        return build_spec(*args, **kwargs)
+
+    monkeypatch.setattr(service, "build_spec", slow_paths)
+    owner = threading.get_ident()
+
+    async def run():
+        with BoundedThreadPool(WorkBudget(max_workers=2)) as pool:
+            blocked = asyncio.create_task(
+                environment.service.replan_async(
+                    original.run_id, changed, "edited", pool
+                )
+            )
+            try:
+
+                async def wait_for_resolution():
+                    while not entered.is_set():
+                        await asyncio.sleep(0.005)
+
+                await asyncio.wait_for(wait_for_resolution(), 2)
+                if action == "submit":
+                    environment.service.submit(original.plan_id)
+                    expected = RunAlreadyStarted
+                elif action == "delete":
+                    environment.service.delete(original.run_id)
+                    expected = KeyError
+                elif action == "key-conflict":
+                    monkeypatch.setattr(service, "build_spec", build_spec)
+                    environment.service.plan(changed, "edited")
+                    expected = IdempotencyConflict
+                else:
+                    monkeypatch.setattr(service, "build_spec", build_spec)
+                    winner = environment.service.replan(
+                        original.run_id, changed, "edited"
+                    )
+                    expected = None
+                monkeypatch.setattr(
+                    environment.local,
+                    "plan",
+                    lambda *args, **kwargs: pytest.fail(
+                        "Stale resolution invoked backend"
+                    ),
+                )
+                release.set()
+                if expected is None:
+                    assert await blocked == winner
+                else:
+                    with pytest.raises(expected):
+                        await blocked
+            finally:
+                release.set()
+                await asyncio.gather(blocked, return_exceptions=True)
+
+    asyncio.run(run())
+    assert len(threads) == 1
+    assert threads[0] != owner

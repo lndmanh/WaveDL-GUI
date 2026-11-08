@@ -32,7 +32,7 @@ from wavedl_daemon.http.schemas.runs import (
     SubmitRequest,
 )
 from wavedl_daemon.storage.ownership import DispatchRequired
-from wavedl_daemon.storage.plans import IdempotencyConflict
+from wavedl_daemon.storage.plans import IdempotencyConflict, RunAlreadyStarted
 from wavedl_daemon.storage.settings import UnsupportedStorage
 
 
@@ -48,6 +48,8 @@ async def _call(callback: Callable, *args, **kwargs):
         return await callback(*args, **kwargs)
     except IdempotencyConflict:
         raise HTTPException(409, "Idempotency conflict") from None
+    except RunAlreadyStarted:
+        raise HTTPException(409, "Run already started") from None
     except KeyError:
         raise HTTPException(404, "Not found") from None
     except (
@@ -77,6 +79,25 @@ def lifecycle_routes(service: AsyncRunService) -> list[APIRoute]:
         )
         response.headers.update(NO_STORE)
         return result.to_dict()
+
+    async def replan(
+        run_id: str, body: PlanRequest, request: Request, response: Response
+    ):
+        if len(request.headers.getlist("idempotency-key")) != 1:
+            raise HTTPException(400, "One idempotency key is required")
+        key = request.headers.get("idempotency-key")
+        result = await _call(
+            service.replan,
+            run_id,
+            body.model_dump(mode="json", exclude_unset=True),
+            key,
+        )
+        response.headers.update(NO_STORE)
+        return result.to_dict()
+
+    async def delete(run_id: str):
+        await _call(service.delete, run_id)
+        return Response(status_code=204, headers=NO_STORE)
 
     async def submit(body: SubmitRequest, response: Response):
         result = await _call(service.submit, body.plan_id)
@@ -146,6 +167,23 @@ def lifecycle_routes(service: AsyncRunService) -> list[APIRoute]:
         methods=["POST"],
         response_model=RunResponse,
         status_code=202,
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}/plan",
+        replan,
+        operation_id="replan_run",
+        responses=JSON_BODY_ERRORS,
+        methods=["PUT"],
+        response_model=PlanView,
+        route_class_override=strict_json_route(65536),
+    )
+    router.add_api_route(
+        "/api/runs/{run_id}",
+        delete,
+        operation_id="delete_run",
+        responses=API_ERRORS,
+        methods=["DELETE"],
+        status_code=204,
     )
     router.add_api_route(
         "/api/runs/{run_id}/plan",

@@ -219,7 +219,7 @@ def test_every_api_route_is_fastapi(fake_services):
         if route.path.startswith("/api")
     ]
     assert (
-        len(routes) == 20
+        len(routes) == 22
     )  # Bootstrap is separately covered with credentials enabled.
     assert all(isinstance(route, APIRoute) for route in routes)
 
