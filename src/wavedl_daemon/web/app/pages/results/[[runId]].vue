@@ -11,11 +11,11 @@ definePageMeta({
   title: 'shell.results',
   breadcrumb: 'shell.results',
   fullWidth: true,
-  fillHeight: false,
+  fillHeight: true,
 });
 
-const { state, api, session, reportFailure, monitorRun } = useWorkstation();
-const { runId, unknown } = useRunRoute('results');
+const { state, api, session, reportFailure } = useWorkstation();
+const { runId, select, unknown } = useRunRoute('results');
 
 watch(
   [runId, api, () => state.value.revision, () => state.value.health?.daemon_id],
@@ -46,8 +46,10 @@ watch(
       v-if="!!api"
       :key="`${state.health?.daemon_id}:${state.revision}`"
       :session="session"
+      :api="api"
       :run-id="runId"
-      @run-selected="monitorRun"
+      @select="select"
+      @connection-error="reportFailure"
     />
   </ShellPage>
 </template>
