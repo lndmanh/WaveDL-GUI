@@ -29,13 +29,15 @@ const {
   select,
   replay,
   cancel,
-  retryAutomaticPlots,
   close,
   pause,
   resume,
 } = useRuns(props.api, (error) => emit('connectionError', error), true);
 
-const { isActive } = usePageActive(resume, pause);
+const { isActive } = usePageActive(resume, () => {
+  pause();
+  shellLayout.setCanvasExpanded(false);
+});
 const root = useTemplateRef<HTMLElement>('root');
 const detail = useTemplateRef('detail');
 const { width } = useElementSize(() => (isActive.value ? root.value : null));
@@ -56,7 +58,8 @@ usePageActive(() => {
 const now = clock.now;
 
 function choose(runId: string) {
-  if (isActive.value && runId !== activeRunId.value) emit('select', runId);
+  if (isActive.value && !shellLayout.isCanvasExpanded.value && runId !== activeRunId.value)
+    emit('select', runId);
 }
 
 function dismiss() {
@@ -85,6 +88,7 @@ function onEscape(event: KeyboardEvent) {
   if (
     shellLayout.commandPaletteOpen.value ||
     shellLayout.isFocusMode.value ||
+    shellLayout.isCanvasExpanded.value ||
     (!shellLayout.isDockedLayout.value && shellLayout.isPanelSheetVisible.value)
   )
     return;
@@ -111,7 +115,10 @@ watch(
     if (previous !== undefined) entered.value = true;
 
     if (runId) select(runId);
-    else close();
+    else {
+      shellLayout.setCanvasExpanded(false);
+      close();
+    }
   },
   { immediate: true },
 );
@@ -144,6 +151,7 @@ watch(
         :last-refreshed="lastRefreshed"
         :selected-run-id="activeRunId"
         :folded="activeRunId !== null"
+        :expanded="shellLayout.isCanvasExpanded.value"
         :stacked="stacked"
         :now="now"
         @refresh="refresh()"
@@ -161,7 +169,6 @@ watch(
             :back="stacked"
             :animate-entrance="entered"
             @cancel="cancel"
-            @retry-automatic-plots="retryAutomaticPlots"
             @replay="replay"
             @close="dismiss"
           />

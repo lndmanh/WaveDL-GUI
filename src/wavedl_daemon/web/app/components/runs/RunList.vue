@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import { AnimatePresence, motion, useReducedMotion } from 'motion-v';
+import { AnimatePresence, motion } from 'motion-v';
 import {
   ArrowDown,
   ArrowUp,
@@ -29,8 +29,6 @@ import type {
   RunGroupKey,
   RunSort,
 } from '~~/types/run-overview';
-
-const FOLD_DURATION = 340;
 
 const styles = {
   root: cn(
@@ -68,6 +66,7 @@ const props = defineProps<{
   loading: boolean;
   page: number;
   folded: boolean;
+  expanded?: boolean;
   stacked: boolean;
   selectedRunId: string | null;
   staleRunIds?: ReadonlySet<string>;
@@ -85,7 +84,6 @@ const emit = defineEmits<{
 const { t, locale } = useI18n({ useScope: 'global' });
 const labels = useRunLabels();
 const { isActive } = usePageActive();
-const reducedMotion = useReducedMotion();
 const query = shallowRef('');
 const filter = shallowRef<RunFilter>('all');
 const sort = shallowRef<RunSort>({ column: 'created', direction: 'desc' });
@@ -95,52 +93,46 @@ const search = useTemplateRef<HTMLInputElement>('search');
 const detailRegion = useTemplateRef<HTMLElement>('detailRegion');
 const { width } = useElementSize(() => (isActive.value ? stage.value : null));
 const gutter = shallowRef(0);
-const entered = shallowRef(false);
-const resizing = shallowRef(false);
 const highlighted = shallowRef<string | null>(null);
-let resizeFrame: number | undefined;
-let focusTimer: ReturnType<typeof setTimeout> | undefined;
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
-let pendingFocus: PendingFocus | null = null;
 
 const compact = computed(() => props.folded || props.stacked);
+const listHidden = computed(() => props.expanded || (props.stacked && props.folded));
 
-const animate = computed(
-  () =>
-    entered.value && isActive.value && !resizing.value && !props.stacked && !reducedMotion.value,
-);
-
-const listWidth = computed(() =>
-  props.stacked ? width.value : Math.round(Math.max(250, width.value * 0.3)),
-);
-
-const cardWidth = computed(() => (props.folded && !props.stacked ? listWidth.value : width.value));
-
-const detailWidth = computed(() =>
-  props.stacked ? width.value : Math.max(0, width.value - listWidth.value - 16),
-);
+const {
+  animate,
+  paneWidth: listWidth,
+  cardWidth,
+  detailWidth,
+  cardTransition,
+  seamTransition,
+  seamExit,
+  requestFocus,
+  onCardAnimationComplete,
+} = useSplitWorkspace<PendingFocus>({
+  width,
+  active: isActive,
+  stacked: () => props.stacked,
+  folded: () => props.folded,
+  expanded: () => props.expanded ?? false,
+  card: () => list.value?.parentElement,
+  beforeResizeFrame: measureGutter,
+  focus: {
+    initial: () => props.selectedRunId ? { kind: 'detail', runId: props.selectedRunId } : null,
+    settle: settleFocus,
+    clear: clearHighlight,
+    request: (intent) => {
+      if (intent.kind === 'row') highlighted.value = intent.runId;
+    },
+    ready: () => {
+      if (props.stacked && !props.folded) measureGutter();
+    },
+  },
+});
 
 const tableWidth = computed(() => Math.max(0, width.value - 2 - gutter.value));
 const identityWidth = computed(() => Math.max(0, listWidth.value - 2 - gutter.value - 28));
 const metadataWidth = computed(() => Math.max(0, tableWidth.value - identityWidth.value - 28));
-
-const cardTransition = computed(() => ({
-  duration: animate.value ? 0.25 : 0,
-  delay: animate.value ? 0.09 : 0,
-  ease: [0.22, 1, 0.36, 1],
-}));
-
-const seamTransition = computed(() => ({
-  duration: animate.value ? 0.17 : 0,
-  delay: animate.value ? 0.17 : 0,
-  ease: [0.22, 1, 0.36, 1],
-}));
-
-const seamExit = computed(() => ({
-  opacity: [null, 0, 0],
-  x: [null, 32, 32],
-  transition: { duration: animate.value ? 0.34 : 0, times: [0, 0.35, 1], ease: [0.22, 1, 0.36, 1] },
-}));
 
 const registry = computed<CollectionColumns>(() => ({
   name: {
@@ -364,7 +356,7 @@ function focusRow(runId: string) {
 }
 
 function move(event: KeyboardEvent, step: -1 | 1) {
-  if (!isActive.value || event.defaultPrevented || event.isComposing) return;
+  if (!isActive.value || props.expanded || event.defaultPrevented || event.isComposing) return;
   const target = event.currentTarget;
   const id = target instanceof HTMLElement ? target.dataset.runId : undefined;
   const index = orderedRuns.value.findIndex((run) => run.run_id === id);
@@ -385,6 +377,7 @@ function moveFromDetail(event: KeyboardEvent) {
   if (
     !isActive.value ||
     !props.folded ||
+    props.expanded ||
     event.defaultPrevented ||
     event.isComposing ||
     (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
@@ -424,26 +417,17 @@ function enterList(event: KeyboardEvent) {
   focusRow(first.run_id);
 }
 
-function clearFocusWork() {
-  clearTimeout(focusTimer);
+function measureGutter() {
+  if (list.value && list.value.offsetWidth > 0)
+    gutter.value = Math.max(0, list.value.offsetWidth - list.value.clientWidth);
+}
+
+function clearHighlight() {
   clearTimeout(highlightTimer);
-  pendingFocus = null;
   highlighted.value = null;
 }
 
-function onCardAnimationComplete() {
-  const card = list.value?.parentElement;
-
-  if (card && Math.abs(card.offsetWidth - cardWidth.value) < 1) settleFocus();
-}
-
-function settleFocus() {
-  clearTimeout(focusTimer);
-  const intent = pendingFocus;
-  pendingFocus = null;
-
-  if (!intent || !isActive.value) return;
-
+function settleFocus(intent: PendingFocus) {
   if (intent.kind === 'detail') {
     if (props.selectedRunId === intent.runId) emit('focusDetail');
   } else if (props.selectedRunId === null) {
@@ -453,23 +437,6 @@ function settleFocus() {
       highlighted.value = null;
     }, 700);
   }
-}
-
-async function requestFocus(intent: PendingFocus, wait: boolean) {
-  clearFocusWork();
-  pendingFocus = intent;
-
-  if (intent.kind === 'row') highlighted.value = intent.runId;
-  await nextTick();
-
-  if (pendingFocus !== intent) return;
-
-  if (props.stacked && !props.folded && list.value && list.value.offsetWidth > 0) {
-    gutter.value = Math.max(0, list.value.offsetWidth - list.value.clientWidth);
-  }
-
-  if (wait) focusTimer = setTimeout(settleFocus, FOLD_DURATION + 30);
-  else settleFocus();
 }
 
 watch(
@@ -483,46 +450,6 @@ watch(
   },
   { flush: 'sync' },
 );
-
-watch(
-  [width, () => props.stacked, isActive],
-  async ([measured, , active], _previous, onCleanup) => {
-    const intent = pendingFocus;
-    clearFocusWork();
-
-    if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
-    let cancelled = false;
-    onCleanup(() => {
-      cancelled = true;
-
-      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
-    });
-    resizing.value = true;
-
-    if (!active || measured <= 0) return;
-    const firstEntry = !entered.value;
-    await nextTick();
-
-    if (cancelled) return;
-
-    if (list.value && list.value.offsetWidth > 0)
-      gutter.value = Math.max(0, list.value.offsetWidth - list.value.clientWidth);
-    resizeFrame = requestAnimationFrame(() => {
-      resizing.value = false;
-      entered.value = true;
-
-      if (intent) void requestFocus(intent, false);
-      else if (firstEntry && props.selectedRunId)
-        void requestFocus({ kind: 'detail', runId: props.selectedRunId }, false);
-    });
-  },
-);
-
-onScopeDispose(() => {
-  clearFocusWork();
-
-  if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
-});
 </script>
 
 <template>
@@ -535,7 +462,7 @@ onScopeDispose(() => {
     :data-animate="animate"
     @keydown="moveFromDetail"
   >
-    <header v-show="!(stacked && folded)" class="flex shrink-0 flex-wrap items-center gap-2">
+    <header v-show="!listHidden" class="flex shrink-0 flex-wrap items-center gap-2">
       <label class="relative flex min-w-0 flex-[1_1_13rem] items-center">
         <Search
           class="pointer-events-none absolute left-[0.7rem] size-4 text-muted-foreground"
@@ -582,7 +509,7 @@ onScopeDispose(() => {
     </header>
     <div ref="stage" class="relative flex min-h-0 min-w-0 flex-1 flex-nowrap overflow-hidden">
       <motion.div
-        v-show="!(stacked && folded)"
+        v-show="!listHidden"
         :class="styles.card"
         :initial="false"
         :animate="{ width: cardWidth || '100%' }"
@@ -731,7 +658,7 @@ onScopeDispose(() => {
           key="detail"
           data-testid="run-detail-seam"
           class="flex min-h-0 shrink-0 flex-col overflow-hidden [&>div]:h-full [&>div]:min-h-0"
-          :style="{ width: `${detailWidth}px`, marginLeft: stacked ? '0px' : '16px' }"
+          :style="{ width: `${detailWidth}px`, marginLeft: expanded || stacked ? '0px' : '16px' }"
           :initial="{ opacity: animate ? 0 : 1, x: animate ? 32 : 0 }"
           :animate="{ opacity: 1, x: 0 }"
           :exit="seamExit"
