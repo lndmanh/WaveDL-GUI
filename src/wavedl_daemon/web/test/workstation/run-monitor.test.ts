@@ -4,7 +4,7 @@ import { useIntervalFn } from '@vueuse/core';
 import { useRuns } from '../../app/composables/useRuns';
 import { canRequestCancellation, eventDiagnostic, RunMonitor } from '../../app/lib/run-monitor';
 import { DaemonApi, DaemonApiError, parseJson } from '../../app/lib/daemon-api';
-import { CursorStore } from '../../app/lib/event-stream';
+import { EventStreamParser } from '../../app/lib/event-stream';
 import { MetricHistory } from '../../app/lib/metric-history';
 import type { RunTransport } from '../../types/run-monitor';
 import type { RunView } from '../../types/daemon-api';
@@ -32,6 +32,54 @@ function metricEvent(
 }
 
 describe('metric payload boundary schemas', () => {
+  it('caches frozen live metrics by revision without exposing mutable history', () => {
+    const history = new MetricHistory(id);
+    history.setScope(view());
+    history.apply(
+      metricEvent({
+        name: 'loss',
+        value: 4,
+        step: 1,
+        metrics: { extra: { nested: [1, { value: 2 }] } },
+      }),
+    );
+    const projection = history.liveMetrics();
+    const first = projection[0];
+
+    if (!first) throw new Error('Missing metric record');
+    expect(Object.isFrozen(projection)).toBe(true);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.metrics.extra)).toBe(true);
+    expect(() => {
+      first.active = false;
+    }).toThrow();
+    expect(() => {
+      first.metrics.extra = null;
+    }).toThrow();
+    const extra = first.metrics.extra;
+
+    if (extra === null || typeof extra !== 'object' || Array.isArray(extra))
+      throw new Error('Missing nested metrics');
+    const nested = extra.nested;
+    expect(Object.isFrozen(nested)).toBe(true);
+
+    if (!Array.isArray(nested)) throw new Error('Missing nested metrics array');
+    expect(() => nested.push(3)).toThrow();
+    expect(history.liveMetrics()).toBe(projection);
+    history.setScope(view());
+    history.apply(metricEvent({ message: 'diagnostic' }, 'warning', 1, 1));
+    expect(history.liveMetrics()).toBe(projection);
+    history.apply(metricEvent({ name: 'loss', value: 3, step: 1 }, 'metric', 1, 2));
+    const replacement = history.liveMetrics();
+    expect(replacement).not.toBe(projection);
+    expect(projection[0]?.active).toBe(true);
+    expect(history.metrics({ activeOnly: false })[0]?.active).toBe(false);
+    history.apply(metricEvent({ cause: 'requeue' }, 'attempt', 2, 0));
+    expect(history.liveMetrics()).not.toBe(replacement);
+    expect(history.liveMetrics()).toEqual([]);
+    history.setScope(view({ attempt: 2 }));
+    expect(history.liveMetrics()).toEqual(replacement);
+  });
   it('projects numeric series without coercing details or falling back over present non-numeric fields', () => {
     const history = new MetricHistory(id);
 
@@ -276,16 +324,11 @@ function frame(seq: number, type: RunEvent['type'] = 'warning', attempt = 1): Ui
   );
 }
 
-function harness(initial = view(), store: CursorStore | null = null) {
+function harness(initial = view()) {
   let current = initial;
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
 
-  const retryAutomaticPlots = vi.fn<(runId: string, signal: AbortSignal) => Promise<RunView>>(
-    async () => current,
-  );
-
   const transport: RunTransport = {
-    retryAutomaticPlots,
     getRun: vi.fn(async () => current),
     cancelRun: vi.fn(async () => view({ cancellation_requested: true, state: 'stopping' })),
     openEvents: vi.fn(
@@ -312,13 +355,12 @@ function harness(initial = view(), store: CursorStore | null = null) {
   };
 
   const reportFailure = vi.fn();
-  const monitor = new RunMonitor(id, transport, 100, reportFailure, store);
+  const monitor = new RunMonitor(id, transport, 100, reportFailure);
 
   return {
     monitor,
     reportFailure,
     transport,
-    retryAutomaticPlots,
     set: (run: RunView) => {
       current = run;
     },
@@ -347,6 +389,98 @@ afterEach(() => {
 });
 
 describe('run monitoring', () => {
+  it('accepts sparse JSON events through ordered ingress without SSE re-encoding', async () => {
+    const h = harness(view({ attempt: 4, state: 'completed' }));
+    vi.mocked(h.transport.openEvents).mockRejectedValue(new TypeError('SSE unavailable'));
+    const push = vi.spyOn(EventStreamParser.prototype, 'push');
+    h.transport.getEventPage = vi.fn(async () => ({
+      events: [
+        metricEvent({ message: 'first' }, 'warning', 1, 3),
+        metricEvent({ message: 'duplicate' }, 'warning', 1, 3),
+        metricEvent({ message: 'old' }, 'warning', 1, 2),
+        metricEvent({ message: 'sparse' }, 'warning', 1, 19),
+        metricEvent({ message: 'requeue' }, 'warning', 4, 3),
+        metricEvent({ message: 'old attempt' }, 'warning', 2, 99),
+      ],
+      next_cursor: { attempt: 4, seq: 3 },
+      more: false,
+    }));
+
+    try {
+      await h.monitor.start();
+      expect(push).not.toHaveBeenCalled();
+      expect(h.monitor.snapshot().events.map((event) => [event.attempt, event.seq])).toEqual([
+        [1, 3],
+        [1, 19],
+        [4, 3],
+      ]);
+      expect(h.monitor.position()).toEqual({ attempt: 4, seq: 3 });
+    } finally {
+      push.mockRestore();
+      h.monitor.stop();
+    }
+  });
+  it('has one periodic state-refresh owner while draining JSON fallback pages', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    vi.mocked(h.transport.openEvents).mockRejectedValue(new TypeError('SSE unavailable'));
+    h.transport.getEventPage = vi.fn(async () => ({
+      events: [],
+      next_cursor: { attempt: 0, seq: -1 },
+      more: false,
+    }));
+    const task = h.monitor.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.transport.getRun).toHaveBeenCalledTimes(1);
+
+    for (let interval = 1; interval <= 40; interval++) {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(h.transport.getRun).toHaveBeenCalledTimes(interval + 1);
+    }
+
+    expect(h.transport.getEventPage).toHaveBeenCalledTimes(3);
+    h.set(view({ state: 'completed' }));
+    await vi.advanceTimersByTimeAsync(2000);
+    await task;
+    expect(h.monitor.snapshot().stream).toBe('stopped');
+    const calls = vi.mocked(h.transport.getRun).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(h.transport.getRun).toHaveBeenCalledTimes(calls);
+  });
+  it('drains again when terminal authority arrives during an in-flight JSON page', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    vi.mocked(h.transport.openEvents).mockRejectedValue(new TypeError('SSE unavailable'));
+    let finishPage: (() => void) | undefined;
+    const getEventPage = vi.fn<NonNullable<RunTransport['getEventPage']>>();
+    getEventPage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPage = () =>
+            resolve({
+              events: [],
+              next_cursor: { attempt: 0, seq: -1 },
+              more: false,
+            });
+        }),
+    );
+    getEventPage.mockResolvedValue({
+      events: [metricEvent({ message: 'final diagnostic' }, 'warning', 1, 7)],
+      next_cursor: { attempt: 1, seq: 7 },
+      more: false,
+    });
+    h.transport.getEventPage = getEventPage;
+    const task = h.monitor.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.set(view({ state: 'completed' }));
+    await vi.advanceTimersByTimeAsync(100);
+    finishPage?.();
+    await task;
+    expect(getEventPage).toHaveBeenCalledTimes(2);
+    expect(h.monitor.position()).toEqual({ attempt: 1, seq: 7 });
+    expect(h.monitor.snapshot().events.at(-1)?.payload.message).toBe('final diagnostic');
+    expect(h.monitor.snapshot().stream).toBe('stopped');
+  });
   it('falls back after five silent heartbeat intervals, drains pages and resumes only committed events', async () => {
     vi.useFakeTimers();
     const h = harness();
@@ -526,7 +660,7 @@ describe('run monitoring', () => {
     expect(h.monitor.snapshot().freshness).toBe('stale');
     expect(h.monitor.snapshot().stream).toBe('error');
   });
-  it('aborts within an already-read chunk without persisting undisplayed frames', async () => {
+  it('aborts within an already-read chunk without advancing past undisplayed frames', async () => {
     const h = harness();
     h.monitor.subscribe((snapshot) => {
       if (snapshot.events.length === 1) h.monitor.stop();
@@ -578,8 +712,7 @@ describe('run monitoring', () => {
 
     for (let seq = 0; seq < 1010; seq++) h.send(seq);
 
-    for (let i = 0; i < 10000 && h.monitor.snapshot().events.at(-1)?.seq !== 1009; i++)
-      await Promise.resolve();
+    await vi.waitFor(() => expect(h.monitor.position()).toEqual({ attempt: 1, seq: 1009 }));
     expect(h.monitor.snapshot().events).toHaveLength(1000);
     expect(h.monitor.snapshot().truncated).toBe(true);
     expect(h.monitor.snapshot().events[0]?.payload.message).toBe('<script>never HTML</script>');
@@ -827,44 +960,9 @@ describe('run monitoring', () => {
     fresh.stop();
     await next;
   });
-  it('replays from zero while consuming and verifying the persisted watermark', async () => {
+  it('reconstructs a requeued attempt and diagnostics from zero', async () => {
     vi.useFakeTimers();
-    const values = new Map<string, string>();
-
-    const store = new CursorStore(id, id, {
-      getItem: (key) => values.get(key) ?? null,
-      setItem: (key, value) => values.set(key, value),
-    });
-
-    store.save({ attempt: 1, seq: 0 });
-    const h = harness(view(), store);
-    const task = h.monitor.start();
-    await flush();
-    expect(h.transport.openEvents).toHaveBeenCalledWith(
-      id,
-      { attempt: 0, seq: -1 },
-      expect.anything(),
-    );
-    expect(h.monitor.replayTargetStatus()).toBe('pending');
-    h.send(0);
-    await flush();
-    expect(h.monitor.replayTargetStatus()).toBe('verified');
-    h.monitor.stop();
-    await task;
-    expect(store.load()).toEqual({ attempt: 1, seq: 0 });
-  });
-  it('reconstructs a requeued attempt and diagnostics before verifying a cold watermark', async () => {
-    vi.useFakeTimers();
-    let saved = JSON.stringify({ attempt: 2, seq: 1 });
-
-    const store = new CursorStore('daemon-a', id, {
-      getItem: () => saved,
-      setItem: (_key, value) => {
-        saved = value;
-      },
-    });
-
-    const h = harness(view({ attempt: 2 }), store);
+    const h = harness(view({ attempt: 2 }));
     const task = h.monitor.start();
     await flush();
 
@@ -881,7 +979,6 @@ describe('run monitoring', () => {
     send(2, 1, 'metric', { name: 'loss', value: 3, step: 2 });
 
     for (let i = 0; i < 20; i++) await flush();
-    expect(h.monitor.replayTargetStatus()).toBe('verified');
     expect(h.monitor.snapshot().metrics.map((record) => record.value)).toEqual([4, 3]);
     expect(h.monitor.snapshot().events).toHaveLength(5);
     expect(h.transport.openEvents).toHaveBeenCalledWith(
@@ -891,112 +988,10 @@ describe('run monitoring', () => {
     );
     h.monitor.stop();
     await task;
-    expect(JSON.parse(saved)).toEqual({ attempt: 2, seq: 1 });
   });
-  it('verifies a historical watermark even when fresh authority selects a newer attempt', async () => {
-    const store = new CursorStore('daemon-a', id, {
-      getItem: () => JSON.stringify({ attempt: 1, seq: 0 }),
-      setItem: () => undefined,
-    });
-
-    const h = harness(view({ attempt: 2 }), store);
-    const task = h.monitor.start();
-    await flush();
-    expect(h.monitor.replayTargetStatus()).toBe('pending');
-    h.send(0);
-    await flush();
-    expect(h.monitor.replayTargetStatus()).toBe('verified');
-    expect(h.monitor.snapshot().run?.attempt).toBe(2);
-    expect(h.monitor.snapshot().liveEvents).toEqual([]);
-    h.monitor.stop();
-    await task;
-  });
-  it.each([
-    ['malformed', '{bad-json', 'invalidated'],
-    ['ahead attempt', JSON.stringify({ attempt: 2, seq: 9 }), 'invalidated'],
-    ['ahead seq', JSON.stringify({ attempt: 1, seq: 999 }), 'pending'],
-    ['absent sparse event', JSON.stringify({ attempt: 1, seq: 1 }), 'invalidated'],
-  ])(
-    'never skips replay or withholds fresh authority for a %s hint',
-    async (_label, raw, status) => {
-      const store = new CursorStore('daemon-a', id, {
-        getItem: () => raw,
-        setItem: () => undefined,
-      });
-
-      const h = harness(view(), store);
-      const task = h.monitor.start();
-      await flush();
-      h.send(2);
-      await flush();
-      expect(h.monitor.replayTargetStatus()).toBe(status);
-      expect(h.monitor.snapshot().freshness).toBe('fresh');
-      expect(h.monitor.snapshot().events).toHaveLength(1);
-      expect(h.monitor.position()).toEqual({ attempt: 1, seq: 2 });
-      h.monitor.stop();
-      await task;
-    },
-  );
-  it('coalesces persistence and never stores event payloads or control cursors', async () => {
+  it('does not advance a failed consumer commit or a pending cursor after fatal retirement', async () => {
     vi.useFakeTimers();
-    const setItem = vi.fn();
-    const store = new CursorStore('daemon-a', id, { getItem: () => null, setItem });
-    const h = harness(view(), store);
-    const task = h.monitor.start();
-    await flush();
-    h.sendCombined();
-    await flush();
-    expect(setItem).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(250);
-    expect(setItem).toHaveBeenCalledTimes(1);
-    expect(setItem).toHaveBeenLastCalledWith(store.key, JSON.stringify({ attempt: 1, seq: 1 }));
-    h.raw('event: overflow\ndata: {"resumePosition":{"attempt":1,"seq":1}}\n\n');
-    await flush();
-    await vi.advanceTimersByTimeAsync(250);
-    expect(setItem).toHaveBeenCalledTimes(1);
-    h.monitor.stop();
-    await task;
-  });
-  it('reports storage denial without stopping safe in-memory monitoring', async () => {
-    const store = new CursorStore('daemon-a', id, {
-      getItem: () => {
-        throw new Error('private storage body');
-      },
-      setItem: () => {
-        throw new Error('private storage body');
-      },
-    });
-
-    const h = harness(view(), store);
-    const task = h.monitor.start();
-    await flush();
-    expect(h.monitor.cursorPersistence()).toBe('unavailable');
-    h.send(2);
-    await flush();
-    expect(h.monitor.position()).toEqual({ attempt: 1, seq: 2 });
-    expect(h.monitor.snapshot().stream).toBe('live');
-    expect(h.monitor.snapshot().message).not.toContain('private');
-    h.monitor.stop();
-    await task;
-    expect(h.monitor.cursorPersistence()).toBe('unavailable');
-  });
-  it('does not load private cursor state before fresh authentication and ownership', async () => {
-    const getItem = vi.fn(() => null);
-    const setItem = vi.fn();
-    const store = new CursorStore('daemon-a', id, { getItem, setItem });
-    const h = harness(view(), store);
-    vi.mocked(h.transport.getRun).mockRejectedValue(
-      new DaemonApiError('authentication', 'Sign in'),
-    );
-    await h.monitor.start();
-    expect(getItem).not.toHaveBeenCalled();
-    expect(setItem).not.toHaveBeenCalled();
-  });
-  it('does not persist a failed consumer commit or a pending cursor after fatal retirement', async () => {
-    vi.useFakeTimers();
-    const setItem = vi.fn();
-    const store = new CursorStore('daemon-a', id, { getItem: () => null, setItem });
-    const h = harness(view(), store);
+    const h = harness();
     const task = h.monitor.start();
     await flush();
     h.send(0);
@@ -1005,9 +1000,7 @@ describe('run monitoring', () => {
     await task;
     await vi.advanceTimersByTimeAsync(1000);
     expect(h.monitor.position()).toEqual({ attempt: 1, seq: 0 });
-    expect(setItem).not.toHaveBeenCalled();
     h.monitor.stop();
-    expect(setItem).not.toHaveBeenCalled();
   });
   it('confirmed terminal lifecycle after EOF stops; exit alone does not', async () => {
     const h = harness();
@@ -1022,156 +1015,18 @@ describe('run monitoring', () => {
     expect(h.monitor.snapshot().run?.state).toBe('completed');
     expect(h.monitor.snapshot().stream).toBe('stopped');
   });
-  it.each([
-    view({ state: 'completed', auto_plot: { status: 'submitted', run_id: id, failure: null } }),
-    view({
-      state: 'completed',
-      auto_plot: { status: 'failed', run_id: null, failure: 'No checkpoint' },
-    }),
-    view({ state: 'completed', auto_plot: null }),
-    view({ state: 'completed' }),
-  ])(
-    'polls terminal pending metadata until it becomes $auto_plot without reopening SSE',
-    async (settled) => {
-      vi.useFakeTimers();
-
-      const h = harness(
-        view({ state: 'completed', auto_plot: { status: 'pending', run_id: null, failure: null } }),
-      );
-
-      const task = h.monitor.start();
-      await flush();
-      h.end();
-      await flush();
-      expect(h.monitor.snapshot().stream).toBe('stopped');
-      const calls = vi.mocked(h.transport.getRun).mock.calls.length;
-      await vi.advanceTimersByTimeAsync(200);
-      expect(vi.mocked(h.transport.getRun).mock.calls.length).toBeGreaterThan(calls);
-      expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('pending');
-      h.set(settled);
-      await vi.advanceTimersByTimeAsync(100);
-      await task;
-      expect(h.monitor.snapshot().run?.auto_plot).toEqual(settled.auto_plot);
-      const stoppedCalls = vi.mocked(h.transport.getRun).mock.calls.length;
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(h.transport.getRun).toHaveBeenCalledTimes(stoppedCalls);
-      expect(h.transport.openEvents).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it('keeps terminal metadata polling within the page scope', async () => {
+  it('stops polling after a confirmed terminal run without reopening SSE', async () => {
     vi.useFakeTimers();
-
-    const h = harness(
-      view({ state: 'completed', auto_plot: { status: 'pending', run_id: null, failure: null } }),
-    );
-
+    const h = harness(view({ state: 'completed' }));
     const task = h.monitor.start();
     await flush();
     h.end();
-    await flush();
-    h.monitor.pause();
     await task;
     const calls = vi.mocked(h.transport.getRun).mock.calls.length;
     await vi.advanceTimersByTimeAsync(1000);
     expect(h.transport.getRun).toHaveBeenCalledTimes(calls);
-    expect(h.monitor.snapshot().freshness).toBe('stale');
-  });
-
-  it('accepts the retry response and resumes metadata-only polling until submission', async () => {
-    vi.useFakeTimers();
-
-    const failed = view({
-      state: 'completed',
-      auto_plot: { status: 'failed', run_id: null, failure: 'Unavailable' },
-    });
-
-    const h = harness(failed);
-    const task = h.monitor.start();
-    await flush();
-    h.end();
-    await task;
-
-    const pending = view({
-      state: 'completed',
-      auto_plot: { status: 'pending', run_id: null, failure: null },
-    });
-
-    h.retryAutomaticPlots.mockResolvedValueOnce(pending);
-    h.set(pending);
-    await h.monitor.retryAutomaticPlots();
-    expect(h.monitor.snapshot().run).toEqual(pending);
-    expect(h.monitor.snapshot().automaticPlotRetry).toBe(false);
-    const calls = vi.mocked(h.transport.getRun).mock.calls.length;
-    await vi.advanceTimersByTimeAsync(200);
-    expect(vi.mocked(h.transport.getRun).mock.calls.length).toBeGreaterThan(calls);
-    h.set(
-      view({ state: 'completed', auto_plot: { status: 'submitted', run_id: id, failure: null } }),
-    );
-    await vi.advanceTimersByTimeAsync(100);
-    expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('submitted');
-    const stoppedCalls = vi.mocked(h.transport.getRun).mock.calls.length;
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(h.transport.getRun).toHaveBeenCalledTimes(stoppedCalls);
     expect(h.transport.openEvents).toHaveBeenCalledTimes(1);
-    h.monitor.stop();
-  });
-
-  it('prevents duplicate retries and ignores an acknowledgement after the page pauses', async () => {
-    const h = harness(
-      view({
-        state: 'completed',
-        auto_plot: { status: 'failed', run_id: null, failure: 'Unavailable' },
-      }),
-    );
-
-    const task = h.monitor.start();
-    await flush();
-    h.end();
-    await task;
-    let resolveRetry: ((run: RunView) => void) | undefined;
-    h.retryAutomaticPlots.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveRetry = resolve;
-        }),
-    );
-    const retry = h.monitor.retryAutomaticPlots();
-    expect(h.monitor.snapshot().automaticPlotRetry).toBe(true);
-    await h.monitor.retryAutomaticPlots();
-    expect(h.retryAutomaticPlots).toHaveBeenCalledTimes(1);
-    h.monitor.pause();
-    expect(h.retryAutomaticPlots.mock.calls[0]?.[1].aborted).toBe(true);
-    resolveRetry?.(
-      view({ state: 'completed', auto_plot: { status: 'pending', run_id: null, failure: null } }),
-    );
-    await retry;
-    expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('failed');
-    expect(h.monitor.snapshot().automaticPlotRetry).toBe(false);
-    await h.monitor.retryAutomaticPlots();
-    expect(h.retryAutomaticPlots).toHaveBeenCalledTimes(1);
-    h.monitor.stop();
-  });
-
-  it('shows retry errors through the existing action message without replacing the run', async () => {
-    const h = harness(
-      view({
-        state: 'completed',
-        auto_plot: { status: 'failed', run_id: null, failure: 'Unavailable' },
-      }),
-    );
-
-    const task = h.monitor.start();
-    await flush();
-    h.end();
-    await task;
-    const error = new DaemonApiError('http', 'Retry unavailable', 503);
-    h.retryAutomaticPlots.mockRejectedValueOnce(error);
-    await h.monitor.retryAutomaticPlots();
-    expect(h.monitor.snapshot().message).toBe(error);
-    expect(h.monitor.snapshot().run?.auto_plot?.status).toBe('failed');
-    expect(h.monitor.snapshot().automaticPlotRetry).toBe(false);
-    h.monitor.stop();
+    expect(h.monitor.snapshot().stream).toBe('stopped');
   });
 
   it('identity/protocol failure halts instead of reconnecting to a replacement daemon', async () => {
@@ -1209,11 +1064,6 @@ describe('kept-alive experiments list', () => {
     vi.stubGlobal('watch', watch);
     vi.stubGlobal('onScopeDispose', onScopeDispose);
     vi.stubGlobal('useIntervalFn', useIntervalFn);
-    const cursors = new Map<string, string>();
-    vi.stubGlobal('localStorage', {
-      getItem: (key: string) => cursors.get(key) ?? null,
-      setItem: (key: string, value: string) => cursors.set(key, value),
-    });
   });
 
   afterEach(() => {

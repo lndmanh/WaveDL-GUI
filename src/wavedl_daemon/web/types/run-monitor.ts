@@ -8,7 +8,6 @@ export interface RunTransport {
   openEvents(runId: string, cursor: Cursor, signal: AbortSignal): Promise<Response>;
   getEventPage?(runId: string, cursor: Cursor, signal: AbortSignal): Promise<EventPage>;
   cancelRun(runId: string, signal: AbortSignal): Promise<RunView>;
-  retryAutomaticPlots?(runId: string, signal: AbortSignal): Promise<RunView>;
 }
 
 export interface RunMonitorSnapshot {
@@ -19,10 +18,7 @@ export interface RunMonitorSnapshot {
   stream: 'connecting' | 'live' | 'reconnecting' | 'stopped' | 'error';
   message: ClientMessage | Error;
   cancellation: 'idle' | 'sending' | 'requested' | 'unknown';
-  automaticPlotRetry: boolean;
   truncated: boolean;
   metrics: readonly MetricRecord[];
   summary: MetricSummary;
 }
-
-export type ReplayTargetStatus = 'none' | 'pending' | 'verified' | 'invalidated';

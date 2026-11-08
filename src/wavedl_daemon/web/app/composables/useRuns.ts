@@ -1,6 +1,5 @@
 import { clientError } from '../i18n/client-messages';
 import { DaemonApi, DaemonApiError } from '../lib/daemon-api';
-import { CursorStore } from '../lib/event-stream';
 import { RunMonitor } from '../lib/run-monitor';
 import { runFilterOf } from '../lib/run-overview';
 import type { ClientMessage } from '~~/types/i18n';
@@ -99,12 +98,6 @@ export function useRuns(
       },
       2000,
       reportFailure,
-      daemonId
-        ? new CursorStore(daemonId, runId, {
-            getItem: (key) => globalThis.localStorage.getItem(key),
-            setItem: (key, value) => globalThis.localStorage.setItem(key, value),
-          })
-        : null,
     );
     unsubscribe = monitor.subscribe((snapshot) => {
       const previous = selected.value;

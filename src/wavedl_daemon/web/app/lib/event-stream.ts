@@ -1,8 +1,8 @@
-import { DaemonApi, DaemonApiError, object, parseJson } from './daemon-api';
+import { DaemonApiError, object, parseJson } from './daemon-api';
 
 import { cursorSchema, runEventSchema } from '../../shared/schemas/event-stream';
 import type { Json } from '~~/types/json';
-import type { Cursor, RunEvent, StreamControl, CursorStorage } from '~~/types/event-stream';
+import type { Cursor, RunEvent, StreamControl } from '~~/types/event-stream';
 
 export const INITIAL_CURSOR: Readonly<Cursor> = Object.freeze({ attempt: 0, seq: -1 });
 const MAX_LINE = 1024 * 1024;
@@ -10,55 +10,6 @@ const MAX_FRAME = 2 * 1024 * 1024;
 
 export function validCursor(value: Json | Cursor | undefined): value is Cursor {
   return cursorSchema.safeParse(value).success;
-}
-
-interface CursorRead {
-  cursor: Cursor;
-  status: 'saved' | 'empty' | 'invalid' | 'unavailable';
-}
-
-export class CursorStore {
-  readonly key: string;
-  constructor(
-    readonly daemonId: string,
-    readonly runId: string,
-    private readonly storage: CursorStorage,
-  ) {
-    if (
-      !/^[\x21-\x7e]{1,256}$/.test(daemonId) ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(runId)
-    ) {
-      throw DaemonApiError.fromKey('identity', 'invalidCursorStorageScope');
-    }
-
-    this.key = `wavedl:cursor:v1:${encodeURIComponent(daemonId)}:${encodeURIComponent(runId)}`;
-  }
-  load(): Cursor {
-    return this.read().cursor;
-  }
-  read(): CursorRead {
-    let raw: string | null;
-
-    try {
-      raw = this.storage.getItem(this.key);
-    } catch {
-      return { cursor: { ...INITIAL_CURSOR }, status: 'unavailable' };
-    }
-
-    try {
-      const value = raw === null || raw.length > 128 ? null : parseJson(raw);
-
-      return validCursor(value)
-        ? { cursor: { attempt: value.attempt, seq: value.seq }, status: 'saved' }
-        : { cursor: { ...INITIAL_CURSOR }, status: raw === null ? 'empty' : 'invalid' };
-    } catch {
-      return { cursor: { ...INITIAL_CURSOR }, status: 'invalid' };
-    }
-  }
-  save(cursor: Cursor): void {
-    if (!validCursor(cursor)) throw DaemonApiError.fromKey('response', 'invalidCursor');
-    this.storage.setItem(this.key, JSON.stringify({ attempt: cursor.attempt, seq: cursor.seq }));
-  }
 }
 
 function envelope(data: string, runId: string, id: string): RunEvent {
@@ -80,43 +31,17 @@ function envelope(data: string, runId: string, id: string): RunEvent {
     throw DaemonApiError.fromKey('protocol', 'invalidEventScope');
   }
 
-  const event = parsed.data;
-
-  if (new Date(event.ts).toISOString().slice(0, 19) !== event.ts.slice(0, 19)) {
-    throw DaemonApiError.fromKey('protocol', 'invalidEventTimestamp');
-  }
-
-  // parseJson recursively validated payload's JSON domain before narrowing.
-  const payload = event.payload;
-
-  return {
-    protocol: 'wavedl-run',
-    version: 2,
-    run_id: runId,
-    attempt: event.attempt,
-    seq: event.seq,
-    type: event.type,
-    ts: event.ts,
-    payload,
-  };
+  return parsed.data;
 }
 
-/** Sequential async callbacks provide backpressure; commit precedes cursor advance. */
-export class EventStreamParser {
-  #decoder = new TextDecoder('utf-8', { fatal: true });
-  #pending = '';
-  #lineBytes = 0;
-  #data: string[] = [];
-  #id = '';
-  #type = '';
-  #frameBytes = 0;
+/** Shared ordered ingress for decoded SSE frames and validated JSON events. */
+class EventIngress {
   #cursor: Cursor;
   constructor(
     private readonly runId: string,
     cursor: Cursor,
     private readonly commit: (event: RunEvent) => void | Promise<void>,
-    private readonly persist: (cursor: Cursor) => void = () => undefined,
-    private readonly control: (event: StreamControl) => void | Promise<void> = () => undefined,
+    private readonly advance: (cursor: Cursor) => void,
     private readonly signal?: AbortSignal,
   ) {
     if (
@@ -128,6 +53,62 @@ export class EventStreamParser {
   }
   get cursor(): Cursor {
     return { ...this.#cursor };
+  }
+  async accept(event: RunEvent): Promise<void> {
+    this.signal?.throwIfAborted();
+
+    if (event.run_id !== this.runId)
+      throw DaemonApiError.fromKey('protocol', 'invalidEventScope');
+
+    if (new Date(event.ts).toISOString().slice(0, 19) !== event.ts.slice(0, 19))
+      throw DaemonApiError.fromKey('protocol', 'invalidEventTimestamp');
+    const current = this.#cursor;
+
+    if (
+      event.attempt < current.attempt ||
+      (event.attempt === current.attempt && event.seq <= current.seq)
+    )
+      return;
+    // Durable journals can be sparse. Only ordering, not adjacency, is promised.
+    await this.commit(event);
+    // Revocation during an async commit must not advance unseen progress.
+    this.signal?.throwIfAborted();
+    const next = { attempt: event.attempt, seq: event.seq };
+    this.advance(next);
+    this.#cursor = next;
+  }
+}
+
+/** Sequential async callbacks provide backpressure; commit precedes cursor advance. */
+export class EventStreamParser {
+  #decoder = new TextDecoder('utf-8', { fatal: true });
+  #pending = '';
+  #lineBytes = 0;
+  #data: string[] = [];
+  #id = '';
+  #type = '';
+  #frameBytes = 0;
+  #ingress: EventIngress;
+  constructor(
+    private readonly runId: string,
+    cursor: Cursor,
+    commit: (event: RunEvent) => void | Promise<void>,
+    advance: (cursor: Cursor) => void = () => undefined,
+    private readonly control: (event: StreamControl) => void | Promise<void> = () => undefined,
+    private readonly signal?: AbortSignal,
+  ) {
+    this.#ingress = new EventIngress(runId, cursor, commit, advance, signal);
+  }
+  get cursor(): Cursor {
+    return this.#ingress.cursor;
+  }
+  /** JSON pages already passed transport schema validation; no SSE framing round-trip. */
+  async accept(event: RunEvent): Promise<void> {
+    this.signal?.throwIfAborted();
+    // Match the former single data-line bound without synthesizing/decoding a frame.
+    if (new TextEncoder().encode(JSON.stringify(event)).byteLength + 6 > MAX_LINE)
+      throw DaemonApiError.fromKey('protocol', 'streamLineExceedsLimit');
+    await this.#ingress.accept(event);
   }
   async push(chunk: Uint8Array): Promise<void> {
     for (let offset = 0; offset < chunk.length; offset += 65536) {
@@ -229,9 +210,11 @@ export class EventStreamParser {
 
       if (!validCursor(resume)) throw DaemonApiError.fromKey('protocol', 'invalidStreamControl');
 
+      const current = this.cursor;
+
       if (
-        resume.attempt > this.#cursor.attempt ||
-        (resume.attempt === this.#cursor.attempt && resume.seq > this.#cursor.seq)
+        resume.attempt > current.attempt ||
+        (resume.attempt === current.attempt && resume.seq > current.seq)
       ) {
         throw DaemonApiError.fromKey('protocol', 'uncommittedStreamProgress');
       }
@@ -246,70 +229,6 @@ export class EventStreamParser {
 
     if (this.#type && this.#type !== 'message')
       throw DaemonApiError.fromKey('protocol', 'unsupportedStreamEvent');
-    const event = envelope(data, this.runId, this.#id);
-    const current = this.#cursor;
-
-    if (
-      event.attempt < current.attempt ||
-      (event.attempt === current.attempt && event.seq <= current.seq)
-    )
-      return;
-    // Durable journals can be sparse. Only ordering, not adjacency, is promised.
-    await this.commit(event);
-    // A monitor may be revoked while its async UI commit is pending. Never
-    // persist unseen progress for a disconnected or superseded consumer.
-    this.signal?.throwIfAborted();
-    const next = { attempt: event.attempt, seq: event.seq };
-    this.persist(next);
-    this.#cursor = next;
-  }
-}
-
-export async function streamRun(
-  api: DaemonApi,
-  runId: string,
-  store: CursorStore,
-  commit: (event: RunEvent) => void | Promise<void>,
-  options: { signal?: AbortSignal; control?: (event: StreamControl) => void | Promise<void> } = {},
-): Promise<Cursor> {
-  if (runId !== store.runId)
-    throw DaemonApiError.fromKey('identity', 'eventCursorBelongsToAnotherRun');
-  const cursor = store.load();
-  const response = await api.openEvents(runId, cursor, options.signal, store.daemonId);
-
-  if (!response.body) throw DaemonApiError.fromKey('response', 'missingEventStream');
-  const reader = response.body.getReader();
-
-  const parser = new EventStreamParser(
-    runId,
-    cursor,
-    commit,
-    (next) => store.save(next),
-    options.control ??
-      (() => {
-        // A control frame means the server could not deliver a complete,
-        // replayable stream.  Never resolve as if the stream completed cleanly
-        // when the caller has not explicitly supplied recovery handling.
-        throw DaemonApiError.fromKey('protocol', 'streamRequiresReplay');
-      }),
-    options.signal,
-  );
-
-  try {
-    for (;;) {
-      options.signal?.throwIfAborted();
-      const { value, done } = await reader.read();
-
-      if (done) break;
-      await parser.push(value);
-    }
-
-    options.signal?.throwIfAborted();
-    await parser.finish();
-
-    return parser.cursor;
-  } finally {
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
+    await this.#ingress.accept(envelope(data, this.runId, this.#id));
   }
 }

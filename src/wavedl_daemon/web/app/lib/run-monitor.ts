@@ -1,13 +1,13 @@
 import { clientError } from '../i18n/client-messages';
 import { DaemonApiError } from './daemon-api';
-import { CursorStore, EventStreamParser, INITIAL_CURSOR } from './event-stream';
+import { EventStreamParser, INITIAL_CURSOR } from './event-stream';
 import { MetricHistory } from './metric-history';
 
 import { diagnosticPayloadSchema } from '../../shared/schemas/run-monitor';
 import type { ClientMessage } from '~~/types/i18n';
 import type { RunView } from '~~/types/daemon-api';
 import type { Cursor, RunEvent } from '~~/types/event-stream';
-import type { RunTransport, RunMonitorSnapshot, ReplayTargetStatus } from '~~/types/run-monitor';
+import type { RunTransport, RunMonitorSnapshot } from '~~/types/run-monitor';
 
 export function terminalRun(run: RunView): boolean {
   return !run.uncertainty && ['completed', 'failed', 'cancelled'].includes(run.state);
@@ -42,8 +42,6 @@ function fatal(cause: unknown): boolean {
 export class RunMonitor {
   #abort = new AbortController();
   #cancelAbort = new AbortController();
-  // Terminal observation stops before a user can retry; page pause still retires this action.
-  #plotRetryAbort = new AbortController();
   #cursor: Cursor = { ...INITIAL_CURSOR };
   #listeners = new Set<(snapshot: RunMonitorSnapshot) => void>();
   #started = false;
@@ -57,12 +55,6 @@ export class RunMonitor {
   #logEvents: RunEvent[] = [];
   #logSizes: number[] = [];
   #logBytes = 0;
-  #replayTarget: Cursor | null = null;
-  #replayTargetStatus: ReplayTargetStatus = 'none';
-  #persistence: 'disabled' | 'ready' | 'saved' | 'unavailable' = 'disabled';
-  #loadedTarget = false;
-  #durableCursor: Cursor | null = null;
-  #persistTimer: ReturnType<typeof setTimeout> | null = null;
   #snapshot: RunMonitorSnapshot = {
     run: null,
     freshness: 'unconfirmed',
@@ -71,7 +63,6 @@ export class RunMonitor {
     stream: 'connecting',
     message: '',
     cancellation: 'idle',
-    automaticPlotRetry: false,
     truncated: false,
     metrics: [],
     summary: { progress: null, best: null, latest: null },
@@ -81,14 +72,8 @@ export class RunMonitor {
     private readonly transport: RunTransport,
     private readonly pollMs = 2000,
     private readonly reportFailure: (error: DaemonApiError) => void = () => undefined,
-    private readonly cursorStore: CursorStore | null = null,
   ) {
     this.#history = new MetricHistory(runId);
-
-    if (cursorStore && cursorStore.runId !== runId)
-      throw DaemonApiError.fromKey('identity', 'eventCursorBelongsToAnotherRun');
-
-    if (cursorStore) this.#persistence = 'ready';
   }
   snapshot(): RunMonitorSnapshot {
     // Explicit readers receive committed progress; subscribers remain coalesced.
@@ -97,56 +82,23 @@ export class RunMonitor {
   position(): Cursor {
     return { ...this.#cursor };
   }
-  replayTargetStatus(): ReplayTargetStatus {
-    return this.#replayTargetStatus;
-  }
-  cursorPersistence(): 'disabled' | 'ready' | 'saved' | 'unavailable' {
-    return this.#persistence;
-  }
-  #loadTarget(): void {
-    if (this.#loadedTarget || !this.cursorStore || this.#abort.signal.aborted) return;
-    this.#loadedTarget = true;
-    const stored = this.cursorStore.read();
-
-    if (stored.status === 'unavailable') {
-      this.#persistence = 'unavailable';
-
-      return;
-    }
-
-    if (stored.status === 'invalid') {
-      this.#replayTargetStatus = 'invalidated';
-
-      return;
-    }
-
-    if (stored.status === 'empty') return;
-    this.#replayTarget = stored.cursor;
-    this.#replayTargetStatus = stored.cursor.attempt === 0 ? 'verified' : 'pending';
-    // A hint ahead of the authoritative runtime is stale/corrupt. It must
-    // never become authority or block reconstruction of the available prefix.
-    const attempt = this.#snapshot.run?.attempt;
-
-    if (attempt !== undefined && (attempt === null || stored.cursor.attempt > attempt))
-      this.#replayTargetStatus = 'invalidated';
-  }
   subscribe(listener: (snapshot: RunMonitorSnapshot) => void): () => void {
     this.#listeners.add(listener);
     listener(this.#snapshot);
 
     return () => this.#listeners.delete(listener);
   }
-  #publish(patch: Partial<RunMonitorSnapshot>): void {
+  #publish(patch: Partial<RunMonitorSnapshot>, projectHistory = false): void {
     if (this.#publicationTimer !== null) clearTimeout(this.#publicationTimer);
     this.#publicationTimer = null;
+    this.#snapshot = { ...this.#snapshot, ...patch };
 
-    if (this.#pendingEvents) {
+    if (patch.liveEvents !== undefined) this.#liveEvents = [...patch.liveEvents];
+
+    if (this.#pendingEvents || projectHistory) {
       this.#pendingEvents = false;
       this.#snapshot = this.#eventSnapshot();
     }
-
-    this.#snapshot = { ...this.#snapshot, ...patch };
-    this.#liveEvents = [...this.#snapshot.liveEvents];
 
     for (const listener of this.#listeners) listener(this.#snapshot);
   }
@@ -158,7 +110,7 @@ export class RunMonitor {
       events: [...this.#logEvents],
       liveEvents: [...this.#liveEvents],
       truncated: this.#truncated,
-      metrics: fresh ? this.#history.metrics({ live: true }) : [],
+      metrics: fresh ? this.#history.liveMetrics() : [],
       summary: fresh ? this.#history.summary() : { progress: null, best: null, latest: null },
     };
   }
@@ -197,14 +149,15 @@ export class RunMonitor {
 
     const changed = prior !== null && prior.attempt !== run.attempt;
     this.#history.setScope(run);
-    this.#publish({
-      run,
-      freshness: 'fresh',
-      liveEvents: changed ? [] : this.#liveEvents,
-      cancellation: run.cancellation_requested ? 'requested' : this.#snapshot.cancellation,
-      metrics: this.#history.metrics({ live: true }),
-      summary: this.#history.summary(),
-    });
+    this.#publish(
+      {
+        run,
+        freshness: 'fresh',
+        liveEvents: changed ? [] : this.#liveEvents,
+        cancellation: run.cancellation_requested ? 'requested' : this.#snapshot.cancellation,
+      },
+      true,
+    );
   }
   async #refresh(): Promise<void> {
     const revision = ++this.#refreshRevision;
@@ -229,18 +182,6 @@ export class RunMonitor {
   #commit(event: RunEvent): void {
     if (this.#abort.signal.aborted) return;
     this.#history.apply(event);
-
-    if (this.#replayTarget && this.#replayTargetStatus === 'pending') {
-      const target = this.#replayTarget;
-
-      if (event.attempt === target.attempt && event.seq === target.seq)
-        this.#replayTargetStatus = 'verified';
-      else if (
-        event.attempt > target.attempt ||
-        (event.attempt === target.attempt && event.seq > target.seq)
-      )
-        this.#replayTargetStatus = 'invalidated';
-    }
 
     const bytes = new TextEncoder().encode(JSON.stringify(event)).byteLength;
     this.#logEvents.push(event);
@@ -309,7 +250,6 @@ export class RunMonitor {
 
     if (!allowed() || !this.#abort.signal.aborted) return;
     this.#abort = new AbortController();
-    this.#plotRetryAbort = new AbortController();
     this.#started = false;
     await this.start();
   }
@@ -385,12 +325,16 @@ export class RunMonitor {
     // Keep JSON polling for this watch once a proxy rejects/buffers SSE.
     // Re-probing adds another silent gap without improving event semantics.
     let pollingEvents = false;
+    let needsAuthority = true;
 
     while (!this.#abort.signal.aborted) {
       try {
-        await this.#refresh();
-        this.#loadTarget();
-        this.#flushCursor();
+        // The poller owns periodic state refreshes, including JSON fallback.
+        // Establish authority once per watch, including a retained monitor's resume.
+        if (needsAuthority) {
+          await this.#refresh();
+          needsAuthority = false;
+        }
 
         const parser = new EventStreamParser(
           this.runId,
@@ -398,16 +342,17 @@ export class RunMonitor {
           (event) => this.#commit(event),
           (cursor) => {
             this.#cursor = cursor;
-            this.#durableCursor = cursor;
-
-            if (this.cursorStore && this.#persistTimer === null)
-              this.#persistTimer = setTimeout(() => this.#flushCursor(), 250);
           },
           () => {
             throw clientError('streamRequiresReplay', {});
           },
           this.#abort.signal,
         );
+
+        const drainingTerminal =
+          this.#snapshot.freshness === 'fresh' &&
+          this.#snapshot.run !== null &&
+          terminalRun(this.#snapshot.run);
 
         if (pollingEvents && this.transport.getEventPage) {
           let more = true;
@@ -421,15 +366,7 @@ export class RunMonitor {
 
             if (this.#abort.signal.aborted) break;
 
-            // Use the same bounded parser, validation, dedupe, commit and
-            // cursor-advance path as SSE, including sparse journal positions.
-            for (const event of page.events) {
-              await parser.push(
-                new TextEncoder().encode(
-                  `id: ${event.attempt}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`,
-                ),
-              );
-            }
+            for (const event of page.events) await parser.accept(event);
 
             more = page.more;
             this.#publish({ stream: 'live', message: '' });
@@ -455,14 +392,36 @@ export class RunMonitor {
 
         if (this.#abort.signal.aborted) break;
         retries = 0;
-        await this.#refresh();
 
-        if (this.#snapshot.run && terminalRun(this.#snapshot.run)) {
-          if (this.#replayTargetStatus === 'pending') this.#replayTargetStatus = 'invalidated';
-          this.#flushCursor();
+        // A page requested before terminal authority may precede the final journal
+        // writes. Drain once more after observing that authority before stopping.
+        if (
+          pollingEvents &&
+          !drainingTerminal &&
+          this.#snapshot.freshness === 'fresh' &&
+          this.#snapshot.run &&
+          terminalRun(this.#snapshot.run)
+        )
+          continue;
+
+        // EOF requires confirmation; JSON pages need it only after the poller
+        // observes a terminal run and we have drained its remaining events.
+        if (
+          !pollingEvents ||
+          (this.#snapshot.freshness === 'fresh' &&
+            this.#snapshot.run &&
+            terminalRun(this.#snapshot.run))
+        )
+          await this.#refresh();
+
+        if (
+          this.#snapshot.freshness === 'fresh' &&
+          this.#snapshot.run &&
+          terminalRun(this.#snapshot.run)
+        ) {
           this.#publish({ stream: 'stopped' });
 
-          if (this.#snapshot.run.auto_plot?.status !== 'pending') this.#abort.abort();
+          this.#abort.abort();
           break;
         }
 
@@ -476,7 +435,6 @@ export class RunMonitor {
 
         if (fatal(error)) {
           this.#abort.abort();
-          this.#flushCursor();
 
           if (error instanceof DaemonApiError) this.reportFailure(error);
           break;
@@ -495,14 +453,6 @@ export class RunMonitor {
 
       try {
         await this.#refresh();
-
-        if (
-          this.#snapshot.stream === 'stopped' &&
-          this.#snapshot.run &&
-          terminalRun(this.#snapshot.run) &&
-          this.#snapshot.run.auto_plot?.status !== 'pending'
-        )
-          this.#abort.abort();
       } catch (error) {
         if (this.#abort.signal.aborted) break;
         this.#publish({ message: message(error) });
@@ -510,7 +460,6 @@ export class RunMonitor {
         if (fatal(error)) {
           this.#publish({ stream: 'error' });
           this.#abort.abort();
-          this.#flushCursor();
 
           if (error instanceof DaemonApiError) this.reportFailure(error);
         }
@@ -551,53 +500,10 @@ export class RunMonitor {
 
       if (fatal(error)) {
         this.#abort.abort();
-        this.#flushCursor();
 
         if (error instanceof DaemonApiError) this.reportFailure(error);
         this.stop();
       }
-    }
-  }
-  async retryAutomaticPlots(): Promise<void> {
-    const retry = this.transport.retryAutomaticPlots;
-    const signal = this.#plotRetryAbort.signal;
-
-    if (
-      !retry ||
-      signal.aborted ||
-      this.#snapshot.automaticPlotRetry ||
-      this.#snapshot.run?.auto_plot?.status !== 'failed'
-    )
-      return;
-    this.#publish({ automaticPlotRetry: true, message: '' });
-
-    try {
-      const run = await retry(this.runId, signal);
-
-      if (signal.aborted) return;
-      this.#refreshRevision++;
-      this.#accept(run);
-
-      if (run.auto_plot?.status === 'pending' && this.#abort.signal.aborted) {
-        await this.#running;
-
-        if (signal.aborted) return;
-        this.#abort = new AbortController();
-        this.#running = this.#poll();
-      }
-    } catch (error) {
-      if (!signal.aborted) {
-        this.#publish({ message: error instanceof Error ? error : message(error) });
-
-        if (fatal(error)) {
-          this.#abort.abort();
-          this.#flushCursor();
-
-          if (error instanceof DaemonApiError) this.reportFailure(error);
-        }
-      }
-    } finally {
-      if (!signal.aborted) this.#publish({ automaticPlotRetry: false });
     }
   }
   stop(): void {
@@ -605,36 +511,14 @@ export class RunMonitor {
     this.pause();
   }
   pause(): void {
-    this.#plotRetryAbort.abort();
-    this.#flushCursor();
     this.#abort.abort();
     this.#publish({
       stream: 'stopped',
       freshness: 'stale',
-      automaticPlotRetry: false,
       liveEvents: [],
       metrics: [],
       summary: { progress: null, best: null, latest: null },
     });
-  }
-  #flushCursor(): void {
-    if (this.#persistTimer !== null) {
-      clearTimeout(this.#persistTimer);
-      this.#persistTimer = null;
-    }
-
-    const cursor = this.#durableCursor;
-
-    if (!this.cursorStore || cursor === null || this.#abort.signal.aborted) return;
-    this.#durableCursor = null;
-
-    try {
-      this.cursorStore.save(cursor);
-      this.#persistence = 'saved';
-    } catch {
-      // Storage denial is a durability degradation only; replay remains safe.
-      this.#persistence = 'unavailable';
-    }
   }
 }
 

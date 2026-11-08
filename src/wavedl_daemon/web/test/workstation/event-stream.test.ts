@@ -1,12 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import {
-  CursorStore,
-  EventStreamParser,
-  INITIAL_CURSOR,
-  streamRun,
-  validCursor,
-} from '../../app/lib/event-stream';
-import { DaemonApi } from '../../app/lib/daemon-api';
+import { describe, expect, it, vi } from 'vitest';
+import { EventStreamParser, INITIAL_CURSOR, validCursor } from '../../app/lib/event-stream';
+import { runEventSchema } from '../../shared/schemas/event-stream';
 import type { FixtureEventOverrides } from './fixture-schemas';
 import type { RunEvent, Cursor } from '../../types/event-stream';
 
@@ -32,6 +26,59 @@ function frame(attempt = 1, seq = 0, overrides: FixtureEventOverrides = {}) {
 }
 
 describe('attempt aware fetch stream', () => {
+  it('shares sparse ordering and deduplication between JSON ingress and SSE decoding', async () => {
+    const received: RunEvent[] = [];
+    const parser = new EventStreamParser(run, INITIAL_CURSOR, (value) => {
+      received.push(value);
+    });
+    await parser.accept(runEventSchema.parse(event(1, 3)));
+    await parser.push(encoder.encode(frame(1, 3) + frame(1, 19)));
+    await parser.accept(runEventSchema.parse(event(1, 4)));
+    await parser.accept(runEventSchema.parse(event(4, 3)));
+    await parser.push(encoder.encode(frame(2, 99)));
+    expect(received.map((value) => [value.attempt, value.seq])).toEqual([
+      [1, 3],
+      [1, 19],
+      [4, 3],
+    ]);
+    expect(parser.cursor).toEqual({ attempt: 4, seq: 3 });
+  });
+  it.each(['failed commit', 'revoked commit', 'already aborted'])(
+    'does not advance JSON ingress after %s',
+    async (outcome) => {
+      const abort = new AbortController();
+      const advance = vi.fn();
+      const commit = vi.fn(async () => {
+        if (outcome === 'failed commit') throw new Error('commit failed');
+        await Promise.resolve();
+        abort.abort();
+      });
+      const parser = new EventStreamParser(
+        run,
+        INITIAL_CURSOR,
+        commit,
+        advance,
+        undefined,
+        abort.signal,
+      );
+      if (outcome === 'already aborted') abort.abort();
+      await expect(parser.accept(runEventSchema.parse(event()))).rejects.toThrow();
+      expect(advance).not.toHaveBeenCalled();
+      expect(parser.cursor).toEqual(INITIAL_CURSOR);
+      if (outcome === 'already aborted') expect(commit).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    { run_id: '22222222-2222-2222-2222-222222222222' },
+    { ts: '2026-02-30T00:00:00Z' },
+    { payload: { message: '🌊'.repeat(270000) } },
+  ])('retains JSON ingress ownership, timestamp and byte bounds', async (patch) => {
+    const parser = new EventStreamParser(run, INITIAL_CURSOR, () => undefined);
+    await expect(parser.accept(runEventSchema.parse(event(1, 0, patch)))).rejects.toMatchObject({
+      code: 'protocol',
+    });
+    expect(parser.cursor).toEqual(INITIAL_CURSOR);
+  });
   it('decodes additive cursor fields without weakening the zero-attempt sentinel', () => {
     expect(validCursor({ attempt: 0, seq: -1, extra: true })).toBe(true);
     expect(validCursor({ attempt: 1, seq: -1 })).toBe(true);
@@ -49,7 +96,7 @@ describe('attempt aware fetch stream', () => {
     }
   });
 
-  it('does not persist a callback revoked while its commit was pending', async () => {
+  it('does not advance a callback revoked while its commit was pending', async () => {
     const abort = new AbortController();
     const saved: Cursor[] = [];
 
@@ -71,17 +118,10 @@ describe('attempt aware fetch stream', () => {
     expect(saved).toEqual([]);
     expect(parser.cursor).toEqual(INITIAL_CURSOR);
   });
-  it('rejects duplicate JSON ownership and ambiguous persisted cursor members', async () => {
+  it('rejects duplicate JSON ownership', async () => {
     const parser = new EventStreamParser(run, INITIAL_CURSOR, () => undefined);
     const text = frame().replace('"attempt":1', '"attempt":2,"attempt":1');
     await expect(parser.push(encoder.encode(text))).rejects.toMatchObject({ code: 'protocol' });
-
-    const store = new CursorStore('daemon-a', run, {
-      getItem: () => '{"attempt":2,"attempt":1,"seq":0}',
-      setItem: () => undefined,
-    });
-
-    expect(store.load()).toEqual(INITIAL_CURSOR);
   });
   it('decodes every UTF-8/newline split, including CRLF', async () => {
     const bytes = encoder.encode(frame().replaceAll('\n', '\r\n'));
@@ -116,7 +156,7 @@ describe('attempt aware fetch stream', () => {
     ]);
     expect(parser.cursor).toEqual({ attempt: 2, seq: 0 });
   });
-  it('commits callback before cursor persistence', async () => {
+  it.each(['SSE', 'JSON'])('commits %s callbacks before cursor advance', async (source) => {
     const order: string[] = [];
 
     const parser = new EventStreamParser(
@@ -130,14 +170,19 @@ describe('attempt aware fetch stream', () => {
       },
     );
 
-    await parser.push(encoder.encode(frame()));
+    if (source === 'SSE') await parser.push(encoder.encode(frame()));
+    else await parser.accept(runEventSchema.parse(event()));
     expect(order).toEqual(['commit', 'cursor']);
 
     const rejected = new EventStreamParser(run, INITIAL_CURSOR, () => {
       throw new Error('cannot commit');
     });
 
-    await expect(rejected.push(encoder.encode(frame()))).rejects.toThrow('cannot commit');
+    await expect(
+      source === 'SSE'
+        ? rejected.push(encoder.encode(frame()))
+        : rejected.accept(runEventSchema.parse(event())),
+    ).rejects.toThrow('cannot commit');
     expect(rejected.cursor).toEqual(INITIAL_CURSOR);
   });
   it('controls and comments never advance the cursor', async () => {
@@ -239,105 +284,23 @@ describe('attempt aware fetch stream', () => {
     await parser.finish();
     expect(received).toEqual([]);
   });
-  it('persists only exact cursor coordinates per daemon and run', () => {
-    const map = new Map<string, string>();
+  it('does not notify or advance the cursor when a commit fails', async () => {
+    const saved: Cursor[] = [];
 
-    const storage = {
-      getItem: (key: string) => map.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        map.set(key, value);
-      },
-    };
-
-    const a = new CursorStore('daemon-a', run, storage);
-    a.save({ attempt: 2, seq: 0 });
-    expect(a.load()).toEqual({ attempt: 2, seq: 0 });
-    expect(new CursorStore('daemon-b', run, storage).load()).toEqual(INITIAL_CURSOR);
-    expect([...map.values()]).toEqual(['{"attempt":2,"seq":0}']);
-    storage.setItem(a.key, '{"attempt":9007199254740992,"seq":0}');
-    expect(a.load()).toEqual(INITIAL_CURSOR);
-  });
-  it('reads a real fetch body with committed cursor and releases on callback failure', async () => {
-    let cancelled = false;
-    let pulls = 0;
-
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        if (pulls++ === 0) controller.enqueue(encoder.encode(frame()));
-      },
-      cancel() {
-        cancelled = true;
-      },
-    });
-
-    const api = new DaemonApi('http://127.0.0.1:8765', {}, async (url) => {
-      if (String(url).endsWith('/health'))
-        return new Response(
-          JSON.stringify({
-            daemon_id: 'daemon-a',
-            build_id: 'build-a',
-            protocol_min: 1,
-            protocol_max: 1,
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
-
-      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
-    });
-
-    api.setToken('token');
-
-    const store = new CursorStore('daemon-a', run, {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error('should not persist');
-      },
-    });
-
-    await expect(
-      streamRun(api, run, store, () => {
+    const parser = new EventStreamParser(
+      run,
+      INITIAL_CURSOR,
+      () => {
         throw new Error('commit failed');
-      }),
-    ).rejects.toThrow('commit failed');
-    expect(cancelled).toBe(true);
-  });
-  it('fails closed when a real fetch body reports stream overflow without a recovery handler', async () => {
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(
-          encoder.encode('event: overflow\ndata: {"resumePosition":{"attempt":0,"seq":-1}}\n\n'),
-        );
-        controller.close();
       },
-    });
+      (cursor) => {
+        saved.push(cursor);
+      },
+    );
 
-    const api = new DaemonApi('http://127.0.0.1:8765', {}, async (url) => {
-      if (String(url).endsWith('/health'))
-        return new Response(
-          JSON.stringify({
-            daemon_id: 'daemon-a',
-            build_id: 'build-a',
-            protocol_min: 1,
-            protocol_max: 1,
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
-
-      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
-    });
-
-    api.setToken('token');
-    const saved: string[] = [];
-
-    const storage = {
-      getItem: () => null,
-      setItem: (_key: string, value: string) => saved.push(value),
-    };
-
-    await expect(
-      streamRun(api, run, new CursorStore('daemon-a', run, storage), () => undefined),
-    ).rejects.toMatchObject({ code: 'protocol', message: 'Live updates need to be reloaded.' });
+    await expect(parser.push(encoder.encode(frame()))).rejects.toThrow('commit failed');
     expect(saved).toEqual([]);
+    expect(parser.cursor).toEqual(INITIAL_CURSOR);
   });
   it('caps multibyte lines by UTF8 bytes, not character count', async () => {
     await expect(
@@ -346,38 +309,36 @@ describe('attempt aware fetch stream', () => {
       ),
     ).rejects.toThrow('live updates is too long');
   });
-  it('refuses cursor stores scoped to a different daemon or run', async () => {
-    const urls: string[] = [];
+  it('rejects invalid parser identities before consuming events', () => {
+    expect(
+      () => new EventStreamParser('invalid-run', INITIAL_CURSOR, () => undefined),
+    ).toThrow();
+    expect(
+      () => new EventStreamParser(run, { attempt: 0, seq: 0 }, () => undefined),
+    ).toThrow();
+  });
+  it('does not commit or advance a frame after abort', async () => {
+    const abort = new AbortController();
+    const received: RunEvent[] = [];
+    const saved: Cursor[] = [];
 
-    const api = new DaemonApi('http://127.0.0.1:8765', {}, async (url) => {
-      urls.push(String(url));
+    const parser = new EventStreamParser(
+      run,
+      INITIAL_CURSOR,
+      (value) => {
+        received.push(value);
+      },
+      (cursor) => {
+        saved.push(cursor);
+      },
+      undefined,
+      abort.signal,
+    );
 
-      return new Response(
-        JSON.stringify({
-          daemon_id: 'daemon-a',
-          build_id: 'build-a',
-          protocol_min: 1,
-          protocol_max: 1,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    });
-
-    api.setToken('token');
-    const storage = { getItem: () => null, setItem: () => undefined };
-    await expect(
-      streamRun(api, run, new CursorStore('daemon-b', run, storage), () => undefined),
-    ).rejects.toMatchObject({ code: 'identity' });
-    expect(urls).toHaveLength(1);
-    expect(urls[0]).toContain('/health');
-    await expect(
-      streamRun(
-        api,
-        run,
-        new CursorStore('daemon-a', '22222222-2222-2222-2222-222222222222', storage),
-        () => undefined,
-      ),
-    ).rejects.toMatchObject({ code: 'identity' });
-    expect(urls).toHaveLength(1);
+    abort.abort();
+    await expect(parser.push(encoder.encode(frame()))).rejects.toThrow();
+    expect(received).toEqual([]);
+    expect(saved).toEqual([]);
+    expect(parser.cursor).toEqual(INITIAL_CURSOR);
   });
 });
