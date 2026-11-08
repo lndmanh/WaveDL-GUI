@@ -9,7 +9,7 @@ type PreviewMessage =
   | { kind: 'pickle' };
 
 // Trust is browser-memory only and never crosses a connection or daemon identity.
-const trustedFiles = new WeakMap<ConnectionSession, Set<string>>();
+const trustedFiles = new WeakMap<ConnectionSession, { revision: number; files: Set<string> }>();
 
 function fileKey(selection: DataSelection): string {
   return JSON.stringify([selection.daemonId, selection.root, selection.relativePath]);
@@ -23,6 +23,7 @@ export function useDatasetPreview(
   const loading = shallowRef(false);
   const available = shallowRef(false);
   const message = shallowRef<PreviewMessage | null>(null);
+  const { isActive } = usePageActive();
   let request: AbortController | null = null;
   let sequence = 0;
   let unsubscribe: (() => void) | null = null;
@@ -46,7 +47,7 @@ export function useDatasetPreview(
     message.value = null;
     const selection = selected();
 
-    if (!selection) return;
+    if (!selection || !isActive.value) return;
 
     if (!available.value) {
       message.value = { kind: 'key', key: 'datasets.previewReconnect' };
@@ -55,6 +56,7 @@ export function useDatasetPreview(
     }
 
     const connection = toRaw(session());
+    const trusted = trustedFiles.get(connection);
     const controller = new AbortController();
     request = controller;
     const current = sequence;
@@ -62,7 +64,8 @@ export function useDatasetPreview(
 
     try {
       const result = await new DatasetPreviewApi(connection).preview(toRaw(selection), {
-        allow_pickle: trustedFiles.get(connection)?.has(fileKey(selection)) ?? false,
+        allow_pickle:
+          trusted?.revision === connection.snapshot().revision && trusted.files.has(fileKey(selection)),
         signal: controller.signal,
       });
 
@@ -86,11 +89,13 @@ export function useDatasetPreview(
   function trust() {
     const selection = selected();
 
-    if (!selection || !available.value || message.value?.kind !== 'pickle') return;
+    if (!isActive.value || !selection || !available.value || message.value?.kind !== 'pickle') return;
     const connection = toRaw(session());
-    const files = trustedFiles.get(connection) ?? new Set<string>();
+    const revision = connection.snapshot().revision;
+    const trusted = trustedFiles.get(connection);
+    const files = trusted?.revision === revision ? trusted.files : new Set<string>();
     files.add(fileKey(selection));
-    trustedFiles.set(connection, files);
+    trustedFiles.set(connection, { revision, files });
     void load();
   }
 
@@ -105,6 +110,7 @@ export function useDatasetPreview(
         available.value = state.status === 'connected';
 
         if (state.revision !== revision || state.status !== 'connected') {
+          trustedFiles.delete(connection);
           revision = state.revision;
           revoke();
           message.value = { kind: 'key', key: 'datasets.previewReconnect' };
@@ -114,7 +120,11 @@ export function useDatasetPreview(
     { immediate: true },
   );
 
-  watch([selected, session], load, { immediate: true });
+  watch(isActive, (active) => {
+    if (!active) revoke();
+  }, { flush: 'sync' });
+
+  watch([selected, session, isActive], load, { immediate: true });
 
   onBeforeUnmount(() => {
     unsubscribe?.();

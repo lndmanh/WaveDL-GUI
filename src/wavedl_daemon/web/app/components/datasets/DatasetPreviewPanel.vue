@@ -93,7 +93,7 @@ const matrices = computed(
 </script>
 
 <template>
-  <section class="min-w-0 my-6" :aria-label="t('datasets.previewTitle')">
+  <section class="min-w-0" :aria-label="t('datasets.previewTitle')">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h3>{{ t('datasets.previewTitle') }}</h3>
       <Button
@@ -131,7 +131,7 @@ const matrices = computed(
         {{ data.format.toUpperCase() }} · {{ data.input_key }} {{ data.input_shape.join(' × ') }} →
         {{ data.output_key }} {{ data.output_shape.join(' × ') }}
       </p>
-      <div class="flex flex-wrap gap-2" :aria-label="t('datasets.previewScope')">
+      <div class="flex flex-wrap gap-2 mb-3" :aria-label="t('datasets.previewScope')">
         <Badge variant="outline" data-testid="preview-bounds">
           {{
             t('datasets.previewBounds', {

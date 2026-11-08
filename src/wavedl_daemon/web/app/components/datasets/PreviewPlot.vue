@@ -48,7 +48,10 @@ function render(preserveView = false) {
   dispose();
   const width = Math.floor(host.value.getBoundingClientRect().width);
 
-  if (!width) return;
+  if (width <= 0) {
+    retainedScales = savedScales;
+    return;
+  }
 
   try {
     plot.value = new uPlot(
@@ -120,6 +123,7 @@ function exportPng() {
 watch(
   () => [props.x, props.y, props.scatter, props.histogram],
   () => {
+    retainedScales = [];
     render();
   },
   { flush: 'post' },
@@ -131,8 +135,18 @@ watch(
   { flush: 'post' },
 );
 
+function resizePlot() {
+  if (!isActive.value || !host.value) return;
+  const width = Math.floor(host.value.getBoundingClientRect().width);
+
+  if (width <= 0) return;
+
+  if (!plot.value) render();
+  else if (plot.value.width !== width) plot.value.setSize({ width, height: 260 });
+}
+
 function resumePlot() {
-  observer = new ResizeObserver(() => render());
+  observer = new ResizeObserver(resizePlot);
 
   if (host.value) observer.observe(host.value);
   render();
