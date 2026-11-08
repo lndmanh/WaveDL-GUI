@@ -546,6 +546,7 @@ def test_get_run_plan_returns_the_original_stored_preview(
     body = payload()
     body["backend"] = backend
     if backend == "slurm":
+        body["runtime"]["python"] = "venv/bin/python"
         body["storage_map"] = [
             {
                 "host_root": str(environment.service.settings.run_root),
