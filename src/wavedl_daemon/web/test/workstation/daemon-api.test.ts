@@ -555,6 +555,25 @@ describe('malformed response diagnostic compatibility matrix', () => {
   });
 });
 
+describe('run list filters', () => {
+  it('lists live runs with the live state filter', async () => {
+    const body = { ...matrixRun, progress: { epoch: 34, total_epochs: 100 } };
+
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : { runs: [body] }),
+    );
+
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+    await expect(api.listRuns({ state: 'live', limit: 100 })).resolves.toEqual([
+      { ...matrixRun, progress: { epoch: 34, totalEpochs: 100, fraction: 0.34 } },
+    ]);
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(
+      `${origin}/api/runs?limit=100&offset=0&state=live`,
+    );
+  });
+});
+
 describe.each(['get', 'list'])('run progress through %s', (method) => {
   it.each([
     { label: 'omitted progress', fields: {}, expected: null },
