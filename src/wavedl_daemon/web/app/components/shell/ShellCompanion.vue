@@ -7,6 +7,7 @@ const {
   closePanel,
   isCompanionShowing,
   isDockedLayout,
+  isCanvasExpanded,
   panelTabs,
   panelWidth,
   setActiveTab,
@@ -14,6 +15,12 @@ const {
 } = useShellLayout();
 
 let opener: HTMLElement | null = null;
+
+function onEscape(event: KeyboardEvent) {
+  if (event.defaultPrevented || isCanvasExpanded.value) return;
+  event.preventDefault();
+  closePanel();
+}
 
 watch(isCompanionShowing, (visible) => {
   if (visible && !isDockedLayout.value) {
@@ -46,7 +53,7 @@ watch(isCompanionShowing, (visible) => {
       @update:active-tab="setActiveTab"
       @resize="setPanelWidth"
       @collapse="closePanel"
-      @keydown.esc.prevent="closePanel()"
+      @keydown.esc="onEscape"
     >
       <template v-for="tab in SHELL_PANEL_TABS" :key="tab.id" #[tab.id]>
         <ShellPanelTarget :tab="tab">

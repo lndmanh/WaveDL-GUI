@@ -39,6 +39,7 @@ export function createShellLayoutState(
   const isDockedLayout = ref(true);
   const panelWidth = ref(SHELL_PANEL_DEFAULT_WIDTH);
   const isFocusMode = ref(false);
+  const isCanvasExpanded = shallowRef(false);
   const activeTab = ref<ShellPanelTabId>('metrics');
   /*
    * Pages opt into the companion; an empty contribution leaves the canvas full-width.
@@ -46,7 +47,7 @@ export function createShellLayoutState(
    */
   const panelTabs = shallowRef<readonly ShellPanelTabDefinition[]>([]);
 
-  const isRailVisible = computed(() => !isFocusMode.value);
+  const isRailVisible = computed(() => !isFocusMode.value && !isCanvasExpanded.value);
 
   // A route without companion tabs must not reserve a blank docked column (or show a sheet).
   // Keep the open preference untouched so returning to a panel-capable route restores it.
@@ -89,6 +90,14 @@ export function createShellLayoutState(
     },
     { immediate: true, flush: 'sync' },
   );
+
+  const setCanvasExpanded = (expanded: boolean) => {
+    isCanvasExpanded.value = expanded;
+  };
+
+  const toggleCanvasExpanded = () => {
+    isCanvasExpanded.value = !isCanvasExpanded.value;
+  };
 
   const enterFocusMode = () => {
     isFocusMode.value = true;
@@ -186,6 +195,9 @@ export function createShellLayoutState(
     isDockedLayout,
     panelWidth,
     isFocusMode,
+    isCanvasExpanded,
+    setCanvasExpanded,
+    toggleCanvasExpanded,
     activeTab,
     panelTabs,
     resolvedActiveTab,

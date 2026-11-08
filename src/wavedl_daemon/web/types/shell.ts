@@ -8,6 +8,9 @@ export interface ShellLayoutState {
   activeSection: ComputedRef<WorkstationSection>;
   isRailVisible: ComputedRef<boolean>;
   isFocusMode: Ref<boolean>;
+  isCanvasExpanded: Ref<boolean>;
+  setCanvasExpanded(expanded: boolean): void;
+  toggleCanvasExpanded(): void;
   isPanelSheetVisible: ComputedRef<boolean>;
   isCompanionShowing: ComputedRef<boolean>;
   resolvedActiveTab: ComputedRef<ShellPanelTabId>;

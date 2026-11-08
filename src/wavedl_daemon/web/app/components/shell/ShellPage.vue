@@ -12,6 +12,7 @@ const props = withDefaults(
 );
 
 const route = useRoute();
+const { isCanvasExpanded } = useShellLayout();
 
 useShellPanelTabs(() => props.panelTabs);
 
@@ -48,7 +49,7 @@ const scrollClass = computed(() =>
   <ShellWorkspace>
     <template #canvas>
       <div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <slot name="header">
+        <slot v-if="!isCanvasExpanded" name="header">
           <ShellPageHeader>
             <template v-if="$slots['title-controls']" #title-controls>
               <slot name="title-controls" />
