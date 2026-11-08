@@ -291,8 +291,11 @@ watch(hasCvSummary, (available) => {
             :events="monitor.events"
             :freshness="monitor.freshness"
           />
-          <Empty v-else class="py-10">
-            <EmptyDescription>{{ t('results.metricsPending') }}</EmptyDescription>
+          <Empty v-else role="status" class="py-10">
+            <EmptyHeader>
+              <EmptyMedia><LoadingSpinner compact /></EmptyMedia>
+              <EmptyDescription>{{ t('results.metricsPending') }}</EmptyDescription>
+            </EmptyHeader>
           </Empty>
         </TabsContent>
         <TabsContent value="files" class="flex min-h-0 min-w-0 flex-1 flex-col">

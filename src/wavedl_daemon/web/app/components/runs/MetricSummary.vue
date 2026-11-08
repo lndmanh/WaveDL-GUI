@@ -102,8 +102,11 @@ const metrics = computed(() => {
       }}
       {{ summary.latest.unit }}
     </p>
-    <Empty v-if="!summary.latest && !summary.progress" class="py-8">
-      <EmptyDescription>{{ t('runs.waitingRuntime') }}</EmptyDescription>
+    <Empty v-if="!summary.latest && !summary.progress" role="status" class="py-8">
+      <EmptyHeader>
+        <EmptyMedia><LoadingSpinner compact /></EmptyMedia>
+        <EmptyDescription>{{ t('runs.waitingRuntime') }}</EmptyDescription>
+      </EmptyHeader>
     </Empty>
   </section>
 </template>
