@@ -3,7 +3,7 @@ definePageMeta({
   title: 'shell.datasets',
   breadcrumb: 'shell.datasets',
   fullWidth: true,
-  fillHeight: false,
+  fillHeight: true,
 });
 
 defineOptions({ name: 'WorkstationDatasetsPage' });
