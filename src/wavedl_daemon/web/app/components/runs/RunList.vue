@@ -6,6 +6,8 @@ import {
   ArrowUp,
   ChevronLeft,
   ChevronRight,
+  Layers,
+  Plus,
   RotateCw,
   Search,
   SearchX,
@@ -13,19 +15,20 @@ import {
 
 import { runStateMessageKeys } from '../../i18n/dynamic-keys';
 import {
+  activeRunFilterCount,
+  createRunFilters,
   groupRuns,
   pathName,
-  runCounts,
   runCreatedAt,
-  runFilterOf,
   runMatches,
+  runMatchesFilters,
 } from '../../lib/run-overview';
 import type { RunView } from '~~/types/daemon-api';
 import type {
   RunColumn,
   RunColumnId,
   RunColumnRegistry,
-  RunFilter,
+  RunFilterState,
   RunGroupKey,
   RunSort,
 } from '~~/types/run-overview';
@@ -69,6 +72,7 @@ const props = defineProps<{
   expanded?: boolean;
   stacked: boolean;
   selectedRunId: string | null;
+  showPlannedFilter?: boolean;
   staleRunIds?: ReadonlySet<string>;
   lastRefreshed?: string | null;
   now: Date;
@@ -85,7 +89,7 @@ const { t, locale } = useI18n({ useScope: 'global' });
 const labels = useRunLabels();
 const { isActive } = usePageActive();
 const query = shallowRef('');
-const filter = shallowRef<RunFilter>('all');
+const filters = shallowRef<RunFilterState>(createRunFilters());
 const sort = shallowRef<RunSort>({ column: 'created', direction: 'desc' });
 const stage = useTemplateRef<HTMLElement>('stage');
 const list = useTemplateRef<HTMLElement>('list');
@@ -207,15 +211,6 @@ const collator = computed(
   () => new Intl.Collator(locale.value, { numeric: true, sensitivity: 'base' }),
 );
 
-const counts = computed(() => runCounts(props.runs));
-
-const filterOptions = computed<{ value: RunFilter; label: string }[]>(() => [
-  { value: 'all', label: `${t('runs.filterAll')} ${counts.value.all}` },
-  { value: 'live', label: `${t('runs.filterLive')} ${counts.value.live}` },
-  { value: 'completed', label: `${t('runs.filterDone')} ${counts.value.completed}` },
-  { value: 'attention', label: `${t('runs.filterAttention')} ${counts.value.attention}` },
-]);
-
 const groupLabels = computed<Record<RunGroupKey, string>>(() => ({
   live: t('runs.groupLive'),
   today: t('runs.groupToday'),
@@ -227,7 +222,7 @@ const groupLabels = computed<Record<RunGroupKey, string>>(() => ({
 const visible = computed(() =>
   props.runs.filter(
     (run) =>
-      (filter.value === 'all' || runFilterOf(run) === filter.value) &&
+      runMatchesFilters(run, filters.value, props.now) &&
       runMatches(run, query.value, [labels.operation(run)]),
   ),
 );
@@ -254,7 +249,10 @@ const rows = computed(() => {
   return orderedRuns.value.map((run) => ({ run, group: starts.get(run.run_id) }));
 });
 
-const filtered = computed(() => filter.value !== 'all' || query.value.trim() !== '');
+const filtered = computed(
+  () => activeRunFilterCount(filters.value) > 0 || query.value.trim() !== '',
+);
+
 const keyboardHintId = `${useId()}-run-keys`;
 
 const updatedLabel = computed(() => {
@@ -328,7 +326,7 @@ function sortLabel(column: RunColumn): string {
 
 function clearFilters() {
   query.value = '';
-  filter.value = 'all';
+  filters.value = createRunFilters();
 }
 
 function rowButton(runId: string): HTMLButtonElement | undefined {
@@ -479,17 +477,13 @@ watch(
           @keydown.down="enterList"
         />
       </label>
-      <div
-        class="min-w-0 max-w-full [&_.segmented-control-item]:shrink-0 [&_.segmented-control-item]:tabular-nums"
-      >
-        <SegmentedControl v-model="filter" :options="filterOptions" :label="t('runs.filterRuns')" />
-      </div>
+      <RunFilterPopover
+        v-model="filters"
+        :runs="runs"
+        :now="now"
+        :show-planned="showPlannedFilter"
+      />
       <div class="ml-auto flex shrink-0 items-center gap-1">
-        <InfoChip
-          v-if="lastRefreshed"
-          :label="updatedLabel"
-          :text="t('runs.listSnapshot', { time: lastRefreshed })"
-        />
         <Button
           variant="ghost"
           size="icon"
@@ -610,9 +604,19 @@ watch(
               <EmptyDescription>{{ t('runs.loadingRuns') }}</EmptyDescription>
             </EmptyHeader>
           </Empty>
-          <Empty v-else-if="!runs.length" role="status" class="py-8"
-            ><EmptyDescription>{{ t('runs.noRuns') }}</EmptyDescription></Empty
-          >
+          <Empty v-else-if="!runs.length" role="status" class="py-10">
+            <EmptyHeader>
+              <EmptyMedia variant="icon"><Layers aria-hidden="true" /></EmptyMedia>
+              <EmptyTitle>{{ t('runs.noRuns') }}</EmptyTitle>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button as-child class="min-h-11"
+                ><NuxtLink to="/new"
+                  ><Plus aria-hidden="true" />{{ t('shell.newTrainingRun') }}</NuxtLink
+                ></Button
+              >
+            </EmptyContent>
+          </Empty>
           <div
             v-else-if="!visible.length"
             role="status"

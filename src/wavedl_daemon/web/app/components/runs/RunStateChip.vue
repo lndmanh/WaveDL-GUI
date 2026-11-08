@@ -69,7 +69,11 @@ const { t } = useI18n({ useScope: 'global' });
 const tooltipOpen = shallowRef(false);
 const metadata = computed(() => stateMeta[props.run.state]);
 const loading = computed(() => props.run.state === 'submission_unknown');
-const runUncertain = computed(() => !loading.value && props.run.uncertainty);
+
+const runUncertain = computed(
+  () => props.run.state !== 'planned' && !loading.value && props.run.uncertainty,
+);
+
 const uncertain = computed(() => Boolean(runUncertain.value || metadata.value.dashed));
 const activity = computed(() => runActivityMessageKeysFor(props.run));
 const activityLabel = computed(() => (activity.value ? t(activity.value.label) : null));

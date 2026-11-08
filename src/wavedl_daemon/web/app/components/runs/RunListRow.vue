@@ -71,7 +71,7 @@ const activityLabel = computed(() => (activity.value ? t(activity.value.label) :
 
 const stateLabel = computed(
   () =>
-    `${t(runStateMessageKeys[props.run.state])}${activityLabel.value ? ` · ${activityLabel.value}` : ''}${props.stale ? t('runs.stale') : ''}${props.run.uncertainty ? t('runs.uncertain') : ''}`,
+    `${t(runStateMessageKeys[props.run.state])}${activityLabel.value ? ` · ${activityLabel.value}` : ''}${props.stale ? t('runs.stale') : ''}${props.run.state !== 'planned' && props.run.uncertainty ? t('runs.uncertain') : ''}`,
 );
 
 const progressLabel = computed(() =>
