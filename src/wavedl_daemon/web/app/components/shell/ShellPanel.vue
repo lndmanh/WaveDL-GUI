@@ -116,6 +116,7 @@ function onResizeKey(event: KeyboardEvent): void {
         v-model="activeTabIndex"
         :tabs="expandableTabs"
         :aria-label="t('shell.companionPanel')"
+        :collapsible="false"
         class="min-w-0 flex-1"
       />
       <Button
