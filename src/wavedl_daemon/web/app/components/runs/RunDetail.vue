@@ -6,18 +6,27 @@ import {
   Activity,
   ArrowLeft,
   ChartLine,
+  Check,
+  Clock,
   Copy,
+  CornerDownRight,
+  Cpu,
+  Database,
   Ellipsis,
   FlaskConical,
   Maximize2,
   Minimize2,
   OctagonX,
   PanelRight,
+  RefreshCcw,
+  Repeat,
   RotateCcw,
   ScrollText,
+  Server,
   X,
 } from '@lucide/vue';
 import { SHELL_PANEL_TABS, shellPanelTabTargetId } from '../../shell/constants';
+import { sectionPath } from '../../shell/sections';
 import type { RunView } from '~~/types/daemon-api';
 import type { ShellPanelTabId } from '~~/types/shell';
 import { evaluationResults } from '../../lib/evaluation-results';
@@ -48,7 +57,14 @@ const styles = {
     "[&[data-stream='error']]:bg-destructive",
   ),
   facts: cn(
-    "flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground [&>li+li]:before:mr-2 [&>li+li]:before:content-['·'] [&>li]:min-w-0 [&>li]:wrap-anywhere",
+    'flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground',
+    '[&>li]:inline-flex [&>li]:min-w-0 [&>li]:items-center [&>li]:gap-1.5 [&>li]:wrap-anywhere',
+    '[&>li>svg]:size-3.5 [&>li>svg]:shrink-0 [&>li>svg]:text-muted-foreground/70',
+    "[&>li[data-tone='warning']]:text-warning [&>li[data-tone='warning']>svg]:text-warning",
+  ),
+  factLink: cn(
+    'rounded-sm text-foreground underline decoration-border underline-offset-3 transition-colors',
+    'hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
   ),
 };
 
@@ -57,6 +73,17 @@ const operationIcons: Readonly<Record<RunView['operation'], Component>> = {
   test: FlaskConical,
   plot: ChartLine,
 };
+
+interface RunFact {
+  key: string;
+  icon: Component;
+  text: string;
+  /** Screen-reader prefix naming what the value is; omitted when the text says it. */
+  label?: string;
+  title?: string;
+  to?: string;
+  tone?: 'warning';
+}
 
 const { t, locale } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
@@ -186,22 +213,60 @@ const created = computed(() => {
   };
 });
 
-const facts = computed(() => {
+// Only facts that tell runs apart; defaults (local backend, first attempt) stay in Configuration.
+const facts = computed<RunFact[]>(() => {
   const run = props.snapshot.run;
 
   if (!run) return [];
   const summary = run.summary;
+  const dataset = pathName(summary?.data_path);
 
-  return [
-    summary?.name ? summary.model : null,
-    pathName(summary?.data_path) || null,
+  const schedule = [
     summary?.epochs ? t('runs.epochCount', { count: summary.epochs }) : null,
     summary?.cv ? t('runs.cvFolds', { count: summary.cv }) : null,
-    summary?.source_run_id ? t('runs.fromRun', { id: shortRunId(summary.source_run_id) }) : null,
-    labels.operation(run),
-    backendLabel(run.backend),
-    t('runs.attempt', { attempt: run.attempt ?? t('runs.notAllocated') }),
-  ].filter((fact): fact is string => fact !== null && fact !== undefined && fact !== '');
+  ].filter((part): part is string => part !== null);
+
+  const result: RunFact[] = [];
+
+  if (summary?.name && summary.model)
+    result.push({ key: 'model', icon: Cpu, text: summary.model, label: t('runs.columnModel') });
+
+  if (dataset)
+    result.push({ key: 'dataset', icon: Database, text: dataset, label: t('runs.columnDataset') });
+
+  if (schedule.length > 0)
+    result.push({ key: 'schedule', icon: Repeat, text: schedule.join(' · ') });
+
+  if (summary?.source_run_id)
+    result.push({
+      key: 'source',
+      icon: CornerDownRight,
+      text: t('runs.fromRun', { id: shortRunId(summary.source_run_id) }),
+      title: summary.source_run_id,
+      to: sectionPath('experiments', summary.source_run_id),
+    });
+
+  if (run.backend !== 'local')
+    result.push({ key: 'backend', icon: Server, text: backendLabel(run.backend) });
+
+  if (run.attempt !== null && run.attempt > 1)
+    result.push({
+      key: 'attempt',
+      icon: RefreshCcw,
+      text: t('runs.attempt', { attempt: run.attempt }),
+      tone: 'warning',
+    });
+
+  if (created.value)
+    result.push({
+      key: 'created',
+      icon: Clock,
+      text: created.value.relative ?? created.value.text,
+      label: t('runs.columnCreated'),
+      title: created.value.text,
+    });
+
+  return result;
 });
 
 const streamLabel = computed(() => t(runStreamMessageKeys[props.snapshot.stream]));
@@ -371,12 +436,42 @@ const hasEvaluation = computed(
           </div>
         </div>
         <ul v-if="snapshot.run" :class="styles.facts">
-          <li v-for="fact in facts" :key="fact">{{ fact }}</li>
-          <li v-if="created" :title="created.relative ?? undefined">
-            {{ t('runs.createdAt', { time: created.text }) }}
+          <li
+            v-for="fact in facts"
+            :key="fact.key"
+            :data-tone="fact.tone"
+            :title="fact.to ? undefined : fact.title"
+          >
+            <component :is="fact.icon" aria-hidden="true" />
+            <span v-if="fact.label" class="sr-only">{{ fact.label }}:</span>
+            <NuxtLink v-if="fact.to" :to="fact.to" :title="fact.title" :class="styles.factLink">{{
+              fact.text
+            }}</NuxtLink>
+            <template v-else>{{ fact.text }}</template>
           </li>
-          <li>
-            <code>{{ shortRunId(snapshot.run.run_id) }}</code>
+          <li class="ml-auto">
+            <Badge
+              v-if="canCopy"
+              as="button"
+              type="button"
+              variant="outline"
+              class="cursor-pointer font-mono font-normal text-muted-foreground"
+              :aria-label="t('runs.copyRunId')"
+              :title="t('runs.copyRunId')"
+              @click="copy(snapshot.run.run_id)"
+            >
+              {{ shortRunId(snapshot.run.run_id) }}
+              <Check v-if="copied" class="text-success" aria-hidden="true" />
+              <Copy v-else aria-hidden="true" />
+            </Badge>
+            <Badge
+              v-else
+              variant="outline"
+              class="font-mono font-normal text-muted-foreground"
+              :title="snapshot.run.run_id"
+            >
+              {{ shortRunId(snapshot.run.run_id) }}
+            </Badge>
           </li>
         </ul>
         <div
