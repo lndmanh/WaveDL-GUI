@@ -2,24 +2,34 @@
 import { cn } from '@/lib/utils';
 import { Field as VeeField } from 'vee-validate';
 import { RotateCcw } from '@lucide/vue';
-import { trainingChoiceLabel, trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
-import { trainingDefaults, trainingFieldMetadata } from '../../../shared/schemas/training-request';
+import { trainingChoiceLabel } from '../../i18n/dynamic-keys';
+import { trainingDefaults } from '../../../shared/schemas/training-request';
+import {
+  fieldListText,
+  fieldText,
+  nullableNumberValue,
+  trainingFieldAdapter,
+} from '../../lib/field-adaptation';
 import type { Json } from '~~/types/json';
 import type { TrainingFieldName } from '~~/types/training-layout';
 
 const props = defineProps<{ name: TrainingFieldName; disabled: boolean }>();
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
-const option = trainingFieldMetadata.find((item) => item.name === props.name);
-const keys = trainingFieldMessageKeys[props.name];
+const defaultValue = trainingDefaults[props.name];
+const { option, kind, messages, listValue, textValue, choiceValue } = trainingFieldAdapter(
+  props.name,
+  defaultValue,
+);
+const translated = computed(() => messages(t, ''));
 const idPrefix = useId();
 const controlId = `${idPrefix}-training-${props.name}`;
 const descriptionId = `${controlId}-description`;
-const label = computed(() => (keys ? t(keys.label) : props.name));
+const label = computed(() => translated.value.label);
 
 // Many CLI help strings restate the label ("Optimizer for training"); drop those.
 const description = computed(() => {
-  const text = keys ? t(keys.description) : '';
+  const text = translated.value.description;
 
   const plain = (value: string) =>
     value
@@ -29,8 +39,6 @@ const description = computed(() => {
 
   return plain(text) === plain(label.value) ? '' : text;
 });
-
-const defaultValue = trainingDefaults[props.name];
 
 /** Example values shown inside free-text fields; technical, so never translated. */
 const examples: Partial<Record<TrainingFieldName, readonly string[]>> = {
@@ -76,37 +84,6 @@ const minimum = computed(() =>
 
 function changed(value: Json | undefined): boolean {
   return JSON.stringify(value) !== JSON.stringify(defaultValue);
-}
-
-function listText(value: Json | undefined): string {
-  return Array.isArray(value) ? value.join('\n') : '';
-}
-
-function listValue(value: string | number): (string | number)[] {
-  if (!option || String(value).trim() === '') return [];
-
-  return String(value)
-    .split('\n')
-    .map((item) =>
-      option.kind === 'number' ? (item.trim() === '' ? Number.NaN : Number(item)) : item,
-    );
-}
-
-function textValue(value: string | number): string | null {
-  return value === '' && defaultValue === null ? null : String(value);
-}
-
-function numeric(value: number | null | undefined): number | null {
-  return value ?? null;
-}
-
-function stringValue(value: Json | undefined): string {
-  return value === null || value === undefined ? '' : String(value);
-}
-
-function choiceValue(value: string | null | undefined): string | undefined {
-  // Only choice controls call this; every such default belongs to its choices.
-  return value || option?.choices.find((choice) => choice === defaultValue);
 }
 
 const projectStyles = {
@@ -165,7 +142,7 @@ const projectStyles = {
         </button>
         <div class="flex shrink-0 items-center" :class="option.multiple ? 'w-full' : ''">
           <Switch
-            v-if="option.kind === 'boolean'"
+            v-if="kind === 'boolean'"
             :id="controlId"
             :data-testid="`training-field-${name}`"
             :model-value="field.value === true"
@@ -190,7 +167,7 @@ const projectStyles = {
             @update:model-value="field.onChange"
           />
           <Select
-            v-else-if="option.choices.length"
+            v-else-if="kind === 'choice'"
             :model-value="choiceValue(field.value)"
             :name="field.name"
             :disabled="disabled"
@@ -216,11 +193,11 @@ const projectStyles = {
             </SelectContent>
           </Select>
           <Textarea
-            v-else-if="option.multiple"
+            v-else-if="kind === 'list'"
             :id="controlId"
             class="min-h-20 font-mono text-xs"
             :data-testid="`training-field-${name}`"
-            :model-value="listText(field.value)"
+            :model-value="fieldListText(field.value)"
             :placeholder="placeholder"
             :disabled="disabled"
             :aria-invalid="!!errors.length"
@@ -229,11 +206,11 @@ const projectStyles = {
             @blur="field.onBlur"
           />
           <NumberField
-            v-else-if="option.kind === 'number' || option.kind === 'integer'"
+            v-else-if="kind === 'number'"
             :id="controlId"
             :label="label"
             :test-id="`training-field-${name}`"
-            :model-value="numeric(field.value)"
+            :model-value="nullableNumberValue(field.value)"
             :integer="option.kind === 'integer'"
             :step="stepStyle"
             :min="minimum"
@@ -248,7 +225,7 @@ const projectStyles = {
             :id="controlId"
             class="w-64 max-w-full"
             :data-testid="`training-field-${name}`"
-            :model-value="stringValue(field.value)"
+            :model-value="fieldText(field.value)"
             :placeholder="placeholder"
             :disabled="disabled"
             :aria-invalid="!!errors.length"

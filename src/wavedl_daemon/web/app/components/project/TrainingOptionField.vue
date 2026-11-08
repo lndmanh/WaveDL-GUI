@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import { trainingChoiceLabel, trainingFieldMessageKeys } from '../../i18n/dynamic-keys';
+import { trainingChoiceLabel } from '../../i18n/dynamic-keys';
+import {
+  fieldListText,
+  fieldText,
+  inputChoiceValue,
+  inputNumberValue,
+  trainingFieldAdapter,
+} from '../../lib/field-adaptation';
 import { Field as VeeField } from 'vee-validate';
-import { trainingFieldMetadata } from '../../../shared/schemas/training-request';
 import { jsonStringSchema } from '../../../shared/schemas/json';
 import type { Json } from '~~/types/json';
 
@@ -15,12 +21,12 @@ function updateValue(value: Json, change: (value: Json) => void, immediate = fal
   emit('changed', immediate);
 }
 
-const option = trainingFieldMetadata.find((item) => item.name === props.name);
-const messageKeys = trainingFieldMessageKeys[props.name];
+const { option, kind, messages, listValue, textValue } = trainingFieldAdapter(props.name);
+const translated = computed(() => messages(t));
 const idPrefix = useId();
 const controlId = computed(() => `${idPrefix}-training-${props.name}`);
-const label = computed(() => (messageKeys ? t(messageKeys.label) : props.name));
-const description = computed(() => (messageKeys ? t(messageKeys.description) : props.name));
+const label = computed(() => translated.value.label);
+const description = computed(() => translated.value.description);
 
 const defaultText = computed(() => {
   if (
@@ -40,24 +46,6 @@ const defaultText = computed(() => {
 
   return Array.isArray(option.default) ? option.default.join(', ') : String(option.default);
 });
-
-function listText(value: Json): string {
-  return Array.isArray(value) ? value.join('\n') : '';
-}
-
-function listValue(value: string | number): (string | number)[] {
-  if (!option || String(value).trim() === '') return [];
-
-  return String(value)
-    .split('\n')
-    .map((item) =>
-      option.kind === 'number' ? (item.trim() === '' ? Number.NaN : Number(item)) : item,
-    );
-}
-
-function stringValue(value: string | number): string | null {
-  return value === '' && option?.default === null ? null : String(value);
-}
 </script>
 <template>
   <VeeField v-if="option" v-slot="{ field, errors }" :name="`config.${name}`" :keep-value="true">
@@ -70,7 +58,7 @@ function stringValue(value: string | number): string | null {
       "
     >
       <div
-        v-if="option.kind !== 'boolean'"
+        v-if="kind !== 'boolean'"
         class="flex flex-wrap items-center justify-between gap-2"
       >
         <FieldLabel :for="controlId">{{ label }}</FieldLabel>
@@ -80,7 +68,7 @@ function stringValue(value: string | number): string | null {
           :text="description"
         />
       </div>
-      <Field v-if="option.kind === 'boolean'" orientation="horizontal" class="max-w-full">
+      <Field v-if="kind === 'boolean'" orientation="horizontal" class="max-w-full">
         <Checkbox
           :id="controlId"
           :aria-label="label"
@@ -98,11 +86,11 @@ function stringValue(value: string | number): string | null {
         >
       </Field>
       <Select
-        v-else-if="option.choices.length"
-        :model-value="String(field.value)"
+        v-else-if="kind === 'choice'"
+        :model-value="fieldText(field.value, 'stringify')"
         :name="field.name"
         :disabled="disabled"
-        @update:model-value="updateValue(String($event ?? ''), field.onChange, true)"
+        @update:model-value="updateValue(inputChoiceValue($event), field.onChange, true)"
       >
         <SelectTrigger
           :id="controlId"
@@ -121,17 +109,17 @@ function stringValue(value: string | number): string | null {
         </SelectContent>
       </Select>
       <Textarea
-        v-else-if="option.multiple"
+        v-else-if="kind === 'list'"
         :id="controlId"
         :data-testid="`training-field-${name}`"
-        :model-value="listText(field.value)"
+        :model-value="fieldListText(field.value)"
         :disabled="disabled"
         :aria-invalid="!!errors.length"
         @update:model-value="updateValue(listValue($event), field.onChange)"
         @blur="field.onBlur"
       />
       <Input
-        v-else-if="option.kind === 'number' || option.kind === 'integer'"
+        v-else-if="kind === 'number'"
         :id="controlId"
         :data-testid="`training-field-${name}`"
         type="number"
@@ -139,9 +127,7 @@ function stringValue(value: string | number): string | null {
         :model-value="field.value"
         :disabled="disabled"
         :aria-invalid="!!errors.length"
-        @update:model-value="
-          updateValue($event === '' ? Number.NaN : Number($event), field.onChange)
-        "
+        @update:model-value="updateValue(inputNumberValue($event), field.onChange)"
         @blur="field.onBlur"
       />
       <Input
@@ -151,11 +137,11 @@ function stringValue(value: string | number): string | null {
         :model-value="field.value ?? ''"
         :disabled="disabled"
         :aria-invalid="!!errors.length"
-        @update:model-value="updateValue(stringValue($event), field.onChange)"
+        @update:model-value="updateValue(textValue($event), field.onChange)"
         @blur="field.onBlur"
       />
       <InfoChip
-        v-if="option.kind === 'boolean' && description.length > 80"
+        v-if="kind === 'boolean' && description.length > 80"
         :label="t('project.fieldHelp')"
         :text="description"
       />

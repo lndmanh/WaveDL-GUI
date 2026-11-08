@@ -60,6 +60,21 @@ const customOpen = shallowRef(false);
 const customValue = shallowRef('');
 const customError = shallowRef('');
 const customBusy = shallowRef(false);
+let customEpoch = 0;
+
+function invalidateCustom() {
+  customEpoch++;
+  customBusy.value = false;
+  customError.value = '';
+}
+
+watch(
+  [customValue, customOpen, () => props.selection, () => props.session, () => props.disabled],
+  invalidateCustom,
+  { flush: 'sync' },
+);
+
+onBeforeUnmount(invalidateCustom);
 
 const entries = computed(() => modelEntries(props.models));
 
@@ -159,7 +174,6 @@ const flat = computed(() => groups.value.flatMap((group) => group.entries));
 const current = computed(
   () =>
     flat.value.find((entry) => entry.key === highlighted.value) ??
-    entries.value.find((entry) => entry.key === highlighted.value) ??
     flat.value[0] ??
     null,
 );
@@ -186,6 +200,17 @@ const rows = computed(() =>
 
 const cursor = shallowRef<string | null>(null);
 
+watch(
+  rows,
+  (list) => {
+    if (list.some((row) => row.id === cursor.value)) return;
+    const row = list.find((item) => item.entry.key === highlighted.value) ?? list[0];
+    cursor.value = row?.id ?? null;
+    highlighted.value = row?.entry.key ?? null;
+  },
+  { immediate: true, flush: 'sync' },
+);
+
 function highlight(entry: ModelEntry, group: string) {
   highlighted.value = entry.key;
   cursor.value = optionId(entry, group);
@@ -196,9 +221,13 @@ function navigate(event: KeyboardEvent) {
 
   if (!list.length) return;
 
-  if (event.key === 'Enter' && current.value) {
-    event.preventDefault();
-    choose(current.value);
+  if (event.key === 'Enter') {
+    const row = list.find((item) => item.id === activeDescendant.value);
+
+    if (row) {
+      event.preventDefault();
+      choose(row.entry);
+    }
 
     return;
   }
@@ -234,6 +263,7 @@ function setWeights(entry: ModelEntry, value: boolean) {
 
 function choose(entry: ModelEntry) {
   if (props.disabled) return;
+  invalidateCustom();
   const weights = weightsFor(entry) && !!entry.weighted;
   recents.value = rememberRecentModel(browserStorage(), entry.key);
   emit('choose', entryModel(entry, weights), weights);
@@ -264,6 +294,7 @@ const currentSelected = computed(() => {
 });
 
 async function useCustom() {
+  if (customBusy.value || props.disabled) return;
   customError.value = '';
   const parsed = customModelSchema.safeParse({ modelId: customValue.value.trim() });
 
@@ -273,18 +304,19 @@ async function useCustom() {
     return;
   }
 
+  const current = ++customEpoch;
   customBusy.value = true;
 
   try {
-    emit(
-      'custom',
-      await new CatalogApi(toRaw(props.session)).selectCustomModel(parsed.data.modelId),
-    );
+    const selection = await new CatalogApi(toRaw(props.session)).selectCustomModel(parsed.data.modelId);
+
+    if (current !== customEpoch) return;
+    emit('custom', selection);
     customOpen.value = false;
   } catch {
-    customError.value = t('project.customModelFailed');
+    if (current === customEpoch) customError.value = t('project.customModelFailed');
   } finally {
-    customBusy.value = false;
+    if (current === customEpoch) customBusy.value = false;
   }
 }
 

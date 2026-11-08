@@ -1,5 +1,4 @@
 import modelSourceHashes from './model-source-hashes.json';
-import modelMessagesVI from './locales/vi/models.json';
 import type { ModelDescription } from '~~/types/catalog-api';
 import type {
   Locale,
@@ -7,12 +6,6 @@ import type {
   ModelMessageTranslator,
   ModelPresentation,
 } from '~~/types/i18n';
-
-/** Vietnamese model copy is bundled; English remains the daemon's authoritative text. */
-export const bundledModelMessages = {
-  vi: modelMessagesVI,
-  sourceHashes: modelSourceHashes,
-} as const;
 
 function isBundledModelId(id: string): id is BundledModelId {
   return Object.hasOwn(modelSourceHashes, id);
