@@ -365,17 +365,6 @@ watch(
   { immediate: true },
 );
 
-/** After a submission: keep every choice, ready to swap the model and go again. */
-function another() {
-  projectDraftState.cancelRestore();
-  invalidate();
-  acknowledged.value = null;
-  reportedRun.value = null;
-  message.value = '';
-  projectDraftState.edited();
-  active.value = 'model';
-}
-
 // ---- Import -----------------------------------------------------------------------------
 
 function openImport() {
@@ -1168,7 +1157,7 @@ watch(
           @status="status"
           @open="openAcknowledged"
           @stop="invalidate"
-          @fresh="another"
+          @fresh="startFresh"
           @go="active = $event"
         />
       </form>
