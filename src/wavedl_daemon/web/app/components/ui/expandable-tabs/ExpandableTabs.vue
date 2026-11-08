@@ -27,10 +27,13 @@ const props = withDefaults(
     class?: HTMLAttributes['class'];
     activeClass?: HTMLAttributes['class'];
     ariaLabel?: string;
+    /** Hide the active label when the user clicks outside the tabs. */
+    collapsible?: boolean;
   }>(),
   {
     activeClass: '',
     ariaLabel: undefined,
+    collapsible: true,
   },
 );
 
@@ -78,7 +81,7 @@ function selectTab(index: number, tab: ExpandableTab) {
 }
 
 function collapseLabels() {
-  if (expandedIndex.value === null) return;
+  if (!props.collapsible || expandedIndex.value === null) return;
 
   expandedIndex.value = null;
   emit('collapse');
