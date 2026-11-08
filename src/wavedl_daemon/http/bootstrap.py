@@ -2,8 +2,8 @@
 Ephemeral browser credentials and credential-safe access logging.
 
 Bootstrap codes and session tokens are 256-bit random capabilities kept only as
-digests. Bootstrap codes are single-use, except the launch code, which is
-reusable until shutdown. Sessions expire on a sliding and an absolute deadline.
+digests. The launch code is reusable until shutdown. Sessions expire on a
+sliding and an absolute deadline.
 Access-log filtering is opt-in.
 
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import unquote_plus
 
-from wavedl_daemon.http.auth import credential_bytes
+from wavedl_daemon.credentials import credential_bytes
 
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ class BootstrapCapacityError(RuntimeError):
 
 
 class BootstrapCredentials:
-    """Thread-safe pool for bounded bootstrap codes and revocable sessions.
+    """Thread-safe launch capability and bounded revocable sessions.
 
     The supplied master token is immediately reduced to a SHA-256 digest. The
     pool never retains plaintext bootstrap or session credentials.
@@ -72,8 +72,6 @@ class BootstrapCredentials:
         self,
         access_token: str,
         *,
-        ttl_seconds: float = 120,
-        max_pending: int = 128,
         session_idle_seconds: float = _SESSION_IDLE_SECONDS,
         session_absolute_seconds: float = _SESSION_ABSOLUTE_SECONDS,
         max_sessions: int = _MAX_SESSIONS,
@@ -81,19 +79,6 @@ class BootstrapCredentials:
         wall_clock: Callable[[], float] = time.time,
     ):
         master = credential_bytes(access_token)
-        if (
-            isinstance(ttl_seconds, bool)
-            or not isinstance(ttl_seconds, (int, float))
-            or not math.isfinite(ttl_seconds)
-            or ttl_seconds <= 0
-        ):
-            raise ValueError("Invalid bootstrap lifetime")
-        if (
-            isinstance(max_pending, bool)
-            or not isinstance(max_pending, int)
-            or max_pending < 1
-        ):
-            raise ValueError("Invalid bootstrap capacity")
         if not callable(clock):
             raise ValueError("Invalid bootstrap clock")
         for value, label in (
@@ -116,15 +101,12 @@ class BootstrapCredentials:
         if not callable(wall_clock):
             raise ValueError("Invalid session wall clock")
         self._master_digest = hashlib.sha256(master).digest()
-        self._ttl_seconds = ttl_seconds
-        self._max_pending = max_pending
         self._session_idle_seconds = session_idle_seconds
         self._session_absolute_seconds = session_absolute_seconds
         self._max_sessions = max_sessions
         self._clock = clock
         self._wall_clock = wall_clock
         self._lock = threading.Lock()
-        self._pending: dict[bytes, float] = {}
         self._launch_digest: bytes | None = None
         self._sessions: OrderedDict[bytes, tuple[float, float]] = OrderedDict()
 
@@ -135,37 +117,11 @@ class BootstrapCredentials:
                 raise BootstrapCapacityError("Launch code already minted")
             code = secrets.token_urlsafe(32)
             digest = hashlib.sha256(code.encode("ascii")).digest()
-            if (
-                self._contains_digest(digest, self._pending)
-                or self._contains_digest(digest, self._sessions)
-                or hmac.compare_digest(digest, self._master_digest)
+            if self._contains_digest(digest, self._sessions) or hmac.compare_digest(
+                digest, self._master_digest
             ):
                 raise BootstrapCapacityError("Bootstrap unavailable")
             self._launch_digest = digest
-            return code
-
-    def mint(self) -> str:
-        """Return a fresh short-lived code; never retain its plaintext."""
-        with self._lock:
-            now = self._clock()
-            if not math.isfinite(now):
-                raise BootstrapCapacityError("Bootstrap unavailable")
-            self._expire(now)
-            if len(self._pending) >= self._max_pending:
-                raise BootstrapCapacityError("Bootstrap capacity reached")
-            # No retry loop: even a hypothetical random collision fails closed.
-            code = secrets.token_urlsafe(32)
-            digest = hashlib.sha256(code.encode("ascii")).digest()
-            if (
-                self._contains_digest(digest, self._pending)
-                or self._contains_digest(digest, self._sessions)
-                or hmac.compare_digest(digest, self._master_digest)
-            ):
-                raise BootstrapCapacityError("Bootstrap unavailable")
-            deadline = now + self._ttl_seconds
-            if not math.isfinite(deadline):
-                raise BootstrapCapacityError("Bootstrap unavailable")
-            self._pending[digest] = deadline
             return code
 
     def exchange(self, code: object) -> SessionGrant:
@@ -178,18 +134,12 @@ class BootstrapCredentials:
             if not math.isfinite(now):
                 raise BootstrapExchangeError("Invalid or expired bootstrap code")
             self._expire(now)
-            matched = None
-            for digest in self._pending:
-                if hmac.compare_digest(candidate, digest):
-                    matched = digest
             launch = self._launch_digest is not None and hmac.compare_digest(
                 candidate, self._launch_digest
             )
-            if matched is None and not launch:
+            if not launch:
                 raise BootstrapExchangeError("Invalid or expired bootstrap code")
             grant, session_digest = self._new_session_locked(now)
-            if matched is not None:
-                del self._pending[matched]
             if len(self._sessions) >= self._max_sessions:
                 self._evict_lru_locked()
             self._sessions[session_digest] = (
@@ -210,11 +160,6 @@ class BootstrapCredentials:
         return found
 
     def _expire(self, now: float) -> None:
-        self._pending = {
-            digest: deadline
-            for digest, deadline in self._pending.items()
-            if deadline > now
-        }
         self._sessions = OrderedDict(
             (digest, record)
             for digest, record in self._sessions.items()
@@ -238,10 +183,8 @@ class BootstrapCredentials:
             raise BootstrapCapacityError("Session unavailable")
         token = secrets.token_urlsafe(32)
         digest = hashlib.sha256(token.encode("ascii")).digest()
-        if (
-            hmac.compare_digest(digest, self._master_digest)
-            or self._contains_digest(digest, self._pending)
-            or self._contains_digest(digest, self._sessions)
+        if hmac.compare_digest(digest, self._master_digest) or self._contains_digest(
+            digest, self._sessions
         ):
             raise BootstrapCapacityError("Session unavailable")
         wall_now = self._wall_clock()
@@ -252,25 +195,6 @@ class BootstrapCredentials:
             raise BootstrapCapacityError("Session unavailable")
         expires_at = int(expiry_ms)
         return SessionGrant(token, expires_at), digest
-
-    def mint_session(self) -> SessionGrant:
-        """Mint a session from the master credential, subject to the pool bound."""
-        with self._lock:
-            now = self._clock()
-            if not math.isfinite(now):
-                raise BootstrapCapacityError("Session unavailable")
-            self._expire(now)
-            grant, digest = self._new_session_locked(now)
-            if len(self._sessions) >= self._max_sessions:
-                self._evict_lru_locked()
-            self._sessions[digest] = (
-                min(
-                    now + self._session_idle_seconds,
-                    now + self._session_absolute_seconds,
-                ),
-                now + self._session_absolute_seconds,
-            )
-            return grant
 
     def _candidate_digest(self, token: object) -> bytes:
         if isinstance(token, str):

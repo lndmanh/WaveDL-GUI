@@ -1,4 +1,4 @@
-"""Ephemeral single-use bootstrap and access-log credential regression tests."""
+"""Launch capability, session, and access-log credential regression tests."""
 
 from __future__ import annotations
 
@@ -49,94 +49,56 @@ def test_launch_code_survives_session_eviction():
     assert not pool.authenticate(grants[0].token)
 
 
-def test_one_time_code_still_single_use_beside_launch_code():
-    pool = BootstrapCredentials(TOKEN)
-    pool.mint_launch()
-    once = pool.mint()
-    pool.exchange(once)
-    with pytest.raises(BootstrapExchangeError):
-        pool.exchange(once)
-
-
-@pytest.mark.parametrize("operation", ["mint", "mint_session", "exchange"])
+@pytest.mark.parametrize("operation", ["rotate", "exchange"])
 def test_launch_digest_collision_fails_closed(monkeypatch, operation):
     pool = BootstrapCredentials(TOKEN)
-    once = pool.mint()
     launch = pool.mint_launch()
     monkeypatch.setattr(
         "wavedl_daemon.http.bootstrap.secrets.token_urlsafe", lambda size: launch
     )
     with pytest.raises(BootstrapCapacityError):
         if operation == "exchange":
-            pool.exchange(once)
+            pool.exchange(launch)
         else:
-            getattr(pool, operation)()
+            pool.rotate(TOKEN)
     assert pool._launch_digest == hashlib.sha256(launch.encode()).digest()
 
 
 def test_code_is_random_and_only_digests_are_stored():
     credentials = BootstrapCredentials(TOKEN)
-    first, second = credentials.mint(), credentials.mint()
-    assert first != second
-    assert len(first) == 43
-    assert hashlib.sha256(first.encode()).digest() in credentials._pending
+    code = credentials.mint_launch()
+    first, second = credentials.exchange(code), credentials.exchange(code)
+    assert first.token != second.token
+    assert len(code) == len(first.token) == len(second.token) == 43
+    assert hashlib.sha256(code.encode()).digest() == credentials._launch_digest
+    assert hashlib.sha256(first.token.encode()).digest() in credentials._sessions
     assert TOKEN not in repr(credentials.__dict__)
-    assert first not in repr(credentials.__dict__)
-    exchanged = credentials.exchange(first)
-    assert exchanged.token not in repr(credentials.__dict__)
-    assert credentials.authenticate(exchanged.token)
-    assert not credentials.is_master(exchanged.token)
-    with pytest.raises(BootstrapExchangeError, match="Invalid or expired"):
-        credentials.exchange(first)
-    assert credentials.authenticate(credentials.exchange(second).token)
+    assert code not in repr(credentials.__dict__)
+    assert first.token not in repr(credentials.__dict__)
+    assert second.token not in repr(credentials.__dict__)
+    assert credentials.authenticate(first.token)
+    assert not credentials.is_master(first.token)
+    assert credentials.authenticate(second.token)
 
 
-def test_sixteen_concurrent_exchanges_have_exactly_one_winner():
+def test_sixteen_concurrent_rotations_have_exactly_one_winner():
     credentials = BootstrapCredentials(TOKEN)
-    code = credentials.mint()
+    token = credentials.exchange(credentials.mint_launch()).token
     barrier = threading.Barrier(16)
 
-    def exchange(_):
+    def rotate(_):
         barrier.wait(timeout=10)
         try:
-            return credentials.exchange(code).token
+            return credentials.rotate(token).token
         except BootstrapExchangeError:
             return None
 
     with ThreadPoolExecutor(max_workers=16) as pool:
-        results = list(pool.map(exchange, range(16)))
+        results = list(pool.map(rotate, range(16)))
     assert sum(result is not None for result in results) == 1
     assert results.count(None) == 15
-    assert not credentials._pending
-
-
-def test_deadline_is_exclusive_and_capacity_cleanup_is_bounded():
-    now = [10.0]
-    credentials = BootstrapCredentials(
-        TOKEN, ttl_seconds=2, max_pending=2, clock=lambda: now[0]
-    )
-    first, second = credentials.mint(), credentials.mint()
-    with pytest.raises(BootstrapCapacityError):
-        credentials.mint()
-    assert len(credentials._pending) == 2
-    now[0] = 11.999
-    first_grant = credentials.exchange(first)
-    assert credentials.authenticate(first_grant.token)
-    third = credentials.mint()
-    now[0] = 12.0
-    with pytest.raises(BootstrapExchangeError):
-        credentials.exchange(second)
-    third_grant = credentials.exchange(third)
-    assert credentials.authenticate(third_grant.token)
-    now[0] = 20
-    code = credentials.mint()
-    now[0] = 22
-    with pytest.raises(BootstrapExchangeError):
-        credentials.exchange(code)
-    for _ in range(100):
-        credentials.mint()
-        now[0] += 2
-    assert len(credentials._pending) <= 2
+    assert not credentials.authenticate(token)
+    assert len(credentials._sessions) == 1
 
 
 @pytest.mark.parametrize(
@@ -144,7 +106,7 @@ def test_deadline_is_exclusive_and_capacity_cleanup_is_bounded():
 )
 def test_invalid_codes_have_identical_secret_free_error(code):
     credentials = BootstrapCredentials(TOKEN)
-    valid = credentials.mint()
+    valid = credentials.mint_launch()
     with pytest.raises(BootstrapExchangeError) as failure:
         credentials.exchange(code)
     assert str(failure.value) == "Invalid or expired bootstrap code"
@@ -155,18 +117,10 @@ def test_invalid_codes_have_identical_secret_free_error(code):
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"ttl_seconds": 0},
-        {"ttl_seconds": -1},
-        {"ttl_seconds": float("nan")},
-        {"ttl_seconds": float("inf")},
-        {"ttl_seconds": True},
         {"session_idle_seconds": 0},
         {"session_absolute_seconds": float("inf")},
-        {"max_pending": 0},
-        {"max_pending": True},
         {"max_sessions": 0},
         {"max_sessions": True},
-        {"max_pending": 1.5},
         {"clock": None},
         {"wall_clock": None},
     ],
@@ -180,10 +134,10 @@ def test_invalid_pool_configuration_fails_without_secret(kwargs):
 def test_nonfinite_clock_fails_closed_without_consuming_code():
     now = [1.0]
     credentials = BootstrapCredentials(TOKEN, clock=lambda: now[0])
-    code = credentials.mint()
+    code = credentials.mint_launch()
     now[0] = float("nan")
-    with pytest.raises(BootstrapCapacityError):
-        credentials.mint()
+    with pytest.raises(BootstrapExchangeError):
+        credentials.rotate(TOKEN)
     with pytest.raises(BootstrapExchangeError):
         credentials.exchange(code)
     now[0] = 2.0
@@ -205,7 +159,7 @@ def test_session_idle_expiry_slides_but_is_exclusive():
         clock=lambda: now[0],
         wall_clock=lambda: 1000.0 + now[0],
     )
-    token = credentials.exchange(credentials.mint()).token
+    token = credentials.exchange(credentials.mint_launch()).token
     assert credentials.authenticate(token)
     now[0] = 109.999
     assert credentials.authenticate(token)
@@ -224,7 +178,7 @@ def test_absolute_expiry_bounds_sliding_sessions_and_rotation():
         clock=lambda: now[0],
         wall_clock=lambda: 2000.0 + now[0],
     )
-    original = credentials.exchange(credentials.mint())
+    original = credentials.exchange(credentials.mint_launch())
     now[0] = 109.0
     rotated = credentials.rotate(original.token)
     assert not credentials.authenticate(original.token)
@@ -239,11 +193,11 @@ def test_absolute_expiry_bounds_sliding_sessions_and_rotation():
 
 def test_session_lru_evicts_oldest_authority_and_rotation_works_at_capacity():
     credentials = BootstrapCredentials(TOKEN, max_sessions=2)
-    first = credentials.mint_session()
-    second = credentials.mint_session()
+    first = credentials.rotate(TOKEN)
+    second = credentials.rotate(TOKEN)
     assert len(credentials._sessions) == 2
     assert credentials.authenticate(first.token)
-    third = credentials.mint_session()
+    third = credentials.rotate(TOKEN)
     assert len(credentials._sessions) == 2
     assert credentials.authenticate(first.token)
     assert not credentials.authenticate(second.token)
@@ -261,10 +215,9 @@ def test_session_lru_evicts_oldest_authority_and_rotation_works_at_capacity():
 
 def test_bootstrap_exchange_evicts_lru_when_session_pool_is_full():
     credentials = BootstrapCredentials(TOKEN, max_sessions=1)
-    first = credentials.mint_session()
-    code = credentials.mint()
+    first = credentials.rotate(TOKEN)
+    code = credentials.mint_launch()
     exchanged = credentials.exchange(code)
-    assert len(credentials._pending) == 0
     assert len(credentials._sessions) == 1
     assert not credentials.authenticate(first.token)
     assert credentials.authenticate(exchanged.token)
@@ -278,7 +231,7 @@ def log_record(message, args=()):
 
 def test_uvicorn_access_format_redacts_and_preserves_pagination():
     credentials = BootstrapCredentials(TOKEN)
-    code = credentials.mint()
+    code = credentials.mint_launch()
     record = log_record(
         '%s - "%s %s HTTP/%s" %d',
         (
@@ -339,13 +292,14 @@ def test_unicode_and_benign_encoded_query_are_preserved():
     )
 
 
-def test_raw_messages_redact_token_headers_and_consumed_bootstrap():
+def test_raw_messages_redact_token_headers_launch_code_and_revoked_session():
     credentials = BootstrapCredentials(TOKEN)
-    code = credentials.mint()
+    code = credentials.mint_launch()
     credentials.exchange(code)
     encoded_code = "".join(f"%{ord(char):02X}" for char in code)
     redactor = AccessLogRedactionFilter(credentials, master_token=TOKEN)
-    session = credentials.exchange(credentials.mint()).token
+    session = credentials.exchange(code).token
+    assert credentials.revoke(session)
     for text in [
         TOKEN,
         quote(TOKEN, safe=""),
@@ -360,7 +314,7 @@ def test_raw_messages_redact_token_headers_and_consumed_bootstrap():
         assert redactor.filter(record)
         assert text not in record.getMessage()
         assert "[REDACTED]" in record.getMessage()
-    assert not credentials._pending
+    assert not credentials.authenticate(session)
 
 
 def test_filter_malformed_format_fails_closed():

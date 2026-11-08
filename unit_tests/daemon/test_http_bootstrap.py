@@ -23,7 +23,7 @@ def request(app, path, *, code=None, headers=None, method="POST"):
     return response
 
 
-def test_single_use_exchange_does_not_open_health_or_cookie_auth():
+def test_launch_exchange_does_not_open_health_or_cookie_auth():
     credentials = BootstrapCredentials("test-access-token")
     app = create_app(
         None,
@@ -32,7 +32,7 @@ def test_single_use_exchange_does_not_open_health_or_cookie_auth():
         build_id="build",
         bootstrap_credentials=credentials,
     )
-    code = credentials.mint()
+    code = credentials.mint_launch()
     assert request(app, "/api/health", method="GET").status_code == 401
     result = request(
         app, "/api/bootstrap", code=code, headers={"Origin": "http://localhost:8420"}
@@ -45,7 +45,9 @@ def test_single_use_exchange_does_not_open_health_or_cookie_auth():
     assert body["access_token"] != "test-access-token"
     session = body["access_token"]
     assert result.headers["cache-control"] == "no-store"
-    assert request(app, "/api/bootstrap", code=code).status_code == 401
+    repeated = request(app, "/api/bootstrap", code=code)
+    assert repeated.status_code == 200
+    assert repeated.json()["access_token"] != session
     assert (
         request(
             app,
@@ -120,7 +122,7 @@ def test_single_use_exchange_does_not_open_health_or_cookie_auth():
     "headers",
     [{"Host": "evil.example"}, {"Origin": "http://evil.example"}, {"Origin": "null"}],
 )
-def test_host_origin_rejection_does_not_consume_nonce(headers):
+def test_host_origin_rejection_preserves_launch_code(headers):
     credentials = BootstrapCredentials("test-access-token")
     app = create_app(
         None,
@@ -129,7 +131,7 @@ def test_host_origin_rejection_does_not_consume_nonce(headers):
         build_id="build",
         bootstrap_credentials=credentials,
     )
-    code = credentials.mint()
+    code = credentials.mint_launch()
     assert request(app, "/api/bootstrap", code=code, headers=headers).status_code in {
         400,
         403,
