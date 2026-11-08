@@ -269,7 +269,7 @@ export class DaemonApi {
   #buildId: string | undefined;
   #approvedPlans = new WeakMap<
     PlanView,
-    { daemonId: string; buildId: string; revision: number; request: JsonObject }
+    { daemonId: string; buildId: string; revision: number; request: JsonObject | null }
   >();
   readonly origin: string;
   readonly protocolVersion: number;
@@ -537,32 +537,60 @@ export class DaemonApi {
 
     return result.data;
   }
+  async approveRunPlan(runId: string, signal?: AbortSignal): Promise<PlanView> {
+    const revision = this.#scopeRevision;
+    const plan = await this.getRunPlan(runId, signal);
+
+    return this.#approvePlan(plan, revision, null);
+  }
   async plan(request: JsonObject, idempotencyKey: string, signal?: AbortSignal): Promise<PlanView> {
+    return this.#plan('/api/runs/plan', request, idempotencyKey, signal);
+  }
+  async replan(
+    runId: string,
+    request: JsonObject,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<PlanView> {
+    if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
+
+    return this.#plan(`/api/runs/${runId}/plan`, request, idempotencyKey, signal, runId);
+  }
+  async #plan(
+    path: string,
+    request: JsonObject,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+    runId?: string,
+  ): Promise<PlanView> {
     if (!idempotencyKey || idempotencyKey.length > 256 || /[\r\n]/.test(idempotencyKey))
       throw DaemonApiError.fromKey('response', 'invalidIdempotencyKey');
     const revision = this.#scopeRevision;
     this.#requestBody(request, idempotencyKey);
     const snapshot = structuredClone(request);
     freezeJson(snapshot);
-    const value = await this.mutate('/api/runs/plan', snapshot, { idempotencyKey, signal });
 
-    if (revision !== this.#scopeRevision)
-      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
+    const value = await this.mutate(path, snapshot, {
+      idempotencyKey,
+      signal,
+      method: runId ? 'PUT' : 'POST',
+    });
+
     const result = planSchema.safeParse(value);
 
-    if (!result.success) throw DaemonApiError.fromKey('response', 'invalidPlanResponse');
-    const plan = result.data;
-    // Approval is memory-only and belongs to this exact verified connection.
-    // A persisted plan must be re-planned with its original idempotency key;
-    // never manufacture a DTO to bypass a fresh preview/identity check.
-    freezeJson(plan.preview);
+    if (!result.success || (runId !== undefined && result.data.run_id !== runId))
+      throw DaemonApiError.fromKey('response', 'invalidPlanResponse');
 
-    const approved = Object.freeze({
-      plan_id: plan.plan_id,
-      run_id: plan.run_id,
-      request_id: plan.request_id,
-      preview: plan.preview,
-    });
+    return this.#approvePlan(result.data, revision, snapshot);
+  }
+  #approvePlan(plan: PlanView, revision: number, request: JsonObject | null): PlanView {
+    if (revision !== this.#scopeRevision)
+      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
+    // Approval is memory-only and belongs to this exact verified connection.
+    // A fresh preview or a plan fetched from this daemon on this connection is allowed;
+    // persisted or manufactured DTOs never bypass the identity/revision check.
+    freezeJson(plan.preview);
+    const approved = Object.freeze({ ...plan });
 
     if (!this.#daemonId || !this.#buildId)
       throw DaemonApiError.fromKey('identity', 'planLacksAVerifiedDaemonIdentity');
@@ -570,12 +598,12 @@ export class DaemonApi {
       daemonId: this.#daemonId,
       buildId: this.#buildId,
       revision,
-      request: snapshot,
+      request,
     });
 
     return approved;
   }
-  approvedRequest(plan: PlanView): JsonObject {
+  #approvalFor(plan: PlanView) {
     const approval = this.#approvedPlans.get(plan);
 
     if (
@@ -587,10 +615,18 @@ export class DaemonApi {
     )
       throw DaemonApiError.fromKey('identity', 'planConnectionMismatch');
 
+    return approval;
+  }
+  approvedRequest(plan: PlanView): JsonObject {
+    const approval = this.#approvalFor(plan);
+
+    // A fetched plan authorizes submission, not reconstruction of its original request.
+    if (!approval.request) throw DaemonApiError.fromKey('identity', 'planConnectionMismatch');
+
     return structuredClone(approval.request);
   }
   async submit(plan: PlanView, signal?: AbortSignal): Promise<RunView> {
-    this.approvedRequest(plan);
+    this.#approvalFor(plan);
 
     if (!isUuid(plan.plan_id) || !isUuid(plan.run_id) || !isUuid(plan.request_id))
       throw DaemonApiError.fromKey('identity', 'invalidApprovedPlanIdentity');
@@ -605,6 +641,16 @@ export class DaemonApi {
 
     return value;
   }
+  async deleteRun(runId: string, signal?: AbortSignal): Promise<void> {
+    if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
+    const revision = this.#credentialRevision;
+    await this.health(signal);
+
+    if (revision !== this.#credentialRevision)
+      throw DaemonApiError.fromKey('authentication', 'requestCredentialChanged');
+    const response = await this.#request(`/api/runs/${runId}`, 'DELETE', undefined, signal);
+    await response.body?.cancel();
+  }
   async cancelRun(runId: string, signal?: AbortSignal): Promise<RunView> {
     if (!isUuid(runId)) throw DaemonApiError.fromKey('identity', 'invalidRunIdentity');
 
@@ -613,7 +659,12 @@ export class DaemonApi {
   async mutate(
     path: string,
     body: JsonObject | undefined,
-    options: { signal?: AbortSignal; idempotencyKey?: string; timeoutMs?: number } = {},
+    options: {
+      signal?: AbortSignal;
+      idempotencyKey?: string;
+      timeoutMs?: number;
+      method?: 'POST' | 'PUT';
+    } = {},
   ): Promise<Json> {
     this.#apiUrl(path);
     this.#requestBody(body, options.idempotencyKey);
@@ -629,7 +680,7 @@ export class DaemonApi {
     return this.#json(
       await this.#request(
         path,
-        'POST',
+        options.method ?? 'POST',
         snapshot,
         options.signal,
         false,
@@ -816,7 +867,7 @@ export class DaemonApi {
   }
   async #request(
     path: string,
-    method: 'GET' | 'POST' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     body?: JsonObject,
     signal?: AbortSignal,
     bootstrap = false,
