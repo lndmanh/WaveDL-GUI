@@ -107,7 +107,12 @@ const matrices = computed(
         t('datasets.stopPreview')
       }}</Button>
     </div>
-    <p v-if="loading" role="status">{{ t('datasets.previewLoading') }}</p>
+    <Empty v-if="loading" role="status" class="py-8">
+      <EmptyHeader>
+        <EmptyMedia><LoadingSpinner compact /></EmptyMedia>
+        <EmptyDescription>{{ t('datasets.previewLoading') }}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
     <Alert v-else-if="message?.kind === 'pickle'" variant="warning" role="status" class="mt-4">
       <AlertTitle>{{ t('datasets.pickleTitle') }}</AlertTitle>
       <AlertDescription class="gap-3">
