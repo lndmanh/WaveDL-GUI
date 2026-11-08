@@ -64,7 +64,19 @@ export function useProjectDraft(options: ProjectDraftOptions) {
     clientMessage,
   } = options;
 
+  const binding = usePlannedRunBinding();
+  const plannedRunId = computed(() => binding.runId(daemonId()));
   const offered = shallowRef<ProjectDraft | null>(null);
+  watch(
+    binding.retired,
+    (retired) => {
+      const draft = offered.value;
+
+      if (draft && retired?.daemonId === draft.daemonId && retired.runId === draft.plannedRunId)
+        offered.value = { ...draft, plannedRunId: undefined };
+    },
+    { flush: 'sync' },
+  );
   const pendingModel = shallowRef<string | null>(null);
   const dragging = shallowRef(false);
   const savedAt = shallowRef<number | null>(null);
@@ -131,7 +143,7 @@ export function useProjectDraft(options: ProjectDraftOptions) {
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   watch(
-    [values, data, model, active, setup],
+    [values, data, model, active, setup, plannedRunId],
     () => {
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
@@ -144,6 +156,7 @@ export function useProjectDraft(options: ProjectDraftOptions) {
 
         if (
           saveProjectDraft(id, {
+            plannedRunId: plannedRunId.value ?? undefined,
             block: active.value,
             data: data.value,
             model: model.value,
@@ -156,6 +169,23 @@ export function useProjectDraft(options: ProjectDraftOptions) {
     },
     { deep: true },
   );
+
+  // A newly created association must survive a reload even before the debounce fires.
+  function bindPlan(runId: string | null) {
+    const id = daemonId();
+
+    if (id) binding.bind(id, runId);
+
+    if (!runId || !id || offered.value || submittedDraft || !connected.value) return;
+    saveProjectDraft(id, {
+      plannedRunId: runId,
+      block: active.value,
+      data: data.value,
+      model: model.value,
+      request: values,
+      setup: setup.value,
+    });
+  }
 
   async function restoreSelections(
     dataset: ProjectDraft['dataset'],
@@ -202,6 +232,7 @@ export function useProjectDraft(options: ProjectDraftOptions) {
     cancelRestore();
     const current = restoreEpoch;
     offered.value = null;
+    binding.bind(draft.daemonId, draft.plannedRunId ?? null);
     setup.value = draftSetup(draft);
     resetForm({ values: draftRequest(draft, defaults()) });
 
@@ -272,6 +303,7 @@ export function useProjectDraft(options: ProjectDraftOptions) {
     const before = id
       ? {
           draft: projectDraft(id, {
+            plannedRunId: plannedRunId.value ?? undefined,
             block: active.value,
             data: data.value,
             model: model.value,
@@ -473,6 +505,8 @@ export function useProjectDraft(options: ProjectDraftOptions) {
   function submitted() {
     const id = daemonId();
 
+    if (id) binding.bind(id, null);
+
     if (id) clearProjectDraft(id);
     submittedDraft = true;
   }
@@ -491,6 +525,9 @@ export function useProjectDraft(options: ProjectDraftOptions) {
   });
 
   return {
+    binding,
+    bindPlan,
+    plannedRunId,
     offered,
     pendingModel,
     dragging,
