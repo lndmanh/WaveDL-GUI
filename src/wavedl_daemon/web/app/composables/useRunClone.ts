@@ -6,11 +6,13 @@ import type { PendingRunClone } from '~~/types/run-clone';
 export function useRunClone() {
   const pending = useState<PendingRunClone | null>('pending-run-clone', () => null);
 
-  function prepare(plan: PlanView, daemonId: string): boolean {
+  function prepare(plan: PlanView, daemonId: string, edit = false): boolean {
     const value = runClone(plan, daemonId);
 
     if (!value) return false;
-    pending.value = value;
+    pending.value = edit
+      ? { ...value, draft: { ...value.draft, plannedRunId: plan.run_id } }
+      : value;
 
     return true;
   }
