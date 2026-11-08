@@ -1,7 +1,9 @@
 import type { ConnectionSession } from '../lib/connection-session';
-import { ArtifactClient, pngPreviewBlob } from '../lib/artifact-client';
+import { ArtifactClient } from '../lib/artifact-client';
 import { artifactDownloadName } from '../lib/artifact-download';
 import type { Artifact, Inventory } from '~~/types/artifact-client';
+
+export type RunArtifacts = ReturnType<typeof useRunArtifacts>;
 
 /** Keep verified artifact reads scoped to the selected run and connected daemon. */
 export function useRunArtifacts(
@@ -19,18 +21,10 @@ export function useRunArtifacts(
   const loaded = shallowRef(false);
   const message = shallowRef('');
   const downloadStatus = shallowRef('');
-  const imageUrl = shallowRef<string | null>(null);
-  const previewPath = shallowRef<string | null>(null);
   const { isActive } = usePageActive();
   const resourceActive = computed(() => isActive.value && toValue(active));
   let scope = new AbortController();
   let epoch = 0;
-
-  function clearImage() {
-    if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
-    imageUrl.value = null;
-    previewPath.value = null;
-  }
 
   function cancel() {
     scope.abort();
@@ -46,7 +40,6 @@ export function useRunArtifacts(
     loaded.value = false;
     message.value = '';
     downloadStatus.value = '';
-    clearImage();
   }
 
   watch(
@@ -96,7 +89,7 @@ export function useRunArtifacts(
     }
   }
 
-  async function consume(artifact: Artifact, preview = false) {
+  async function consume(artifact: Artifact) {
     if (busy.value || !connected.value || !resourceActive.value) return;
     const current = epoch;
     busy.value = true;
@@ -106,26 +99,16 @@ export function useRunArtifacts(
       const blob = await new ArtifactClient(session.value).verifiedBlob(artifact, scope.signal);
 
       if (current !== epoch) return;
+      const name = await artifactDownloadName(artifact, inventory.value.files);
 
-      if (preview) {
-        const image = await pngPreviewBlob(blob);
-
-        if (current !== epoch) return;
-        clearImage();
-        imageUrl.value = URL.createObjectURL(image);
-        previewPath.value = artifact.path;
-      } else {
-        const name = await artifactDownloadName(artifact, inventory.value.files);
-
-        if (current !== epoch) return;
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = name;
-        link.click();
-        downloadStatus.value = 'results.downloadRequested';
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
+      if (current !== epoch) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.click();
+      downloadStatus.value = 'results.downloadRequested';
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
       if (current === epoch)
         message.value =
@@ -138,10 +121,7 @@ export function useRunArtifacts(
   watch(
     resourceActive,
     (active) => {
-      if (!active) {
-        cancel();
-        clearImage();
-      }
+      if (!active) cancel();
     },
     { flush: 'sync' },
   );
@@ -164,10 +144,7 @@ export function useRunArtifacts(
     busy,
     message,
     downloadStatus,
-    imageUrl,
-    previewPath,
     refresh,
     consume,
-    clearImage,
   };
 }
