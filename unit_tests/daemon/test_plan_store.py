@@ -1,4 +1,4 @@
-"""Plans are immutable, keyed by request, and replayed rather than duplicated."""
+"""Plans preserve run identity and replay their current request key."""
 
 import sqlite3
 import sys
@@ -91,16 +91,27 @@ def test_a_run_belongs_to_exactly_one_plan(store, plan):
     assert store.get_by_key("other-key") is None
 
 
-def test_plans_cannot_be_changed_or_deleted(store, plan):
+def test_unstarted_plans_allow_edits_but_keep_run_identity(store, plan):
     original = put(store, plan)
     connection = store._connection
-    with pytest.raises(sqlite3.IntegrityError, match="immutable"):
-        connection.execute(
-            "UPDATE plans SET plan_json='{}' WHERE plan_id=?", (original.plan_id,)
-        )
-    with pytest.raises(sqlite3.IntegrityError, match="immutable"):
-        connection.execute("DELETE FROM plans")
+    for column, value in (
+        ("run_id", str(uuid4())),
+        ("run_id", None),
+        ("created_at", "changed"),
+        ("created_at", None),
+    ):
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute(
+                f"UPDATE plans SET {column}=? WHERE plan_id=?",
+                (value, original.plan_id),
+            )
     assert store.get(original.plan_id) == original
+    connection.execute(
+        "UPDATE plans SET request_json='{}' WHERE plan_id=?", (original.plan_id,)
+    )
+    assert store.get(original.plan_id).request_json == "{}"
+    connection.execute("DELETE FROM plans WHERE plan_id=?", (original.plan_id,))
+    assert store.get(original.plan_id) is None
 
 
 def test_lookups_of_unknown_identities_are_empty(store):
@@ -174,3 +185,31 @@ def test_an_empty_key_is_refused(store, plan):
     with pytest.raises(ValueError, match="idempotency_key"):
         put(store, plan, key="")
     assert store.page(limit=10, offset=0) == []
+
+
+def test_old_blanket_plan_triggers_are_refused_without_modifying_database(state, store):
+    from wavedl_daemon.storage.database import UnsupportedDatabase
+
+    connection = store._connection
+    connection.execute("DROP TRIGGER plans_immutable_update")
+    connection.execute("DROP TRIGGER plans_immutable_delete")
+    for action in ("UPDATE", "DELETE"):
+        connection.execute(
+            f"CREATE TRIGGER plans_immutable_{action.lower()} BEFORE {action} ON plans "
+            "BEGIN SELECT RAISE(ABORT, 'persisted plan is immutable'); END"
+        )
+    before = connection.execute(
+        "SELECT type, name, sql FROM sqlite_master ORDER BY name"
+    ).fetchall()
+    path, lock = state
+    with pytest.raises(
+        UnsupportedDatabase, match=r"unsupported plan triggers.*move it aside"
+    ):
+        open_database(path, dispatch_lock=lock)
+    assert (
+        connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY name"
+        ).fetchall()
+        == before
+    )
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1

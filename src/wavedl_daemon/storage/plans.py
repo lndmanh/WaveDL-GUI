@@ -1,8 +1,5 @@
 """
-Immutable plans and the request identity that replays them.
-
-Everything after the plan, including submit and cancel intent, lives in the run
-log, so this table never changes after an insert.
+Plans and their replay identity, editable only until the run log starts them.
 
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """
@@ -26,6 +23,10 @@ if TYPE_CHECKING:
 
 class IdempotencyConflict(ValueError):
     """An existing idempotency key was reused for a different request."""
+
+
+class RunAlreadyStarted(ValueError):
+    """A started run's approved plan cannot be edited or deleted."""
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,7 @@ def _record(row: sqlite3.Row | None) -> PlanRecord | None:
 
 
 class PlanStore:
-    """Reads and inserts on a connection from ``open_database``."""
+    """Plan persistence on a connection from ``open_database``."""
 
     def __init__(self, connection: sqlite3.Connection):
         self._connection = connection
@@ -172,3 +173,34 @@ class PlanStore:
         if record is None:
             raise RuntimeError("The plan insert did not commit")
         return record
+
+    def replace(
+        self, plan: Plan, *, idempotency_key: str, request_payload: Mapping[str, object]
+    ) -> bool:
+        """Rotate approval identity only if submit has not opened the run."""
+        return (
+            self._connection.execute(
+                "UPDATE plans SET plan_id=?, request_id=?, idempotency_key=?, "
+                "request_json=?, plan_json=? WHERE run_id=? "
+                "AND run_id NOT IN (SELECT run_id FROM run_heads)",
+                (
+                    str(uuid4()),
+                    str(uuid4()),
+                    idempotency_key,
+                    canonical_request(request_payload),
+                    plan.to_json(),
+                    plan.run_id,
+                ),
+            ).rowcount
+            == 1
+        )
+
+    def delete(self, run_id: str) -> bool:
+        return (
+            self._connection.execute(
+                "DELETE FROM plans WHERE run_id=? "
+                "AND run_id NOT IN (SELECT run_id FROM run_heads)",
+                (run_id,),
+            ).rowcount
+            == 1
+        )
