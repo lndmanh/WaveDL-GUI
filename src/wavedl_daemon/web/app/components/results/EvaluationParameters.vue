@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowDownWideNarrow, TriangleAlert } from '@lucide/vue';
 import type { AcceptableValue } from 'reka-ui';
+import { motion } from 'motion-v';
 import { isParameterMetric, parameterRanking } from '../../lib/evaluation-scorecard';
 import type { ParameterMetric, ParameterScores } from '../../lib/evaluation-scorecard';
 
@@ -78,9 +79,12 @@ function selectMetric(value: AcceptableValue | AcceptableValue[]) {
       </div>
     </div>
     <ul class="flex flex-col gap-3">
-      <li
+      <motion.li
         v-for="row in rows"
         :key="row.index"
+        layout="position"
+        :initial="false"
+        :transition="{ duration: 0.2 }"
         class="flex flex-col gap-1.5"
         :class="!scaleFree ? 'border-b pb-2.5 last:border-b-0' : ''"
       >
@@ -100,7 +104,7 @@ function selectMetric(value: AcceptableValue | AcceptableValue[]) {
             <TooltipTrigger as-child
               ><span
                 tabindex="0"
-                class="shrink-0 font-semibold tabular-nums"
+                class="shrink-0 rounded-sm font-semibold tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :title="String(row.value)"
                 >{{ numberFormat.format(row.value) }}</span
               ></TooltipTrigger
@@ -117,12 +121,12 @@ function selectMetric(value: AcceptableValue | AcceptableValue[]) {
           aria-hidden="true"
         >
           <span
-            class="block h-full rounded-r"
+            class="block h-full rounded-r transition-[width] duration-300 motion-reduce:transition-none"
             :class="row.weakest ? 'bg-warning' : 'bg-primary'"
             :style="{ width: `${row.fraction * 100}%` }"
           />
         </span>
-      </li>
+      </motion.li>
     </ul>
     <p class="mt-3 text-xs text-muted-foreground">
       {{

@@ -109,7 +109,7 @@ function tracked(field: EvaluationMetric) {
             <TooltipTrigger as-child>
               <span
                 tabindex="0"
-                class="break-all text-[1.7rem] leading-none font-semibold tracking-tight tabular-nums"
+                class="rounded-sm break-all text-[1.7rem] leading-none font-semibold tracking-tight tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :title="String(card.value)"
                 >{{ card.formatted }}</span
               >
