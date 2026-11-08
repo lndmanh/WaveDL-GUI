@@ -16,6 +16,7 @@ import {
   type TrainingConfig,
 } from '../../shared/schemas/training-request';
 import type { ShellDockSlots } from '~~/types/shell';
+import type { ArtifactFileView } from '~~/types/artifact-list';
 import type {
   AppearancePreferences,
   TrainingPreferences,
@@ -52,6 +53,26 @@ export function browserStorage(): PreferenceStorage | null {
 const appearanceKey = 'wavedl.appearance.v1';
 const keepSignedInKey = 'wavedl.keep-signed-in.v1';
 const shellDockKey = 'wavedl.shell-dock.v1';
+const artifactFileViewKey = 'wavedl.results.file-view.v1';
+
+export function loadArtifactFileView(storage = browserStorage()): ArtifactFileView {
+  try {
+    return storage?.getItem(artifactFileViewKey) === 'list' ? 'list' : 'cards';
+  } catch {
+    return 'cards';
+  }
+}
+
+export function saveArtifactFileView(value: ArtifactFileView, storage = browserStorage()): boolean {
+  try {
+    if (!storage) return false;
+    storage.setItem(artifactFileViewKey, value);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function loadShellDockSlots(storage = browserStorage()): ShellDockSlots {
   try {

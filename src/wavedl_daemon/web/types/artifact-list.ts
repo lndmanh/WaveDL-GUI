@@ -1,5 +1,7 @@
 export type ArtifactGroupKey = 'checkpoints' | 'plots' | 'metrics' | 'other';
 
+export type ArtifactFileView = 'cards' | 'list';
+
 export type ArtifactColumnId = 'name' | 'type' | 'size' | 'modified';
 
 export interface ArtifactSort {
