@@ -15,6 +15,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from unit_tests.daemon.async_services import AsyncService, resolve_test_plan
 from wavedl_daemon.events.broker import EventBroker
 from wavedl_daemon.http.app import SecurityBoundary
 from wavedl_daemon.http.events import event_routes
@@ -43,7 +44,7 @@ TOKEN = "event-boundary-test-private-token"
 
 @contextmanager
 def open_log(root, *, notify=lambda run_id: None):
-    """A real schema 1 database under its dispatch lock."""
+    """A real current-schema database under its dispatch lock."""
     with acquire_dispatch_lock(Path(root) / "dispatch.lock") as lock:
         connection = open_database(Path(root) / "registry.db", dispatch_lock=lock)
         try:
@@ -255,9 +256,9 @@ async def wire_phase(app, *, timeout=5, **options):
 def authenticated_app(store, broker):
     app = FastAPI(
         routes=event_routes(
-            event_log=store,
+            event_log=AsyncService(store),
             broker=broker,
-            resolve_plan=lambda run: "test-owned-plan",
+            resolve_plan=resolve_test_plan,
         )
     )
     return SecurityBoundary(app, token=TOKEN.encode(), allowed_hosts=("127.0.0.1",))

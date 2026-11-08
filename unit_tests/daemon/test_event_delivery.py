@@ -9,6 +9,7 @@ import httpx
 import pytest
 from starlette.requests import ClientDisconnect, Request
 
+from unit_tests.daemon.async_services import AsyncService, resolve_test_plan
 from unit_tests.daemon.conftest import route_app
 from unit_tests.daemon.test_event_stream_live_boundaries import (
     RUN,
@@ -44,7 +45,9 @@ def test_http_event_pages_share_sse_envelopes_and_resume_across_attempts(log):
     requeue(log)
     metrics(log, 2)
     expected = log.read_after(RunId(RUN_ID), (0, -1), limit=256)
-    routes = event_routes(event_log=log, broker=None, resolve_plan=lambda run: "plan")
+    routes = event_routes(
+        event_log=AsyncService(log), broker=None, resolve_plan=resolve_test_plan
+    )
 
     async def scenario():
         async with httpx.AsyncClient(
@@ -79,7 +82,7 @@ def test_http_event_pages_share_sse_envelopes_and_resume_across_attempts(log):
     "query", ["limit=0", "limit=257", "limit=nan", "limit=1&limit=2"]
 )
 def test_http_event_page_rejects_invalid_limits(query):
-    routes = event_routes(event_log=None, broker=None, resolve_plan=lambda run: "plan")
+    routes = event_routes(event_log=None, broker=None, resolve_plan=resolve_test_plan)
 
     async def scenario():
         async with httpx.AsyncClient(
@@ -96,12 +99,12 @@ def test_http_event_page_rejects_invalid_limits(query):
 @pytest.mark.parametrize("stage", ["resolve", "read", "lookahead"])
 def test_http_event_page_redacts_storage_failure(stage):
     class FailedLog:
-        def read_after(self, run_id, cursor, *, limit):
+        async def read_after(self, run_id, cursor, *, limit):
             if stage == "read" or cursor != (0, -1):
                 raise StorageWorkError("private-token private-path")
             return [type("Event", (), {"attempt": 1, "seq": 0})()]
 
-    def resolver(run_id):
+    async def resolver(run_id):
         if stage == "resolve":
             raise sqlite3.OperationalError("private-token private-path")
         return "plan"
@@ -125,7 +128,7 @@ def test_http_event_page_redacts_storage_failure(stage):
 def test_http_event_page_unknown_run_and_noncanonical_identity():
     calls = []
 
-    def resolver(run_id):
+    async def resolver(run_id):
         calls.append(run_id)
         raise KeyError(run_id)
 
@@ -299,7 +302,9 @@ def test_http_event_page_more_respects_byte_bounded_short_pages(log):
         ],
         expect=Expect(),
     )
-    routes = event_routes(event_log=log, broker=None, resolve_plan=lambda run: "plan")
+    routes = event_routes(
+        event_log=AsyncService(log), broker=None, resolve_plan=resolve_test_plan
+    )
 
     async def scenario():
         async with httpx.AsyncClient(
@@ -369,7 +374,7 @@ def test_disconnected_stream_cancels_async_wait(log):
 )
 @pytest.mark.parametrize("endpoint", ["events", "events/page"])
 def test_http_rejects_invalid_or_partial_cursors(query, endpoint):
-    routes = event_routes(event_log=None, broker=None, resolve_plan=lambda run: "plan")
+    routes = event_routes(event_log=None, broker=None, resolve_plan=resolve_test_plan)
 
     async def scenario():
         async with httpx.AsyncClient(
@@ -386,7 +391,7 @@ def test_http_rejects_invalid_or_partial_cursors(query, endpoint):
 def test_http_rejects_noncanonical_run_identity_without_resolving():
     called = False
 
-    def resolve(_run):
+    async def resolve(_run):
         nonlocal called
         called = True
         raise AssertionError("noncanonical identity must be rejected at the route")
@@ -469,7 +474,7 @@ def test_event_http_full_broker_rejects_before_stream_headers():
         routes = event_routes(
             event_log=None,
             broker=broker,
-            resolve_plan=lambda run: "plan",
+            resolve_plan=resolve_test_plan,
         )
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=route_app(routes=routes)),
@@ -497,7 +502,7 @@ def test_event_http_first_read_failure_releases_admitted_subscriber():
         routes = event_routes(
             event_log=FailedStore(),
             broker=broker,
-            resolve_plan=lambda run: "plan",
+            resolve_plan=resolve_test_plan,
         )
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=route_app(routes=routes)),
@@ -524,7 +529,7 @@ def test_event_http_cancelled_initial_query_releases_admitted_subscriber():
         routes = event_routes(
             event_log=SlowStore(),
             broker=broker,
-            resolve_plan=lambda run: "plan",
+            resolve_plan=resolve_test_plan,
         )
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=route_app(routes=routes)),
@@ -561,7 +566,7 @@ def test_live_read_failure_emits_redacted_resume_position():
 
 def test_stream_asgi_failure_before_iteration_releases_preadmitted_subscriber():
     class Store:
-        def read_after(self, *args, **kwargs):
+        async def read_after(self, *args, **kwargs):
             return []
 
     async def scenario():
@@ -569,7 +574,7 @@ def test_stream_asgi_failure_before_iteration_releases_preadmitted_subscriber():
         routes = event_routes(
             event_log=Store(),
             broker=broker,
-            resolve_plan=lambda run: "plan",
+            resolve_plan=resolve_test_plan,
         )
         scope = {
             "type": "http",

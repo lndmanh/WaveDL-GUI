@@ -5,7 +5,6 @@ Author: Ngo Duc Manh Le (manh@nnsvn.me)
 
 from __future__ import annotations
 
-import inspect
 import json
 import re
 from uuid import UUID
@@ -59,13 +58,10 @@ class _OwnedStreamingResponse(StreamingResponse):
 def event_routes(*, event_log, broker, resolve_plan):
     """resolve_plan(run_id) supplies the daemon-approved active plan identity."""
 
-    async def resolve(value):
-        return await value if inspect.isawaitable(value) else value
-
     async def events(run_id: str, request: Request):
         run_id = _identity(request)
         try:
-            await resolve(resolve_plan(run_id))
+            await resolve_plan(run_id)
         except KeyError:
             raise HTTPException(404, "Unknown run") from None
         except EVENT_SERVICE_ERRORS:
@@ -97,7 +93,7 @@ def event_routes(*, event_log, broker, resolve_plan):
             # Admit and perform the first bounded DB query BEFORE headers. The
             # subscription is installed first, preserving the replay/live race.
             subscription = broker.subscribe(run_id)
-            page = await resolve(event_log.read_after(run_id, cursor, limit=256))
+            page = await event_log.read_after(run_id, cursor, limit=256)
             return _OwnedStreamingResponse(
                 stream_events(
                     event_log,
@@ -124,7 +120,7 @@ def event_routes(*, event_log, broker, resolve_plan):
     async def events_page(run_id: str, request: Request):
         run_id = _identity(request)
         try:
-            await resolve(resolve_plan(run_id))
+            await resolve_plan(run_id)
         except KeyError:
             raise HTTPException(404, "Unknown run") from None
         except EVENT_SERVICE_ERRORS:
@@ -147,12 +143,12 @@ def event_routes(*, event_log, broker, resolve_plan):
         except ValueError:
             raise HTTPException(400, "Invalid event cursor or limit") from None
         try:
-            events = await resolve(event_log.read_after(run_id, cursor, limit=limit))
+            events = await event_log.read_after(run_id, cursor, limit=limit)
             next_cursor = (events[-1].attempt, events[-1].seq) if events else cursor
             # read_after also imposes a byte budget, so len(events) < limit
             # does not establish exhaustion. A one-row lookahead does.
             more = (
-                bool(await resolve(event_log.read_after(run_id, next_cursor, limit=1)))
+                bool(await event_log.read_after(run_id, next_cursor, limit=1))
                 if events
                 else False
             )
