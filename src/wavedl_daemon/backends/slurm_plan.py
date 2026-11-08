@@ -364,7 +364,6 @@ class SlurmPlanner:
             "#SBATCH --export=NIL",
             f"#SBATCH --chdir={shlex.quote(spec.working_directory)}",
             f"#SBATCH --output={shlex.quote(str(logs / 'slurm-%j.out'))}",
-            f"#SBATCH --error={shlex.quote(str(logs / 'slurm-%j.err'))}",
         ]
         for field, option in (
             ("account", "account"),

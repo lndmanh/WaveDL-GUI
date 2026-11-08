@@ -67,6 +67,8 @@ def test_plan_is_pure_and_round_trips(tmp_path):
     assert f"#SBATCH --job-name=wavedl-{request.run_id}" in plan.script
     assert f"#SBATCH --comment={request.run_id}" in plan.script
     assert "/logs/slurm-%j.out" in plan.script
+    assert "#SBATCH --error" not in plan.script
+    assert "slurm-%j.err" not in plan.script
     assert "--no-requeue" in plan.script
     assert "#SBATCH --export=NIL" in plan.script
     assert "export SLURM_EXPORT_ENV=ALL" in plan.script
