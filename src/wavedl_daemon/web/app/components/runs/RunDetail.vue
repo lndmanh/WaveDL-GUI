@@ -416,8 +416,9 @@ const hasEvaluation = computed(
           :events="snapshot.events"
           :freshness="snapshot.freshness"
         />
-        <Empty v-else class="min-h-48">
+        <Empty v-else role="status" class="min-h-48">
           <EmptyHeader>
+            <EmptyMedia><LoadingSpinner compact /></EmptyMedia>
             <EmptyTitle>{{ t('runs.evaluation') }}</EmptyTitle>
             <EmptyDescription>{{ t('runs.waitingEvaluation') }}</EmptyDescription>
           </EmptyHeader>
