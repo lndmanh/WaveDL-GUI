@@ -61,6 +61,7 @@ export function projectDraft(daemonId: string, snapshot: DraftSnapshot): Project
     version: 1,
     daemonId,
     savedAt: Date.now(),
+    plannedRunId: snapshot.plannedRunId,
     block: snapshot.block,
     dataset: snapshot.data
       ? { root: snapshot.data.root, relativePath: snapshot.data.relativePath }
@@ -123,6 +124,24 @@ export function clearProjectDraft(
     storage?.removeItem(draftKey(daemonId));
   } catch {
     // Storage may be unavailable (private mode); an unsaved draft is not an error.
+  }
+}
+
+/** Starting/deleting elsewhere retires only the association, preserving the editable draft. */
+export function unbindProjectDraft(
+  daemonId: string,
+  runId: string,
+  storage: PreferenceStorage | null = browserStorage(),
+): void {
+  const draft = loadProjectDraft(daemonId, storage);
+
+  if (!draft || draft.plannedRunId !== runId) return;
+  const { plannedRunId: _plannedRunId, ...unbound } = draft;
+
+  try {
+    storage?.setItem(draftKey(daemonId), boundedText(JSON.stringify(unbound)));
+  } catch {
+    // Storage availability must not turn a successful daemon action into a failure.
   }
 }
 

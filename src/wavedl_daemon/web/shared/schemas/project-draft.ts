@@ -24,6 +24,7 @@ export const projectDraftSchema = z.strictObject({
   version: z.literal(1),
   daemonId: z.string().min(1).max(256),
   savedAt: z.number().int().nonnegative(),
+  plannedRunId: z.uuid().optional(),
   block: z.enum(projectBlocks),
   dataset: z
     .strictObject({

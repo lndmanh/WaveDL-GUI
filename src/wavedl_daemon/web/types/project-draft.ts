@@ -23,6 +23,7 @@ export interface DraftSummary {
 }
 
 export interface DraftSnapshot {
+  readonly plannedRunId?: string;
   readonly block: ProjectBlock;
   readonly data: DataSelection | null;
   readonly model: ModelSelection | null;
