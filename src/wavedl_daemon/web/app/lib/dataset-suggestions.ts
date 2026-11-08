@@ -27,7 +27,7 @@ export function datasetSuggestions(runs: readonly RunView[]): DatasetSuggestion[
   const seen = new Set<string>();
 
   for (const run of runs) {
-    if (seen.has(run.run_id)) continue;
+    if (run.state === 'planned' || seen.has(run.run_id)) continue;
     seen.add(run.run_id);
     const path = run.summary?.data_path;
     const format = path ? datasetFormat(path) : null;
