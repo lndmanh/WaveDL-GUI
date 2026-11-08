@@ -340,7 +340,7 @@ def test_next_work_for_submitted_runs():
     assert kind(tested) is None
     assert kind(fold(STAGES["ended"])) is None
     work = next_work(evolve(local, metric(1, 10)), local_poll=None)
-    assert (work.revision, work.attempt, work.offset) == (3, 1, 10)
+    assert work == Work(WorkKind.TAIL)
 
 
 def test_react_appends_only_changes():

@@ -325,13 +325,9 @@ class WorkKind(StrEnum):
 
 @dataclass(frozen=True)
 class Work:
-    """One blocking unit for the pool, with the head tokens it was read under."""
+    """One blocking unit to execute against the controller's current head."""
 
     kind: WorkKind
-    run_id: RunId
-    revision: int
-    attempt: int
-    offset: int
 
 
 @dataclass(frozen=True)
@@ -351,10 +347,6 @@ Step = Work | Append | None
 _SUBMIT = {BackendKind.LOCAL: WorkKind.SPAWN, BackendKind.SLURM: WorkKind.SBATCH}
 
 
-def _work(head: RunHead, kind: WorkKind) -> Work:
-    return Work(kind, head.ref.run_id, head.revision, head.attempt, head.metrics_offset)
-
-
 def next_work(head: RunHead, *, local_poll: LocalPoll | None) -> Step:
     """What to do for a head with no work in flight.
 
@@ -372,15 +364,15 @@ def next_work(head: RunHead, *, local_poll: LocalPoll | None) -> Step:
         case Requested():
             return Append((Submitting(),), then=_SUBMIT[head.ref.backend])
         case Claimed():
-            return _work(head, WorkKind.RECOVER)
+            return Work(WorkKind.RECOVER)
         case Live() if local_poll is not None:
-            return _work(head, WorkKind.SETTLE)
+            return Work(WorkKind.SETTLE)
         case Live(cancel_delivered=False) if head.cancel_requested:
-            return _work(head, WorkKind.CANCEL)
+            return Work(WorkKind.CANCEL)
         case Live() if (
             head.ref.operation is Operation.TRAIN and not head.metrics_sealed
         ):
-            return _work(head, WorkKind.TAIL)
+            return Work(WorkKind.TAIL)
     return None
 
 
@@ -393,9 +385,9 @@ def react(head: RunHead, observation: SlurmObservation | ObservationFailed) -> S
         case ObservationFailed(detail=detail):
             return None if live.lost is not None else Append((ObservationLost(detail),))
         case SlurmObservation(terminal=True):
-            return _work(head, WorkKind.SETTLE)
+            return Work(WorkKind.SETTLE)
         case SlurmObservation(restart_count=restarts) if restarts >= head.attempt:
-            return _work(head, WorkKind.SETTLE)
+            return Work(WorkKind.SETTLE)
         case SlurmObservation(phase=None):
             return None
         case SlurmObservation(phase=phase, native_state=native) if (

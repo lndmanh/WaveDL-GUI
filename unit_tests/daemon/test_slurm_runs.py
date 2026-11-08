@@ -289,9 +289,7 @@ def test_react_and_settle_read_a_requeue_from_scheduler_text(environment, tmp_pa
     runner.accounting = account(target(run_id), "PREEMPTED", "0:15")
     backend = SlurmBackend(SlurmSite("compute", cluster="alpha"), runner, owner="alice")
     observation = backend.observe_many([target(run_id)], since=SINCE)[run_id]
-    assert react(head, observation) == Work(
-        WorkKind.SETTLE, run_id, head.revision, 1, head.metrics_offset
-    )
+    assert react(head, observation) == Work(WorkKind.SETTLE)
     files = AttemptFiles(read_tail(tmp_path / "missing", start=0), None)
     assert settle(head, observation, files) == (
         Exited(
