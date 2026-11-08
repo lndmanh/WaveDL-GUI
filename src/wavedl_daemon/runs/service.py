@@ -150,6 +150,8 @@ def _run_summary(plan: Plan) -> dict:
         "data_path": text("data_path"),
         "epochs": count("epochs", 1),
         "cv": count("cv", 2),
+        "plot": config.get("plot") is True,
+        "export": text("export"),
         "source_run_id": (
             None
             if plan.spec.checkpoint_source is None

@@ -105,6 +105,19 @@ class RunProgressView(WireModel):
     total_epochs: Annotated[int, Field(gt=0, le=9007199254740991)]
 
 
+class RunSummaryView(WireModel):
+    """Approved inputs identifying a run and its requested outputs."""
+
+    name: str | None
+    model: str | None
+    data_path: str | None
+    epochs: int | None
+    cv: int | None
+    source_run_id: str | None
+    plot: bool
+    export: str | None
+
+
 class RunResponse(WireModel):
     """Lifecycle view retaining the existing daemon response field types."""
 
@@ -120,7 +133,7 @@ class RunResponse(WireModel):
     cancellation_requested: bool
     evidence: RunEvidence | None
     created_at: str | None
-    summary: dict[str, JsonValue] | None
+    summary: RunSummaryView | None
     progress: RunProgressView | None
     activity: Literal["starting", "training", "finalizing"] | None
 

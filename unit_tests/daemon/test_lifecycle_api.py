@@ -1056,6 +1056,8 @@ def test_runs_carry_creation_time_and_approved_inputs(environment):
     assert run["created_at"].endswith("+00:00")
     assert run["summary"]["epochs"] == 2
     assert run["summary"]["source_run_id"] is None
+    assert run["summary"]["plot"] is False
+    assert run["summary"]["export"] is None
     assert set(run["summary"]) == {
         "name",
         "model",
@@ -1063,8 +1065,44 @@ def test_runs_carry_creation_time_and_approved_inputs(environment):
         "epochs",
         "cv",
         "source_run_id",
+        "plot",
+        "export",
     }
     assert [item["summary"] for item in listed] == [run["summary"]]
+
+
+@pytest.mark.parametrize(
+    "flags,plot,export",
+    [
+        ({}, False, None),
+        ({"plot": True}, True, None),
+        ({"export": "onnx"}, False, "onnx"),
+        ({"plot": True, "export": "onnx"}, True, "onnx"),
+    ],
+)
+def test_run_summaries_include_resolved_output_flags(
+    environment, tmp_path, flags, plot, export
+):
+    source = ended_train_run(environment, "summary-source")
+    checkpoint = (
+        environment.service.settings.run_root / source / "output" / "best_checkpoint"
+    )
+    checkpoint.mkdir(parents=True)
+    body = from_checkpoint(source, tmp_path)
+    body["config"].update(flags)
+    planned = request(
+        environment.app, "POST", "/api/runs/plan", body=body, key="summary-flags"
+    )
+    assert planned.status_code == 200, planned.text
+    run_id = planned.json()["run_id"]
+    stored = environment.plans.get(planned.json()["plan_id"]).plan
+    summary = request(environment.app, "GET", f"/api/runs/{run_id}").json()["summary"]
+    assert summary["plot"] is plot
+    assert summary["export"] == export
+    assert summary["plot"] is stored.spec.resolved_config["plot"]
+    assert summary["export"] == stored.spec.resolved_config["export"]
+    listed = request(environment.app, "GET", "/api/runs").json()["runs"]
+    assert next(run["summary"] for run in listed if run["run_id"] == run_id) == summary
 
 
 def test_plan_replay_survives_model_round_trip(environment):
