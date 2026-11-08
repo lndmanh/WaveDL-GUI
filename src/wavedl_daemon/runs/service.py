@@ -591,7 +591,7 @@ class RunService:
         plan = record.plan
         head = self.log.head(RunId(record.run_id))
         if head is None:
-            state, uncertainty, evidence = "planned", True, None
+            state, uncertainty, evidence = "planned", False, None
         else:
             current = status(head)
             state, uncertainty = current.state.value, not current.confirmed
