@@ -17,7 +17,6 @@ const numbers = [
     nullable: true,
   },
   { name: 'out_size', label: inferenceFieldMessageKeys.outputSize, min: 1, nullable: true },
-  { name: 'export_opset', label: inferenceFieldMessageKeys.opset, min: 11, nullable: false },
 ];
 
 const texts = [
@@ -26,12 +25,7 @@ const texts = [
   { name: 'output_key', label: inferenceFieldMessageKeys.outputKey },
 ];
 
-const flags = [
-  { name: 'save_predictions', label: inferenceFieldMessageKeys.predictions },
-  { name: 'plot', label: inferenceFieldMessageKeys.plot },
-  { name: 'verbose', label: inferenceFieldMessageKeys.verbose },
-  { name: 'no_denorm', label: inferenceFieldMessageKeys.normalized },
-];
+const flags = [{ name: 'verbose', label: inferenceFieldMessageKeys.verbose }];
 
 function numberValue(value: string | number, nullable: boolean): number | null {
   return value === '' ? (nullable ? null : Number.NaN) : Number(value);

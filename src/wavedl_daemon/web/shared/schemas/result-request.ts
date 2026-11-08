@@ -29,6 +29,8 @@ export const inferenceConfigSchema = z.strictObject({
   no_denorm: z.boolean(),
   out_size: z.number().int().positive().nullable(),
 });
+export const inferenceConfigOverridesSchema = inferenceConfigSchema.omit({ data_path: true }).partial();
+
 export const inferenceDefaults: z.infer<typeof inferenceConfigSchema> = {
   data_path: '',
   model: null,
