@@ -1,8 +1,5 @@
 """
-Opens the daemon database at schema 2, upgrading schema 1 in place.
-
-Pre-schema-1 databases are refused, not imported, because their runs
-came from a trainer protocol that no longer exists.
+Opens the current daemon database without migrating older development schemas.
 
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """
@@ -30,9 +27,12 @@ _PLANS_SCHEMA = (
     "request_id TEXT NOT NULL UNIQUE, idempotency_key TEXT NOT NULL UNIQUE, "
     "request_json TEXT NOT NULL, plan_json TEXT NOT NULL, created_at TEXT NOT NULL)",
     "CREATE TRIGGER plans_immutable_update BEFORE UPDATE ON plans "
-    "BEGIN SELECT RAISE(ABORT, 'persisted plan is immutable'); END",
+    "WHEN EXISTS (SELECT 1 FROM run_heads WHERE run_id = OLD.run_id) "
+    "OR NEW.run_id IS NOT OLD.run_id OR NEW.created_at IS NOT OLD.created_at "
+    "BEGIN SELECT RAISE(ABORT, 'started plan or plan identity is immutable'); END",
     "CREATE TRIGGER plans_immutable_delete BEFORE DELETE ON plans "
-    "BEGIN SELECT RAISE(ABORT, 'persisted plan is immutable'); END",
+    "WHEN EXISTS (SELECT 1 FROM run_heads WHERE run_id = OLD.run_id) "
+    "BEGIN SELECT RAISE(ABORT, 'started plan is immutable'); END",
 )
 _TABLES = frozenset({"plans", "run_events", "run_heads"})
 
@@ -59,6 +59,17 @@ def _check(connection: sqlite3.Connection, path: Path) -> bool:
         raise UnsupportedDatabase(
             f"{path} is not a schema {SCHEMA_VERSION} daemon database; "
             "move it aside to start fresh"
+        )
+    triggers = {
+        row[0]
+        for row in connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type='trigger' AND tbl_name='plans'"
+        )
+    }
+    if triggers != set(_PLANS_SCHEMA[1:]):
+        raise UnsupportedDatabase(
+            f"{path} has unsupported plan triggers (possibly an older development "
+            "schema); move it aside to start fresh"
         )
     return False
 
