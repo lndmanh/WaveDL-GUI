@@ -534,6 +534,7 @@ def test_planning_resolves_off_owner_and_rechecks_idempotency(
         monkeypatch.setattr(service, "build_spec", slow_paths)
         blocked = asyncio.create_task(runs.plan(train_payload(epochs=1), "shared"))
         try:
+
             async def wait_for_resolution():
                 while not entered.is_set():
                     await asyncio.sleep(0.005)

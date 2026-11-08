@@ -110,12 +110,12 @@ def test_lookups_of_unknown_identities_are_empty(store):
     assert store.page(limit=10, offset=0) == []
 
 
-def test_pages_are_in_creation_order(store, tmp_path):
+def test_pages_are_in_reverse_creation_order(store, tmp_path):
     records = [
         put(store, make_plan(tmp_path), key=f"key-{index}") for index in range(5)
     ]
-    assert store.page(limit=10, offset=0) == records
-    assert store.page(limit=2, offset=1) == records[1:3]
+    assert store.page(limit=10, offset=0) == records[::-1]
+    assert store.page(limit=2, offset=1) == records[-2:-4:-1]
     assert store.page(limit=10, offset=5) == []
 
 

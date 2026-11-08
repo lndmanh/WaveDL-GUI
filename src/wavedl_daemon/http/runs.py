@@ -104,6 +104,7 @@ def lifecycle_routes(service: AsyncRunService) -> list[APIRoute]:
         offset: Annotated[int, Query(ge=0, le=10000)] = 0,
         state: RunStateFilter | None = None,
     ):
+        """List runs newest first, filtering by state before pagination."""
         result = await _call(service.list, limit, offset, state)
         response.headers.update(NO_STORE)
         return {"runs": [item.to_dict() for item in result]}

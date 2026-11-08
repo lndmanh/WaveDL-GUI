@@ -74,8 +74,8 @@ def canonical_request(payload: Mapping[str, object]) -> str:
 
 
 _SELECT = (
-    "SELECT plan_id, run_id, request_id, idempotency_key, request_json, "
-    "plan_json, created_at FROM plans "
+    "SELECT plans.plan_id, plans.run_id, plans.request_id, plans.idempotency_key, "
+    "plans.request_json, plans.plan_json, plans.created_at FROM plans "
 )
 
 
@@ -118,9 +118,22 @@ class PlanStore:
             self._connection.execute(_SELECT + "WHERE run_id = ?", (run_id,)).fetchone()
         )
 
-    def page(self, *, limit: int, offset: int) -> list[PlanRecord]:
+    def page(
+        self, *, limit: int, offset: int, state: str | None = None
+    ) -> list[PlanRecord]:
+        query = _SELECT
+        parameters: list[str | int] = []
+        if state is not None:
+            query += "LEFT JOIN run_heads ON plans.run_id = run_heads.run_id "
+            if state == "planned":
+                query += "WHERE run_heads.run_id IS NULL "
+            else:
+                query += "WHERE run_heads.state = ? "
+                parameters.append(state)
         rows = self._connection.execute(
-            _SELECT + "ORDER BY created_at, plan_id LIMIT ? OFFSET ?", (limit, offset)
+            query
+            + "ORDER BY plans.created_at DESC, plans.plan_id DESC LIMIT ? OFFSET ?",
+            (*parameters, limit, offset),
         )
         return [_record(row) for row in rows]
 

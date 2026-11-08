@@ -294,7 +294,7 @@ def test_hosted_local_run_streams_metrics_completes_and_cancels(tmp_path):
             assert view["evidence"]["exit_code"] == 130
             assert supervisor.launches[1].cancels == [(45.0, True)]
             listed = (await client.get("/api/runs")).json()["runs"]
-            assert [item["run_id"] for item in listed] == [run_id, second["run_id"]]
+            assert [item["run_id"] for item in listed] == [second["run_id"], run_id]
 
     asyncio.run(run())
     assert services.host.outstanding == 0

@@ -29,7 +29,6 @@ from wavedl_daemon.backends.contracts import (
     Topology,
     UnsupportedPlan,
 )
-from wavedl_daemon.execution.budget import BudgetExhausted
 from wavedl_daemon.runs import training_options
 from wavedl_daemon.runs.artifacts import CHECKPOINT_NAME
 from wavedl_daemon.runs.lifecycle import Ended, Live, RunRef, RunState, status
@@ -50,8 +49,8 @@ from wavedl_daemon.storage.run_log import Expect, New, Stale
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from wavedl_daemon.execution.pool import BoundedThreadPool
     from wavedl_daemon.backends.contracts import Planner
+    from wavedl_daemon.execution.pool import BoundedThreadPool
     from wavedl_daemon.runs.layout import RunPaths
     from wavedl_daemon.runs.lifecycle import RunHead
     from wavedl_daemon.runs.model import Metric
@@ -64,12 +63,12 @@ def _uuid(value: str) -> None:
     if type(value) is not str or str(UUID(value)) != value:
         raise ValueError("Identity must be a canonical UUID")
 
+
 @dataclass(frozen=True)
 class _PlanningSnapshot:
     spec: RunSpec
     topology: Topology
     backend_name: str
-
 
 
 @dataclass(frozen=True)
@@ -333,8 +332,8 @@ class RunService:
     def _guard(self) -> None:
         if threading.get_ident() != self._thread:
             raise RuntimeError("Run service must remain on its store owner thread")
-    def plan(self, payload: dict, idempotency_key: str) -> PlanResponse:
 
+    def plan(self, payload: dict, idempotency_key: str) -> PlanResponse:
         selected = self._select_plan(payload, idempotency_key)
         if isinstance(selected, PlanResponse):
             return selected
@@ -652,17 +651,7 @@ class RunService:
             *(item.value for item in RunState),
         }:
             raise ValueError("Invalid state filter")
-        if state is None:
-            return [
-                self._view(record)
-                for record in self.plans.page(limit=limit, offset=offset)
-            ]
-        # A bounded scan keeps state filtering from monopolizing the owner thread.
-        views = (
-            self._view(record, include_progress=False)
-            for record in self.plans.page(limit=1000, offset=0)
-        )
-        matches = [view for view in views if view.state == state]
-        if self.plans.page(limit=1, offset=1000):
-            raise BudgetExhausted("Derived-state list scan capacity exhausted")
-        return [self._with_progress(view) for view in matches[offset : offset + limit]]
+        return [
+            self._view(record)
+            for record in self.plans.page(limit=limit, offset=offset, state=state)
+        ]
