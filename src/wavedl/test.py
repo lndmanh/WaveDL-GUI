@@ -68,6 +68,7 @@ from wavedl.utils import (  # noqa: E402
     SpatialTargetScaler,
     StreamingFieldMetrics,
     calc_pearson,
+    calc_per_target_r2,
     canonicalize_targets,
     load_test_data,
     plot_bland_altman,
@@ -985,6 +986,7 @@ def _compute_field_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, 
         "relative_l2": float(np.mean(relative_l2_per_channel)),
     }
     for i in range(channels):
+        metrics[f"r2_p{i}"] = float(r2_values[i])
         metrics[f"mae_p{i}"] = float(mae_per_channel[i])
         metrics[f"rmse_p{i}"] = float(np.sqrt(mse_per_channel[i]))
         metrics[f"relative_l2_p{i}"] = float(relative_l2_per_channel[i])
@@ -1014,6 +1016,7 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
 
     # Handle single-sample case
     if len(y_true) == 1:
+        r2_values = np.full(y_true.shape[1], np.nan)
         metrics = {
             "r2_score": float("nan"),  # R² undefined for single sample
             "pearson_corr": float("nan"),  # Correlation undefined for single sample
@@ -1021,6 +1024,7 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
             "rmse": np.sqrt(np.mean((y_true - y_pred) ** 2)),
         }
     else:
+        r2_values = calc_per_target_r2(y_true, y_pred)
         metrics = {
             "r2_score": r2_score(y_true.astype(np.float64), y_pred.astype(np.float64)),
             "pearson_corr": calc_pearson(y_true, y_pred),
@@ -1028,8 +1032,9 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
             "rmse": np.sqrt(np.mean((y_true - y_pred) ** 2)),
         }
 
-    # Per-parameter MAE
+    # Per-parameter R² and MAE
     for i in range(y_true.shape[1]):
+        metrics[f"r2_p{i}"] = float(r2_values[i])
         metrics[f"mae_p{i}"] = mean_absolute_error(y_true[:, i], y_pred[:, i])
 
     return metrics
