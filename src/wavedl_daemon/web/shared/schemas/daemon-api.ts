@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { jsonObjectSchema, jsonSchema } from '../../shared/schemas/json';
-import { cursorSchema, runEventSchema } from '../../shared/schemas/event-stream';
+import { jsonObjectSchema, jsonSchema } from './json';
+import { cursorSchema, runEventSchema } from './event-stream';
 
 // Run only after boundedJson/parseJson validate the JSON domain. All response
 // objects historically permit additive fields; DTO schemas strip only at return.
-export { jsonObjectSchema } from '../../shared/schemas/json';
+export { jsonObjectSchema } from './json';
 
 export const RUN_STATES = [
   'planned',
@@ -59,14 +59,6 @@ export const runViewSchema = z.object({
   evidence: jsonObjectSchema.nullable(),
   progress: runProgressSchema.nullable().optional(),
   activity: z.enum(['starting', 'training', 'finalizing']).nullable().optional(),
-  auto_plot: z
-    .object({
-      status: z.enum(['pending', 'submitted', 'failed']),
-      run_id: uuid.nullable(),
-      failure: z.string().nullable(),
-    })
-    .optional()
-    .nullable(),
   // Older daemons omit these; a run is still valid without a human identity.
   created_at: z.iso.datetime({ offset: true }).nullable().optional(),
   summary: z
@@ -96,12 +88,9 @@ export const sessionGrantSchema = z.object({
   daemon_id: printable,
 });
 
-export const planSchema = z.object({
-  plan_id: uuid,
-  run_id: uuid,
-  request_id: uuid,
-  preview: planPreviewSchema,
-});
+export const planSchema = runViewSchema
+  .pick({ plan_id: true, run_id: true, request_id: true })
+  .extend({ preview: planPreviewSchema });
 
 export const runListSchema = z.object({ runs: z.array(jsonSchema) });
 

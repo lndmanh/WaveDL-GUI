@@ -11,7 +11,7 @@ import {
   eventPageSchema,
   outputChunkSchema,
   isUuid,
-} from './daemon-api-schemas';
+} from '../../shared/schemas/daemon-api';
 import { runEvidenceSchema } from '../../shared/schemas/run-evidence';
 import { cursorSchema } from '../../shared/schemas/event-stream';
 import type { Cursor, EventPage } from '~~/types/event-stream';
@@ -70,7 +70,7 @@ export function object(value: unknown): value is JsonObject {
   return jsonObjectSchema.safeParse(value).success;
 }
 
-export { isUuid } from './daemon-api-schemas';
+export { isUuid } from '../../shared/schemas/daemon-api';
 
 function freezeJson(item: Json): void {
   if (item instanceof Object) {

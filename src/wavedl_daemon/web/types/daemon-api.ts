@@ -6,7 +6,7 @@ import type {
   runViewSchema,
   planSchema,
   outputChunkSchema,
-} from '../app/lib/daemon-api-schemas';
+} from '../shared/schemas/daemon-api';
 import type { runEvidenceSchema } from '../shared/schemas/run-evidence';
 import type { MessageParams } from './i18n';
 

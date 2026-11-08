@@ -1,4 +1,4 @@
-import { isUuid } from '../lib/daemon-api-schemas';
+import { isUuid } from '../../shared/schemas/daemon-api';
 
 /**
  * Section integration contract:

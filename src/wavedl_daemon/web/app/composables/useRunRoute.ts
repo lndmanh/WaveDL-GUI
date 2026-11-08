@@ -1,4 +1,4 @@
-import { isUuid } from '../lib/daemon-api-schemas';
+import { isUuid } from '../../shared/schemas/daemon-api';
 import { sectionPath } from '../shell/sections';
 
 /** Route params are the only selection authority; corrections never add history. */
