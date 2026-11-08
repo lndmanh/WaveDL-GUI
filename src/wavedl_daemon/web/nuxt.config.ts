@@ -76,7 +76,7 @@ export default defineNuxtConfig({
   // tag names. shadcn-nuxt claims components/ui first and registers its named exports.
   components: [{ path: '~/components', pathPrefix: false }],
   css: ['@/assets/css/tailwind.css'],
-  devtools: { enabled: false },
+  devtools: { enabled: true },
   telemetry: false,
   debug: false,
   compatibilityDate: '2026-10-05',
