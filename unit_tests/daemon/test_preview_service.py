@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -127,6 +128,106 @@ def test_failures_retry_and_allow_pickle_is_a_separate_cache_key(tmp_path):
         asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    "error_type", [PickleRequired, PreviewRefused, BudgetExhausted]
+)
+def test_failure_between_polls_is_reported_once_then_retried(tmp_path, error_type):
+    write_dataset(tmp_path / "data.npz")
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool, wait_seconds=0.001)
+
+        async def run():
+            gate = asyncio.Event()
+            calls = []
+            failure = error_type("Failed between polls")
+
+            async def compute(path, allow_pickle):
+                calls.append(path)
+                if len(calls) == 1:
+                    await gate.wait()
+                    raise failure
+                return {"ok": True}
+
+            service._run = compute
+            try:
+                assert await service.preview(request()) == {"status": "pending"}
+                task = next(iter(service._jobs.values()))
+                gate.set()
+                await asyncio.wait({task}, timeout=1)
+                assert not service._jobs
+                with pytest.raises(error_type, match="Failed between polls") as error:
+                    await service.preview(request())
+                assert error.value is failure
+                assert len(calls) == 1
+                service.wait_seconds = 1
+                assert (await service.preview(request()))["ok"]
+                assert len(calls) == 2
+            finally:
+                await service.close()
+
+        asyncio.run(run())
+
+
+def test_retained_failures_are_bounded_expire_and_do_not_use_job_slots(
+    tmp_path, monkeypatch
+):
+    for index in range(12):
+        (tmp_path / f"{index}.npz").write_bytes(b"fixture")
+    now = [0.0]
+    monkeypatch.setattr("wavedl_daemon.runs.preview_service.monotonic", lambda: now[0])
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool, wait_seconds=0.001)
+
+        async def run():
+            gate = asyncio.Event()
+            calls = []
+            retry = False
+
+            async def compute(path, allow_pickle):
+                calls.append(path)
+                await gate.wait()
+                if not retry:
+                    raise PreviewRefused("Failed between polls")
+                return {"ok": True}
+
+            service._run = compute
+            try:
+                for index in range(9):
+                    gate.clear()
+                    assert await service.preview(request(f"{index}.npz")) == {
+                        "status": "pending"
+                    }
+                    task = next(iter(service._jobs.values()))
+                    gate.set()
+                    await asyncio.wait({task}, timeout=1)
+                    assert not service._jobs
+                assert len(service._failures) == 8
+                retry = True
+                gate.clear()
+                for index in (9, 10):
+                    assert await service.preview(request(f"{index}.npz")) == {
+                        "status": "pending"
+                    }
+                with pytest.raises(BudgetExhausted):
+                    await service.preview(request("11.npz"))
+                with pytest.raises(PreviewRefused, match="Failed between polls"):
+                    await service.preview(request("8.npz"))
+                assert len(calls) == 11
+                gate.set()
+                await asyncio.wait(set(service._jobs.values()), timeout=1)
+                service.wait_seconds = 1
+                assert (await service.preview(request("0.npz")))["ok"]
+                now[0] = 31
+                assert (await service.preview(request("7.npz")))["ok"]
+                assert len(calls) == 13
+                assert not service._failures
+            finally:
+                await service.close()
+            assert not service._failures
+
+        asyncio.run(run())
+
+
 def test_cache_invalidates_on_file_change_and_evicts_old_entries(tmp_path):
     with BoundedThreadPool(WorkBudget()) as pool:
         service = make_service(tmp_path, pool)
@@ -147,6 +248,35 @@ def test_cache_invalidates_on_file_change_and_evicts_old_entries(tmp_path):
             (tmp_path / "0.npz").write_bytes(b"changed fixture")
             await service.preview(request("0.npz"))
             assert len(calls) == 11
+            await service.close()
+
+        asyncio.run(run())
+
+
+def test_cache_invalidates_on_atomic_replace_with_preserved_size_and_mtime(tmp_path):
+    with BoundedThreadPool(WorkBudget()) as pool:
+        service = make_service(tmp_path, pool)
+        path = tmp_path / "data.npz"
+        path.write_bytes(b"original")
+        original = path.stat()
+
+        async def run():
+            calls = []
+
+            async def compute(path, allow_pickle):
+                calls.append(path)
+                return {"content": path.read_text()}
+
+            service._run = compute
+            first = await service.preview(request("data.npz"))
+            replacement = tmp_path / "replacement.npz"
+            replacement.write_bytes(b"replaced")
+            os.utime(replacement, ns=(original.st_atime_ns, original.st_mtime_ns))
+            replacement.replace(path)
+            second = await service.preview(request("data.npz"))
+            assert first["content"] == "original"
+            assert second["content"] == "replaced"
+            assert len(calls) == 2
             await service.close()
 
         asyncio.run(run())

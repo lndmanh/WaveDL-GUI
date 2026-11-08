@@ -10,9 +10,11 @@ import json
 from collections import OrderedDict
 from dataclasses import replace
 from pathlib import Path
+from time import monotonic
 
 from wavedl_daemon.execution.budget import BudgetExhausted
 from wavedl_daemon.execution.commands import run_command
+from wavedl_daemon.paths import file_identity
 from wavedl_daemon.runs.catalog import BrowseForbidden, BrowseMissing
 from wavedl_daemon.runs.dataset_preview import PickleRequired, PreviewRefused
 from wavedl_daemon.supervision.base import ProcessSpec
@@ -33,6 +35,7 @@ class DatasetPreviewService:
         self.wait_seconds = wait_seconds
         self._jobs = {}
         self._cache = OrderedDict()
+        self._failures = OrderedDict()
 
     def _selection(self, request):
         try:
@@ -43,8 +46,7 @@ class DatasetPreviewService:
             info = path.stat()
             return path, (
                 str(path),
-                info.st_size,
-                info.st_mtime_ns,
+                *file_identity(info).values(),
                 request["allow_pickle"],
             )
         except (BrowseForbidden, BrowseMissing, OSError, ValueError):
@@ -54,6 +56,13 @@ class DatasetPreviewService:
         path, key = await self.pool.submit(
             lambda token: self._selection(request)
         ).wait()
+        now = monotonic()
+        for failed_key, (expiry, _) in list(self._failures.items()):
+            if expiry <= now:
+                self._failures.pop(failed_key)
+        failure = self._failures.pop(key, None)
+        if failure is not None:
+            failure[1].result()
         if key in self._cache:
             self._cache.move_to_end(key)
             value = self._cache[key]
@@ -68,6 +77,9 @@ class DatasetPreviewService:
             done, _ = await asyncio.wait({task}, timeout=self.wait_seconds)
             if not done:
                 return {"status": "pending"}
+            failure = self._failures.get(key)
+            if failure is not None and failure[1] is task:
+                self._failures.pop(key)
             value = task.result()
         return {
             **value,
@@ -76,7 +88,15 @@ class DatasetPreviewService:
 
     def _complete(self, key, task):
         self._jobs.pop(key, None)
-        if not task.cancelled() and task.exception() is None:
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            # A poll that already returned pending must still observe this failure.
+            self._failures[key] = (monotonic() + 30, task)
+            while len(self._failures) > 8:
+                self._failures.popitem(last=False)
+        else:
             self._cache[key] = task.result()
             while len(self._cache) > 8:
                 self._cache.popitem(last=False)
@@ -125,3 +145,4 @@ class DatasetPreviewService:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._cache.clear()
+        self._failures.clear()
