@@ -102,10 +102,22 @@ class HostProfiler:
         self.backends = tuple(sorted(backends))
         self.budget = budget or pool.budget
         self._profile: dict | None = None
+        self._probe: asyncio.Task[dict] | None = None
 
     async def profile(self) -> dict:
         if self._profile is not None:
             return self._profile
+        if self._probe is None:
+            self._probe = asyncio.create_task(self._probe_profile())
+        return await asyncio.shield(self._probe)
+
+    async def _probe_profile(self) -> dict:
+        try:
+            return await self._load_profile()
+        finally:
+            self._probe = None
+
+    async def _load_profile(self) -> dict:
         accelerators = await self._accelerators()
         profile = {
             "hostname": platform.node()[:255],

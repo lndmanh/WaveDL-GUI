@@ -67,6 +67,61 @@ def test_failed_probe_is_unknown_and_retried(monkeypatch):
     assert len(calls) == 2
 
 
+def test_concurrent_cold_requests_share_one_probe(monkeypatch):
+    async def scenario(pool):
+        profiler = HostProfiler(sys.executable, Path.cwd(), pool, ())
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = []
+
+        async def probe():
+            calls.append(True)
+            started.set()
+            await release.wait()
+            return {"torch": None, "cuda": None, "mps": None}
+
+        monkeypatch.setattr(profiler, "_accelerators", probe)
+        requests = [asyncio.create_task(profiler.profile()) for _ in range(3)]
+        await started.wait()
+        release.set()
+        results = await asyncio.gather(*requests)
+        assert len(calls) == 1
+        assert results[0] is results[1] is results[2]
+
+    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
+        asyncio.run(scenario(pool))
+
+
+def test_cancelled_waiter_does_not_cancel_shared_probe(monkeypatch):
+    async def scenario(pool):
+        profiler = HostProfiler(sys.executable, Path.cwd(), pool, ())
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = []
+
+        async def probe():
+            calls.append(True)
+            started.set()
+            await release.wait()
+            return {"torch": None, "cuda": None, "mps": None}
+
+        monkeypatch.setattr(profiler, "_accelerators", probe)
+        cancelled = asyncio.create_task(profiler.profile())
+        survivor = asyncio.create_task(profiler.profile())
+        await started.wait()
+        cancelled.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await cancelled
+        release.set()
+        result = await survivor
+        assert result["accelerators"] is not None
+        assert await profiler.profile() is result
+        assert len(calls) == 1
+
+    with BoundedThreadPool(WorkBudget(timeout_seconds=10)) as pool:
+        asyncio.run(scenario(pool))
+
+
 def test_relative_interpreter_is_refused():
     with BoundedThreadPool(WorkBudget()) as pool, pytest.raises(ValueError):
         HostProfiler("python3", Path.cwd(), pool, ())
