@@ -31,7 +31,6 @@ from wavedl_daemon.backends.contracts import (
 from wavedl_daemon.execution.budget import BudgetExhausted
 from wavedl_daemon.runs import training_options
 from wavedl_daemon.runs.artifacts import CHECKPOINT_NAME
-from wavedl_daemon.runs.automatic_plots import eligible
 from wavedl_daemon.runs.lifecycle import Ended, Live, RunRef, RunState, status
 from wavedl_daemon.runs.model import (
     AttemptOpened,
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
     from wavedl_daemon.runs.layout import RunPaths
     from wavedl_daemon.runs.lifecycle import RunHead
     from wavedl_daemon.runs.model import Metric
-    from wavedl_daemon.storage.automatic_plots import AutomaticPlotStore
     from wavedl_daemon.storage.plans import PlanRecord, PlanStore
     from wavedl_daemon.storage.run_log import RunLog
     from wavedl_daemon.storage.settings import Settings
@@ -88,13 +86,6 @@ class RunProgress:
 
 
 @dataclass(frozen=True)
-class AutomaticPlotView:
-    status: Literal["pending", "submitted", "failed"]
-    run_id: str | None
-    failure: str | None
-
-
-@dataclass(frozen=True)
 class RunResponse:
     plan_id: str
     run_id: str
@@ -110,7 +101,6 @@ class RunResponse:
     created_at: str | None = None
     summary: dict | None = None
     progress: RunProgress | None = None
-    auto_plot: AutomaticPlotView | None = None
     activity: Literal["starting", "training", "finalizing"] | None = None
 
     def to_dict(self) -> dict:
@@ -322,14 +312,12 @@ class RunService:
         log: RunLog,
         backends: Mapping[str, Planner],
         *,
-        automatic_plots: AutomaticPlotStore | None = None,
         training_complete: Callable[[RunId, int], bool] | None = None,
     ) -> None:
         self.settings = settings
         self.plans = plans
         self.log = log
         self.backends = dict(backends)
-        self.automatic_plots = automatic_plots
         self._training_complete = training_complete
         self._thread = threading.get_ident()
 
@@ -522,19 +510,6 @@ class RunService:
             )
         return self._view(record)
 
-    def retry_automatic_plot(self, run_id: str) -> RunResponse:
-        self._guard()
-        record = self._owned(run_id)
-        head = self.log.head(RunId(run_id))
-        if head is None or self.automatic_plots is None or not eligible(head, record):
-            raise ValueError("The run is not eligible for an automatic plot")
-        row = self.automatic_plots.get(run_id, head.attempt)
-        if row is None or row.status == "skipped":
-            raise ValueError("The run has no automatic plot to retry")
-        if row.status == "failed":
-            self.automatic_plots.update(run_id, head.attempt, "pending")
-        return self._view(record)
-
     def get(self, run_id: str) -> RunResponse:
         self._guard()
         return self._view(self._owned(run_id))
@@ -559,16 +534,6 @@ class RunService:
             current = status(head)
             state, uncertainty = current.state.value, not current.confirmed
             evidence = _evidence(head)
-        auto_plot = None
-        if head is not None and self.automatic_plots is not None:
-            row = self.automatic_plots.get(record.run_id, head.attempt)
-            if row is not None and row.status != "skipped":
-                auto_plot = AutomaticPlotView(row.status, row.plot_run_id, row.failure)
-            elif row is None and eligible(head, record):
-                # The pump records the row on its next tick; until then the
-                # run is already owed a plot, and clients stop watching a
-                # finished run unless it reports pending work.
-                auto_plot = AutomaticPlotView("pending", None, None)
         view = RunResponse(
             record.plan_id,
             record.run_id,
@@ -583,7 +548,6 @@ class RunService:
             evidence,
             record.created_at,
             _run_summary(plan),
-            auto_plot=auto_plot,
         )
         return self._with_progress(view) if include_progress else view
 

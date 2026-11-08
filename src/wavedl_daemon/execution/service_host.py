@@ -276,9 +276,6 @@ class AsyncRunService:
     async def cancel(self, run_id: str) -> RunResponse:
         return await self._call("cancel", run_id)
 
-    async def retry_automatic_plot(self, run_id: str) -> RunResponse:
-        return await self._call("retry_automatic_plot", run_id)
-
     async def get(self, run_id: str) -> RunResponse:
         return await self._call("get", run_id)
 

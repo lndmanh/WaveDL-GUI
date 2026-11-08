@@ -91,11 +91,6 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
         response.headers.update(NO_STORE)
         return result.to_dict()
 
-    async def retry_automatic_plot(run_id: str, response: Response):
-        result = await _call(service.retry_automatic_plot, run_id)
-        response.headers.update(NO_STORE)
-        return result.to_dict()
-
     async def get(run_id: str, response: Response):
         result = await _call(service.get, run_id)
         response.headers.update(NO_STORE)
@@ -149,15 +144,6 @@ def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
         "/api/runs/{run_id}/cancel",
         cancel,
         operation_id="cancel_run",
-        responses=API_ERRORS,
-        methods=["POST"],
-        response_model=RunResponse,
-        status_code=202,
-    )
-    router.add_api_route(
-        "/api/runs/{run_id}/automatic-plots/retry",
-        retry_automatic_plot,
-        operation_id="retry_automatic_plot",
         responses=API_ERRORS,
         methods=["POST"],
         response_model=RunResponse,

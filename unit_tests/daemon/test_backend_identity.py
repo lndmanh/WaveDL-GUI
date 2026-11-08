@@ -3,9 +3,11 @@
 import asyncio
 import os
 import shutil
+import sqlite3
 from pathlib import Path
 
 import httpx
+import pytest
 
 from wavedl_daemon.http.app import create_app
 from wavedl_daemon.runs.runtime_service import (
@@ -13,7 +15,11 @@ from wavedl_daemon.runs.runtime_service import (
     HostedServices,
     ServiceSession,
 )
-from wavedl_daemon.storage.database import database_generation, open_database
+from wavedl_daemon.storage.database import (
+    UnsupportedDatabase,
+    database_generation,
+    open_database,
+)
 from wavedl_daemon.storage.ownership import acquire_dispatch_lock
 from wavedl_daemon.storage.settings import Settings
 
@@ -75,7 +81,7 @@ def test_database_loss_with_reused_inode_starts_a_new_namespace(tmp_path, monkey
         assert session.runs.list() == []
 
 
-def test_existing_schema_one_database_acquires_a_stable_generation(tmp_path):
+def test_existing_current_schema_database_acquires_a_stable_generation(tmp_path):
     settings = settings_for(tmp_path)
     path = settings.state_root / DATABASE_FILE
     with acquire_dispatch_lock(settings.state_root / "dispatch.lock") as lock:
@@ -83,8 +89,6 @@ def test_existing_schema_one_database_acquires_a_stable_generation(tmp_path):
         try:
             original = database_generation(connection)
             connection.execute("DROP TABLE database_identity")
-            connection.execute("DROP TABLE automatic_plots")
-            connection.execute("PRAGMA user_version=1")
         finally:
             connection.close()
         connection = open_database(path, dispatch_lock=lock)
@@ -93,11 +97,32 @@ def test_existing_schema_one_database_acquires_a_stable_generation(tmp_path):
             assert generation != original
             version = connection.execute("PRAGMA user_version").fetchone()
             assert version is not None
-            assert version[0] == 2
+            assert version[0] == 1
         finally:
             connection.close()
         connection = open_database(path, dispatch_lock=lock)
         try:
+            assert database_generation(connection) == generation
+        finally:
+            connection.close()
+
+
+@pytest.mark.parametrize("version", [0, 2, 3])
+def test_other_schema_versions_are_refused_without_changing_identity(tmp_path, version):
+    settings = settings_for(tmp_path)
+    path = settings.state_root / DATABASE_FILE
+    with acquire_dispatch_lock(settings.state_root / "dispatch.lock") as lock:
+        connection = open_database(path, dispatch_lock=lock)
+        try:
+            generation = database_generation(connection)
+            connection.execute(f"PRAGMA user_version={version}")
+        finally:
+            connection.close()
+        with pytest.raises(UnsupportedDatabase):
+            open_database(path, dispatch_lock=lock)
+        connection = sqlite3.connect(path)
+        try:
+            assert connection.execute("PRAGMA user_version").fetchone() == (version,)
             assert database_generation(connection) == generation
         finally:
             connection.close()

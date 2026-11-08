@@ -105,12 +105,6 @@ class RunProgressView(WireModel):
     total_epochs: Annotated[int, Field(gt=0, le=9007199254740991)]
 
 
-class AutomaticPlotView(WireModel):
-    status: Literal["pending", "submitted", "failed"]
-    run_id: str | None
-    failure: str | None
-
-
 class RunResponse(WireModel):
     """Lifecycle view retaining the existing daemon response field types."""
 
@@ -129,7 +123,6 @@ class RunResponse(WireModel):
     summary: dict[str, JsonValue] | None
     progress: RunProgressView | None
     activity: Literal["starting", "training", "finalizing"] | None
-    auto_plot: AutomaticPlotView | None
 
 
 class RunList(WireModel):

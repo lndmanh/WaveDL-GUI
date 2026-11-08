@@ -25,7 +25,6 @@ from wavedl_daemon.http.runs import lifecycle_routes
 from wavedl_daemon.runs.controller import RunController
 from wavedl_daemon.runs.model import Metric, RunId
 from wavedl_daemon.runs.service import RunProgress, RunService, _run_progress
-from wavedl_daemon.storage.automatic_plots import AutomaticPlotStore
 from wavedl_daemon.storage.database import open_database
 from wavedl_daemon.storage.ownership import acquire_dispatch_lock
 from wavedl_daemon.storage.plans import PlanStore, canonical_request
@@ -73,7 +72,6 @@ def environment(tmp_path):
             plans,
             log,
             {"local": local, "slurm": slurm},
-            automatic_plots=AutomaticPlotStore(connection),
             training_complete=controller.training_complete,
         )
         app = create_app(

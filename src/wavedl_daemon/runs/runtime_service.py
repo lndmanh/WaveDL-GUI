@@ -21,14 +21,12 @@ from wavedl_daemon.execution.budget import BudgetExhausted, WorkBudget
 from wavedl_daemon.execution.pool import BoundedThreadPool
 from wavedl_daemon.execution.service_host import AsyncRunService, ServiceHost
 from wavedl_daemon.http.services import DaemonServices
-from wavedl_daemon.runs.automatic_plots import AutomaticPlots
 from wavedl_daemon.runs.catalog import AsyncCatalogService, CatalogService
 from wavedl_daemon.runs.controller import RunController
 from wavedl_daemon.runs.host_profile import HostProfiler
 from wavedl_daemon.runs.inspection import DatasetInspector
 from wavedl_daemon.runs.preview_service import DatasetPreviewService
 from wavedl_daemon.runs.service import RunService
-from wavedl_daemon.storage.automatic_plots import AutomaticPlotStore
 from wavedl_daemon.storage.database import database_generation, open_database
 from wavedl_daemon.storage.ownership import acquire_dispatch_lock
 from wavedl_daemon.storage.plans import PlanStore
@@ -121,16 +119,13 @@ class ServiceSession:
             for backend in self.backends.values():
                 if hasattr(backend, "close"):
                     stack.callback(backend.close)
-            automatic_plots = AutomaticPlotStore(connection)
             self.runs = RunService(
                 self.settings,
                 plans,
                 self.log,
                 self.backends,
-                automatic_plots=automatic_plots,
                 training_complete=self.controller.training_complete,
             )
-            self.automatic_plots = AutomaticPlots(self.runs, automatic_plots)
             self.catalog = CatalogService(
                 self.browse_roots
                 if self.browse_roots is not None
@@ -157,7 +152,6 @@ class ServiceSession:
         while True:
             try:
                 self.controller.tick()
-                self.automatic_plots.tick()
                 self.errors.pop("control", None)
             except asyncio.CancelledError:
                 raise
