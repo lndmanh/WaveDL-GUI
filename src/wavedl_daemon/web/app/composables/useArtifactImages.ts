@@ -79,7 +79,8 @@ export function useArtifactImages(runId: MaybeRefOrGetter<string | null>): Artif
   watch(
     isActive,
     (active) => {
-      if (!active) cache.reset();
+      // Hidden pages stop fetching; decoded images stay so returning never replays their loading state.
+      if (!active) cache.cancelPending();
     },
     { flush: 'sync' },
   );

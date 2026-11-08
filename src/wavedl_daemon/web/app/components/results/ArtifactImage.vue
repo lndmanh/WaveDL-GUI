@@ -37,7 +37,8 @@ function retry(event: Event) {
 <template>
   <div
     ref="root"
-    class="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-md bg-muted/50"
+    class="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-md"
+    :class="image.status === 'ready' ? 'bg-white' : 'bg-muted/50'"
     :aria-busy="image.status === 'loading'"
     @click="retry"
   >

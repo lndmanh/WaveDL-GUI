@@ -111,6 +111,22 @@ export class ArtifactImageCache {
     this.#changed();
   }
 
+  /** Stop queued and in-flight work but keep decoded images, so a hidden page returns without reloading them. */
+  cancelPending(): void {
+    this.#scope.abort();
+    this.#scope = new AbortController();
+
+    for (const [identity, entry] of this.#entries) {
+      if (entry.state.status === 'ready') continue;
+      entry.resolve(null);
+      this.#entries.delete(identity);
+    }
+
+    this.#queue = [];
+    this.#running.clear();
+    this.#changed();
+  }
+
   #pump(): void {
     while (this.#running.size < 2) {
       const entry = this.#queue.shift();

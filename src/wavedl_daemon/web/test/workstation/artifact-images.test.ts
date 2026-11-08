@@ -130,6 +130,36 @@ describe('artifact image queue and scoped cache', () => {
     cache.reset();
     expect(release).toHaveBeenCalledWith('blob:3');
   });
+
+  it('cancels pending reads on hide but keeps decoded images without reloading them', async () => {
+    const { cache, loads, release, finish } = setup();
+    const kept = artifact('kept.png');
+    const ready = cache.request(kept);
+    finish(0);
+    await ready;
+    const pending = artifact('pending.png');
+    const active = cache.request(pending);
+    const queued = cache.request(artifact('queued.png'));
+    cache.request(artifact('third.png'));
+    cache.cancelPending();
+    expect(await Promise.all([active, queued])).toEqual([null, null]);
+    expect(loads.slice(1).every((load) => load.signal.aborted)).toBe(true);
+    expect(release).not.toHaveBeenCalled();
+    expect(cache.state(kept)).toEqual({ status: 'ready', url: 'blob:0', width: 10, height: 20 });
+    expect(cache.state(pending).status).toBe('idle');
+    // A late result from the cancelled read is released, never published.
+    finish(1);
+    await Promise.resolve();
+    expect(release).toHaveBeenCalledWith('blob:1');
+    expect(cache.state(pending).status).toBe('idle');
+    await cache.request(kept);
+    const reloaded = cache.request(pending);
+    expect(loads).toHaveLength(4);
+    finish(3);
+    await reloaded;
+    expect(cache.state(pending).status).toBe('ready');
+    cache.reset();
+  });
 });
 
 it('extracts bounded PNG dimensions while retaining the existing PNG preview validation', async () => {
