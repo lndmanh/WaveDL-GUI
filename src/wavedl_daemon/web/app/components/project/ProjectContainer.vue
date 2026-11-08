@@ -209,9 +209,13 @@ const blockedBlocks = computed<ProjectBlock[]>(() => {
 let workflow = new ProjectPlan(props.session);
 let pending: AbortController | null = null;
 let epoch = 0;
+let autoPreviewAttempted = false;
+const draftRevision = shallowRef(0);
 let unsubscribe: (() => void) | undefined;
 
 function invalidate() {
+  autoPreviewAttempted = false;
+  draftRevision.value++;
   epoch++;
   pending?.abort();
   pending = null;
@@ -220,8 +224,19 @@ function invalidate() {
   workflow.invalidate();
 }
 
+watch(
+  projectDraftState.binding.retired,
+  (retired) => {
+    if (retired?.daemonId === daemonId() && retired?.runId === plan.value?.run_id) invalidate();
+  },
+  { flush: 'sync' },
+);
+
 function retireScope() {
   projectDraftState.retire();
+  const id = daemonId();
+
+  if (id) projectDraftState.binding.bind(id, null);
   scope.value++;
   invalidate();
   data.value = null;
@@ -441,11 +456,18 @@ function preview(event?: Event) {
       }
 
       await work('preview', async (signal, isCurrent) => {
-        const result = await workflow.preview(signal);
+        const previewScope = scope.value;
+        const id = daemonId();
+
+        const result = await workflow.preview(signal, {
+          runId: projectDraftState.plannedRunId.value,
+          bind: (runId) => {
+            if (id && previewScope === scope.value) projectDraftState.bindPlan(runId);
+          },
+        });
 
         if (!isCurrent()) return;
         plan.value = result;
-        active.value = 'plan';
       });
     },
     ({ errors }) => {
@@ -459,6 +481,8 @@ function preview(event?: Event) {
 }
 
 function submit() {
+  if (!plan.value || !connected.value || busy.value || planSubmitted.value) return;
+
   return work('submit', async (signal, isCurrent) => {
     const run = await workflow.submit(signal);
 
@@ -479,6 +503,7 @@ function status() {
 
     if (run.submission_requested) {
       acknowledged.value = run;
+      projectDraftState.submitted();
       emit('submitted', run);
     }
   });
@@ -498,30 +523,10 @@ const planSubmitted = computed(
   () => !!plan.value && acknowledged.value?.request_id === plan.value.request_id,
 );
 
-function review() {
-  if (planSubmitted.value) {
-    openAcknowledged();
-
-    return;
-  }
-
-  active.value = 'plan';
-
-  if (plan.value) return;
-
-  if (canPreview.value) {
-    void preview();
-
-    return;
-  }
-
-  const current = epoch;
-  void validate().then((result) => {
-    if (current !== epoch) return;
-
-    if (!result.valid) message.value = 'project.planValidationRequired';
-    else if (!data.value || !model.value) message.value = 'project.selectionRequired';
-  });
+function stopWaiting() {
+  invalidate();
+  // Stopping is deliberate: only an edit or an explicit retry prepares another plan.
+  autoPreviewAttempted = true;
 }
 
 // ---- Derived presentation ---------------------------------------------------------------
@@ -551,6 +556,40 @@ function issueCount(block: ProjectBlock): number {
 
 const canPreview = computed(
   () => connected.value && !!data.value && !!model.value && !issues.value.length && !busy.value,
+);
+
+watch(
+  [active, canPreview, draftRevision, offered, isClonePageActive],
+  () => {
+    if (
+      !isClonePageActive.value ||
+      active.value !== 'plan' ||
+      offered.value ||
+      plan.value ||
+      planSubmitted.value ||
+      busy.value
+    )
+      return;
+
+    if (canPreview.value) {
+      // Busy becoming false after a failed request must not trigger another request.
+      if (autoPreviewAttempted) return;
+      autoPreviewAttempted = true;
+      void preview();
+
+      return;
+    }
+
+    const current = epoch;
+    void validate().then((result) => {
+      if (current !== epoch || !isClonePageActive.value || active.value !== 'plan' || offered.value)
+        return;
+
+      if (!result.valid) message.value = 'project.planValidationRequired';
+      else if (!data.value || !model.value) message.value = 'project.selectionRequired';
+    });
+  },
+  { immediate: true },
 );
 
 const catalogueModel = computed(() =>
@@ -703,8 +742,8 @@ const blocks = computed<PipelineBlock[]>(() => [
       ? t('builder.submitted')
       : plan.value
         ? t('builder.planReady')
-        : canPreview.value
-          ? t('builder.readyToPlan')
+        : busy.value
+          ? t('builder.preparingPlan')
           : t('builder.planPending'),
     detail:
       planSubmitted.value && acknowledged.value
@@ -732,19 +771,13 @@ const stepBlocked = computed(() => {
 
 const nextDisabled = computed(() => busy.value || !nextBlock.value || stepBlocked.value);
 
-const stepMessages: Record<ProjectBlock, { title: string; description: string }> = {
-  dataset: { title: 'builder.datasetTitle', description: 'builder.datasetDescription' },
-  model: { title: 'builder.modelTitle', description: 'builder.modelDescription' },
-  training: { title: 'builder.trainingTitle', description: 'builder.trainingDescription' },
-  runtime: { title: 'builder.runtimeTitle', description: 'builder.runtimeDescription' },
-  plan: { title: 'builder.planTitle', description: 'builder.planDescription' },
+const stepMessages: Record<ProjectBlock, string> = {
+  dataset: 'builder.datasetTitle',
+  model: 'builder.modelTitle',
+  training: 'builder.trainingTitle',
+  runtime: 'builder.runtimeTitle',
+  plan: 'builder.planTitle',
 };
-
-const stepDescription = computed(() =>
-  active.value === 'plan' && planSubmitted.value
-    ? t('project.leaveDoesNotCancel')
-    : t(stepMessages[active.value].description),
-);
 
 const nextHint = computed(() => {
   const block = activeBlock.value;
@@ -771,14 +804,6 @@ async function navigateStep(direction: 'back' | 'next') {
     behavior: reduceMotion.value ? 'instant' : 'smooth',
   });
 }
-
-const reviewLabel = computed(() =>
-  planSubmitted.value
-    ? t('project.viewRun')
-    : plan.value
-      ? t('builder.reviewPlan')
-      : t('builder.createPlan'),
-);
 
 const readiness = computed<ReadinessItem[]>(() =>
   blocks.value.flatMap((block) =>
@@ -900,6 +925,7 @@ const runCloneImport = useRunClone();
 async function consumeRunClone(value: PendingRunClone) {
   offered.value = null;
   retireScope();
+  projectDraftState.binding.bind(value.draft.daemonId, value.draft.plannedRunId ?? null);
   setup.value = 'manual';
   const fresh = draftRequest(value.draft, defaults());
   resetForm({
@@ -970,8 +996,6 @@ async function consumeRunClone(value: PendingRunClone) {
           .filter(Boolean)
           .join(' '),
     });
-    // Normal review validates the new draft and asks the daemon for a fresh plan.
-    review();
   } finally {
     cancel();
     controller.abort();
@@ -1045,12 +1069,8 @@ watch(
         :blocks="blocks"
         :active="active"
         :panel-id="panelId"
-        :review-label="reviewLabel"
-        :review-disabled="!connected || busy || !!offered"
-        :review-busy="busy"
         :class="offered ? projectStyles.runBuilderMuted : ''"
         @select="selectBlock"
-        @review="review"
         @measure="pipelineBottom = $event"
       />
 
@@ -1168,18 +1188,9 @@ watch(
         "
         :data-dragging="dragging"
         novalidate
-        @submit.prevent="preview"
+        @submit.prevent
       >
-        <StepHeader
-          ref="stepHeader"
-          :title="t(stepMessages[active].title)"
-          :description="stepDescription"
-          :back-disabled="backDisabled"
-          :next-disabled="nextDisabled"
-          :next-hint="nextHint"
-          @back="navigateStep('back')"
-          @next="navigateStep('next')"
-        />
+        <StepHeader ref="stepHeader" :title="t(stepMessages[active])" />
         <DatasetInspector
           v-show="active === 'dataset'"
           :active="active === 'dataset'"
@@ -1231,12 +1242,27 @@ watch(
           :can-preview="canPreview"
           :busy="busy"
           :connected="connected"
-          @submit="submit"
+          @retry="preview"
           @status="status"
           @open="openAcknowledged"
-          @stop="invalidate"
+          @stop="stopWaiting"
           @fresh="startFresh"
           @go="active = $event"
+        />
+        <StepNav
+          :show-back="!!previousBlock"
+          :back-disabled="backDisabled"
+          :next-disabled="nextDisabled"
+          :next-hint="nextHint"
+          :final="active === 'plan'"
+          :submitted="planSubmitted"
+          :start-disabled="!plan || !connected || busy || planSubmitted"
+          :busy="busy"
+          :connected="connected"
+          @back="navigateStep('back')"
+          @next="navigateStep('next')"
+          @start="submit"
+          @open="openAcknowledged"
         />
       </form>
     </MotionConfig>
