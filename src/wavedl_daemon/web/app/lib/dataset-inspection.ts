@@ -95,7 +95,7 @@ export class DatasetInspectionApi {
         const body = await api.mutate(
           '/api/datasets/inspect',
           { root: selection.root, path: selection.relativePath },
-          { signal: requestSignal },
+          { signal: requestSignal, timeoutMs: 60000 },
         );
 
         return parseDatasetInspection(body, selection);

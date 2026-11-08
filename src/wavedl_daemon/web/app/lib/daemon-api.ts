@@ -461,11 +461,17 @@ export class DaemonApi {
       protocol_max: maximum,
     };
   }
-  async read(path: string, signal?: AbortSignal): Promise<Json> {
+  async read(
+    path: string,
+    signal?: AbortSignal,
+    options: { timeoutMs?: number } = {},
+  ): Promise<Json> {
     this.#apiUrl(path);
     await this.health(signal);
 
-    return this.#json(await this.#request(path, 'GET', undefined, signal));
+    return this.#json(
+      await this.#request(path, 'GET', undefined, signal, false, undefined, false, options.timeoutMs),
+    );
   }
   /** Artifact bytes only; consumers must bound and recheck before publishing. */
   async downloadResponse(path: string, signal?: AbortSignal): Promise<Response> {

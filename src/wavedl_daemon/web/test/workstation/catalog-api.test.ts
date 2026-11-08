@@ -2,7 +2,7 @@ import type { FixtureResponse } from './fixture-schemas';
 import { describe, expect, it, vi } from 'vitest';
 import { ConnectionSession } from './session-fixture';
 import { CatalogApi, relativePath } from '../../app/lib/catalog-api';
-import { parseDatasetInspection } from '../../app/lib/dataset-inspection';
+import { DatasetInspectionApi, parseDatasetInspection } from '../../app/lib/dataset-inspection';
 import { previewValuesSchema } from '../../shared/schemas/dataset-preview';
 import { modelShapeGuidance } from '../../app/lib/model-shape-guidance';
 
@@ -263,6 +263,80 @@ async function setup(body: FixtureResponse, origin = 'http://localhost:8765') {
     },
   };
 }
+
+describe('long-running daemon probes', () => {
+  it.each(['host', 'inspection'])('allows %s response headers after the default request deadline', async (kind) => {
+    const { api, session, fetcher } = await setup({
+      root: 'data',
+      relative_path: 'train.npz',
+      path: '/srv/train.npz',
+      kind: 'file',
+    });
+
+    const selection = await api.resolve('data', 'train.npz');
+    const host = {
+      hostname: 'workstation',
+      os: 'Linux',
+      os_release: '6.0',
+      arch: 'x86_64',
+      cpu_count: 8,
+      memory_bytes: 16 * 1024 ** 3,
+      python: '/usr/bin/python',
+      python_version: '3.13',
+      accelerators: null,
+      backends: ['local'],
+    };
+
+    const header = {
+      schema_version: 1,
+      format: 'npz',
+      variables: [
+        { name: 'X', dtype: 'float32', shape: [2, 3], sample_count: 2, declared_bytes: 24 },
+        { name: 'Y', dtype: 'float32', shape: [2], sample_count: 2, declared_bytes: 8 },
+      ],
+    };
+
+    vi.useFakeTimers();
+
+    try {
+      fetcher.mockImplementation(async (url, init) => {
+        if (String(url).endsWith('/api/health')) return json(health);
+
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => resolve(json(kind === 'host' ? host : header)), 20_000);
+
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              reject(init.signal?.reason);
+            },
+            { once: true },
+          );
+        });
+      });
+
+      const pending = (
+        kind === 'host' ? api.host() : new DatasetInspectionApi(session).inspect(selection)
+      ).catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(15_001);
+      const request = fetcher.mock.lastCall;
+      expect(String(request?.[0])).toBe(
+        `http://localhost:8765/api/${kind === 'host' ? 'host' : 'datasets/inspect'}`,
+      );
+      expect(request?.[1]?.signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(pending).resolves.toEqual(
+        kind === 'host' ? host : parseDatasetInspection(header, selection),
+      );
+      expect(session.snapshot().status).toBe('connected');
+    } finally {
+      session.dispose();
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('scoped daemon catalogues', () => {
   it('scopes explicit custom model declarations without inventing metadata certification', async () => {
