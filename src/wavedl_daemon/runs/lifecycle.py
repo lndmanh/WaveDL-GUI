@@ -390,8 +390,9 @@ def react(head: RunHead, observation: SlurmObservation | ObservationFailed) -> S
             return Work(WorkKind.SETTLE)
         case SlurmObservation(phase=None):
             return None
-        case SlurmObservation(phase=phase, native_state=native) if (
-            live.lost is None and (phase, native) == (live.phase, live.native_state)
+        case SlurmObservation(phase=phase, native_state=native, reason=reason) if (
+            live.lost is None
+            and (phase, native, reason) == (live.phase, live.native_state, live.reason)
         ):
             return None
     return Append(

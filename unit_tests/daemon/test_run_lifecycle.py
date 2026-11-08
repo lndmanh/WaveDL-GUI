@@ -344,6 +344,13 @@ def test_next_work_for_submitted_runs():
 
 
 def test_react_appends_only_changes():
+    queued = fold([*LIVE, Observed(Phase.QUEUED, "PENDING", "Resources")])
+    assert react(
+        queued, observation(phase=Phase.QUEUED, native_state="PENDING", reason="Resources")
+    ) is None
+    assert react(
+        queued, observation(phase=Phase.QUEUED, native_state="PENDING", reason="Priority")
+    ) == Append((Observed(Phase.QUEUED, "PENDING", "Priority"),))
     running = fold([*LIVE, Observed(Phase.RUNNING, "RUNNING", None)])
     assert react(running, observation()) is None
     assert react(running, observation(phase=None, native_state=None)) is None
