@@ -69,6 +69,8 @@ export const runViewSchema = z.object({
       epochs: positive.nullable(),
       cv: positive.nullable(),
       source_run_id: uuid.nullable(),
+      plot: z.boolean().optional(),
+      export: z.string().nullable().optional(),
     })
     .nullable()
     .optional(),
