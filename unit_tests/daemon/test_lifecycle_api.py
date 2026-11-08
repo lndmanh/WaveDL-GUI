@@ -31,6 +31,7 @@ from wavedl_daemon.storage.plans import PlanStore, canonical_request
 from wavedl_daemon.storage.run_log import Expect, RunLog
 from wavedl_daemon.storage.settings import Settings
 
+from .async_services import AsyncService
 from .test_hosted_app import StubSupervisor, train_payload
 
 
@@ -77,7 +78,7 @@ def environment(tmp_path):
         app = create_app(
             settings, token="lifecycle-test-token", daemon_id="test", build_id="test"
         )
-        app.router.routes.extend(lifecycle_routes(service))
+        app.router.routes.extend(lifecycle_routes(AsyncService(service)))
         try:
             yield Environment(app, service, controller, plans, log, local, supervisor)
         finally:
@@ -1108,7 +1109,7 @@ def test_runs_responses_are_no_store(environment):
 
 
 def test_lifecycle_routes_are_api_routes(environment):
-    routes = lifecycle_routes(environment.service)
+    routes = lifecycle_routes(AsyncService(environment.service))
     assert all(isinstance(route, APIRoute) for route in routes)
 
 

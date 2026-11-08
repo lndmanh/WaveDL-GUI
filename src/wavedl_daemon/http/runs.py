@@ -5,7 +5,6 @@ Author: Ngo Duc Manh Le (manh@nnsvn.me)
 
 from __future__ import annotations
 
-import inspect
 import sqlite3
 from typing import TYPE_CHECKING, Annotated
 
@@ -41,14 +40,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from wavedl_daemon.execution.service_host import AsyncRunService
-    from wavedl_daemon.runs.service import RunService
 
 
 async def _call(callback: Callable, *args, **kwargs):
-    """Await the bounded owner adapter, retaining inert synchronous test facades."""
+    """Await the bounded owner adapter with lifecycle-specific error mapping."""
     try:
-        result = callback(*args, **kwargs)
-        return await result if inspect.isawaitable(result) else result
+        return await callback(*args, **kwargs)
     except IdempotencyConflict:
         raise HTTPException(409, "Idempotency conflict") from None
     except KeyError:
@@ -68,7 +65,7 @@ async def _call(callback: Callable, *args, **kwargs):
         raise HTTPException(400, "Invalid lifecycle request") from None
 
 
-def lifecycle_routes(service: RunService | AsyncRunService) -> list[APIRoute]:
+def lifecycle_routes(service: AsyncRunService) -> list[APIRoute]:
     """SecurityBoundary in the enclosing app authenticates every API route."""
 
     async def plan(body: PlanRequest, request: Request, response: Response):

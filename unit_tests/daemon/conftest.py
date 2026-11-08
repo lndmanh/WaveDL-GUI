@@ -5,7 +5,7 @@ import sys
 from contextlib import contextmanager
 from queue import Queue
 from threading import Thread
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
@@ -32,9 +32,9 @@ class FakeServices:
 
     def __init__(self):
         self.daemon_id = "daemon-test"
-        self.run_service = Mock()
-        self.catalog = Mock()
-        self.event_log = Mock()
+        self.run_service = AsyncMock()
+        self.catalog = AsyncMock()
+        self.event_log = AsyncMock()
         self.broker = EventBroker()
         self.pool = Mock()
 
