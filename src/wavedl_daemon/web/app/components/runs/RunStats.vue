@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { TrendingDown, TrendingUp } from '@lucide/vue';
-import { buildPlotSeries, minimumPoint } from '../../lib/plot-series';
 import type { MetricRecord, MetricSummary } from '~~/types/metric-history';
 
 type StatChannel = 'train_loss' | 'val_loss' | 'r2' | 'lr';
@@ -20,7 +19,11 @@ const styles = {
 };
 
 const { t, locale } = useI18n({ useScope: 'global' });
-const props = defineProps<{ summary: MetricSummary; records: readonly MetricRecord[] }>();
+const props = defineProps<{
+  summary: MetricSummary;
+  records: readonly MetricRecord[];
+  bestLoss: { step: number; value: number } | null;
+}>();
 
 const channels: readonly { name: StatChannel; risingIsBetter: boolean | null }[] = [
   { name: 'val_loss', risingIsBetter: false },
@@ -86,14 +89,6 @@ function display(value: number | null | undefined): string {
     : new Intl.NumberFormat(locale.value, { maximumSignificantDigits: 4 }).format(value);
 }
 
-const best = computed(() => {
-  try {
-    return minimumPoint(buildPlotSeries(props.records, 'loss'), 'val_loss');
-  } catch {
-    return null;
-  }
-});
-
 const stats = computed(() => {
   const current = props.summary.current;
 
@@ -101,7 +96,7 @@ const stats = computed(() => {
     { label: t('runs.valLoss'), value: current?.validationLoss, channel: 0 },
     { label: t('runs.trainLoss'), value: current?.trainLoss, channel: 1 },
     { label: t('runs.r2'), value: current?.r2, channel: 2 },
-    { label: t('runs.bestValShort'), value: best.value?.value, epoch: best.value?.step },
+    { label: t('runs.bestValShort'), value: props.bestLoss?.value, epoch: props.bestLoss?.step },
     { label: t('runs.lr'), value: current?.learningRate, channel: 3 },
   ];
 

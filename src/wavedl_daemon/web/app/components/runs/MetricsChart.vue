@@ -5,7 +5,7 @@ import { VisXYContainer, VisLine, VisAxis, VisFreeBrush, VisPlotline } from '@un
 import { ChartTooltipContent, componentToString, type ChartConfig } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 import type { RuntimeMetricField } from '../../../shared/schemas/metric-history';
-import { buildPlotSeries, minimumPoint } from '../../lib/plot-series';
+import { buildPlotSeries } from '../../lib/plot-series';
 import { plotMetricMessageKeys } from '../../i18n/dynamic-keys';
 import type { MetricRecord } from '~~/types/metric-history';
 import type { PlotChannel, PlotPoint, PlotSeries } from '~~/types/plot-series';
@@ -28,7 +28,13 @@ const styles = {
 };
 
 const { t } = useI18n({ useScope: 'global' });
-const props = defineProps<{ records: readonly MetricRecord[]; unavailable?: boolean }>();
+const props = defineProps<{
+  records: readonly MetricRecord[];
+  unavailable?: boolean;
+  lossSeries: PlotSeries | null;
+  lossError: string;
+  bestLoss: { step: number; value: number } | null;
+}>();
 const channel = shallowRef<PlotChannel>('loss');
 const hiddenFields = shallowRef<readonly RuntimeMetricField[]>([]);
 const zoom = shallowRef<[number, number] | null>(null);
@@ -41,6 +47,8 @@ function metricLabel(field: string): string {
 }
 
 const projection = computed<{ series: PlotSeries | null; error: string }>(() => {
+  if (channel.value === 'loss') return { series: props.lossSeries, error: props.lossError };
+
   try {
     return {
       series: buildPlotSeries(props.unavailable ? [] : props.records, channel.value),
@@ -99,11 +107,7 @@ const y = computed(() =>
   visibleFields.value.map((field) => (point: PlotPoint) => point.values[field] ?? undefined),
 );
 
-const best = computed(() =>
-  channel.value === 'loss' && projection.value.series
-    ? minimumPoint(projection.value.series, 'val_loss')
-    : null,
-);
+const best = computed(() => (channel.value === 'loss' ? props.bestLoss : null));
 
 function selectChannel(value: string | number) {
   if (value === 'loss' || value === 'r2' || value === 'lr') {

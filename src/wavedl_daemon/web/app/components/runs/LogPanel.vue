@@ -35,9 +35,17 @@ const props = withDefaults(
 );
 
 const tab = shallowRef('output');
-const diagnostics = computed(() => props.events.map(eventDiagnostic));
-const text = computed(() => diagnostics.value.map((event) => event.text).join('\n'));
-const shortened = computed(() => diagnostics.value.some((event) => event.truncated));
+const diagnostics = computed<{ text: string; shortened: boolean; truncated: boolean }>((previous) => {
+  if (!props.active || tab.value !== 'events')
+    return previous ?? { text: '', shortened: false, truncated: false };
+  const events = props.events.map(eventDiagnostic);
+
+  return {
+    text: events.map((event) => event.text).join('\n'),
+    shortened: events.some((event) => event.truncated),
+    truncated: props.truncated,
+  };
+});
 </script>
 <template>
   <section
@@ -58,13 +66,13 @@ const shortened = computed(() => diagnostics.value.some((event) => event.truncat
       </TabsContent>
       <TabsContent value="events" :class="styles.content">
         <InfoChip
-          v-if="truncated"
+          v-if="diagnostics.truncated"
           :label="t('runs.boundedDiagnostics')"
           :text="t('runs.omittedDiagnostics')"
           uncertain
         />
         <InfoChip
-          v-if="shortened"
+          v-if="diagnostics.shortened"
           :label="t('runs.shortDiagnostics')"
           :text="t('runs.shortenedDiagnostics')"
         />
@@ -74,7 +82,7 @@ const shortened = computed(() => diagnostics.value.some((event) => event.truncat
           tabindex="0"
           aria-live="off"
           :aria-label="t('runs.runEvents')"
-          >{{ text || t('runs.noEvents') }}</pre>
+          >{{ diagnostics.text || t('runs.noEvents') }}</pre>
       </TabsContent>
     </Tabs>
   </section>

@@ -1,9 +1,24 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { motion, useReducedMotion } from 'motion-v';
-import { ArrowLeft, Check, Copy, Ellipsis, OctagonX, RotateCcw, ScrollText, X } from '@lucide/vue';
+import {
+  ArrowLeft,
+  Copy,
+  Ellipsis,
+  Maximize2,
+  Minimize2,
+  OctagonX,
+  PanelRight,
+  RotateCcw,
+  ScrollText,
+  X,
+} from '@lucide/vue';
+import { SHELL_PANEL_TABS, shellPanelTabTargetId } from '../../shell/constants';
+import type { ShellPanelTabId } from '~~/types/shell';
 import { evaluationResults } from '../../lib/evaluation-results';
 import { canRequestCancellation } from '../../lib/run-monitor';
+import { buildPlotSeries, minimumPoint } from '../../lib/plot-series';
+import type { PlotSeries } from '~~/types/plot-series';
 import {
   durationText,
   pathName,
@@ -18,8 +33,6 @@ import {
 } from '../../i18n/dynamic-keys';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 
-type RunDetailTab = 'overview' | 'metrics' | 'configuration' | 'logs' | 'evaluation';
-
 const styles = {
   card: cn('@container h-full min-h-0 min-w-0 gap-0 overflow-hidden py-0'),
   header: cn('flex shrink-0 flex-col gap-3 px-4 py-3'),
@@ -32,25 +45,14 @@ const styles = {
   facts: cn(
     "flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground [&>li+li]:before:mr-2 [&>li+li]:before:content-['·'] [&>li]:min-w-0 [&>li]:wrap-anywhere",
   ),
-  tabs: cn('flex min-h-0 flex-1 flex-col gap-0'),
-  tabList: cn(
-    'h-10 w-full shrink-0 justify-start overflow-x-auto rounded-none border-b bg-transparent p-0 px-2',
-  ),
-  tabTrigger: cn(
-    'h-full flex-none rounded-none border-0 border-b-2 border-transparent px-3 text-xs text-muted-foreground shadow-none',
-    'data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none',
-    'dark:data-[state=active]:border-primary dark:data-[state=active]:bg-transparent',
-  ),
-  body: cn('min-h-0 flex-1 overflow-y-auto p-4'),
-  configuration: cn(
-    'grid gap-0 text-sm [&>div]:grid [&>div]:grid-cols-[minmax(6rem,1fr)_minmax(0,2fr)] [&>div]:gap-4 [&>div]:border-b [&>div]:py-3 [&_dt]:text-muted-foreground [&_dd]:min-w-0 [&_dd]:wrap-anywhere',
-  ),
 };
 
 const { t, locale } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
-const { state: connectionState, monitorRun } = useWorkstation();
+const { state: connectionState } = useWorkstation();
+const navigate = useShellNavigation();
 const shellLayout = useShellLayout();
+const { isCanvasExpanded, isCompanionShowing, panelTabs } = shellLayout;
 const { isActive } = usePageActive();
 const labels = useRunLabels();
 const reducedMotion = useReducedMotion();
@@ -79,15 +81,22 @@ function focusTitle() {
 
 defineExpose({ focusTitle });
 
-defineEmits<{ cancel: []; retryAutomaticPlots: []; replay: []; close: [] }>();
+defineEmits<{ cancel: []; replay: []; close: [] }>();
 
-const tab = shallowRef<RunDetailTab>('overview');
-const logTarget = shallowRef<HTMLElement | null>(null);
-const parkedLogs = shallowRef<HTMLElement | null>(null);
+const panelTargets = shallowReactive<Record<ShellPanelTabId, HTMLElement | null>>({
+  metrics: null,
+  health: null,
+  configuration: null,
+  logs: null,
+  artifacts: null,
+});
+const parkedPanel = shallowRef<HTMLElement | null>(null);
 
 onMounted(() => {
-  parkedLogs.value = document.createElement('div');
-  logTarget.value = document.querySelector<HTMLElement>('#shell-panel-tab-logs');
+  parkedPanel.value = document.createElement('div');
+
+  for (const tab of SHELL_PANEL_TABS)
+    panelTargets[tab.id] = document.getElementById(shellPanelTabTargetId(tab.id));
 });
 
 const { copy, copied, isSupported: canCopy } = useClipboard({ copiedDuring: 1600 });
@@ -97,6 +106,21 @@ const metricsUnavailable = computed(
 );
 
 const chartRecords = computed(() => (metricsUnavailable.value ? [] : props.snapshot.metrics));
+
+// Share the causal loss projection and its minimum between the strip and chart.
+const lossProjection = computed<{ series: PlotSeries | null; error: string }>(() => {
+  try {
+    return { series: buildPlotSeries(chartRecords.value, 'loss'), error: '' };
+  } catch (error) {
+    return {
+      series: null,
+      error: error instanceof Error ? error.message : t('runs.chartDataError'),
+    };
+  }
+});
+const bestLoss = computed(() =>
+  lossProjection.value.series ? minimumPoint(lossProjection.value.series, 'val_loss') : null,
+);
 
 const healthIssues = computed(() =>
   metricsUnavailable.value
@@ -117,6 +141,19 @@ const metricSummary = computed(() =>
         progress: props.snapshot.summary.progress ?? props.snapshot.run?.progress ?? null,
       },
 );
+
+const canEvaluate = computed(() => {
+  const run = props.snapshot.run;
+
+  return run?.operation === 'train' && run.state === 'completed' && !run.uncertainty;
+});
+
+function evaluateOnTestData() {
+  const run = props.snapshot.run;
+
+  if (!run || !canEvaluate.value || connectionState.value.status !== 'connected') return;
+  void navigate?.(`/results/${run.run_id}?evaluate=best_checkpoint`, false);
+}
 
 const canCancel = computed(() =>
   canRequestCancellation(props.snapshot.run, props.snapshot.cancellation),
@@ -177,31 +214,11 @@ const hasEvaluation = computed(
     props.snapshot.freshness === 'fresh' &&
     evaluationResults(props.snapshot.run, props.snapshot.events) !== null,
 );
-
-watch(hasEvaluation, (available) => {
-  if (!available && tab.value === 'evaluation') tab.value = 'overview';
-});
-
-const configuration = computed(() => {
-  const run = props.snapshot.run;
-  const summary = run?.summary;
-  const unavailable = t('runs.unavailable');
-
-  return [
-    { label: t('runs.configModel'), value: summary?.model ?? unavailable },
-    { label: t('runs.configDataset'), value: summary?.data_path ?? unavailable },
-    { label: t('runs.configEpochs'), value: summary?.epochs ?? unavailable },
-    { label: t('runs.configFolds'), value: summary?.cv ?? unavailable },
-    { label: t('runs.configSource'), value: summary?.source_run_id ?? unavailable },
-    { label: t('runs.configOperation'), value: run ? labels.operation(run) : unavailable },
-    { label: t('runs.configBackend'), value: run ? backendLabel(run.backend) : unavailable },
-    { label: t('runs.configAttempt'), value: run?.attempt ?? t('runs.notAllocated') },
-    { label: t('runs.configCreated'), value: created.value?.text ?? unavailable },
-  ];
-});
 </script>
 <template>
+  <!-- Hidden KeepAlive mounts leave motion-v at its initial opacity; enter only on activation. -->
   <motion.div
+    v-if="isActive"
     as-child
     :initial="animateEntrance ? { opacity: 0, y: 12 } : false"
     :animate="{ opacity: 1, y: 0 }"
@@ -229,7 +246,7 @@ const configuration = computed(() => {
             type="button"
             variant="outline"
             class="cursor-pointer"
-            @click="tab = 'metrics'"
+            @click="shellLayout.setActiveTab('health')"
           >
             <span class="size-1.5 rounded-full bg-warning" aria-hidden="true" />
             {{ t('runs.healthWarnings', { count: healthIssues }, healthIssues) }}
@@ -241,7 +258,15 @@ const configuration = computed(() => {
           >
             <span class="sr-only">{{ t('runs.eventConnection', { status: streamLabel }) }}</span>
           </span>
-          <div class="ml-auto flex shrink-0 items-center gap-1">
+          <div class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
+            <Button
+              v-if="canEvaluate"
+              variant="outline"
+              size="sm"
+              :disabled="connectionState.status !== 'connected'"
+              @click="evaluateOnTestData"
+              >{{ t('runs.evaluateOnTestData') }}</Button
+            >
             <Button
               variant="ghost"
               size="sm"
@@ -267,6 +292,31 @@ const configuration = computed(() => {
                 snapshot.cancellation === 'sending' ? t('runs.requesting') : t('runs.requestCancel')
               }}</span>
             </Button>
+            <Button
+              v-if="isCanvasExpanded && panelTabs.length > 0"
+              variant="ghost"
+              size="icon"
+              class="size-8"
+              :aria-label="t('shell.openCompanionPanel')"
+              :title="t('shell.openCompanionPanel')"
+              :aria-pressed="isCompanionShowing"
+              aria-controls="shell-companion"
+              @click="shellLayout.togglePanel()"
+            >
+              <PanelRight aria-hidden="true" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-8"
+              :aria-label="t(isCanvasExpanded ? 'runs.collapseDetail' : 'runs.expandDetail')"
+              :title="t(isCanvasExpanded ? 'runs.collapseDetail' : 'runs.expandDetail')"
+              :aria-pressed="isCanvasExpanded"
+              @click="shellLayout.toggleCanvasExpanded()"
+            >
+              <Minimize2 v-if="isCanvasExpanded" aria-hidden="true" />
+              <Maximize2 v-else aria-hidden="true" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
                 <Button
@@ -282,7 +332,7 @@ const configuration = computed(() => {
                   ><Copy aria-hidden="true" />{{ t('runs.copyRunId') }}</DropdownMenuItem
                 >
                 <DropdownMenuItem
-                  v-if="logTarget"
+                  v-if="panelTargets.logs"
                   data-testid="run-open-logs"
                   @select="shellLayout.setActiveTab('logs')"
                   ><ScrollText aria-hidden="true" />{{ t('runs.openLogsPanel') }}</DropdownMenuItem
@@ -310,41 +360,6 @@ const configuration = computed(() => {
             <code>{{ shortRunId(snapshot.run.run_id) }}</code>
           </li>
         </ul>
-        <div
-          v-if="snapshot.run?.auto_plot"
-          aria-live="polite"
-          class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
-        >
-          <template v-if="snapshot.run.auto_plot.status === 'pending'">
-            <Spinner size="sm" :label="t('runs.automaticPlotsPending')" />
-            <span>{{ t('runs.automaticPlotsPending') }}</span>
-          </template>
-          <template v-else-if="snapshot.run.auto_plot.status === 'submitted'">
-            <span>{{ t('runs.automaticPlotsSubmitted') }}</span>
-            <Button
-              v-if="snapshot.run.auto_plot.run_id"
-              variant="link"
-              size="sm"
-              class="h-auto p-0 text-xs"
-              @click="monitorRun(snapshot.run.auto_plot.run_id)"
-              >{{ t('runs.automaticPlotsOpen') }}</Button
-            >
-          </template>
-          <template v-else>
-            <span>{{ t('runs.automaticPlotsFailed') }}</span>
-            <span v-if="snapshot.run.auto_plot.failure" class="min-w-0 wrap-anywhere">{{
-              snapshot.run.auto_plot.failure
-            }}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              class="h-6 px-2 text-xs"
-              :disabled="snapshot.automaticPlotRetry || connectionState.status !== 'connected'"
-              @click="$emit('retryAutomaticPlots')"
-              >{{ t('runs.automaticPlotsRetry') }}</Button
-            >
-          </template>
-        </div>
         <div
           v-if="metricSummary.progress"
           class="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs tabular-nums"
@@ -392,90 +407,73 @@ const configuration = computed(() => {
         </div>
       </header>
       <Separator />
-      <Tabs v-model="tab" :class="styles.tabs">
-        <TabsList :class="styles.tabList" :aria-label="t('runs.selected')">
-          <TabsTrigger value="overview" :class="styles.tabTrigger">{{
-            t('runs.tabOverview')
-          }}</TabsTrigger>
-          <TabsTrigger value="metrics" :class="styles.tabTrigger">{{
-            healthIssues > 0
-              ? t('runs.tabMetricsCount', { count: healthIssues })
-              : t('runs.tabMetrics')
-          }}</TabsTrigger>
-          <TabsTrigger value="configuration" :class="styles.tabTrigger">{{
-            t('runs.tabConfiguration')
-          }}</TabsTrigger>
-          <TabsTrigger value="logs" :class="styles.tabTrigger">{{ t('runs.tabLogs') }}</TabsTrigger>
-          <TabsTrigger v-if="hasEvaluation" value="evaluation" :class="styles.tabTrigger">{{
-            t('runs.tabEvaluation')
-          }}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview" class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <RunStats :summary="metricSummary" :records="chartRecords" />
-          <Separator />
-          <div class="flex min-h-0 flex-1 flex-col p-4">
-            <MetricsChart :records="chartRecords" :unavailable="metricsUnavailable" />
-          </div>
-        </TabsContent>
-        <TabsContent value="metrics" :class="styles.body">
-          <MetricSummary :summary="metricSummary" :unconfirmed="metricsUnconfirmed" />
-        </TabsContent>
-        <TabsContent value="configuration" :class="styles.body">
-          <dl :class="styles.configuration">
-            <div v-for="fact in configuration" :key="fact.label">
-              <dt>{{ fact.label }}</dt>
-              <dd>{{ fact.value }}</dd>
-            </div>
-            <div>
-              <dt>{{ t('runs.configRunId') }}</dt>
-              <dd v-if="snapshot.run" class="flex items-start gap-1">
-                <code class="min-w-0 flex-1 wrap-anywhere">{{ snapshot.run.run_id }}</code>
-                <Button
-                  v-if="canCopy"
-                  variant="ghost"
-                  size="icon"
-                  class="size-7 shrink-0"
-                  :aria-label="t('runs.copyRunId')"
-                  @click="copy(snapshot.run.run_id)"
-                  ><Check v-if="copied" aria-hidden="true" /><Copy v-else aria-hidden="true"
-                /></Button>
-              </dd>
-              <dd v-else>{{ t('runs.unavailable') }}</dd>
-            </div>
-          </dl>
-        </TabsContent>
-        <TabsContent value="logs" :class="styles.body">
-          <LogPanel
-            :run="snapshot.run"
-            :events="snapshot.events"
-            :truncated="snapshot.truncated"
-            :active="tab === 'logs'"
-            panel
+      <div v-if="snapshot.run?.operation === 'test'" class="min-h-0 flex-1 overflow-y-auto p-4">
+        <EvaluationResultsPanel
+          v-if="hasEvaluation"
+          :run="snapshot.run"
+          :events="snapshot.events"
+          :freshness="snapshot.freshness"
+        />
+        <Empty v-else class="min-h-48">
+          <EmptyHeader>
+            <EmptyTitle>{{ t('runs.evaluation') }}</EmptyTitle>
+            <EmptyDescription>{{ t('runs.waitingEvaluation') }}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
+      <div v-else class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <RunStats :summary="metricSummary" :records="chartRecords" :best-loss="bestLoss" />
+        <Separator />
+        <div class="flex min-h-0 flex-1 flex-col p-4">
+          <MetricsChart
+            :records="chartRecords"
+            :unavailable="metricsUnavailable"
+            :loss-series="lossProjection.series"
+            :loss-error="lossProjection.error"
+            :best-loss="bestLoss"
           />
-        </TabsContent>
-        <TabsContent v-if="hasEvaluation" value="evaluation" :class="styles.body">
-          <EvaluationResultsPanel
-            :run="snapshot.run"
-            :events="snapshot.events"
-            :freshness="snapshot.freshness"
-          />
-        </TabsContent>
-      </Tabs>
-      <Teleport
-        v-if="logTarget && parkedLogs && snapshot.run"
-        :to="isActive ? logTarget : parkedLogs"
-        defer
-      >
+        </div>
+      </div>
+    </Card>
+  </motion.div>
+  <!-- Keep companion content mounted, but park it off-document while this page is cached. -->
+  <template v-if="parkedPanel">
+    <Teleport
+      v-for="panel in SHELL_PANEL_TABS"
+      :key="panel.id"
+      :to="isActive && panelTargets[panel.id] ? panelTargets[panel.id] : parkedPanel"
+      defer
+    >
+      <div class="min-w-0 p-4">
+        <MetricSummary
+          v-if="panel.id === 'metrics'"
+          :summary="metricSummary"
+          :unconfirmed="metricsUnconfirmed"
+        />
+        <MetricHealthPanel
+          v-else-if="panel.id === 'health'"
+          :health="metricSummary.current?.health ?? []"
+        />
+        <RunConfigurationPanel
+          v-else-if="panel.id === 'configuration' && snapshot.run"
+          :key="snapshot.run.run_id"
+          :run="snapshot.run"
+          :active="isActive && isCompanionShowing && shellLayout.resolvedActiveTab.value === 'configuration'"
+        />
         <LogPanel
+          v-else-if="panel.id === 'logs'"
           :run="snapshot.run"
           :events="snapshot.events"
           :truncated="snapshot.truncated"
-          :active="
-            shellLayout.isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'logs'
-          "
+          :active="isActive && isCompanionShowing && shellLayout.resolvedActiveTab.value === 'logs'"
           panel
         />
-      </Teleport>
-    </Card>
-  </motion.div>
+        <RunArtifactsPanel
+          v-else-if="panel.id === 'artifacts' && snapshot.run"
+          :run-id="snapshot.run.run_id"
+          :active="isActive && isCompanionShowing && shellLayout.resolvedActiveTab.value === 'artifacts'"
+        />
+      </div>
+    </Teleport>
+  </template>
 </template>
