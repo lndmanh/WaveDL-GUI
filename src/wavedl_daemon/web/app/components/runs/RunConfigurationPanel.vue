@@ -40,15 +40,26 @@ watch(
     const controller = new AbortController();
     onCleanup(() => controller.abort());
     const run = props.run;
-    plan.value = null;
-    error.value = '';
-    cloneError.value = '';
+    const current = plan.value;
+
+    // Refetches for the same run keep the loaded plan on screen and swap it in place.
+    if (
+      current &&
+      (current.run_id !== run.run_id ||
+        current.plan_id !== run.plan_id ||
+        current.request_id !== run.request_id)
+    ) {
+      plan.value = null;
+      cloneError.value = '';
+    }
+
+    if (!plan.value) error.value = '';
     loading.value = false;
 
     const client = api.value;
 
     if (!resourceActive.value || state.value.status !== 'connected' || !client) return;
-    loading.value = true;
+    loading.value = !plan.value;
 
     try {
       const result = await client.getRunPlan(run.run_id, controller.signal);
@@ -62,9 +73,12 @@ watch(
       )
         throw new Error(t('project.configurationMismatch'));
       plan.value = result;
+      error.value = '';
     } catch (failure) {
       if (controller.signal.aborted || !resourceActive.value) return;
-      error.value = clientMessage(failure instanceof Error ? failure : String(failure));
+
+      if (!plan.value)
+        error.value = clientMessage(failure instanceof Error ? failure : String(failure));
 
       if (failure instanceof DaemonApiError) reportFailure.value(failure);
     } finally {
