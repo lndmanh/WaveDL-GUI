@@ -15,6 +15,8 @@ export function useRunArtifacts(
   const emptyInventory: Inventory = { files: [], checkpoints: [] };
   const inventory = shallowRef<Inventory>(emptyInventory);
   const busy = shallowRef(false);
+  // Only the first read per run and connection loads on its own; later reads wait for Refresh.
+  const loaded = shallowRef(false);
   const message = shallowRef('');
   const downloadStatus = shallowRef('');
   const imageUrl = shallowRef<string | null>(null);
@@ -30,13 +32,18 @@ export function useRunArtifacts(
     previewPath.value = null;
   }
 
-  function reset() {
+  function cancel() {
     scope.abort();
     scope = new AbortController();
     epoch++;
+    busy.value = false;
+  }
+
+  function reset() {
+    cancel();
     scopeGeneration.value++;
     inventory.value = emptyInventory;
-    busy.value = false;
+    loaded.value = false;
     message.value = '';
     downloadStatus.value = '';
     clearImage();
@@ -78,7 +85,10 @@ export function useRunArtifacts(
     try {
       const items = await new ArtifactClient(session.value).list(id, scope.signal);
 
-      if (current === epoch) inventory.value = items;
+      if (current === epoch) {
+        inventory.value = items;
+        loaded.value = true;
+      }
     } catch {
       if (current === epoch) message.value = 'results.artifactsFailed';
     } finally {
@@ -128,7 +138,10 @@ export function useRunArtifacts(
   watch(
     resourceActive,
     (active) => {
-      if (!active) reset();
+      if (!active) {
+        cancel();
+        clearImage();
+      }
     },
     { flush: 'sync' },
   );
@@ -136,7 +149,7 @@ export function useRunArtifacts(
   watch(
     [resourceActive, connected, () => toValue(runId), scopeGeneration],
     () => {
-      void refresh();
+      if (!loaded.value) void refresh();
     },
     { immediate: true },
   );
