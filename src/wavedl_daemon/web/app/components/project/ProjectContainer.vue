@@ -11,7 +11,6 @@ import {
   Undo2,
   X,
 } from '@lucide/vue';
-import { clientError } from '../../i18n/client-messages';
 import { automaticRuntime, hostAccelerator, matchesAutomatic } from '../../lib/host-runtime';
 import type { RuntimeSetup } from '../../../shared/schemas/host-profile';
 import {
@@ -27,11 +26,7 @@ import {
   trainingRequestSchema,
   type TrainingRequest,
 } from '../../../shared/schemas/training-request';
-import {
-  projectBlocks,
-  type ProjectBlock,
-  type ProjectDraft,
-} from '../../../shared/schemas/project-draft';
+import { projectBlocks, type ProjectBlock } from '../../../shared/schemas/project-draft';
 import { ConnectionSessionError, type ConnectionSession } from '../../lib/connection-session';
 import { applyTrainingPreferences, loadTrainingPreferences } from '../../lib/preferences';
 import { CatalogApi } from '../../lib/catalog-api';
@@ -46,16 +41,7 @@ import {
   trainingRecipes,
   trainingSections,
 } from '../../lib/training-layout';
-import { CONFIG_IMPORT_LIMIT, parseTrainingConfig } from '../../lib/training-import';
-import {
-  clearProjectDraft,
-  draftSetup,
-  draftRequest,
-  loadProjectDraft,
-  projectDraft,
-  saveProjectDraft,
-  validDraftConfig,
-} from '../../lib/project-draft';
+import { draftSetup, draftRequest } from '../../lib/project-draft';
 import { draftConfigFields } from '../../../shared/schemas/project-draft';
 import { trainingCommand } from '../../lib/training-export';
 import type { PlanView, RunView } from '~~/types/daemon-api';
@@ -126,32 +112,37 @@ const reportedRun = shallowRef<RunView | null>(null);
 const connected = shallowRef(false);
 const active = shallowRef<ProjectBlock>('dataset');
 
-/** A saved draft offered on the start panel; null once the user chooses how to begin. */
-const offered = shallowRef<ProjectDraft | null>(null);
-const pendingModel = shallowRef<string | null>(null);
-const dragging = shallowRef(false);
-const savedAt = shallowRef<number | null>(null);
-
 /** Bumped whenever a connection scope retires; inspectors drop transient UI state. */
 const scope = shallowRef(0);
 
-/** Title and detail are read at render time so a visible notice follows the locale. */
-interface Notice {
-  readonly id: number;
-  readonly tone: 'success' | 'info' | 'warning';
-  readonly title: () => string;
-  readonly detail?: () => string;
-  readonly undo?: () => void;
-}
-
-const notice = shallowRef<Notice | null>(null);
-let noticeTimer: ReturnType<typeof setTimeout> | undefined;
-
-function announce(value: Omit<Notice, 'id'>) {
-  clearTimeout(noticeTimer);
-  notice.value = { ...value, id: Date.now() };
-  noticeTimer = setTimeout(() => (notice.value = null), value.undo ? 12000 : 6000);
-}
+const { isActive: isClonePageActive } = usePageActive();
+const projectDraftState = useProjectDraft({
+  session: () => props.session,
+  daemonId,
+  defaults,
+  form: { values, resetForm, setFieldValue },
+  data,
+  model,
+  datasetInspection,
+  active,
+  setup,
+  scope,
+  connected,
+  pageActive: isClonePageActive,
+  models: catalogue.models,
+  catalogueSelection: catalogue.select,
+  selectData,
+  selectModel,
+  retireScope,
+  fieldLabel,
+  t,
+  clientMessage,
+});
+const {
+  offered, pendingModel, dragging, savedAt, notice,
+  announce, clearNotice, continueDraft, startFresh,
+  pickedFile, dragEnter, dragLeave, drop, exportNotice,
+} = projectDraftState;
 
 const displayMessage = computed(() =>
   message.value === 'reported' && reportedRun.value
@@ -203,9 +194,6 @@ let pending: AbortController | null = null;
 let epoch = 0;
 let unsubscribe: (() => void) | undefined;
 
-/** Set after the daemon acknowledges; the next edit makes the draft worth saving again. */
-let submittedDraft = false;
-
 function invalidate() {
   epoch++;
   pending?.abort();
@@ -216,12 +204,12 @@ function invalidate() {
 }
 
 function retireScope() {
+  projectDraftState.retire();
   scope.value++;
   invalidate();
   data.value = null;
   datasetInspection.value = null;
   model.value = null;
-  pendingModel.value = null;
   acknowledged.value = null;
   reportedRun.value = null;
   message.value = '';
@@ -231,7 +219,7 @@ watch(
   values,
   () => {
     invalidate();
-    submittedDraft = false;
+    projectDraftState.edited();
   },
   { deep: true, flush: 'sync' },
 );
@@ -257,8 +245,7 @@ watch(
       // The revision bumps while still connecting, so offer on the transition to connected:
       // a verified connection offers the saved draft rather than silently replacing it.
       if (connected.value && (fresh || !wasConnected)) {
-        const id = daemonId();
-        offered.value = id ? loadProjectDraft(id) : null;
+        projectDraftState.offerSaved();
       } else if (!connected.value) offered.value = null;
     });
   },
@@ -267,13 +254,14 @@ watch(
 
 // ---- Selections -------------------------------------------------------------------------
 
-function selectData(selection: DataSelection) {
+function selectData(selection: DataSelection, restoring = false) {
   try {
     new CatalogApi(toRaw(props.session)).assertSelection(selection);
   } catch {
     return;
   }
 
+  if (!restoring) projectDraftState.cancelRestore();
   data.value = selection;
   datasetInspection.value = null;
   setFieldValue('config.data_path', selection.path);
@@ -293,13 +281,14 @@ function inspectData(inspection: DatasetInspection | null, selection: DataSelect
   datasetInspection.value = inspection;
 }
 
-function selectModel(selection: ModelSelection) {
+function selectModel(selection: ModelSelection, restoring = false) {
   try {
     new CatalogApi(toRaw(props.session)).assertSelection(selection);
   } catch {
     return;
   }
 
+  if (!restoring) projectDraftState.cancelRestore();
   model.value = selection;
   pendingModel.value = null;
   setFieldValue('config.model', selection.model);
@@ -313,26 +302,17 @@ function chooseModel(description: ModelDescription, pretrained: boolean) {
   setFieldValue('config.pretrained', pretrained);
 }
 
-// Draft restore and import name a model before the catalogue may have loaded.
-watch([() => catalogue.models.value, pendingModel], ([models, id]) => {
-  if (!id || !models.length) return;
-  const description = models.find((item) => item.id === id);
-  const selection = description ? catalogue.select(description) : null;
-
-  if (selection) selectModel(selection);
-  else {
-    pendingModel.value = null;
-    announce({ tone: 'warning', title: () => t('builder.modelMissing', { model: id }) });
-  }
-});
-
 function applyPreset(id: string) {
   const recipe = trainingRecipes.find((item) => item.id === id);
 
-  if (recipe) setFieldValue('config', applyTrainingPreset(values.config, recipe.config));
+  if (recipe) {
+    projectDraftState.cancelRestore();
+    setFieldValue('config', applyTrainingPreset(values.config, recipe.config));
+  }
 }
 
 function resetTraining() {
+  projectDraftState.cancelRestore();
   const config = structuredClone(trainingDefaults);
   config.data_path = data.value?.path ?? config.data_path;
   config.model = model.value?.model ?? config.model;
@@ -372,119 +352,14 @@ watch(
   { immediate: true },
 );
 
-// ---- Draft persistence ------------------------------------------------------------------
-
-/** Automatic runtime values are detected, not authored, so they alone are not worth saving. */
-function meaningful(): boolean {
-  const fresh = defaults();
-  const { config, ...rest } = toRaw(values);
-  const { config: freshConfig, ...freshRest } = fresh;
-
-  return (
-    !!data.value ||
-    !!model.value ||
-    JSON.stringify(config) !== JSON.stringify(freshConfig) ||
-    (setup.value === 'manual' && JSON.stringify(rest) !== JSON.stringify(freshRest))
-  );
-}
-
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-
-watch(
-  [values, data, model, active, setup],
-  () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      const id = daemonId();
-
-      // Never overwrite a draft the user has not yet chosen to continue or discard.
-      if (!id || offered.value || submittedDraft || !connected.value) return;
-
-      if (!meaningful()) return;
-
-      if (
-        saveProjectDraft(id, {
-          block: active.value,
-          data: data.value,
-          model: model.value,
-          request: values,
-          setup: setup.value,
-        })
-      )
-        savedAt.value = Date.now();
-    }, 450);
-  },
-  { deep: true },
-);
-
-async function restoreSelections(
-  dataset: ProjectDraft['dataset'],
-  chosen: ProjectDraft['model'],
-): Promise<string[]> {
-  const current = epoch;
-  const api = new CatalogApi(toRaw(props.session));
-  const missing: string[] = [];
-
-  if (dataset) {
-    try {
-      const selection = await api.resolve(dataset.root, dataset.relativePath);
-
-      if (current === epoch && selection.kind === 'file') selectData(selection);
-    } catch {
-      missing.push(dataset.relativePath);
-    }
-  }
-
-  if (chosen?.custom) {
-    try {
-      const selection = await api.selectCustomModel(chosen.id);
-
-      if (current === epoch) selectModel(selection);
-    } catch {
-      missing.push(chosen.id);
-    }
-  } else if (chosen) pendingModel.value = chosen.id;
-
-  return missing;
-}
-
-async function continueDraft() {
-  const draft = offered.value;
-
-  if (!draft) return;
-  offered.value = null;
-  setup.value = draftSetup(draft);
-  resetForm({ values: draftRequest(draft, defaults()) });
-  const missing = await restoreSelections(draft.dataset, draft.model);
-  active.value = !data.value ? 'dataset' : !draft.model ? 'model' : draft.block;
-
-  if (missing.length)
-    announce({
-      tone: 'warning',
-      title: () => t('builder.restoreIncomplete'),
-      detail: () => missing.join(', '),
-    });
-}
-
-function startFresh() {
-  const id = daemonId();
-
-  if (id) clearProjectDraft(id);
-  offered.value = null;
-  retireScope();
-  setup.value = 'automatic';
-  resetForm({ values: defaults() });
-  active.value = 'dataset';
-  savedAt.value = null;
-}
-
 /** After a submission: keep every choice, ready to swap the model and go again. */
 function another() {
+  projectDraftState.cancelRestore();
   invalidate();
   acknowledged.value = null;
   reportedRun.value = null;
   message.value = '';
-  submittedDraft = false;
+  projectDraftState.edited();
   active.value = 'model';
 }
 
@@ -492,177 +367,6 @@ function another() {
 
 function openImport() {
   importInput.value?.click();
-}
-
-async function importFile(file: File) {
-  if (file.size > CONFIG_IMPORT_LIMIT) {
-    announce({
-      tone: 'warning',
-      title: () => clientMessage(clientError('configImportTooLarge')),
-    });
-
-    return;
-  }
-
-  let imported: ReturnType<typeof parseTrainingConfig>;
-
-  try {
-    imported = parseTrainingConfig(await file.text());
-  } catch (error) {
-    announce({
-      tone: 'warning',
-      title: () => t('builder.importFailed', { file: file.name }),
-      detail: () => clientMessage(error instanceof Error ? error : String(error)),
-    });
-
-    return;
-  }
-
-  const id = daemonId();
-
-  // Field-wise snapshot (no deep clone of reactive state); environment values are copied.
-  const before = id
-    ? {
-        draft: projectDraft(id, {
-          block: active.value,
-          data: data.value,
-          model: model.value,
-          request: values,
-          setup: setup.value,
-        }),
-        environment: { ...values.runtime.environment },
-        data: data.value,
-        model: model.value,
-        inspection: datasetInspection.value,
-      }
-    : null;
-
-  offered.value = null;
-  // Fields that choose which code or checkpoint the run executes never arrive by file:
-  // like presets, an import cannot retarget executable code or checkpoints.
-  const withheld = codeFields.filter((name) => imported.config[name] !== undefined);
-
-  const applied = validDraftConfig(
-    Object.fromEntries(
-      Object.entries(imported.config).filter(([name]) => !withheld.some((code) => code === name)),
-    ),
-  );
-
-  const next = {
-    ...values.config,
-    ...applied,
-    data_path: values.config.data_path,
-    model: values.config.model,
-  };
-
-  // An import that changes nothing must not revoke an approved plan.
-  if (JSON.stringify(next) !== JSON.stringify(values.config)) setFieldValue('config', next);
-  const missing: string[] = [];
-
-  if (imported.dataPath) {
-    try {
-      const selection = await new CatalogApi(toRaw(props.session)).locate(imported.dataPath);
-
-      if (selection?.kind === 'file') selectData(selection);
-      else missing.push(imported.dataPath);
-    } catch {
-      missing.push(imported.dataPath);
-    }
-  }
-
-  if (imported.model) {
-    const known = catalogue.models.value.find((item) => item.id === imported.model);
-
-    if (known) chooseModel(known, imported.config.pretrained ?? values.config.pretrained);
-    else if (catalogue.models.value.length) {
-      try {
-        selectModel(await new CatalogApi(toRaw(props.session)).selectCustomModel(imported.model));
-      } catch {
-        missing.push(imported.model);
-      }
-    } else pendingModel.value = imported.model;
-  }
-
-  active.value = data.value ? 'training' : 'dataset';
-  // Fields that choose which code or checkpoint the run executes are never applied quietly.
-  announce({
-    tone: missing.length || withheld.length ? 'warning' : 'success',
-    title: () => t('builder.imported', { file: file.name, count: Object.keys(applied).length }),
-    detail: () =>
-      [
-        withheld.length
-          ? t('builder.importCode', { keys: withheld.map(fieldLabel).join(', ') })
-          : '',
-        missing.length ? t('builder.importMissing', { items: missing.join(', ') }) : '',
-        imported.skipped.length
-          ? t('builder.importSkipped', { keys: imported.skipped.join(', ') })
-          : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-    undo: before
-      ? () => {
-          const restored = draftRequest(before.draft, defaults());
-          resetForm({
-            values: {
-              ...restored,
-              config: {
-                ...restored.config,
-                data_path: before.data?.path ?? restored.config.data_path,
-                model: before.model?.model ?? restored.config.model,
-              },
-              runtime: { ...restored.runtime, environment: before.environment },
-            },
-          });
-          data.value = before.data;
-          model.value = before.model;
-          datasetInspection.value = before.inspection;
-          notice.value = null;
-        }
-      : undefined,
-  });
-}
-
-const codeFields: readonly TrainingFieldName[] = [
-  'import_modules',
-  'constraint',
-  'constraint_file',
-  'resume',
-];
-
-function pickedFile(event: Event) {
-  if (!(event.target instanceof HTMLInputElement)) return;
-  const file = event.target.files?.[0];
-  event.target.value = '';
-
-  if (file) void importFile(file);
-}
-
-let dragDepth = 0;
-
-function hasFiles(event: DragEvent): boolean {
-  return !!event.dataTransfer?.types.includes('Files');
-}
-
-function dragEnter(event: DragEvent) {
-  if (!hasFiles(event)) return;
-  dragDepth++;
-  dragging.value = true;
-}
-
-function dragLeave(event: DragEvent) {
-  if (!hasFiles(event)) return;
-  dragDepth = Math.max(0, dragDepth - 1);
-
-  if (!dragDepth) dragging.value = false;
-}
-
-function drop(event: DragEvent) {
-  dragDepth = 0;
-  dragging.value = false;
-  const file = event.dataTransfer?.files[0];
-
-  if (file && connected.value) void importFile(file);
 }
 
 const planCommand = computed<PlanCommand | null>(() => {
@@ -674,15 +378,6 @@ const planCommand = computed<PlanCommand | null>(() => {
     return { ok: false, reason: clientMessage(error instanceof Error ? error : String(error)) };
   }
 });
-
-function exportNotice(value: string | Error, ok: boolean, detail?: string) {
-  announce({
-    tone: ok ? 'success' : 'warning',
-    detail: detail ? () => t(detail) : undefined,
-    title: () =>
-      !(value instanceof Error) && value.startsWith('project.') ? t(value) : clientMessage(value),
-  });
-}
 
 // ---- Planning workflow (unchanged semantics) ---------------------------------------------
 
@@ -764,10 +459,7 @@ function submit() {
     if (!isCurrent()) return;
     acknowledged.value = run;
     message.value = 'project.runStarted';
-    const id = daemonId();
-
-    if (id) clearProjectDraft(id);
-    submittedDraft = true;
+    projectDraftState.submitted();
     emit('submitted', run);
   });
 }
@@ -1106,8 +798,6 @@ const savedRecently = computed(() => savedAt.value !== null);
 onBeforeUnmount(() => {
   unsubscribe?.();
   retireScope();
-  clearTimeout(saveTimer);
-  clearTimeout(noticeTimer);
 });
 
 const projectStyles = {
@@ -1143,7 +833,6 @@ const projectStyles = {
 };
 // A run clone is a one-shot import, never an old approval or old catalogue selection.
 const runCloneImport = useRunClone();
-const { isActive: isClonePageActive } = usePageActive();
 
 async function consumeRunClone(value: PendingRunClone) {
   offered.value = null;
@@ -1334,7 +1023,7 @@ watch(
             size="icon-sm"
             variant="ghost"
             :aria-label="t('builder.dismiss')"
-            @click="notice = null"
+            @click="clearNotice"
           >
             <X aria-hidden="true" />
           </Button>
