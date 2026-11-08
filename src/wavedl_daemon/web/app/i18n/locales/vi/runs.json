@@ -1,4 +1,13 @@
 {
+  "filterPlanned": "Đã lên kế hoạch",
+  "startRun": "Bắt đầu lượt chạy",
+  "editPlanned": "Chỉnh sửa",
+  "deletePlanned": "Xóa",
+  "deletePlanTitle": "Xóa lượt chạy đã lên kế hoạch này?",
+  "deletePlanHelp": "Thao tác này xóa kế hoạch đã lưu. Lượt chạy chưa bắt đầu. Mọi bản nháp trong trình tạo đang gắn với kế hoạch này sẽ giữ lại cấu hình.",
+  "keepPlan": "Giữ kế hoạch",
+  "planChanged": "Kế hoạch này đã được chỉnh sửa hoặc xóa ở nơi khác. Danh sách lượt chạy đã được làm mới. Hãy xem lại kế hoạch hiện tại trước khi bắt đầu.",
+  "planStarted": "Lượt chạy này đã bắt đầu hoặc kế hoạch đã thay đổi. Danh sách lượt chạy đã được làm mới.",
   "evaluateOnTestData": "Đánh giá",
   "evaluateOnTestDataHint": "Đánh giá checkpoint tốt nhất trên dữ liệu kiểm tra",
   "activityStarting": "Đang khởi động…",

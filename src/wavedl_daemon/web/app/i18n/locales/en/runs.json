@@ -1,4 +1,13 @@
 {
+  "filterPlanned": "Planned",
+  "startRun": "Start run",
+  "editPlanned": "Edit",
+  "deletePlanned": "Delete",
+  "deletePlanTitle": "Delete this planned run?",
+  "deletePlanHelp": "This removes the saved plan. The run has not started. Any builder draft bound to it will keep its configuration.",
+  "keepPlan": "Keep plan",
+  "planChanged": "This plan was edited or deleted elsewhere. The run list has been refreshed. Review the current plan before starting.",
+  "planStarted": "This run has already started or its plan changed. The run list has been refreshed.",
   "evaluateOnTestData": "Test",
   "evaluateOnTestDataHint": "Evaluate the best checkpoint on test data",
   "activityStarting": "Starting…",
