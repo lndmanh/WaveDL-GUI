@@ -9,7 +9,9 @@ import type { Artifact, Checkpoint, Inventory } from '~~/types/artifact-client';
 
 export const BLOB_BUDGET = 64 * 1024 * 1024;
 
-export async function pngPreviewBlob(blob: Blob): Promise<Blob> {
+export async function pngPreviewImage(
+  blob: Blob,
+): Promise<{ blob: Blob; width: number; height: number }> {
   const header = new Uint8Array(await blob.slice(0, 33).arrayBuffer());
 
   if (
@@ -32,7 +34,11 @@ export async function pngPreviewBlob(blob: Blob): Promise<Blob> {
   )
     throw clientError('pngPixelBudget', {});
 
-  return new Blob([blob], { type: 'image/png' });
+  return { blob: new Blob([blob], { type: 'image/png' }), width, height };
+}
+
+export async function pngPreviewBlob(blob: Blob): Promise<Blob> {
+  return (await pngPreviewImage(blob)).blob;
 }
 
 const scopes = new WeakMap<
