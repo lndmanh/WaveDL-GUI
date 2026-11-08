@@ -1,7 +1,32 @@
 import type { RunView } from './daemon-api';
 
 /** Presentation-only grouping of one run page; lifecycle truth stays with the daemon. */
-export type RunFilter = 'all' | 'live' | 'completed' | 'attention';
+export type RunFilter = 'all' | 'live' | 'completed' | 'attention' | 'planned';
+
+export type RunKind = 'training' | 'evaluation' | 'evaluation-plots' | 'onnx-export' | 'plot';
+export type RunStateGroup = Exclude<RunFilter, 'all'>;
+export type RunCreatedFilter = 'any' | 'today' | 'week' | 'month';
+
+export interface RunFilterState {
+  kinds: RunKind[];
+  states: RunStateGroup[];
+  models: string[];
+  datasets: string[];
+  created: RunCreatedFilter;
+}
+
+export interface RunFilterOption<Value extends string = string> {
+  value: Value;
+  count: number;
+}
+
+export interface RunFilterCounts {
+  kinds: Record<RunKind, number>;
+  states: Record<RunFilter, number>;
+  models: RunFilterOption[];
+  datasets: RunFilterOption[];
+  created: Record<RunCreatedFilter, number>;
+}
 
 export type RunColumnId =
   | 'name'

@@ -1,5 +1,14 @@
 import type { RunState, RunView } from '~~/types/daemon-api';
-import type { RunFilter, RunGroupKey, RunGroup } from '~~/types/run-overview';
+import type {
+  RunCreatedFilter,
+  RunFilter,
+  RunFilterCounts,
+  RunFilterOption,
+  RunFilterState,
+  RunGroupKey,
+  RunGroup,
+  RunKind,
+} from '~~/types/run-overview';
 
 const LIVE_STATES: ReadonlySet<RunState> = new Set([
   'pending',
@@ -20,7 +29,120 @@ const ATTENTION_STATES: ReadonlySet<RunState> = new Set([
 
 const DAY = 86_400_000;
 
+export const RUN_KINDS: readonly RunKind[] = [
+  'training',
+  'evaluation',
+  'evaluation-plots',
+  'onnx-export',
+  'plot',
+];
+
+export function runKindOf(run: RunView): RunKind {
+  if (run.operation === 'train') return 'training';
+
+  if (run.operation === 'plot') return 'plot';
+
+  // Export is the primary output even when a test also requests plots.
+  if (run.summary?.export) return 'onnx-export';
+
+  return run.summary?.plot ? 'evaluation-plots' : 'evaluation';
+}
+
+export function createRunFilters(): RunFilterState {
+  return { kinds: [], states: [], models: [], datasets: [], created: 'any' };
+}
+
+/** Each selected value counts once; the single created-time choice counts once. */
+export function activeRunFilterCount(filters: RunFilterState): number {
+  return (
+    filters.kinds.length +
+    filters.states.length +
+    filters.models.length +
+    filters.datasets.length +
+    Number(filters.created !== 'any')
+  );
+}
+
+/** OR within a group, AND across groups; search is applied separately with runMatches. */
+export function runMatchesFilters(run: RunView, filters: RunFilterState, now: Date): boolean {
+  if (filters.kinds.length && !filters.kinds.includes(runKindOf(run))) return false;
+  const state = runFilterOf(run);
+
+  if (filters.states.length && (!state || !filters.states.includes(state))) return false;
+
+  if (filters.models.length && !filters.models.includes(run.summary?.model ?? '')) return false;
+
+  if (filters.datasets.length && !filters.datasets.includes(pathName(run.summary?.data_path)))
+    return false;
+
+  return runMatchesCreated(run, filters.created, now);
+}
+
+function runMatchesCreated(run: RunView, filter: RunCreatedFilter, now: Date): boolean {
+  if (filter === 'any') return true;
+  const created = runCreatedAt(run)?.getTime();
+  const end = now.getTime();
+  const start = filter === 'today' ? startOfDay(now) : end - (filter === 'week' ? 7 : 30) * DAY;
+
+  // Today uses local midnight; the other windows are rolling 7/30 days. Missing,
+  // invalid and future dates never match a bounded creation-time filter.
+  return created !== undefined && created >= start && created <= end;
+}
+
+/** Counts always describe the full loaded page, independent of filters and search. */
+export function runFilterCounts(runs: readonly RunView[], now: Date): RunFilterCounts {
+  const kinds: Record<RunKind, number> = {
+    training: 0,
+    evaluation: 0,
+    'evaluation-plots': 0,
+    'onnx-export': 0,
+    plot: 0,
+  };
+
+  const models = new Map<string, number>();
+  const datasets = new Map<string, number>();
+
+  const created: Record<RunCreatedFilter, number> = {
+    any: runs.length,
+    today: 0,
+    week: 0,
+    month: 0,
+  };
+
+  const windows: readonly RunCreatedFilter[] = ['today', 'week', 'month'];
+
+  for (const run of runs) {
+    kinds[runKindOf(run)]++;
+    const model = run.summary?.model;
+    const dataset = pathName(run.summary?.data_path);
+
+    if (model) models.set(model, (models.get(model) ?? 0) + 1);
+
+    if (dataset) datasets.set(dataset, (datasets.get(dataset) ?? 0) + 1);
+
+    for (const window of windows) {
+      if (runMatchesCreated(run, window, now)) created[window]++;
+    }
+  }
+
+  function options(counts: ReadonlyMap<string, number>): RunFilterOption[] {
+    return [...counts]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([value, count]) => ({ value, count }));
+  }
+
+  return {
+    kinds,
+    states: runCounts(runs),
+    models: options(models),
+    datasets: options(datasets),
+    created,
+  };
+}
+
 export function runFilterOf(run: RunView): Exclude<RunFilter, 'all'> | null {
+  if (run.state === 'planned') return 'planned';
+
   if (LIVE_STATES.has(run.state)) return 'live';
 
   if (ATTENTION_STATES.has(run.state)) return 'attention';
@@ -31,6 +153,7 @@ export function runFilterOf(run: RunView): Exclude<RunFilter, 'all'> | null {
 export function runCounts(runs: readonly RunView[]): Record<RunFilter, number> {
   const counts: Record<RunFilter, number> = {
     all: runs.length,
+    planned: 0,
     live: 0,
     completed: 0,
     attention: 0,
