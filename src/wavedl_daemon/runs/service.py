@@ -1,9 +1,9 @@
 """
 Plans, submits, cancels and reads runs on the database-owning thread.
 
-Planning commits an immutable plan and nothing else. Submit and cancel each
-append one event to the run log, and the controller does the rest. A run's
-state is always the ``status`` of its head, never stored separately.
+Planning commits a preview, immutable once submitted, and nothing else.
+Submit and cancel each append one event to the run log, and the controller does
+the rest. A run's state is always the ``status`` of its head, never stored separately.
 
 Author: Ngo Duc Manh Le (manh@nnsvn.me)
 """
@@ -42,7 +42,11 @@ from wavedl_daemon.runs.model import (
     PlanId,
     RunId,
 )
-from wavedl_daemon.storage.plans import IdempotencyConflict, canonical_request
+from wavedl_daemon.storage.plans import (
+    IdempotencyConflict,
+    RunAlreadyStarted,
+    canonical_request,
+)
 from wavedl_daemon.storage.run_log import Expect, New, Stale
 
 
@@ -342,10 +346,15 @@ class RunService:
         return self._finish_plan(payload, idempotency_key, selected())
 
     async def plan_async(
-        self, payload: dict, idempotency_key: str, pool: BoundedThreadPool
+        self,
+        payload: dict,
+        idempotency_key: str,
+        pool: BoundedThreadPool,
+        *,
+        run_id: str | None = None,
     ) -> PlanResponse:
         """Yield for filesystem work only; store access stays on this owner loop."""
-        selected = self._select_plan(payload, idempotency_key)
+        selected = self._select_plan(payload, idempotency_key, run_id=run_id)
         if isinstance(selected, PlanResponse):
             return selected
         handle = pool.submit(lambda token: selected())
@@ -355,10 +364,55 @@ class RunService:
             handle.cancel()
             await asyncio.gather(handle.wait(), return_exceptions=True)
             raise
-        return self._finish_plan(payload, idempotency_key, snapshot)
+        return self._finish_plan(payload, idempotency_key, snapshot, run_id=run_id)
+
+    def replan(self, run_id: str, payload: dict, idempotency_key: str) -> PlanResponse:
+        selected = self._select_plan(payload, idempotency_key, run_id=run_id)
+        if isinstance(selected, PlanResponse):
+            return selected
+        return self._finish_plan(payload, idempotency_key, selected(), run_id=run_id)
+
+    async def replan_async(
+        self,
+        run_id: str,
+        payload: dict,
+        idempotency_key: str,
+        pool: BoundedThreadPool,
+    ) -> PlanResponse:
+        return await self.plan_async(payload, idempotency_key, pool, run_id=run_id)
+
+    def _editable_plan(self, run_id: str) -> PlanRecord:
+        record = self._owned(run_id)
+        if self.log.head(RunId(run_id)) is not None:
+            raise RunAlreadyStarted("Run already started")
+        if record.plan.spec.paths.run_dir != self.settings.run_root / run_id:
+            raise ValueError("Stored run directory does not match the run identity")
+        return record
+
+    def _replay_plan(
+        self, canonical: str, idempotency_key: str, run_id: str | None
+    ) -> PlanRecord | None:
+        current = None if run_id is None else self._editable_plan(run_id)
+        existing = self.plans.get_by_key(idempotency_key)
+        if existing is not None:
+            if existing.request_json != canonical or (
+                run_id is not None and existing.run_id != run_id
+            ):
+                raise IdempotencyConflict("Key is bound to another request")
+            return existing
+        if current is not None and current.request_json == canonical:
+            return current
+        return None
+
+    def delete(self, run_id: str) -> None:
+        self._guard()
+        _uuid(run_id)
+        if not self.plans.delete(run_id):
+            self._editable_plan(run_id)
+            raise RuntimeError("The plan delete did not commit")
 
     def _select_plan(
-        self, payload: dict, idempotency_key: str
+        self, payload: dict, idempotency_key: str, *, run_id: str | None = None
     ) -> PlanResponse | Callable[[], _PlanningSnapshot]:
         self._guard()
         if type(idempotency_key) is not str or not 1 <= len(idempotency_key) <= 256:
@@ -368,10 +422,8 @@ class RunService:
         _bounded(payload)
         if len(canonical.encode()) > 65536:
             raise ValueError("Request exceeds bound")
-        existing = self.plans.get_by_key(idempotency_key)
+        existing = self._replay_plan(canonical, idempotency_key, run_id)
         if existing is not None:
-            if existing.request_json != canonical:
-                raise IdempotencyConflict("Key is bound to another request")
             return self._preview(existing)
         body = _object(
             payload,
@@ -446,7 +498,7 @@ class RunService:
             )
             for item in storage
         )
-        run_dir = self.settings.run_root / str(uuid4())
+        run_dir = self.settings.run_root / (str(uuid4()) if run_id is None else run_id)
 
         def resolve_paths() -> _PlanningSnapshot:
             if source is not None:
@@ -473,14 +525,19 @@ class RunService:
         return resolve_paths
 
     def _finish_plan(
-        self, payload: dict, idempotency_key: str, snapshot: _PlanningSnapshot
+        self,
+        payload: dict,
+        idempotency_key: str,
+        snapshot: _PlanningSnapshot,
+        *,
+        run_id: str | None = None,
     ) -> PlanResponse:
         self._guard()
         # Another request or a controller tick may have run during resolution.
-        existing = self.plans.get_by_key(idempotency_key)
+        existing = self._replay_plan(
+            canonical_request(payload), idempotency_key, run_id
+        )
         if existing is not None:
-            if existing.request_json != canonical_request(payload):
-                raise IdempotencyConflict("Key is bound to another request")
             return self._preview(existing)
         if snapshot.spec.checkpoint_source is not None:
             self._checkpoint_source(payload["checkpoint_source"])
@@ -489,9 +546,17 @@ class RunService:
         )
         if plan.target != snapshot.backend_name or plan.spec != snapshot.spec:
             raise ValueError("Backend changed the approved execution identity")
-        record = self.plans.put(
-            plan, idempotency_key=idempotency_key, request_payload=payload
-        )
+        if run_id is None:
+            record = self.plans.put(
+                plan, idempotency_key=idempotency_key, request_payload=payload
+            )
+        else:
+            if not self.plans.replace(
+                plan, idempotency_key=idempotency_key, request_payload=payload
+            ):
+                self._editable_plan(run_id)
+                raise RuntimeError("The plan update did not commit")
+            record = self._owned(run_id)
         return self._preview(record)
 
     def _checkpoint_source(self, value: object) -> CheckpointSource:
