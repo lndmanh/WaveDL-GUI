@@ -19,7 +19,7 @@ from wavedl_daemon.runs.model import ObservationFailed, SlurmHandle
 from wavedl_daemon.storage.ownership import require_dispatch
 
 from .contracts import UnsupportedPlan
-from .slurm_observation import corroborates, observe_cluster
+from .slurm_observation import UnknownJobs, corroborates, observe_cluster
 from .slurm_plan import SlurmPlanner, SlurmSite, job_name
 
 
@@ -76,6 +76,22 @@ class SlurmBackend:
             result = self.runner.run(argv)
         except (RuntimeError, OSError) as error:
             raise ValueError(f"{argv[0]} unavailable: {error}") from error
+        if (
+            argv[0] == "squeue"
+            and result.returncode
+            and not (
+                result.timed_out
+                or result.cancelled
+                or result.stdout_truncated
+                or result.stderr_truncated
+            )
+            and result.stderr.strip()
+            in {
+                b"slurm_load_jobs error: Invalid job id specified",
+                b"squeue: error: Invalid job id specified",
+            }
+        ):
+            raise UnknownJobs("Requested scheduler job no longer exists")
         if (
             result.returncode
             or result.timed_out

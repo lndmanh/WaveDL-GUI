@@ -118,6 +118,10 @@ def _restart_count(row: dict[str, str]) -> int:
     return int(values[0])
 
 
+class UnknownJobs(ValueError):
+    """A complete squeue reply refused one or more requested job IDs."""
+
+
 def observe_cluster(
     query: Callable[[tuple[str, ...]], str],
     *,
@@ -129,27 +133,36 @@ def observe_cluster(
     """Observe ``jobs`` (job ID to run ID) on one cluster.
 
     ``query`` returns stdout or raises ValueError. A squeue failure fails the
-    batch. The controller is asked about each job squeue lists, since only it
+    batch, except unknown IDs are retried individually to establish absence.
+    The controller is asked about each job squeue lists, since only it
     knows a live job's restart count. The controller and accounting may each
     be missing, as long as the other still proves the job's state and restart
     count. ``since`` (UTC) bounds accounting, so a reused job ID's old records
     are never read.
     """
-    queue = _rows(
-        query(
-            (
-                "squeue",
-                "--noheader",
-                "--local",
-                "--clusters",
-                cluster,
-                f"--user={owner}",
-                "--states=all",
-                "--format=%i|%u|%j|%T|%r|%k",
-            )
-        ),
-        jobs,
+    queue_command = (
+        "squeue",
+        "--noheader",
+        "--local",
+        "--clusters",
+        cluster,
+        f"--user={owner}",
+        "--states=all",
+        "--format=%i|%u|%j|%T|%r|%k",
     )
+    try:
+        queued = query((*queue_command, f"--jobs={','.join(jobs)}"))
+    except UnknownJobs:
+        # Older Slurm rejects the batch when just one finished job was purged.
+        # Retry individually so its missing ID cannot hide live peers.
+        rows = []
+        for job in jobs:
+            try:
+                rows.append(query((*queue_command, f"--jobs={job}")))
+            except UnknownJobs:
+                pass
+        queued = "\n".join(rows)
+    queue = _rows(queued, jobs)
     failures = []
     try:
         accounting = query(

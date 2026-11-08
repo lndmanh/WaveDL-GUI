@@ -335,6 +335,43 @@ def test_queries_are_batched_per_cluster():
     assert all(observation.terminal for observation in result.values())
     assert [call[0] for call in runner.calls] == ["squeue", "sacct"]
     assert "42,43" in runner.calls[1]
+    assert "--jobs=42,43" in runner.calls[0]
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        b"slurm_load_jobs error: Invalid job id specified\n",
+        b"squeue: error: Invalid job id specified\n",
+    ],
+)
+def test_missing_job_in_restricted_batch_does_not_hide_live_peer(diagnostic):
+    first, second = run(), run("43")
+
+    class VanishingRunner(Runner):
+        def run(self, argv):
+            if argv[0] == "squeue" and argv[-1] != "--jobs=43":
+                self.calls.append(argv)
+                return ProcessResult(1, b"", diagnostic)
+            return super().run(argv)
+
+    runner = VanishingRunner(scontrol=controller(second, "RUNNING"))
+    result = observe(runner, first, second)
+    assert result[first[0]].terminal
+    assert result[second[0]].phase == Phase.RUNNING
+    assert [call[-1] for call in runner.calls if call[0] == "squeue"] == [
+        "--jobs=42,43",
+        "--jobs=42",
+        "--jobs=43",
+    ]
+
+
+def test_invalid_job_diagnostic_on_incomplete_query_is_not_absence():
+    target = run()
+    failure = ProcessResult(
+        1, b"", b"slurm_load_jobs error: Invalid job id specified", timed_out=True
+    )
+    assert isinstance(observe(Runner(squeue=failure), target), ObservationFailed)
 
 
 def test_the_controller_is_asked_only_about_listed_jobs():
