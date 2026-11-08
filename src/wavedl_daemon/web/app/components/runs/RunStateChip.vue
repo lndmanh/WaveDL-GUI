@@ -52,7 +52,7 @@ const stateMeta: Readonly<
   completed: { icon: CircleCheck, iconName: 'circle-check', tone: 'success' },
   failed: { icon: CircleX, iconName: 'circle-x', tone: 'destructive' },
   cancelled: { icon: Ban, iconName: 'ban', tone: 'secondary' },
-  submission_unknown: { icon: CircleHelp, iconName: 'circle-help', tone: 'warning', dashed: true },
+  submission_unknown: { icon: Loader2, iconName: 'loader-2', tone: 'secondary' },
   terminal_unknown: { icon: CircleHelp, iconName: 'circle-help', tone: 'warning', dashed: true },
   observation_unavailable: { icon: EyeOff, iconName: 'eye-off', tone: 'secondary', dashed: true },
   supervision_lost: { icon: Unplug, iconName: 'unplug', tone: 'warning', dashed: true },
@@ -68,7 +68,9 @@ const props = defineProps<{
 const { t } = useI18n({ useScope: 'global' });
 const tooltipOpen = shallowRef(false);
 const metadata = computed(() => stateMeta[props.run.state]);
-const uncertain = computed(() => Boolean(props.run.uncertainty || metadata.value.dashed));
+const loading = computed(() => props.run.state === 'submission_unknown');
+const runUncertain = computed(() => !loading.value && props.run.uncertainty);
+const uncertain = computed(() => Boolean(runUncertain.value || metadata.value.dashed));
 const activity = computed(() => runActivityMessageKeysFor(props.run));
 const activityLabel = computed(() => (activity.value ? t(activity.value.label) : null));
 const activityHint = computed(() => (activity.value?.hint ? t(activity.value.hint) : null));
@@ -92,7 +94,9 @@ const badgeVariant = computed<'outline' | Exclude<StateTone, 'blue'>>(() =>
 );
 
 const tooltipNeeded = computed(
-  () => uncertain.value || props.stale === true || Boolean(props.explanation || activityHint.value),
+  () =>
+    !loading.value &&
+    (uncertain.value || props.stale === true || Boolean(props.explanation || activityHint.value)),
 );
 
 const tooltipNotes = computed(() => [
@@ -114,13 +118,13 @@ const tooltipNotes = computed(() => [
             :variant="badgeVariant"
             :class="chipClasses"
             :data-run-state="run.state"
-            :title="accessibleLabel"
+            :title="loading ? undefined : accessibleLabel"
             :data-run-icon="metadata.iconName"
             :data-effective-icon="
-              run.uncertainty && run.state !== 'running' ? 'circle-help' : metadata.iconName
+              runUncertain && run.state !== 'running' ? 'circle-help' : metadata.iconName
             "
             :data-uncertainty-icon="
-              run.uncertainty && run.state === 'running' ? 'circle-help' : undefined
+              runUncertain && run.state === 'running' ? 'circle-help' : undefined
             "
             :data-run-tone="metadata.tone"
             :data-uncertain="uncertain ? 'true' : 'false'"
@@ -131,27 +135,29 @@ const tooltipNotes = computed(() => [
             @keydown.enter.prevent.stop="tooltipOpen = !tooltipOpen"
             @keydown.space.prevent.stop="tooltipOpen = !tooltipOpen"
             :tabindex="tooltipNeeded ? 0 : undefined"
-            :aria-label="`${accessibleLabel}${stale ? t('runs.stale') : ''}${run.uncertainty ? t('runs.uncertain') : ''}`"
+            :aria-label="`${accessibleLabel}${stale ? t('runs.stale') : ''}${runUncertain ? t('runs.uncertain') : ''}`"
           >
             <WifiOff v-if="stale" data-lucide-icon="wifi-off" aria-hidden="true" />
             <component
-              :is="run.uncertainty && run.state !== 'running' ? CircleHelp : metadata.icon"
+              :is="runUncertain && run.state !== 'running' ? CircleHelp : metadata.icon"
               :data-lucide-icon="
-                run.uncertainty && run.state !== 'running' ? 'circle-help' : metadata.iconName
+                runUncertain && run.state !== 'running' ? 'circle-help' : metadata.iconName
               "
               :class="
-                run.state === 'running' ? 'animate-spin motion-reduce:animate-none' : undefined
+                run.state === 'running' || loading
+                  ? 'animate-spin motion-reduce:animate-none'
+                  : undefined
               "
               aria-hidden="true"
             />
             <CircleHelp
-              v-if="run.uncertainty && run.state === 'running'"
+              v-if="runUncertain && run.state === 'running'"
               data-lucide-icon="circle-help"
               aria-hidden="true"
             />
             <span>{{ activityLabel ?? label }}</span>
             <span v-if="stale">{{ t('runs.stale') }}</span>
-            <span v-if="run.uncertainty">{{ t('runs.uncertain') }}</span>
+            <span v-if="runUncertain">{{ t('runs.uncertain') }}</span>
           </Badge>
         </TooltipTrigger>
         <TooltipContent v-if="tooltipNeeded">
