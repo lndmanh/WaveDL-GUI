@@ -355,7 +355,11 @@ const projectStyles = {
 };
 </script>
 <template>
-  <InspectorPanel :title="t('builder.modelTitle')" title-hidden>
+  <InspectorPanel
+    :title="t('builder.modelTitle')"
+    :description="t('builder.modelDescription')"
+    title-hidden
+  >
     <div :class="projectStyles.modelToolbar">
       <div class="relative min-w-40 flex-1">
         <Search

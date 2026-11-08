@@ -325,6 +325,7 @@ const projectStyles = {
   <InspectorPanel
     :title="t('builder.trainingTitle')"
     :description="t('builder.trainingDescription')"
+    title-hidden
   >
     <template #actions>
       <div :class="projectStyles.trainingFind">

@@ -93,7 +93,11 @@ const styles = {
 </script>
 
 <template>
-  <InspectorPanel :title="t('builder.datasetTitle')" :description="t('builder.datasetDescription')">
+  <InspectorPanel
+    :title="t('builder.datasetTitle')"
+    :description="t('builder.datasetDescription')"
+    title-hidden
+  >
     <div ref="root" class="min-w-0">
       <!-- Hidden mounts enter motion-v's exit state; recreate presence only when visible. -->
       <AnimatePresence v-if="active && isActive" mode="wait" :initial="false">

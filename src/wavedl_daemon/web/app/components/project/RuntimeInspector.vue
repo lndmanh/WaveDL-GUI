@@ -168,7 +168,11 @@ const projectStyles = {
 };
 </script>
 <template>
-  <InspectorPanel :title="t('builder.runtimeTitle')" :description="t('builder.runtimeDescription')">
+  <InspectorPanel
+    :title="t('builder.runtimeTitle')"
+    :description="t('builder.runtimeDescription')"
+    title-hidden
+  >
     <template #actions>
       <SegmentedControl
         :model-value="setup"

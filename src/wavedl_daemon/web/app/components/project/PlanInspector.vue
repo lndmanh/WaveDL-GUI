@@ -63,6 +63,7 @@ const projectStyles = {
     v-else
     :title="t('builder.planTitle')"
     :description="t('builder.planDescription')"
+    title-hidden
   >
     <template v-if="plan">
       <PlanPresentation :plan="plan" :command="command" />
