@@ -1,5 +1,5 @@
 import { clientError } from '../i18n/client-messages';
-import { DaemonApi, DaemonApiError, stripBootstrapUrl } from './daemon-api';
+import { DaemonApi, DaemonApiError } from './daemon-api';
 import {
   clearSessionCredentialArea,
   removeMatchingSessionCredential,
@@ -233,25 +233,6 @@ export class ConnectionSession {
     const rejectedToken = this.#grant?.access_token;
     this.#fail(error, rejectedToken);
   }
-  async bootstrap(input: string, replaceUrl: (url: string) => void): Promise<boolean> {
-    // Strip credentials even when offline, before starting the connection work.
-    try {
-      replaceUrl(stripBootstrapUrl(input).url);
-    } catch {
-      this.#fail();
-
-      return false;
-    }
-
-    return this.#connect(async (api, signal) => {
-      const grant = await api.bootstrap(input, () => undefined);
-
-      if (!grant) return null;
-      const health = await api.health(signal);
-
-      return { health, grant };
-    }, false);
-  }
   async bootstrapCode(
     code: string | null,
     invalid = false,
@@ -311,7 +292,7 @@ export class ConnectionSession {
     handshake: (
       api: DaemonApi,
       signal: AbortSignal,
-    ) => Promise<{ health: Health; grant: SessionGrant } | null>,
+    ) => Promise<{ health: Health; grant: SessionGrant }>,
     keepSignedIn = false,
     retirementToken?: string,
     persistCredential = true,
@@ -376,14 +357,6 @@ export class ConnectionSession {
 
       if (revision !== this.#state.revision || scope.signal.aborted) {
         candidate.clearToken();
-
-        return false;
-      }
-
-      if (!result) {
-        candidate.clearToken();
-        this.#scope = null;
-        this.#publish('authentication', clientError('credentialRequired'));
 
         return false;
       }

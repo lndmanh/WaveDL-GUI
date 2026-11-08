@@ -1,8 +1,8 @@
 import type { FixtureResponse } from './fixture-schemas';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionSession, ConnectionSessionError } from '../../app/lib/connection-session';
-import { DaemonApi, DaemonApiError } from '../../app/lib/daemon-api';
-import { healthSchema } from '../../app/lib/daemon-api-schemas';
+import { DaemonApi, DaemonApiError, stripBootstrapUrl } from '../../app/lib/daemon-api';
+import { healthSchema } from '../../shared/schemas/daemon-api';
 
 const origin = 'http://localhost:8765';
 const health = { daemon_id: 'daemon-one', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 };
@@ -153,7 +153,8 @@ describe('browser connection authority', () => {
 
     vi.stubGlobal('fetch', receiverSensitive);
     const bootstrapped = new ConnectionSession({ origin, buildId: '1.8.1' });
-    expect(await bootstrapped.bootstrap(`${origin}/?bootstrap=secret`, () => undefined)).toBe(true);
+    const stripped = stripBootstrapUrl(`${origin}/?bootstrap=secret`);
+    expect(await bootstrapped.bootstrapCode(stripped.code, stripped.invalid)).toBe(true);
     const manual = new ConnectionSession({ origin, buildId: '1.8.1' });
     expect(await manual.connect('credential')).toBe(true);
     const direct = new DaemonApi(origin, { buildId: '1.8.1' });
@@ -182,39 +183,31 @@ describe('browser connection authority', () => {
     });
 
     const owner = session(fetcher);
-    expect(
-      await owner.bootstrap(`${origin}/?bootstrap=secret&token=secret&view=runs#private`, (url) => {
-        clean = url;
-      }),
-    ).toBe(true);
+    const stripped = stripBootstrapUrl(
+      `${origin}/?bootstrap=secret&token=secret&view=runs#private`,
+    );
+    clean = stripped.url;
+    expect(await owner.bootstrapCode(stripped.code, stripped.invalid)).toBe(true);
     expect(owner.snapshot().health).toEqual(health);
     expect(JSON.stringify(owner.snapshot())).not.toContain('private-token');
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it('strips bootstrap secrets while offline, without making any request', async () => {
     const fetcher = vi.fn<typeof fetch>();
-    let clean = '';
     const owner = session(fetcher, false);
-    expect(
-      await owner.bootstrap(`${origin}/?bootstrap=secret`, (url) => {
-        clean = url;
-      }),
-    ).toBe(false);
-    expect(clean).toBe(`${origin}/`);
+    const stripped = stripBootstrapUrl(`${origin}/?bootstrap=secret`);
+    expect(stripped.url).toBe(`${origin}/`);
+    expect(await owner.bootstrapCode(stripped.code, stripped.invalid)).toBe(false);
     expect(fetcher).not.toHaveBeenCalled();
   });
   it('rejects ambiguous bootstrap and safely handles malformed input', async () => {
     const fetcher = vi.fn<typeof fetch>();
     const owner = session(fetcher);
-    let clean = '';
-    expect(
-      await owner.bootstrap(`${origin}/?bootstrap=one&bootstrap=two`, (url) => {
-        clean = url;
-      }),
-    ).toBe(false);
-    expect(clean).toBe(`${origin}/`);
+    const stripped = stripBootstrapUrl(`${origin}/?bootstrap=one&bootstrap=two`);
+    expect(stripped).toEqual({ url: `${origin}/`, code: null, invalid: true });
+    expect(await owner.bootstrapCode(stripped.code, stripped.invalid)).toBe(false);
     expect(owner.snapshot().status).toBe('authentication');
-    expect(await owner.bootstrap('secret malformed URL', () => undefined)).toBe(false);
+    expect(() => stripBootstrapUrl('secret malformed URL')).toThrow();
     expect(JSON.stringify(owner.snapshot())).not.toContain('secret malformed');
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -227,6 +220,29 @@ describe('browser connection authority', () => {
     expect(await owner.connect('credential')).toBe(false);
     expect(owner.snapshot().status).toBe(status);
     expect(owner.api).toBeNull();
+  });
+  it.each([
+    ['grant identity', { ...health, daemon_id: 'daemon-two' }, 'skew'],
+    ['build', { ...health, build_id: '2.0.0' }, 'skew'],
+    ['protocol', { ...health, protocol_min: 2, protocol_max: 2 }, 'skew'],
+    ['malformed health', { daemon_id: 'private-response' }, 'error'],
+  ])('fails closed on bootstrap %s mismatch', async (_name, body, status) => {
+    const owner = session(async (input) =>
+      String(input).endsWith('/api/bootstrap')
+        ? json({
+            token_type: 'Bearer',
+            access_token: `session-${'d'.repeat(35)}`,
+            expires_at: Date.now() + 86_400_000,
+            daemon_id: health.daemon_id,
+          })
+        : json(body),
+    );
+
+    const stripped = stripBootstrapUrl(`${origin}/?bootstrap=secret`);
+    expect(await owner.bootstrapCode(stripped.code, stripped.invalid)).toBe(false);
+    expect(owner.snapshot().status).toBe(status);
+    expect(owner.api).toBeNull();
+    expect(owner.sessionCredential).toBeNull();
   });
   it('marks only an actual build-id mismatch as eligible for the reload prompt', async () => {
     const buildMismatch = session(async () => json({ ...health, build_id: '2.0.0' }));
@@ -360,7 +376,8 @@ describe('browser connection authority', () => {
       return new Promise<Response>(() => undefined);
     });
 
-    const pending = owner.bootstrap(`${origin}/?bootstrap=secret`, () => undefined);
+    const stripped = stripBootstrapUrl(`${origin}/?bootstrap=secret`);
+    const pending = owner.bootstrapCode(stripped.code, stripped.invalid);
     await vi.advanceTimersByTimeAsync(1001);
     expect(await pending).toBe(false);
     expect(signal?.aborted).toBe(true);

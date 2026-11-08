@@ -2,7 +2,7 @@ import { ConnectionSession as BrowserConnectionSession } from '../../app/lib/con
 
 export type { ConnectionState } from '../../types/connection-session';
 
-import { healthSchema } from '../../app/lib/daemon-api-schemas';
+import { healthSchema } from '../../shared/schemas/daemon-api';
 import type { ConnectionOptions } from '../../types/connection-session';
 
 /** Add the session endpoints to domain fixtures without altering their API responses. */

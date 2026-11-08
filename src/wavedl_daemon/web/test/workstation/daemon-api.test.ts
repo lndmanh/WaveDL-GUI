@@ -942,7 +942,7 @@ describe('daemon transport', () => {
     );
 
     const pending = expect(
-      api.bootstrap(`${origin}/?bootstrap=once`, () => undefined),
+      api.exchangeBootstrapCode('once'),
     ).rejects.toThrow('Your access key changed');
 
     // Let the response reader begin before revoking its connection scope.
@@ -1054,10 +1054,12 @@ describe('daemon transport', () => {
     });
 
     const api = new DaemonApi(origin, {}, fetcher);
-    await api.bootstrap(`${origin}/?bootstrap=once&token=secret&tab=runs#secret`, (url) => {
-      order.push('strip');
-      expect(url).toBe(`${origin}/?tab=runs`);
-    });
+    const stripped = stripBootstrapUrl(`${origin}/?bootstrap=once&token=secret&tab=runs#secret`);
+    order.push('strip');
+    expect(stripped.url).toBe(`${origin}/?tab=runs`);
+
+    if (stripped.code === null || stripped.invalid) throw new Error('Expected one bootstrap code');
+    await api.exchangeBootstrapCode(stripped.code);
     expect(order).toEqual(['strip', 'fetch']);
     expect(api.authenticated).toBe(true);
     expect(JSON.stringify(api)).not.toContain(token);
@@ -1065,14 +1067,12 @@ describe('daemon transport', () => {
     api.clearToken();
     expect(api.authenticated).toBe(false);
   });
-  it('rejects duplicate bootstrap codes after removing them', async () => {
-    const fetcher = vi.fn<typeof fetch>();
-    const replace = vi.fn();
-    await expect(
-      new DaemonApi(origin, {}, fetcher).bootstrap(`${origin}/?bootstrap=a&bootstrap=b`, replace),
-    ).rejects.toMatchObject({ code: 'authentication' });
-    expect(replace).toHaveBeenCalledWith(`${origin}/`);
-    expect(fetcher).not.toHaveBeenCalled();
+  it('marks duplicate bootstrap codes invalid after removing them', () => {
+    expect(stripBootstrapUrl(`${origin}/?bootstrap=a&bootstrap=b`)).toEqual({
+      url: `${origin}/`,
+      code: null,
+      invalid: true,
+    });
     expect(stripBootstrapUrl(`${origin}/?ACCESS_TOKEN=x&ok=y`).url).toBe(`${origin}/?ok=y`);
   });
   it('re-prompts on 401 and forgets the credential', async () => {

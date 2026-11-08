@@ -2,6 +2,7 @@
 import type { FixtureResponse } from './fixture-schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionSession } from '../../app/lib/connection-session';
+import { stripBootstrapUrl } from '../../app/lib/daemon-api';
 import { translateClientDiagnostic } from '../../app/i18n/client-messages';
 import { credentialSchema } from '../../shared/schemas/session-credential';
 import { loadSessionCredential, SESSION_CREDENTIAL_KEY } from '../../app/lib/session-credential';
@@ -141,6 +142,54 @@ describe('resumable browser session', () => {
     expect(loadSessionCredential({}, origin)?.credential.token).toBe(fresh);
     owner.dispose();
   });
+
+  it.each(['detach', 'new bootstrap'])(
+    'does not persist a late bootstrap response after %s',
+    async (retirement) => {
+      const stale = `session-${'r'.repeat(35)}`;
+      const fresh = `session-${'s'.repeat(35)}`;
+      let respond: ((response: Response) => void) | undefined;
+      let first = true;
+
+      const owner = session(async (input) => {
+        if (new URL(String(input)).pathname === '/api/health') return json(health);
+
+        if (first) {
+          first = false;
+
+          return new Promise<Response>((resolve) => {
+            respond = resolve;
+          });
+        }
+
+        return json(grant(fresh));
+      });
+
+      const stripped = stripBootstrapUrl(`${origin}/?bootstrap=old-code`);
+      window.history.replaceState(null, '', stripped.url);
+      const pending = owner.bootstrapCode(stripped.code, stripped.invalid);
+
+      if (retirement === 'detach') owner.detach();
+      else expect(await owner.bootstrapCode('new-code')).toBe(true);
+      respond?.(json(grant(stale)));
+      expect(await pending).toBe(false);
+      // Flush the ignored transport's remaining continuations before inspecting storage.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(owner.sessionCredential?.token).toBe(retirement === 'detach' ? undefined : fresh);
+      const stored = window.sessionStorage.getItem(SESSION_CREDENTIAL_KEY);
+      expect(stored ?? '').not.toContain(stale);
+
+      if (retirement === 'detach') {
+        expect(owner.snapshot().status).toBe('disconnected');
+        expect(stored).toBeNull();
+      } else {
+        expect(owner.snapshot().status).toBe('connected');
+        expect(credentialSchema.parse(JSON.parse(stored ?? 'null')).token).toBe(fresh);
+      }
+
+      owner.dispose();
+    },
+  );
 
   it('resumes with health only and preserves the stored token and grant expiry', async () => {
     window.sessionStorage.setItem(SESSION_CREDENTIAL_KEY, JSON.stringify(credential));

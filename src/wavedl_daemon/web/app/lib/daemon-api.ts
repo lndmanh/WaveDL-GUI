@@ -343,20 +343,6 @@ export class DaemonApi {
     this.#credentialRevision++;
     this.#scopeRevision++;
   }
-  async bootstrap(input: string, replaceUrl: (url: string) => void): Promise<SessionGrant | null> {
-    const stripped = stripBootstrapUrl(input);
-    replaceUrl(stripped.url); // Synchronous removal MUST precede the first request.
-
-    if (new URL(stripped.url).origin !== this.origin)
-      throw DaemonApiError.fromKey('identity', 'bootstrapOriginDiffers');
-
-    if (stripped.invalid)
-      throw DaemonApiError.fromKey('authentication', 'ambiguousBootstrapCredential');
-
-    if (stripped.code === null) return null;
-
-    return this.exchangeBootstrapCode(stripped.code);
-  }
   async exchangeBootstrapCode(code: string, signal?: AbortSignal): Promise<SessionGrant> {
     if (!/^[A-Za-z0-9._~+/=-]{1,4096}$/.test(code))
       throw DaemonApiError.fromKey('authentication', 'invalidBootstrapCredential');
