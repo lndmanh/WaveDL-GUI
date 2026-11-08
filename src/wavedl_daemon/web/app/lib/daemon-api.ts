@@ -365,7 +365,8 @@ export class DaemonApi {
     if (signal?.aborted) throw DaemonApiError.fromKey('http', 'sessionRotationWasInterrupted');
     const revision = this.#credentialRevision;
     const presented = this.#token;
-    let release!: () => void;
+    // The executor runs synchronously, so this is replaced before any await.
+    let release = (): void => undefined;
     this.#rotation = new Promise<void>((resolve) => {
       release = resolve;
     });
