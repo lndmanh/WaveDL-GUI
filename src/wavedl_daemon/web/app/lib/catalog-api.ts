@@ -69,6 +69,7 @@ export class CatalogApi {
           return await api.read(
             '/api/host',
             AbortSignal.any([requestSignal, AbortSignal.timeout(45_000)]),
+            { timeoutMs: 45_000 },
           );
         } catch {
           return null;
@@ -169,25 +170,48 @@ export class CatalogApi {
       { signal },
     );
   }
+  /** Resolve each browse root once for a batch of host-path lookups. */
+  async locations(signal?: AbortSignal, roots?: readonly string[]): Promise<readonly DataSelection[]> {
+    const locations: DataSelection[] = [];
+
+    for (const root of roots ?? await this.roots(signal)) {
+      try {
+        locations.push(await this.resolve(root, '', signal));
+      } catch (error) {
+        if (signal?.aborted) throw error;
+      }
+    }
+
+    return locations;
+  }
   /**
    * Maps an absolute host path (from an imported config) onto a configured browse
    * root. Null when no root contains it; the daemon still verifies the final path.
    */
-  async locate(path: string, signal?: AbortSignal): Promise<DataSelection | null> {
+  async locate(
+    path: string,
+    signal?: AbortSignal,
+    locations?: readonly DataSelection[],
+  ): Promise<DataSelection | null> {
     const parsed = datasetHostPathSchema.safeParse(path);
 
     if (!parsed.success) return null;
     const target = parsed.data.replaceAll('\\', '/');
 
-    for (const root of await this.roots(signal)) {
-      let base: DataSelection;
+    const roots = locations?.map((location) => location.root) ?? await this.roots(signal);
 
-      try {
-        base = await this.resolve(root, '', signal);
-      } catch (error) {
-        // One unreadable root must not hide a match under another.
-        if (signal?.aborted) throw error;
-        continue;
+    for (const root of roots) {
+      let base = locations?.find((location) => location.root === root);
+
+      if (base) this.assertSelection(base);
+      else {
+        try {
+          base = await this.resolve(root, '', signal);
+        } catch (error) {
+          // One unreadable root must not hide a match under another.
+          if (signal?.aborted) throw error;
+          continue;
+        }
       }
 
       const prefix = base.path.replaceAll('\\', '/').replace(/\/?$/, '/');

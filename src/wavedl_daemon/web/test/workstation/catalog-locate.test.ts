@@ -76,7 +76,7 @@ async function setup(
       String(url).endsWith('/api/browse/resolve') ? [resolveBody(init)] : [],
     );
 
-  return { api: new CatalogApi(session), fetcher, resolved };
+  return { api: new CatalogApi(session), session, fetcher, resolved };
 }
 
 describe('locating imported dataset paths', () => {
@@ -98,6 +98,54 @@ describe('locating imported dataset paths', () => {
       { root: 'scratch', path: '' },
       { root: 'scratch', path: 'runs/2026/train.npz' },
     ]);
+  });
+
+  it('reuses scoped root locations across a batch without repeating root requests', async () => {
+    const { api, fetcher, resolved } = await setup();
+    const roots = await api.roots();
+    const locations = await api.locations(undefined, roots);
+    const before = fetcher.mock.calls.length;
+
+    expect(await api.locate('/srv/data/first.npz', undefined, locations)).toMatchObject({
+      relativePath: 'first.npz',
+    });
+    expect(await api.locate('/srv/data/second.npz', undefined, locations)).toMatchObject({
+      relativePath: 'second.npz',
+    });
+    expect(fetcher.mock.calls.slice(before)
+      .map(([url]) => new URL(String(url)).pathname)
+      .filter((path) => path !== '/api/health'))
+      .toEqual(['/api/browse/resolve', '/api/browse/resolve']);
+    expect(resolved()).toEqual([
+      { root: 'data', path: '' },
+      { root: 'scratch', path: '' },
+      { root: 'windows', path: '' },
+      { root: 'data', path: 'first.npz' },
+      { root: 'data', path: 'second.npz' },
+    ]);
+  });
+
+  it('rejects cached locations after their session detaches', async () => {
+    const { api, session, fetcher } = await setup();
+    const locations = await api.locations();
+    session.detach();
+    const before = fetcher.mock.calls.length;
+
+    await expect(api.locate('/srv/data/first.npz', undefined, locations)).rejects.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(before);
+  });
+
+  it('skips unreadable roots when collecting batch locations', async () => {
+    const { api } = await setup({
+      onResolve: (root, path) => root === 'data' && !path ? json({ detail: 'missing' }, 404) : null,
+    });
+    const locations = await api.locations();
+
+    expect(locations.map((location) => location.root)).toEqual(['scratch', 'windows']);
+    expect(await api.locate('/scratch/team/train.npz', undefined, locations)).toMatchObject({
+      root: 'scratch',
+      relativePath: 'train.npz',
+    });
   });
 
   it('maps Windows host paths with backslash separators', async () => {
