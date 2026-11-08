@@ -301,19 +301,12 @@ export const metricHealthStatusMessageKeys = {
 } as const;
 
 export const evaluationMetricMessageKeys = {
-  mae_avg: 'runs.evalMae',
-  val_mae_avg: 'runs.evalValMae',
-  r2: 'runs.evalR2',
-  val_r2: 'runs.evalValR2',
-  pearson: 'runs.evalPearson',
-  val_pearson: 'runs.evalValPearson',
-  epoch_time: 'runs.evalEpochTime',
-  total_time: 'runs.evalTotalTime',
-  mse: 'runs.evalMse',
-  rmse: 'runs.evalRmse',
-  mae_per_param: 'runs.evalMaePerParam',
-  per_param_mae: 'runs.evalPerParamMae',
-} as const;
+  r2_score: 'results.scorecard.r2',
+  pearson_corr: 'results.scorecard.pearson',
+  mae_avg: 'results.scorecard.mae',
+  rmse: 'results.scorecard.rmse',
+  relative_l2: 'results.scorecard.relativeL2',
+};
 
 export const plotMetricMessageKeys = {
   train_loss: 'runs.trainLoss',
