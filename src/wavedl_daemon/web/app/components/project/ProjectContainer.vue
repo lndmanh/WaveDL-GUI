@@ -460,7 +460,6 @@ function submit() {
 
     if (!isCurrent()) return;
     acknowledged.value = run;
-    message.value = 'project.runStarted';
     projectDraftState.submitted();
     emit('submitted', run);
   });
