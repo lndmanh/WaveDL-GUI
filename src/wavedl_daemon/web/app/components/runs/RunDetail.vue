@@ -104,8 +104,9 @@ const props = withDefaults(
 
 const artifactResourcesActive = computed(
   () =>
-    props.snapshot.run?.operation === 'test' ||
-    (isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'artifacts'),
+    props.snapshot.run?.state !== 'planned' &&
+    (props.snapshot.run?.operation === 'test' ||
+      (isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'artifacts')),
 );
 
 const runArtifacts = useRunArtifacts(
@@ -140,7 +141,9 @@ function focusTitle() {
 
 defineExpose({ focusTitle });
 
-defineEmits<{ cancel: []; replay: []; close: [] }>();
+defineEmits<{ cancel: []; replay: []; close: []; changed: [message?: string]; deleted: [] }>();
+
+const planned = computed(() => props.snapshot.run?.state === 'planned');
 
 const panelTargets = shallowReactive<Record<ShellPanelTabId, HTMLElement | null>>({
   metrics: null,
@@ -370,7 +373,7 @@ const hasEvaluation = computed(
           </div>
           <TooltipProvider>
             <div class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
-              <div class="flex items-center gap-1">
+              <div v-if="!planned" class="flex items-center gap-1">
                 <Tooltip v-if="canEvaluate">
                   <TooltipTrigger as-child>
                     <Button
@@ -476,7 +479,7 @@ const hasEvaluation = computed(
                       ><Copy aria-hidden="true" />{{ t('runs.copyRunId') }}</DropdownMenuItem
                     >
                     <DropdownMenuItem
-                      v-if="panelTargets.logs"
+                      v-if="!planned && panelTargets.logs"
                       data-testid="run-open-logs"
                       @select="shellLayout.setActiveTab('logs')"
                       ><ScrollText aria-hidden="true" />{{
@@ -589,7 +592,18 @@ const hasEvaluation = computed(
         </div>
       </header>
       <Separator />
-      <div v-if="snapshot.run?.operation === 'test'" class="min-h-0 flex-1 overflow-y-auto p-4">
+      <div v-if="planned && snapshot.run" class="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
+        <PlannedRunActions
+          :run="snapshot.run"
+          @changed="$emit('changed', $event)"
+          @deleted="$emit('deleted')"
+        />
+        <RunConfigurationPanel :key="snapshot.run.run_id" :run="snapshot.run" :active="isActive" />
+      </div>
+      <div
+        v-else-if="snapshot.run?.operation === 'test'"
+        class="min-h-0 flex-1 overflow-y-auto p-4"
+      >
         <EvaluationResultsPanel
           v-if="hasEvaluation && snapshot.run"
           :key="snapshot.run.run_id"
@@ -633,7 +647,7 @@ const hasEvaluation = computed(
     @download="runArtifacts.consume"
   />
   <!-- Keep companion content mounted, but park it off-document while this page is cached. -->
-  <template v-if="parkedPanel">
+  <template v-if="parkedPanel && !planned">
     <Teleport
       v-for="panel in SHELL_PANEL_TABS"
       :key="panel.id"

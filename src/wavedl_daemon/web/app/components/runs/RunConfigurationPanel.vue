@@ -94,7 +94,10 @@ const document = computed(() => {
 });
 
 const canClone = computed(
-  () => props.run.operation === 'train' && document.value?.review.operation === 'train',
+  () =>
+    props.run.state !== 'planned' &&
+    props.run.operation === 'train' &&
+    document.value?.review.operation === 'train',
 );
 
 const command = computed<PlanCommand | null>(() => {

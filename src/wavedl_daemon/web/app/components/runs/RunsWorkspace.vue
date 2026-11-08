@@ -15,6 +15,7 @@ const emit = defineEmits<{
   connectionError: [error: DaemonApiError];
   select: [runId: string | null];
   unknownRun: [runId: string];
+  planned: [value: boolean];
 }>();
 
 const {
@@ -62,6 +63,28 @@ function choose(runId: string) {
   if (isActive.value && !shellLayout.isCanvasExpanded.value && runId !== activeRunId.value)
     emit('select', runId);
 }
+
+const planNotice = shallowRef('');
+
+function changed(notice = '') {
+  planNotice.value = notice;
+  replay();
+  void refresh();
+}
+
+function deleted() {
+  close();
+  dismiss();
+  void refresh();
+}
+
+watch(
+  () => selected.value?.run?.state,
+  (state) => emit('planned', state === 'planned'),
+  {
+    immediate: true,
+  },
+);
 
 function dismiss() {
   if (isActive.value) emit('select', null);
@@ -144,6 +167,10 @@ watch(
         <CircleAlert aria-hidden="true" />
         <AlertDescription>{{ clientMessage(message) }}</AlertDescription>
       </Alert>
+      <Alert v-if="planNotice" variant="warning" role="status" class="shrink-0">
+        <CircleAlert aria-hidden="true" />
+        <AlertDescription>{{ planNotice }}</AlertDescription>
+      </Alert>
       <RunList
         :runs="runs"
         :loading="loading"
@@ -171,6 +198,8 @@ watch(
             :animate-entrance="entered"
             @cancel="cancel"
             @replay="replay"
+            @changed="changed"
+            @deleted="deleted"
             @close="dismiss"
           />
         </template>

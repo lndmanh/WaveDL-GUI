@@ -16,10 +16,14 @@ definePageMeta({
 
 const { state, api, reportFailure } = useWorkstation();
 const { runId, select, unknown } = useRunRoute('experiments');
+const planned = shallowRef(false);
 </script>
 
 <template>
-  <ShellPage :panel-tabs="runId && api ? SHELL_PANEL_TABS : []" data-work-page="experiments">
+  <ShellPage
+    :panel-tabs="runId && api && !planned ? SHELL_PANEL_TABS : []"
+    data-work-page="experiments"
+  >
     <RunsWorkspace
       v-if="!!api"
       :key="`${state.health?.daemon_id}:${state.revision}`"
@@ -28,6 +32,7 @@ const { runId, select, unknown } = useRunRoute('experiments');
       @connection-error="reportFailure"
       @select="select"
       @unknown-run="unknown"
+      @planned="planned = $event"
     />
   </ShellPage>
 </template>
