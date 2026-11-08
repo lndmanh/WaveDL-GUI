@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { motion, useReducedMotion } from 'motion-v';
+import type { Component } from 'vue';
 import {
+  Activity,
   ArrowLeft,
+  ChartLine,
   Copy,
   Ellipsis,
+  FlaskConical,
   Maximize2,
   Minimize2,
   OctagonX,
@@ -14,6 +18,7 @@ import {
   X,
 } from '@lucide/vue';
 import { SHELL_PANEL_TABS, shellPanelTabTargetId } from '../../shell/constants';
+import type { RunView } from '~~/types/daemon-api';
 import type { ShellPanelTabId } from '~~/types/shell';
 import { evaluationResults } from '../../lib/evaluation-results';
 import { canRequestCancellation } from '../../lib/run-monitor';
@@ -45,6 +50,12 @@ const styles = {
   facts: cn(
     "flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground [&>li+li]:before:mr-2 [&>li+li]:before:content-['·'] [&>li]:min-w-0 [&>li]:wrap-anywhere",
   ),
+};
+
+const operationIcons: Readonly<Record<RunView['operation'], Component>> = {
+  train: Activity,
+  test: FlaskConical,
+  plot: ChartLine,
 };
 
 const { t, locale } = useI18n({ useScope: 'global' });
@@ -229,14 +240,27 @@ const hasEvaluation = computed(
     <Card :class="styles.card" :aria-label="t('runs.selected')">
       <header :class="styles.header">
         <div class="flex flex-wrap items-center gap-2">
-          <h3
-            ref="title"
-            tabindex="-1"
-            class="min-w-[min(100%,10rem)] flex-1 truncate text-lg font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            :title="snapshot.run ? labels.title(snapshot.run) : undefined"
+          <div class="flex min-w-[min(100%,10rem)] flex-1 items-center gap-2">
+            <h3
+              ref="title"
+              tabindex="-1"
+              class="min-w-0 truncate text-lg font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :title="snapshot.run ? labels.title(snapshot.run) : undefined"
+            >
+              {{ snapshot.run ? labels.title(snapshot.run) : t('runs.loadingRuns') }}
+            </h3>
+            <Badge v-if="snapshot.run" variant="outline" class="shrink-0 text-muted-foreground">
+              <component :is="operationIcons[snapshot.run.operation]" aria-hidden="true" />
+              {{ labels.operation(snapshot.run) }}
+            </Badge>
+          </div>
+          <span
+            :class="styles.stream"
+            :data-stream="snapshot.stream"
+            :title="t('runs.eventConnection', { status: streamLabel })"
           >
-            {{ snapshot.run ? labels.title(snapshot.run) : t('runs.loadingRuns') }}
-          </h3>
+            <span class="sr-only">{{ t('runs.eventConnection', { status: streamLabel }) }}</span>
+          </span>
           <RunStateChip
             v-if="snapshot.run"
             :run="snapshot.run"
@@ -253,13 +277,6 @@ const hasEvaluation = computed(
             <span class="size-1.5 rounded-full bg-warning" aria-hidden="true" />
             {{ t('runs.healthWarnings', { count: healthIssues }, healthIssues) }}
           </Badge>
-          <span
-            :class="styles.stream"
-            :data-stream="snapshot.stream"
-            :title="t('runs.eventConnection', { status: streamLabel })"
-          >
-            <span class="sr-only">{{ t('runs.eventConnection', { status: streamLabel }) }}</span>
-          </span>
           <div class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
             <Button
               v-if="canEvaluate"
