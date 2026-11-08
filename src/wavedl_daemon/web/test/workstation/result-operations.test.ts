@@ -1,6 +1,6 @@
 import { jsonObjectSchema } from '../../shared/schemas/json';
 import type { FixtureResponse } from './fixture-schemas';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { inferenceDefaults, resultRequestSchema } from '../../shared/schemas/result-request';
 import { ResultOperations } from '../../app/lib/result-operations';
 import { ArtifactClient } from '../../app/lib/artifact-client';
@@ -233,6 +233,62 @@ describe('explicit published inference workflow', () => {
     workflow.invalidate();
     await expect(workflow.submit()).rejects.toThrow();
   });
+  it('clears approval on prepare and rotates the key for a different checkpoint', async () => {
+    const { workflow, draft, data, best, periodic, keys, session } = await setup();
+    workflow.prepare(draft, data, best);
+    const plan = await workflow.preview();
+    expect(workflow.approved).toBe(plan);
+    const api = session.api;
+
+    if (!api) throw new Error('Missing connected API');
+    expect(api.approvedRequest(plan)).toEqual(draft);
+    expect(() => api.approvedRequest({ ...plan })).toThrow();
+    workflow.prepare(draft, data, best);
+    expect(workflow.approved).toBeNull();
+    await expect(workflow.submit()).rejects.toThrow();
+    await workflow.preview();
+    workflow.prepare(
+      { ...draft, checkpoint_source: { run_id: periodic.runId, checkpoint: periodic.name } },
+      data,
+      periodic,
+    );
+    await workflow.preview();
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+  it.each(['invalidate', 'prepare', 'invalid prepare'])(
+    'rejects an in-flight inference preview after %s',
+    async (change) => {
+      const { workflow, draft, data, best, session, keys } = await setup();
+      const api = session.api;
+
+      if (!api) throw new Error('Missing connected API');
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const planRequest = api.plan.bind(api);
+      vi.spyOn(api, 'plan').mockImplementationOnce(async (...args) => {
+        const plan = await planRequest(...args);
+        await gate;
+
+        return plan;
+      });
+      workflow.prepare(draft, data, best);
+      const preview = expect(workflow.preview()).rejects.toMatchObject({
+        clientMessageKey: 'draftChangedPreviewAgain',
+      });
+      await vi.waitFor(() => expect(keys).toHaveLength(1));
+
+      if (change === 'invalidate') workflow.invalidate();
+      else if (change === 'prepare') workflow.prepare(draft, data, best);
+      else expect(() => workflow.prepare(draft, data, { ...best })).toThrow();
+      release();
+      await preview;
+      expect(workflow.approved).toBeNull();
+      await expect(workflow.submit()).rejects.toThrow();
+    },
+  );
   it('rejects unrelated dataset/source and stale connection grants', async () => {
     const { workflow, draft, data, best, periodic, session } = await setup();
 

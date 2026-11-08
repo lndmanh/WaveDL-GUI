@@ -4,33 +4,27 @@ import { toRaw } from 'vue';
 import { ArtifactClient } from './artifact-client';
 import { CatalogApi } from './catalog-api';
 import type { ConnectionSession } from './connection-session';
-import { DaemonApiError } from './daemon-api';
+import { RequestApproval } from './request-approval';
 import type { Checkpoint } from '~~/types/artifact-client';
 import type { DataSelection } from '~~/types/catalog-api';
 import type { PlanView, RunView } from '~~/types/daemon-api';
 
 /** Explicit checkpoint source; no filename, last attempt or host-path inference. */
 export class ResultOperations {
-  #request: ResultRequest | null = null;
-  #fingerprint = '';
-  #key = '';
-  #plan: PlanView | null = null;
-  #epoch = 0;
-  #revision = -1;
+  readonly #approval: RequestApproval;
   readonly session: ConnectionSession;
   constructor(
     session: ConnectionSession,
-    readonly keyFactory = () => crypto.randomUUID(),
+    readonly keyFactory: () => string = () => crypto.randomUUID(),
   ) {
     this.session = toRaw(session);
+    this.#approval = new RequestApproval(this.session, keyFactory);
   }
   get approved(): PlanView | null {
-    return this.#revision === this.session.snapshot().revision ? this.#plan : null;
+    return this.#approval.approved;
   }
   invalidate() {
-    this.#epoch++;
-    this.#plan = null;
-    this.#request = null;
+    this.#approval.invalidate();
   }
   prepare(draft: ResultRequest, data: DataSelection, checkpoint: Checkpoint): void {
     this.invalidate();
@@ -47,57 +41,22 @@ export class ResultOperations {
       request.checkpoint_source.checkpoint !== checkpoint.name
     )
       throw clientError('inferenceSelectionRequired', {});
-    const fingerprint = JSON.stringify(request);
-
-    if (fingerprint !== this.#fingerprint) {
-      this.#key = this.keyFactory();
-      this.#fingerprint = fingerprint;
-    }
-
-    this.#request = request;
-    this.#revision = this.session.snapshot().revision;
+    this.#approval.prepare(request);
   }
-  async preview(signal?: AbortSignal): Promise<PlanView> {
-    if (!this.#request) throw clientError('validateTheInferenceDraftFirst', {});
-
-    if (this.#revision !== this.session.snapshot().revision || !this.session.api)
-      throw clientError('inferenceValidationRequired', {});
-    const epoch = this.#epoch;
-    const request = this.#request;
-    const key = this.#key;
-
-    const plan = await this.session.perform((api, scoped) => api.plan(request, key, scoped), {
-      signal,
-    });
-
-    if (epoch !== this.#epoch) throw clientError('draftChangedPreviewAgain', {});
-    this.#revision = this.session.snapshot().revision;
-    this.#plan = plan;
-
-    return plan;
-  }
-  async submit(signal?: AbortSignal): Promise<RunView> {
-    const plan = this.approved;
-
-    if (!plan) throw clientError('inferencePreviewRequired', {});
-
-    return this.session.perform((api, scoped) => api.submit(plan, scoped), { signal });
-  }
-  async status(signal?: AbortSignal): Promise<RunView> {
-    const plan = this.approved;
-
-    if (!plan) throw clientError('previewFirst', {});
-
-    return this.session.perform(
-      async (api, scoped) => {
-        const view = await api.getRun(plan.run_id, scoped);
-
-        if (view.plan_id !== plan.plan_id || view.request_id !== plan.request_id)
-          throw DaemonApiError.fromKey('identity', 'inferencePlanMismatch');
-
-        return view;
+  preview(signal?: AbortSignal): Promise<PlanView> {
+    return this.#approval.preview(
+      {
+        requestRequired: 'validateTheInferenceDraftFirst',
+        validationRequired: 'inferenceValidationRequired',
+        draftChanged: 'draftChangedPreviewAgain',
       },
-      { signal },
+      signal,
     );
+  }
+  submit(signal?: AbortSignal): Promise<RunView> {
+    return this.#approval.submit('inferencePreviewRequired', signal);
+  }
+  status(signal?: AbortSignal): Promise<RunView> {
+    return this.#approval.status('previewFirst', 'inferencePlanMismatch', signal);
   }
 }
