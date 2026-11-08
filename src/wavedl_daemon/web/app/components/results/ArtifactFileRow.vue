@@ -1,16 +1,6 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import {
-  Download,
-  Ellipsis,
-  Eye,
-  File,
-  FileJson,
-  FileSpreadsheet,
-  Image,
-  Package,
-  ScrollText,
-} from '@lucide/vue';
+import { Download, Ellipsis, Eye } from '@lucide/vue';
 import { motion } from 'motion-v';
 import { formatBytes, pathName, relativeTime } from '../../lib/run-overview';
 import type { Artifact } from '~~/types/artifact-client';
@@ -50,22 +40,6 @@ const modified = computed(() => new Date(props.artifact.modified));
 const exactTime = computed(() => modified.value.toLocaleString(numberLocale.value));
 const size = computed(() => formatBytes(props.artifact.size, numberLocale.value));
 const modifiedTime = computed(() => relativeTime(modified.value, props.now, locale.value));
-
-const icon = computed(() => {
-  if (props.group === 'checkpoints') return Package;
-
-  if (png.value) return Image;
-
-  const path = props.artifact.path.toLowerCase();
-
-  if (path.endsWith('.json')) return FileJson;
-
-  if (path.endsWith('.csv')) return FileSpreadsheet;
-
-  if (/\.(log|txt)$/.test(path)) return ScrollText;
-
-  return File;
-});
 </script>
 
 <template>
@@ -73,13 +47,13 @@ const icon = computed(() => {
     :class="styles.row"
     :data-artifact-path="artifact.path"
     :data-artifact-size="artifact.size"
-    :initial="reducedMotion ? false : { opacity: 0 }"
-    :animate="{ opacity: 1 }"
+    :initial="false"
+    :layout="reducedMotion ? false : 'position'"
     :transition="reducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.22, 1, 0.36, 1] }"
   >
     <td class="p-0">
       <div :class="cn(styles.cell, 'flex items-center justify-center px-0')">
-        <component :is="icon" class="size-4 text-muted-foreground" aria-hidden="true" />
+        <ArtifactFileIcon :path="artifact.path" :group="group" />
       </div>
     </td>
     <td class="p-0">
@@ -158,7 +132,6 @@ const icon = computed(() => {
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                :disabled="busy"
                 :aria-label="t('results.previewFile', { path: artifact.path })"
                 @click="emit('preview', artifact)"
                 ><Eye aria-hidden="true"
