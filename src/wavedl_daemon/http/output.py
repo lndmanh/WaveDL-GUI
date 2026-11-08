@@ -16,29 +16,22 @@ from starlette.responses import Response
 
 from wavedl_daemon.execution.budget import BudgetExhausted, StorageWorkError
 from wavedl_daemon.execution.pool import WorkCancelled
-from wavedl_daemon.execution.service_host import AsyncRunService
 from wavedl_daemon.http.runs import _call
 from wavedl_daemon.http.schemas.common import API_ERRORS, NO_STORE, exact_query
 from wavedl_daemon.http.schemas.output import OutputChunk
 from wavedl_daemon.runs.output import (
     MAX_OUTPUT_OFFSET,
-    OutputSource,
     read_output,
-    resolve_output,
 )
 
 
 if TYPE_CHECKING:
     from wavedl_daemon.execution.pool import BoundedThreadPool
+    from wavedl_daemon.execution.service_host import AsyncRunService
 
 
-def output_routes(pool: BoundedThreadPool, service) -> list[APIRoute]:
+def output_routes(pool: BoundedThreadPool, service: AsyncRunService) -> list[APIRoute]:
     """Mount inside the same bearer boundary as run events and artifacts."""
-
-    async def resolve(run_id: str, attempt: int | None) -> OutputSource:
-        if isinstance(service, AsyncRunService):
-            return await service.output_source(run_id, attempt)
-        return resolve_output(service, run_id, attempt)
 
     async def output(
         run_id: str,
@@ -51,7 +44,7 @@ def output_routes(pool: BoundedThreadPool, service) -> list[APIRoute]:
                 raise ValueError("Invalid run identity")
         except ValueError:
             raise HTTPException(400, "Invalid run identity") from None
-        source = await _call(resolve, run_id, attempt)
+        source = await _call(service.output_source, run_id, attempt)
         try:
             chunk = await pool.submit(lambda token: read_output(source, offset)).wait()
         except ValueError:

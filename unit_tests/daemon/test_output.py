@@ -48,6 +48,9 @@ class OutputService:
             raise KeyError(run_id)
         return self.paths
 
+    async def output_source(self, run_id, attempt=None):
+        return resolve_output(self, run_id, attempt)
+
 
 @pytest.fixture
 def service(tmp_path):
