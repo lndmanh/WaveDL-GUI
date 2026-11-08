@@ -27,7 +27,12 @@ const props = defineProps<{
 
 defineOptions({ inheritAttrs: false });
 
-const emit = defineEmits<{ select: [block: ProjectBlock]; review: [] }>();
+const emit = defineEmits<{
+  select: [block: ProjectBlock];
+  review: [];
+  measure: [bottom: number];
+}>();
+
 const { t } = useI18n({ useScope: 'global' });
 const reduceMotion = useReducedMotion();
 const root = useTemplateRef<HTMLElement>('root');
@@ -85,7 +90,16 @@ useEventListener(document, 'scroll', updateCondensed, { capture: true, passive: 
 const expandedHeight = shallowRef<number | null>(null);
 
 useResizeObserver(card, () => {
-  if (!condensed.value && card.value) expandedHeight.value = card.value.offsetHeight;
+  const strip = root.value;
+  const surface = card.value;
+
+  if (!strip || !surface) return;
+
+  if (!condensed.value) expandedHeight.value = surface.offsetHeight;
+
+  // Share the visible card edge, not the expanded space reserved by the sticky wrapper.
+  const stickyTop = Number.parseFloat(getComputedStyle(strip).top) || 0;
+  emit('measure', stickyTop + surface.getBoundingClientRect().height);
 });
 
 const reservedSpace = computed(() =>
