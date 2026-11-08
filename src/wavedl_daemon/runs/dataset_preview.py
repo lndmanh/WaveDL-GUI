@@ -16,6 +16,8 @@ from wavedl_daemon.runs.inspection import InspectionRefused, inspect_dataset, np
 # The key priority of upstream's loader, ``wavedl/utils/data.py``.
 INPUT_KEYS = ["input_train", "input_test", "X", "data", "inputs", "features", "x"]
 OUTPUT_KEYS = ["output_train", "output_test", "Y", "labels", "outputs", "targets", "y"]
+# Twice the old 8M-element float64 cap, including both arrays and working copies.
+_PREVIEW_BYTES = 128 * 1024 * 1024
 
 
 class PreviewRefused(ValueError):
@@ -42,14 +44,23 @@ def _keys(variables):
     return keys, shapes
 
 
-def _dense(value):
+def _dense(value, byte_budget):
     import numpy as np
 
+    shape = getattr(value, "shape", None)
+    dtype = getattr(value, "dtype", np.dtype("float64"))
+    if (
+        shape is not None
+        and math.prod(shape) * max(24, 2 * dtype.itemsize + 8) > byte_budget
+    ):
+        raise PreviewRefused("Dataset is too large to preview")
     array = np.asarray(value.toarray() if hasattr(value, "toarray") else value)
+    if array.size * max(24, 2 * array.dtype.itemsize + 8) > byte_budget:
+        raise PreviewRefused("Dataset is too large to preview")
     return np.asarray(array.tolist()) if array.dtype.hasobject else array
 
 
-def _npz_rows(archive, key, indices, loaded):
+def _npz_rows(archive, key, indices, loaded, byte_budget):
     import numpy as np
 
     with archive.open(key + ".npy") as stream:
@@ -58,7 +69,12 @@ def _npz_rows(archive, key, indices, loaded):
             if key not in loaded:
                 with archive.open(key + ".npy") as member:
                     loaded[key] = np.load(member, allow_pickle=dtype.hasobject)
-            return np.stack([_dense(loaded[key][int(index)]) for index in indices])
+            rows = []
+            for index in indices:
+                row = _dense(loaded[key][int(index)], byte_budget)
+                byte_budget -= row.size * (2 * row.dtype.itemsize + 8)
+                rows.append(row)
+            return np.stack(rows)
         row_bytes = math.prod(shape[1:]) * dtype.itemsize
         rows = []
         position = 0
@@ -76,25 +92,38 @@ def _npz_rows(archive, key, indices, loaded):
 
 
 @contextmanager
-def _reader(path, keys, allow_pickle):
+def _reader(path, keys, allow_pickle, variables):
     import h5py
     import numpy as np
 
     suffix = path.suffix.lower()
     if suffix == ".npz":
         with zipfile.ZipFile(path) as archive:
+            reserved = 0
             for key in keys:
                 with archive.open(key + ".npy") as member:
-                    _, _, dtype = npy_header(member)
+                    shape, fortran, dtype = npy_header(member)
                 if dtype.hasobject and not allow_pickle:
                     raise PickleRequired("Dataset contains pickled arrays")
+                if dtype.hasobject or fortran:
+                    reserved += max(
+                        math.prod(shape) * dtype.itemsize,
+                        archive.getinfo(key + ".npy").file_size,
+                    )
+            if reserved >= _PREVIEW_BYTES:
+                raise PreviewRefused("Dataset is too large to preview")
             loaded = {}
-            yield lambda key, indices: _npz_rows(archive, key, indices, loaded)
+            yield (
+                lambda key, indices, byte_budget: _npz_rows(
+                    archive, key, indices, loaded, byte_budget
+                ),
+                reserved,
+            )
     elif suffix in {".h5", ".hdf5", ".mat"}:
         if suffix != ".mat" or h5py.is_hdf5(path):
             with h5py.File(path, "r") as file:
 
-                def rows(key, indices):
+                def rows(key, indices, byte_budget):
                     dataset = file[key]
                     # Selection authority must not be bypassed by external HDF storage.
                     if dataset.external or dataset.is_virtual:
@@ -105,12 +134,19 @@ def _reader(path, keys, allow_pickle):
                         else dataset[indices]
                     )
 
-                yield rows
+                yield rows, 0
         else:
             from scipy.io import loadmat
 
+            reserved = sum(
+                math.prod(item["shape"]) * np.dtype(item["dtype"]).itemsize
+                for item in variables
+                if item["name"] in keys
+            )
+            if reserved >= _PREVIEW_BYTES:
+                raise PreviewRefused("Dataset is too large to preview")
             arrays = loadmat(path, variable_names=keys, appendmat=False)
-            yield lambda key, indices: arrays[key][indices]
+            yield lambda key, indices, byte_budget: arrays[key][indices], reserved
     else:
         raise PreviewRefused("Unsupported dataset format")
 
@@ -169,7 +205,7 @@ def _summaries(x, y, indices, input_indices, shapes):
         stds = x_flat[:, stats].std(axis=0)
     samples = []
     for position in range(min(3, len(input_indices))):
-        row = x[position].astype(np.float64, copy=False)
+        row = x_flat[position].reshape(x[position].shape)
         # A uniform stride preserves coverage and the rank used by sample views.
         stride = 1
         while math.prod(math.ceil(size / stride) for size in row.shape) > 16384:
@@ -218,19 +254,41 @@ def preview_dataset(path, *, allow_pickle=False):
     try:
         metadata = inspect_dataset(path)
         keys, shapes = _keys(metadata["variables"])
-        indices = np.linspace(0, shapes[0][0] - 1, min(512, shapes[0][0]), dtype=int)
-        with _reader(path, keys, allow_pickle) as read:
-            inputs = next(
-                item for item in metadata["variables"] if item["name"] == keys[0]
+        variables = metadata["variables"]
+        dtypes = [
+            np.dtype(next(item["dtype"] for item in variables if item["name"] == key))
+            for key in keys
+        ]
+        with _reader(path, keys, allow_pickle, variables) as (read, reserved):
+            for position, dtype in enumerate(dtypes):
+                if dtype.hasobject:
+                    first = read(
+                        keys[position], np.array([0]), _PREVIEW_BYTES - reserved
+                    )
+                    shapes[position] = [shapes[position][0], *first.shape[1:]]
+                    dtypes[position] = first.dtype
+                    del first
+            # Account for retained rows, stacking/selection copies and float64 summaries.
+            row_bytes = [
+                math.prod(shape[1:]) * (2 * dtype.itemsize + 8)
+                for shape, dtype in zip(shapes, dtypes)
+            ]
+            available = _PREVIEW_BYTES - reserved
+            if sum(row_bytes) > available:
+                raise PreviewRefused("Dataset is too large to preview")
+            output_count = min(
+                512, shapes[0][0], (available - row_bytes[0]) // max(1, row_bytes[1])
             )
-            if np.dtype(inputs["dtype"]).hasobject:
-                first = read(keys[0], np.array([0]))
-                shapes[0] = [shapes[0][0], *first.shape[1:]]
+            indices = np.linspace(0, shapes[0][0] - 1, output_count, dtype=int)
             width = math.prod(shapes[0][1:])
-            count = min(len(indices), max(1, 8388608 // max(1, width)))
+            count = min(
+                len(indices),
+                max(1, 8388608 // max(1, width)),
+                (available - output_count * row_bytes[1]) // max(1, row_bytes[0]),
+            )
             input_indices = indices[np.linspace(0, len(indices) - 1, count, dtype=int)]
-            x = read(keys[0], input_indices)
-            y = read(keys[1], indices)
+            x = read(keys[0], input_indices, available - output_count * row_bytes[1])
+            y = read(keys[1], indices, available - x.size * (2 * x.dtype.itemsize + 8))
         if x.dtype.kind not in {"b", "i", "u", "f"} or y.dtype.kind not in {
             "b",
             "i",

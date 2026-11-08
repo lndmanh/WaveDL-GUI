@@ -85,6 +85,71 @@ def test_input_sampling_budget_and_strided_samples_cover_full_image(tmp_path):
     assert len(value["input_statistics"]["means"]) == 40
 
 
+def test_wide_outputs_reduce_sampling_within_shared_byte_budget(tmp_path):
+    path = tmp_path / "wide.h5"
+    with h5py.File(path, "w") as file:
+        file.create_dataset("inputs", shape=(1000, 2), dtype="float32")
+        file.create_dataset("outputs", shape=(1000, 50000), dtype="float32")
+    value = preview_dataset(path)
+    assert 1 <= len(value["sample_indices"]) < 512
+    assert len(value["input_sample_indices"]) <= len(value["sample_indices"])
+
+
+def test_single_row_over_budget_is_refused_before_reading(tmp_path):
+    path = tmp_path / "huge.h5"
+    with h5py.File(path, "w") as file:
+        file.create_dataset("inputs", shape=(2, 2), dtype="float32")
+        file.create_dataset("outputs", shape=(2, 20000000), dtype="float64")
+    with pytest.raises(PreviewRefused, match="Dataset is too large to preview"):
+        preview_dataset(path)
+
+
+def test_fortran_whole_array_over_budget_is_refused_before_loading(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "fortran.npz"
+    inputs = np.asfortranarray(np.zeros((1024, 20000), dtype="float64"))
+    np.savez_compressed(path, inputs=inputs, outputs=np.zeros((1024, 1)))
+    monkeypatch.setattr(
+        np, "load", lambda *args, **kwargs: pytest.fail("Loaded oversized fallback")
+    )
+    with pytest.raises(PreviewRefused, match="Dataset is too large to preview"):
+        preview_dataset(path)
+
+
+def test_object_whole_array_over_budget_is_refused_before_loading(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "objects.npz"
+    inputs = np.empty(1024, dtype=object)
+    inputs[:] = 1
+    np.savez_compressed(path, inputs=inputs, outputs=np.zeros((1024, 1)))
+    monkeypatch.setattr("wavedl_daemon.runs.dataset_preview._PREVIEW_BYTES", 4096)
+    monkeypatch.setattr(
+        np,
+        "load",
+        lambda *args, **kwargs: pytest.fail("Loaded oversized object fallback"),
+    )
+    with pytest.raises(PreviewRefused, match="Dataset is too large to preview"):
+        preview_dataset(path, allow_pickle=True)
+
+
+def test_sparse_object_row_over_budget_is_refused_before_densifying(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "sparse.npz"
+    inputs = np.empty(1, dtype=object)
+    inputs[0] = csr_matrix((1, 20000000), dtype="float64")
+    np.savez(path, inputs=inputs, outputs=np.zeros((1, 1)))
+    monkeypatch.setattr(
+        csr_matrix,
+        "toarray",
+        lambda *args, **kwargs: pytest.fail("Densified oversized row"),
+    )
+    with pytest.raises(PreviewRefused, match="Dataset is too large to preview"):
+        preview_dataset(path, allow_pickle=True)
+
+
 @pytest.mark.parametrize("suffix", [".h5", ".hdf5", ".mat"])
 def test_hdf_and_mat73_fancy_indexing_matches_logical_rows(tmp_path, suffix):
     path = tmp_path / ("data" + suffix)
