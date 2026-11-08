@@ -20,11 +20,11 @@ from starlette.middleware import Middleware
 from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse
 
+from wavedl_daemon.credentials import credential_bytes
 from wavedl_daemon.http.auth import (
     DEFAULT_ALLOWED_HOSTS,
     authority,
     bearer_token,
-    credential_bytes,
     require_auth,
     validate_origin_host,
 )

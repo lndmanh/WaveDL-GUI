@@ -9,7 +9,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from wavedl_daemon.credentials import credential_bytes
 from wavedl_daemon.http.app import create_app, read_json
+from wavedl_daemon.http.auth import credential_bytes as http_credential_bytes
 from wavedl_daemon.storage.settings import Settings
 
 
@@ -587,3 +589,40 @@ def test_internal_error_contains_no_details(app):
 def test_invalid_factory_credential_is_rejected(token):
     with pytest.raises(ValueError, match="credential"):
         create_app(None, token=token, daemon_id="daemon", build_id="build")
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~+/=-",
+        "x" * 4096,
+    ],
+)
+def test_shared_credential_validator_accepts_alphabet_and_size_boundary(token):
+    assert http_credential_bytes is credential_bytes
+    assert credential_bytes(token) == token.encode("ascii")
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        None,
+        False,
+        23,
+        [],
+        {},
+        b"token",
+        "",
+        "é",
+        "\ud800",
+        "with space",
+        "line\nbreak",
+        "token!",
+        "x" * 4097,
+    ],
+)
+def test_shared_credential_validator_rejects_invalid_inputs_without_details(token):
+    assert http_credential_bytes is credential_bytes
+    with pytest.raises(ValueError) as failure:
+        credential_bytes(token)
+    assert str(failure.value) == "Invalid daemon credential"

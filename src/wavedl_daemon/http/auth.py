@@ -12,25 +12,14 @@ from urllib.parse import urlsplit
 
 from starlette.exceptions import HTTPException
 
+from wavedl_daemon.credentials import credential_bytes
+
 
 DEFAULT_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "[::1]")
 _TOKEN = re.compile(rb"[A-Za-z0-9._~+/=-]+\Z")
 _DNS = re.compile(
     r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\Z"
 )
-
-
-def credential_bytes(token: str) -> bytes:
-    """Validate an explicitly supplied credential without creating one."""
-    if not isinstance(token, str):
-        raise ValueError("Invalid daemon credential")
-    try:
-        value = token.encode("ascii")
-    except UnicodeEncodeError:
-        raise ValueError("Invalid daemon credential") from None
-    if not _TOKEN.fullmatch(value) or len(value) > 4096:
-        raise ValueError("Invalid daemon credential")
-    return value
 
 
 def _bearer_candidate(request) -> bytes:
