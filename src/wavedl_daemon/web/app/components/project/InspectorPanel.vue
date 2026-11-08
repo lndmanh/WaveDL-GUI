@@ -26,6 +26,9 @@ const projectStyles = {
         <slot name="actions" />
       </div>
     </header>
+    <div v-if="titleHidden && $slots.actions" class="flex flex-wrap items-center justify-end gap-2">
+      <slot name="actions" />
+    </div>
     <slot />
   </section>
 </template>
