@@ -268,7 +268,12 @@ class AsyncRunService:
         return await self.host.call(invoke)
 
     async def plan(self, payload: dict, idempotency_key: str) -> PlanResponse:
-        return await self._call("plan", deepcopy(payload), idempotency_key)
+        request = deepcopy(payload)
+
+        async def invoke(session):
+            return await session.runs.plan_async(request, idempotency_key, session.pool)
+
+        return await self.host.call(invoke, concurrent_async=True)
 
     async def submit(self, plan_id: str) -> RunResponse:
         return await self._call("submit", plan_id)

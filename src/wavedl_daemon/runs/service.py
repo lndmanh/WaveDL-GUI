@@ -10,6 +10,7 @@ Author: Ngo Duc Manh Le (manh@nnsvn.me)
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import signal
@@ -49,6 +50,7 @@ from wavedl_daemon.storage.run_log import Expect, New, Stale
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from wavedl_daemon.execution.pool import BoundedThreadPool
     from wavedl_daemon.backends.contracts import Planner
     from wavedl_daemon.runs.layout import RunPaths
     from wavedl_daemon.runs.lifecycle import RunHead
@@ -61,6 +63,13 @@ if TYPE_CHECKING:
 def _uuid(value: str) -> None:
     if type(value) is not str or str(UUID(value)) != value:
         raise ValueError("Identity must be a canonical UUID")
+
+@dataclass(frozen=True)
+class _PlanningSnapshot:
+    spec: RunSpec
+    topology: Topology
+    backend_name: str
+
 
 
 @dataclass(frozen=True)
@@ -324,8 +333,32 @@ class RunService:
     def _guard(self) -> None:
         if threading.get_ident() != self._thread:
             raise RuntimeError("Run service must remain on its store owner thread")
-
     def plan(self, payload: dict, idempotency_key: str) -> PlanResponse:
+
+        selected = self._select_plan(payload, idempotency_key)
+        if isinstance(selected, PlanResponse):
+            return selected
+        return self._finish_plan(payload, idempotency_key, selected())
+
+    async def plan_async(
+        self, payload: dict, idempotency_key: str, pool: BoundedThreadPool
+    ) -> PlanResponse:
+        """Yield for filesystem work only; store access stays on this owner loop."""
+        selected = self._select_plan(payload, idempotency_key)
+        if isinstance(selected, PlanResponse):
+            return selected
+        handle = pool.submit(lambda token: selected())
+        try:
+            snapshot = await handle.wait()
+        except asyncio.CancelledError:
+            handle.cancel()
+            await asyncio.gather(handle.wait(), return_exceptions=True)
+            raise
+        return self._finish_plan(payload, idempotency_key, snapshot)
+
+    def _select_plan(
+        self, payload: dict, idempotency_key: str
+    ) -> PlanResponse | Callable[[], _PlanningSnapshot]:
         self._guard()
         if type(idempotency_key) is not str or not 1 <= len(idempotency_key) <= 256:
             raise ValueError("A bounded idempotency key is required")
@@ -412,17 +445,48 @@ class RunService:
             )
             for item in storage
         )
-        spec = build_spec(
-            self.settings.run_root / str(uuid4()),
-            operation=operation,
-            resolved_config=config,
-            runtime=selected,
-            submission_cwd=Path(cwd),
-            storage_map=mappings,
-            checkpoint_source=source,
+        run_dir = self.settings.run_root / str(uuid4())
+
+        def resolve_paths() -> _PlanningSnapshot:
+            if source is not None:
+                path = Path(source.path)
+                # Match the artifact listing's refusal of symlinked checkpoints.
+                if path.is_symlink() or not path.is_dir():
+                    raise UnsupportedPlan(
+                        f"The checkpoint source has no {source.checkpoint}"
+                    )
+            return _PlanningSnapshot(
+                build_spec(
+                    run_dir,
+                    operation=operation,
+                    resolved_config=config,
+                    runtime=selected,
+                    submission_cwd=Path(cwd),
+                    storage_map=mappings,
+                    checkpoint_source=source,
+                ),
+                topology,
+                backend_name,
+            )
+
+        return resolve_paths
+
+    def _finish_plan(
+        self, payload: dict, idempotency_key: str, snapshot: _PlanningSnapshot
+    ) -> PlanResponse:
+        self._guard()
+        # Another request or a controller tick may have run during resolution.
+        existing = self.plans.get_by_key(idempotency_key)
+        if existing is not None:
+            if existing.request_json != canonical_request(payload):
+                raise IdempotencyConflict("Key is bound to another request")
+            return self._preview(existing)
+        if snapshot.spec.checkpoint_source is not None:
+            self._checkpoint_source(payload["checkpoint_source"])
+        plan = self.backends[snapshot.backend_name].plan(
+            snapshot.spec, topology=snapshot.topology
         )
-        plan = self.backends[backend_name].plan(spec, topology=topology)
-        if plan.target != backend_name or plan.spec != spec:
+        if plan.target != snapshot.backend_name or plan.spec != snapshot.spec:
             raise ValueError("Backend changed the approved execution identity")
         record = self.plans.put(
             plan, idempotency_key=idempotency_key, request_payload=payload
@@ -453,9 +517,6 @@ class RunService:
                 "once it stopped on its own"
             )
         path = record.plan.spec.paths.output / name
-        # The artifact listing hides a symlinked checkpoint, so refuse it too.
-        if path.is_symlink() or not path.is_dir():
-            raise UnsupportedPlan(f"The checkpoint source has no {name}")
         return CheckpointSource(run_id, name, str(path))
 
     @staticmethod

@@ -408,6 +408,40 @@ def test_checkpoint_sources_are_refused_unless_ended_and_present(environment, tm
     assert len(all_plans(environment.plans)) == count
 
 
+def test_planning_rechecks_checkpoint_eligibility_after_path_resolution(
+    environment, tmp_path, monkeypatch
+):
+    from wavedl_daemon.backends.contracts import UnsupportedPlan
+
+    source = ended_train_run(environment, "source")
+    (
+        environment.service.settings.run_root / source / "output" / "best_checkpoint"
+    ).mkdir(parents=True)
+    head = environment.log.head
+    calls = []
+
+    def current_head(run_id):
+        calls.append(threading.get_ident())
+        return head(run_id) if len(calls) == 1 else None
+
+    monkeypatch.setattr(environment.log, "head", current_head)
+    owner = threading.get_ident()
+    count = len(all_plans(environment.plans))
+
+    async def run():
+        with BoundedThreadPool(WorkBudget()) as pool:
+            with pytest.raises(
+                UnsupportedPlan, match="checkpoint source cannot supply"
+            ):
+                await environment.service.plan_async(
+                    from_checkpoint(source, tmp_path), "changed-source", pool
+                )
+
+    asyncio.run(run())
+    assert calls == [owner, owner]
+    assert len(all_plans(environment.plans)) == count
+
+
 def cancelled_train_run(environment, key, ending):
     """Cancel a running train run, whose process then ends as ``ending`` says."""
     run_id = planned_and_submitted(environment, key)["run_id"]
@@ -818,13 +852,45 @@ def test_list_pages_plans_and_filters_before_offset(environment):
     request(app, "POST", "/api/runs", body={"plan_id": second["plan_id"]})
     response = request(app, "GET", "/api/runs?state=planned&limit=1&offset=1")
     assert response.status_code == 200
-    # Plans list oldest first; the offset counts matching runs only.
-    assert [run["run_id"] for run in response.json()["runs"]] == [third["run_id"]]
+    # Plans list newest first; the offset counts matching runs only.
+    assert [run["run_id"] for run in response.json()["runs"]] == [first["run_id"]]
     pending = request(app, "GET", "/api/runs?state=pending").json()["runs"]
     assert [run["run_id"] for run in pending] == [second["run_id"]]
     paged = request(app, "GET", "/api/runs?limit=2&offset=1").json()["runs"]
-    assert [run["run_id"] for run in paged] == [second["run_id"], third["run_id"]]
-    assert first["run_id"] not in [run["run_id"] for run in paged]
+    assert [run["run_id"] for run in paged] == [second["run_id"], first["run_id"]]
+    assert third["run_id"] not in [run["run_id"] for run in paged]
+
+
+def test_state_filtered_list_pages_more_than_1000_plans(environment, monkeypatch):
+    plans = [
+        environment.service.plan(payload(), f"large-page-{index}")
+        for index in range(1005)
+    ]
+    for index in (1, 1001, 1003):
+        environment.service.submit(plans[index].plan_id)
+    calls = []
+    view = environment.service._view
+
+    def lookup(record, **options):
+        calls.append(record.run_id)
+        return view(record, **options)
+
+    monkeypatch.setattr(environment.service, "_view", lookup)
+    response = request(environment.app, "GET", "/api/runs?state=pending&limit=1&offset=1")
+    assert response.status_code == 200
+    assert [run["run_id"] for run in response.json()["runs"]] == [plans[1001].run_id]
+    assert calls == [plans[1001].run_id]
+    calls.clear()
+    response = request(
+        environment.app, "GET", "/api/runs?state=planned&limit=2&offset=1000"
+    )
+    assert response.status_code == 200
+    expected = [plans[index].run_id for index in (2, 0)]
+    assert [run["run_id"] for run in response.json()["runs"]] == expected
+    assert calls == expected
+    response = request(environment.app, "GET", "/api/runs?state=pending&offset=3")
+    assert response.status_code == 200
+    assert response.json()["runs"] == []
 
 
 def test_duplicate_key_header_is_refused(environment):
@@ -971,11 +1037,11 @@ def test_filtered_progress_queries_only_the_returned_live_page(
     monkeypatch.setattr(environment.log, "latest_epoch_metric", lookup)
     response = request(app, "GET", "/api/runs?state=pending&limit=1&offset=1")
     assert response.status_code == 200
-    assert [run["run_id"] for run in response.json()["runs"]] == [plans[3]["run_id"]]
-    assert calls == [(plans[3]["run_id"], 1)]
+    assert [run["run_id"] for run in response.json()["runs"]] == [plans[1]["run_id"]]
+    assert calls == [(plans[1]["run_id"], 1)]
     calls.clear()
     response = request(app, "GET", "/api/runs?state=planned&limit=1&offset=1")
-    assert [run["run_id"] for run in response.json()["runs"]] == [plans[2]["run_id"]]
+    assert [run["run_id"] for run in response.json()["runs"]] == [plans[0]["run_id"]]
     assert calls == []
 
 

@@ -498,3 +498,64 @@ def test_opt_in_filesystem_wait_and_cleanup_do_not_block_owner_get_or_cancel():
     finally:
         release.set()
         pool.shutdown()
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_planning_resolves_off_owner_and_rechecks_idempotency(
+    tmp_path, monkeypatch, conflicting
+):
+    from wavedl_daemon.runs import service
+    from wavedl_daemon.runs.runtime_service import HostedServices
+    from wavedl_daemon.storage.plans import IdempotencyConflict
+
+    from .test_hosted_app import train_payload
+
+    entered, release = threading.Event(), threading.Event()
+    threads = []
+    build_spec = service.build_spec
+
+    def slow_paths(*args, **kwargs):
+        threads.append(threading.get_ident())
+        if len(threads) == 1:
+            entered.set()
+            assert release.wait(5)
+        return build_spec(*args, **kwargs)
+
+    services = HostedServices(
+        Settings(tmp_path / "state", tmp_path / "runs"),
+        budget=WorkBudget(max_workers=3, max_pending=2, timeout_seconds=10),
+    )
+
+    async def run():
+        await services.start()
+        runs = services.run_service
+        first = await runs.plan(train_payload(epochs=1), "first")
+        owner = await services.host.call(lambda session: threading.get_ident())
+        monkeypatch.setattr(service, "build_spec", slow_paths)
+        blocked = asyncio.create_task(runs.plan(train_payload(epochs=1), "shared"))
+        try:
+            async def wait_for_resolution():
+                while not entered.is_set():
+                    await asyncio.sleep(0.005)
+
+            await asyncio.wait_for(wait_for_resolution(), 2)
+            view = await asyncio.wait_for(runs.get(first.run_id), 0.5)
+            assert view.run_id == first.run_id
+            winner = await asyncio.wait_for(
+                runs.plan(train_payload(epochs=2 if conflicting else 1), "shared"), 2
+            )
+            release.set()
+            if conflicting:
+                with pytest.raises(IdempotencyConflict):
+                    await blocked
+            else:
+                assert await blocked == winner
+            assert len(await runs.list()) == 2
+            assert len(threads) == 2
+            assert all(thread != owner for thread in threads)
+        finally:
+            release.set()
+            await asyncio.gather(blocked, return_exceptions=True)
+            await services.close()
+
+    asyncio.run(run())
