@@ -2,7 +2,7 @@ import { clientError } from '../i18n/client-messages';
 import { trainingRequestSchema, type TrainingRequest } from '../../shared/schemas/training-request';
 import { CatalogApi } from './catalog-api';
 import type { ConnectionSession } from './connection-session';
-import { DaemonApiError } from './daemon-api';
+import { RequestApproval } from './request-approval';
 import { toRaw } from 'vue';
 import type { DataSelection, ModelSelection } from '~~/types/catalog-api';
 import type { PlanView, RunView } from '~~/types/daemon-api';
@@ -10,29 +10,25 @@ import type { PlanView, RunView } from '~~/types/daemon-api';
 /** Memory-only draft/approval scope; retries never rotate an unchanged request key. */
 export class ProjectPlan {
   readonly session: ConnectionSession;
-  #request: TrainingRequest | null = null;
-  #fingerprint = '';
-  #key = '';
-  #approved: PlanView | null = null;
-  #revision = -1;
-  #epoch = 0;
+  readonly #approval: RequestApproval;
   constructor(
     session: ConnectionSession,
-    readonly keyFactory = () => crypto.randomUUID(),
+    readonly keyFactory: () => string = () => crypto.randomUUID(),
   ) {
     this.session = toRaw(session);
+    this.#approval = new RequestApproval(this.session, keyFactory);
   }
   get approved(): PlanView | null {
-    return this.#revision === this.session.snapshot().revision ? this.#approved : null;
+    return this.#approval.approved;
   }
   get key(): string {
-    return this.#key;
+    return this.#approval.key;
   }
   invalidate(): void {
-    this.#epoch++;
-    this.#approved = null;
+    this.#approval.invalidate();
   }
   prepare(draft: TrainingRequest, data: DataSelection, model: ModelSelection): void {
+    this.invalidate();
     const catalogue = new CatalogApi(this.session);
     catalogue.assertSelection(data);
     catalogue.assertSelection(model);
@@ -46,55 +42,22 @@ export class ProjectPlan {
     const request = trainingRequestSchema.parse(draft);
 
     if (!request.storage_map?.length) delete request.storage_map;
-    const fingerprint = JSON.stringify(request);
-
-    if (fingerprint !== this.#fingerprint) {
-      this.#fingerprint = fingerprint;
-      this.#key = this.keyFactory();
-      this.#approved = null;
-    }
-
-    this.#request = request;
+    this.#approval.prepare(request);
   }
-  async preview(signal?: AbortSignal): Promise<PlanView> {
-    if (!this.#request) throw clientError('validateTheTrainingDraftFirst', {});
-    const request = this.#request;
-    const key = this.#key;
-    const epoch = this.#epoch;
-
-    const plan = await this.session.perform((api, scoped) => api.plan(request, key, scoped), {
-      signal,
-    });
-
-    if (epoch !== this.#epoch || key !== this.#key || request !== this.#request)
-      throw clientError('planningDraftChanged', {});
-    this.#revision = this.session.snapshot().revision;
-    this.#approved = plan;
-
-    return plan;
-  }
-  async submit(signal?: AbortSignal): Promise<RunView> {
-    const plan = this.approved;
-
-    if (!plan) throw clientError('trainingPreviewRequired', {});
-
-    return this.session.perform((api, scoped) => api.submit(plan, scoped), { signal });
-  }
-  async status(signal?: AbortSignal): Promise<RunView> {
-    const plan = this.approved;
-
-    if (!plan) throw clientError('submissionPreviewRequired', {});
-
-    return this.session.perform(
-      async (api, scoped) => {
-        const run = await api.getRun(plan.run_id, scoped);
-
-        if (run.plan_id !== plan.plan_id || run.request_id !== plan.request_id)
-          throw DaemonApiError.fromKey('identity', 'runPlanMismatch');
-
-        return run;
+  preview(signal?: AbortSignal): Promise<PlanView> {
+    return this.#approval.preview(
+      {
+        requestRequired: 'validateTheTrainingDraftFirst',
+        validationRequired: 'catalogSelectionStale',
+        draftChanged: 'planningDraftChanged',
       },
-      { signal },
+      signal,
     );
+  }
+  submit(signal?: AbortSignal): Promise<RunView> {
+    return this.#approval.submit('trainingPreviewRequired', signal);
+  }
+  status(signal?: AbortSignal): Promise<RunView> {
+    return this.#approval.status('submissionPreviewRequired', 'runPlanMismatch', signal);
   }
 }

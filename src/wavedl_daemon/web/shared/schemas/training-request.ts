@@ -227,9 +227,3 @@ export const customModelSchema = z.strictObject({
 export const trainingFieldMetadata = options.filter(
   (option) => option.name !== 'data_path' && option.name !== 'model',
 );
-export const daemonOwnedTrainingFields = {
-  config: 'Daemon plans use this typed configuration, not a host YAML filename.',
-  output_dir: 'The daemon owns isolated run output directories.',
-  list_models: 'Model discovery is the authenticated catalogue.',
-  mixed_precision: 'CLI alias of precision; use the single precision field.',
-};
