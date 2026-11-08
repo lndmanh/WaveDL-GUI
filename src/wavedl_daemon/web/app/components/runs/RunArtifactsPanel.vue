@@ -23,8 +23,7 @@ const {
 
 <template>
   <section class="flex min-w-0 flex-col gap-4" :aria-label="t('shell.artifacts')">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="text-sm font-semibold">{{ t('results.publications') }}</h3>
+    <div class="flex justify-end">
       <Button
         type="button"
         variant="outline"
