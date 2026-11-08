@@ -5,7 +5,6 @@ Author: Ngo Duc Manh Le (manh@nnsvn.me)
 
 from __future__ import annotations
 
-import inspect
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -35,13 +34,12 @@ from wavedl_daemon.runs.catalog import BrowseForbidden, BrowseMissing
 
 
 if TYPE_CHECKING:
-    from wavedl_daemon.runs.catalog import AsyncCatalogService, CatalogService
+    from wavedl_daemon.runs.catalog import AsyncCatalogService
 
 
 async def _call(callback, *args):
     try:
-        result = callback(*args)
-        return await result if inspect.isawaitable(result) else result
+        return await callback(*args)
     except BrowseForbidden:
         raise HTTPException(403, "Browse location is not allowed") from None
     except BrowseMissing:
@@ -56,7 +54,7 @@ async def _call(callback, *args):
         raise HTTPException(400, "Invalid catalog request") from None
 
 
-def catalog_routes(service: CatalogService | AsyncCatalogService) -> list[APIRoute]:
+def catalog_routes(service: AsyncCatalogService) -> list[APIRoute]:
     async def models(response: Response):
         try:
             result = await _call(service.models)

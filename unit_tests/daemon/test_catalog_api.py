@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from unit_tests.daemon.async_services import AsyncService
 from wavedl_daemon.execution.budget import BudgetExhausted, WorkBudget
 from wavedl_daemon.execution.pool import BoundedThreadPool, WorkDeadlineExceeded
 from wavedl_daemon.execution.service_host import ServiceHost
@@ -108,7 +109,9 @@ def test_resolve_route_is_authenticated_strict_bounded_and_redacted(tmp_path):
         daemon_id="test",
         build_id="test",
     )
-    app.router.routes.extend(catalog_routes(CatalogService({"data": tmp_path})))
+    app.router.routes.extend(
+        catalog_routes(AsyncService(CatalogService({"data": tmp_path})))
+    )
 
     async def scenario():
         async with httpx.AsyncClient(
@@ -283,7 +286,7 @@ def test_http_auth_query_bounds_unreadable_and_redacted_errors(tmp_path, monkeyp
         daemon_id="test",
         build_id="test",
     )
-    app.router.routes.extend(catalog_routes(service))
+    app.router.routes.extend(catalog_routes(AsyncService(service)))
 
     async def run():
         async with httpx.AsyncClient(
