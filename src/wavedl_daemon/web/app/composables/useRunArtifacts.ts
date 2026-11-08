@@ -7,6 +7,7 @@ import type { Artifact, Inventory } from '~~/types/artifact-client';
 export function useRunArtifacts(
   owner: MaybeRefOrGetter<ConnectionSession>,
   runId: MaybeRefOrGetter<string | null>,
+  active: MaybeRefOrGetter<boolean> = true,
 ) {
   const session = computed(() => toRaw(toValue(owner)));
   const connected = shallowRef(false);
@@ -19,6 +20,7 @@ export function useRunArtifacts(
   const imageUrl = shallowRef<string | null>(null);
   const previewPath = shallowRef<string | null>(null);
   const { isActive } = usePageActive();
+  const resourceActive = computed(() => isActive.value && toValue(active));
   let scope = new AbortController();
   let epoch = 0;
 
@@ -67,7 +69,7 @@ export function useRunArtifacts(
   async function refresh() {
     const id = toValue(runId);
 
-    if (!id || !connected.value || !isActive.value || busy.value) return;
+    if (!id || !connected.value || !resourceActive.value || busy.value) return;
     const current = epoch;
     busy.value = true;
     message.value = '';
@@ -84,7 +86,7 @@ export function useRunArtifacts(
   }
 
   async function consume(artifact: Artifact, preview = false) {
-    if (busy.value || !connected.value || !isActive.value) return;
+    if (busy.value || !connected.value || !resourceActive.value) return;
     const current = epoch;
     busy.value = true;
     message.value = '';
@@ -122,12 +124,12 @@ export function useRunArtifacts(
     }
   }
 
-  watch(isActive, (active) => {
+  watch(resourceActive, (active) => {
     if (!active) reset();
   }, { flush: 'sync' });
 
   watch(
-    [isActive, connected, () => toValue(runId), scopeGeneration],
+    [resourceActive, connected, () => toValue(runId), scopeGeneration],
     () => { void refresh(); },
     { immediate: true },
   );

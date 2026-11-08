@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = defineProps<{ runId: string }>();
+const props = defineProps<{ runId: string; active: boolean }>();
 const { t } = useI18n({ useScope: 'global' });
 const { session } = useWorkstation();
 const {
@@ -13,7 +13,7 @@ const {
   refresh,
   consume,
   clearImage,
-} = useRunArtifacts(session, () => props.runId);
+} = useRunArtifacts(session, () => props.runId, () => props.active);
 </script>
 
 <template>
