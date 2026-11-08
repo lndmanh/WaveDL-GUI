@@ -12,7 +12,11 @@ const styles = {
 };
 
 const { t, locale } = useI18n({ useScope: 'global' });
-const props = defineProps<{ parameters: RuntimeMetricSummary['parameters'] }>();
+
+const props = defineProps<{
+  parameters: RuntimeMetricSummary['parameters'];
+  waiting: boolean;
+}>();
 
 // Bars compare parameters with each other only; the largest error fills the track.
 const largest = computed(() =>
@@ -54,7 +58,15 @@ function share(value: number | null): string {
         /></span>
       </div>
     </dl>
-    <p v-if="!parameters.length" class="text-muted-foreground text-sm">
+    <div
+      v-if="!parameters.length && waiting"
+      role="status"
+      class="flex items-center gap-2 text-sm text-muted-foreground"
+    >
+      <LoadingSpinner compact size="sm" />
+      <p>{{ t('runs.waitingPerParam') }}</p>
+    </div>
+    <p v-else-if="!parameters.length" class="text-muted-foreground text-sm">
       {{ t('runs.noPerParam') }}
     </p>
   </section>

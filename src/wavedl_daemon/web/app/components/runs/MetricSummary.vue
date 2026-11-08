@@ -18,6 +18,7 @@ const { t, locale } = useI18n({ useScope: 'global' });
 const props = defineProps<{
   summary: MetricSummary;
   unconfirmed?: boolean;
+  waiting: boolean;
 }>();
 
 const numberFormat = computed(
@@ -65,19 +66,13 @@ const metrics = computed(() => {
     class="@container flex min-w-0 flex-col gap-6"
     :aria-label="unconfirmed ? t('runs.lastKnownRuntime') : t('runs.currentRuntime')"
   >
-    <header
-      class="flex flex-wrap items-center justify-between gap-2 [&_h3]:text-base [&_h3]:font-[650] [&_h3]:tracking-[-0.015em]"
-    >
-      <h3>{{ unconfirmed ? t('runs.lastKnownRuntime') : t('runs.currentRuntime') }}</h3>
-      <InfoChip
-        v-if="unconfirmed"
-        :label="t('runs.lastKnownRuntime')"
-        :text="t('runs.lastKnownNote')"
-        uncertain
-      />
-      <InfoChip v-else :label="t('runs.currentRuntime')" :text="t('runs.latestNote')" uncertain />
-    </header>
-    <PerParameterMetrics :parameters="summary.current?.parameters ?? []" />
+    <InfoChip
+      v-if="unconfirmed"
+      :label="t('runs.lastKnownRuntime')"
+      :text="t('runs.lastKnownNote')"
+      uncertain
+    />
+    <PerParameterMetrics :parameters="summary.current?.parameters ?? []" :waiting="waiting" />
     <section v-if="metrics.length" :aria-label="t('runs.allMetrics')">
       <h4 class="text-[0.85rem] font-[650]">{{ t('runs.allMetrics') }}</h4>
       <dl :class="cn(styles.metricSpecList)">
