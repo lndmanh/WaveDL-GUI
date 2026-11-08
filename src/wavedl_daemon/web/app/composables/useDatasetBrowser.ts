@@ -1,8 +1,7 @@
 import { CatalogApi } from '../lib/catalog-api';
 import type { ConnectionSession } from '../lib/connection-session';
-import { datasetFormat, datasetSuggestions } from '../lib/dataset-suggestions';
+import { loadDatasetSuggestions } from '../lib/dataset-suggestions';
 import type { DataSelection } from '~~/types/catalog-api';
-import type { RunView } from '~~/types/daemon-api';
 import type { DatasetBrowserColumn, ResolvedDatasetSuggestion } from '~~/types/dataset-browser';
 
 export function useDatasetBrowser(session: () => ConnectionSession, allowDirectory: () => boolean) {
@@ -34,41 +33,9 @@ export function useDatasetBrowser(session: () => ConnectionSession, allowDirecto
     message.value = false;
   }
 
-  async function loadSuggestions(signal: AbortSignal) {
+  async function loadSuggestions(signal: AbortSignal, currentRoots: readonly string[]) {
     try {
-      const runs: RunView[] = [];
-      const currentSession = toRaw(session());
-      let offset = 0;
-
-      while (!signal.aborted) {
-        const page = await currentSession.perform(
-          (api, requestSignal) => api.listRuns({ limit: 100, offset, signal: requestSignal }),
-          { signal },
-        );
-
-        runs.push(...page);
-
-        if (page.length < 100) break;
-        offset += page.length;
-      }
-
-      const api = new CatalogApi(currentSession);
-      const resolved: ResolvedDatasetSuggestion[] = [];
-
-      for (const suggestion of datasetSuggestions(runs)) {
-        if (signal.aborted) return;
-
-        try {
-          const selection = await api.locate(suggestion.path, signal);
-
-          if (selection?.kind === 'file' && datasetFormat(selection.path))
-            resolved.push({ ...suggestion, selection });
-        } catch {
-          if (signal.aborted) return;
-        }
-
-        if (resolved.length === 4) break;
-      }
+      const resolved = await loadDatasetSuggestions(toRaw(session()), currentRoots, signal);
 
       if (!signal.aborted) suggestions.value = resolved;
     } catch {
@@ -80,12 +47,14 @@ export function useDatasetBrowser(session: () => ConnectionSession, allowDirecto
     reset();
     const signal = scope.signal;
     busy.value = true;
-    void loadSuggestions(signal);
 
     try {
       const result = await new CatalogApi(toRaw(session())).roots(signal);
 
-      if (!signal.aborted) roots.value = result;
+      if (!signal.aborted) {
+        roots.value = result;
+        void loadSuggestions(signal, result);
+      }
     } catch {
       if (!signal.aborted) message.value = true;
     } finally {

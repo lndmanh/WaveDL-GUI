@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, File, Folder, HardDrive } from '@lucide/vue';
+import { Check, ChevronLeft, ChevronRight, Copy, File, Folder, HardDrive } from '@lucide/vue';
 import { cn } from '@/lib/utils';
 import { datasetFormat } from '../../lib/dataset-suggestions';
 import type { BrowseEntry, BrowsePage } from '~~/types/catalog-api';
@@ -11,12 +11,16 @@ const props = defineProps<{
   locations?: boolean;
   page?: BrowsePage | null;
   busy?: boolean;
+  fill?: boolean;
+  copyable?: boolean;
+  copyState?: 'copied' | 'failed' | null;
 }>();
 
 const emit = defineEmits<{
   choose: [entry: BrowseEntry];
   back: [];
   page: [offset: number];
+  copyPath: [];
 }>();
 
 const { t } = useI18n({ useScope: 'global' });
@@ -84,13 +88,39 @@ function keydown(event: KeyboardEvent, entry: BrowseEntry) {
 
 <template>
   <section class="flex min-w-0 flex-col" :aria-label="title">
-    <h3
-      class="truncate border-b px-3 py-3 text-xs font-semibold text-muted-foreground"
-      :title="title"
-    >
-      {{ title }}
-    </h3>
-    <div class="min-h-64 flex-1 overflow-y-auto p-1.5">
+    <div :class="cn('flex min-h-11 items-center gap-1 border-b pr-1.5 pl-3', fill && 'shrink-0')">
+      <h3 class="min-w-0 flex-1 truncate py-3 text-xs font-semibold text-muted-foreground" :title="title">
+        {{ title }}
+      </h3>
+      <TooltipProvider v-if="copyable">
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            :disabled="busy"
+            :aria-label="t('datasets.copyFolderPath', { name: title })"
+            @click="emit('copyPath')"
+            ><Check v-if="copyState === 'copied'" class="text-success" aria-hidden="true" /><Copy
+              v-else
+              aria-hidden="true"
+          /></Button>
+        </TooltipTrigger>
+        <TooltipContent>{{
+          copyState === 'copied'
+            ? t('datasets.folderPathCopied')
+            : copyState === 'failed'
+              ? t('datasets.folderPathCopyFailed')
+              : t('datasets.copyFolderPathTip')
+        }}</TooltipContent>
+      </Tooltip>
+      </TooltipProvider>
+      <span v-if="copyState" class="sr-only" role="status">{{
+        copyState === 'copied' ? t('datasets.folderPathCopied') : t('datasets.folderPathCopyFailed')
+      }}</span>
+    </div>
+    <div :class="cn('flex-1 overflow-y-auto p-1.5', fill ? 'min-h-0' : 'min-h-64')">
       <div
         v-if="busy"
         class="space-y-3 p-2"
@@ -149,7 +179,7 @@ function keydown(event: KeyboardEvent, entry: BrowseEntry) {
     </div>
     <nav
       v-if="page && page.total > page.limit"
-      class="flex items-center justify-between gap-1 border-t p-2"
+      :class="cn('flex items-center justify-between gap-1 border-t p-2', fill && 'shrink-0')"
       :aria-label="t('datasets.entries')"
     >
       <Button

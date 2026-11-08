@@ -14,8 +14,11 @@ const props = withDefaults(
     allowDirectory?: boolean;
     label?: string;
     selected?: DataSelection | null;
+    /** Select a file as soon as it is clicked, without the preview and confirm step. */
+    immediate?: boolean;
+    fill?: boolean;
   }>(),
-  { allowDirectory: false, selected: null },
+  { allowDirectory: false, selected: null, immediate: false, fill: false },
 );
 
 const emit = defineEmits<{
@@ -48,7 +51,7 @@ const {
   failed,
 } = useDatasetInspection(
   () => props.session,
-  () => candidate.value,
+  () => (props.fill && props.immediate ? null : candidate.value),
 );
 
 const container = useTemplateRef<HTMLElement>('container');
@@ -57,6 +60,7 @@ const narrow = computed(() => width.value > 0 && width.value < 896);
 const mobileColumn = shallowRef(0);
 const previewOpen = shallowRef(false);
 let previewTrigger: HTMLElement | null = null;
+let awaitingPick = false;
 const query = shallowRef('');
 let focusIntent = 0;
 const id = useId();
@@ -98,7 +102,7 @@ const shownColumns = computed(() =>
 
 const styles = {
   browser: cn('flex min-w-0 overflow-x-auto rounded-xl border bg-surface'),
-  column: cn('h-[23rem] w-52 shrink-0 border-r'),
+  column: cn('w-52 shrink-0 border-r'),
   suggestion: cn(
     'flex min-w-0 flex-col gap-3 rounded-xl border p-3.5 text-left transition-colors',
     'bg-[color-mix(in_srgb,var(--foreground)_2%,transparent)] hover:bg-[color-mix(in_srgb,var(--primary)_6%,transparent)]',
@@ -134,8 +138,32 @@ async function focusColumn(index: number) {
   pane?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
+async function focusSelection(selection: DataSelection) {
+  const parent = selection.relativePath.split('/').slice(0, -1).join('/');
+  const index = columns.value.findIndex(
+    (column) => column.root === selection.root && column.path === parent,
+  );
+
+  if (index >= 0) mobileColumn.value = index + 1;
+  await nextTick();
+  const pane = container.value?.querySelector<HTMLElement>(`[data-column="${index + 1}"]`);
+  const option = Array.from(pane?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []).find(
+    (entry) => entry.dataset.name === pathName(selection.relativePath) && !entry.disabled,
+  );
+
+  if (option && index >= 0) {
+    option.focus({ preventScroll: true });
+    option.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  } else {
+    container.value?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true });
+  }
+}
+
+defineExpose({ focusSelection });
+
 async function openFolder(root: string, path: string, index: number, offset = 0) {
   const intent = ++focusIntent;
+  awaitingPick = false;
   query.value = '';
   mobileColumn.value = index + 1;
   await browse(root, path, index, offset);
@@ -150,9 +178,14 @@ function choose(column: DatasetBrowserColumn, index: number, entry: BrowseEntry)
   else {
     focusIntent++;
     mobileColumn.value = index + 1;
-    openPreview();
+    reveal();
     void chooseFile(column.root, child(column, entry.name));
   }
+}
+
+function reveal() {
+  if (props.immediate) awaitingPick = true;
+  else openPreview();
 }
 
 function openPreview() {
@@ -177,6 +210,26 @@ function paginate(column: DatasetBrowserColumn, index: number, offset: number) {
   else void openFolder(column.root, column.path, index, offset);
 }
 
+const { copy } = useClipboard({ legacy: true });
+const copied = shallowRef<{ key: string; state: 'copied' | 'failed' } | null>(null);
+const { start: resetCopied } = useTimeoutFn(() => (copied.value = null), 1600, { immediate: false });
+
+/** Copies the folder's absolute host path, which only the daemon can resolve. */
+async function copyFolder(column: DatasetBrowserColumn) {
+  const key = `${column.root}/${column.path}`;
+
+  try {
+    const selection = await new CatalogApi(toRaw(props.session)).resolve(column.root, column.path);
+
+    await copy(selection.path);
+    copied.value = { key, state: 'copied' };
+  } catch {
+    copied.value = { key, state: 'failed' };
+  }
+
+  resetCopied();
+}
+
 function confirm() {
   const selection = candidate.value;
 
@@ -193,7 +246,35 @@ function confirm() {
   emit('inspected', info.value, selection);
 }
 
+// Immediate mode selects once the clicked file resolves; inspection is not awaited.
+function selectImmediate() {
+  const selection = candidate.value;
+
+  if (!awaitingPick || resolving.value || !selection) return;
+  awaitingPick = false;
+
+  try {
+    new CatalogApi(toRaw(props.session)).assertSelection(selection);
+  } catch {
+    return;
+  }
+
+  emit('select', selection);
+}
+
+function chooseSuggestion(selection: DataSelection) {
+  focusIntent++;
+  reveal();
+  suggest(selection);
+
+  // A suggested selection can be the same object as the previous pick.
+  if (props.immediate) selectImmediate();
+}
+
+watch([candidate, resolving], selectImmediate);
+
 watch(roots, () => {
+  awaitingPick = false;
   mobileColumn.value = 0;
   query.value = '';
   previewOpen.value = false;
@@ -206,8 +287,12 @@ watch(narrow, (value) => {
 </script>
 
 <template>
-  <section ref="container" class="flex min-w-0 flex-col gap-4" :aria-label="label">
-    <div class="flex items-center gap-2">
+  <section
+    ref="container"
+    :class="cn('flex min-w-0 flex-col gap-4', fill && 'h-full min-h-0 flex-1')"
+    :aria-label="label"
+  >
+    <div :class="cn('flex items-center gap-2', fill && 'shrink-0')">
       <div class="relative min-w-0 flex-1">
         <Search
           class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -234,13 +319,17 @@ watch(narrow, (value) => {
       /></Button>
     </div>
     <p :id="`${id}-filter-help`" class="sr-only">{{ t('datasets.filterHelp') }}</p>
-    <section v-if="matchingSuggestions.length" :aria-labelledby="`${id}-suggested`">
+    <section
+      v-if="matchingSuggestions.length && !(fill && narrow && mobileColumn > 0)"
+      :class="fill && 'max-h-[30%] shrink-0 overflow-y-auto'"
+      :aria-labelledby="`${id}-suggested`"
+    >
       <h3 :id="`${id}-suggested`" class="mb-2 text-xs font-semibold text-muted-foreground">
         {{ t('datasets.suggested') }}
       </h3>
       <div
         class="grid grid-cols-1 gap-2 min-[30rem]:grid-cols-2"
-        :class="!narrow && 'grid-cols-4!'"
+        :class="cn(!narrow && 'grid-cols-4!', fill && narrow && 'grid-cols-1!')"
       >
         <button
           v-for="item in matchingSuggestions"
@@ -249,11 +338,7 @@ watch(narrow, (value) => {
           :class="styles.suggestion"
           :aria-pressed="candidate?.path === item.selection.path"
           :title="item.path"
-          @click="
-            focusIntent++;
-            suggest(item.selection);
-            openPreview();
-          "
+          @click="chooseSuggestion(item.selection)"
         >
           <span class="flex w-full items-center gap-2"
             ><FileStack class="size-4 shrink-0 text-primary" aria-hidden="true" /><span
@@ -286,11 +371,12 @@ watch(narrow, (value) => {
         >{{ t('datasets.useFolder') }}</Button
       >
     </div>
-    <div :class="styles.browser">
+    <div :class="cn(styles.browser, fill && 'min-h-0 flex-1')">
       <DatasetBrowserColumn
         v-show="!narrow || mobileColumn === 0"
         data-column="0"
-        :class="cn(styles.column, narrow && 'w-full border-r-0')"
+        :class="cn(styles.column, fill ? 'h-full min-h-0' : 'h-[23rem]', narrow && 'w-full border-r-0')"
+        :fill="fill"
         :title="t('datasets.locations')"
         :entries="locations"
         :selected="columns[0]?.root ?? null"
@@ -303,8 +389,11 @@ watch(narrow, (value) => {
         v-show="!narrow || mobileColumn === index + 1"
         :key="`${column.root}/${column.path}`"
         :data-column="index + 1"
-        :class="cn(styles.column, narrow && 'w-full border-r-0')"
+        :class="cn(styles.column, fill ? 'h-full min-h-0' : 'h-[23rem]', narrow && 'w-full border-r-0')"
+        :fill="fill"
         :title="column.path ? pathName(column.path) : column.root"
+        copyable
+        :copy-state="copied?.key === `${column.root}/${column.path}` ? copied.state : null"
         :entries="column.entries"
         :selected="selectedEntry(column, index)"
         :page="column.page"
@@ -312,9 +401,10 @@ watch(narrow, (value) => {
         @choose="choose(column, index, $event)"
         @back="back(index)"
         @page="paginate(column, index, $event)"
+        @copy-path="copyFolder(column)"
       />
       <div
-        v-if="!narrow"
+        v-if="!narrow && !immediate"
         class="sticky right-0 min-h-[23rem] w-72 shrink-0 grow border-l bg-surface"
       >
         <DatasetSelectionPreview
