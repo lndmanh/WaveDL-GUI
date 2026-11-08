@@ -22,7 +22,7 @@ const styles = {
 
 const { t } = useI18n({ useScope: 'global' });
 
-defineProps<{ health: readonly MetricHealth[] }>();
+defineProps<{ health: readonly MetricHealth[]; waiting: boolean }>();
 
 function translated<const Mapping extends Readonly<Record<string, string>>>(
   mapping: Mapping,
@@ -45,10 +45,6 @@ function displayHealthValue(row: MetricHealth): string {
 </script>
 <template>
   <section :aria-label="t('runs.health')" class="flex min-w-0 flex-col gap-[0.6rem]">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <h4 class="text-[0.85rem] font-[650]">{{ t('runs.health') }}</h4>
-      <InfoChip :label="t('runs.health')" :text="t('runs.healthNote')" uncertain />
-    </div>
     <dl class="flex flex-col m-0">
       <div
         v-for="row in health"
@@ -72,7 +68,15 @@ function displayHealthValue(row: MetricHealth): string {
         </dd>
       </div>
     </dl>
-    <p v-if="!health.length" class="text-muted-foreground text-sm">
+    <div
+      v-if="!health.length && waiting"
+      role="status"
+      class="flex items-center gap-2 text-sm text-muted-foreground"
+    >
+      <LoadingSpinner compact size="sm" />
+      <p>{{ t('runs.waitingHealth') }}</p>
+    </div>
+    <p v-else-if="!health.length" class="text-muted-foreground text-sm">
       {{ t('runs.noHealth') }}
     </p>
   </section>
