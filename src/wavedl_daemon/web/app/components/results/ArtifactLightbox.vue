@@ -5,6 +5,7 @@ import { CircleAlert, LoaderCircle, RotateCcw } from '@lucide/vue';
 import 'photoswipe/style.css';
 import type { ArtifactImages } from '../../composables/useArtifactImages';
 import { pathName } from '../../lib/run-overview';
+import { artifactPlotLabel } from '../../lib/artifact-plots';
 import type { Artifact } from '~~/types/artifact-client';
 
 const props = defineProps<{
@@ -41,6 +42,12 @@ let viewer: PhotoSwipe | null = null;
 let generation = 0;
 let restoreTarget: HTMLElement | null = null;
 
+function plotTitle(artifact: Artifact): string {
+  const label = artifactPlotLabel(artifact.path);
+
+  return label ? t(label.key, label.params ?? {}) : pathName(artifact.path);
+}
+
 function slideData(artifact: Artifact): SlideData {
   const state = props.images.state(artifact);
 
@@ -49,7 +56,7 @@ function slideData(artifact: Artifact): SlideData {
       src: state.url,
       width: state.width,
       height: state.height,
-      alt: pathName(artifact.path),
+      alt: plotTitle(artifact),
     };
   }
 
@@ -137,7 +144,7 @@ async function open() {
 
           const update = () => {
             const artifact = originals[instance.currIndex];
-            title.textContent = artifact ? pathName(artifact.path) : '';
+            title.textContent = artifact ? plotTitle(artifact) : '';
             path.textContent = artifact?.path ?? '';
           };
 
@@ -177,7 +184,8 @@ async function open() {
         emit('close');
       }
 
-      if (restoreTarget?.isConnected) restoreTarget.focus({ preventScroll: true });
+      if (isActive.value && restoreTarget?.isConnected && restoreTarget.getClientRects().length)
+        restoreTarget.focus({ preventScroll: true });
     });
     instance.init();
     instance.element?.setAttribute('aria-modal', 'true');
