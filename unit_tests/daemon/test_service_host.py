@@ -560,3 +560,48 @@ def test_planning_resolves_off_owner_and_rechecks_idempotency(
             await services.close()
 
     asyncio.run(run())
+
+
+def test_async_replan_uses_pool_and_delete_uses_owner(tmp_path, monkeypatch):
+    from wavedl_daemon.runs import service
+    from wavedl_daemon.runs.runtime_service import HostedServices
+
+    from .test_hosted_app import train_payload
+
+    threads = []
+    build_spec = service.build_spec
+
+    def resolve_paths(*args, **kwargs):
+        threads.append(threading.get_ident())
+        return build_spec(*args, **kwargs)
+
+    services = HostedServices(Settings(tmp_path / "state", tmp_path / "runs"))
+
+    async def run():
+        await services.start()
+        try:
+            runs = services.run_service
+            original = await runs.plan(train_payload(epochs=1), "original")
+            owner = await services.host.call(lambda session: threading.get_ident())
+            monkeypatch.setattr(service, "build_spec", resolve_paths)
+            edited = await runs.replan(
+                original.run_id, train_payload(epochs=4), "edited"
+            )
+            assert edited.plan_id != original.plan_id
+            assert edited.run_id == original.run_id
+            assert edited.preview.spec.resolved_config["epochs"] == 4
+            assert len(threads) == 1
+            assert threads[0] != owner
+            assert (
+                await runs.replan(original.run_id, train_payload(epochs=4), "edited")
+                == edited
+            )
+            assert len(threads) == 1
+            await runs.delete(original.run_id)
+            with pytest.raises(KeyError):
+                await runs.get(original.run_id)
+            assert not (tmp_path / "runs" / original.run_id).exists()
+        finally:
+            await services.close()
+
+    asyncio.run(run())

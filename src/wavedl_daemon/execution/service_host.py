@@ -275,6 +275,21 @@ class AsyncRunService:
 
         return await self.host.call(invoke, concurrent_async=True)
 
+    async def replan(
+        self, run_id: str, payload: dict, idempotency_key: str
+    ) -> PlanResponse:
+        request = deepcopy(payload)
+
+        async def invoke(session):
+            return await session.runs.replan_async(
+                run_id, request, idempotency_key, session.pool
+            )
+
+        return await self.host.call(invoke, concurrent_async=True)
+
+    async def delete(self, run_id: str) -> None:
+        return await self._call("delete", run_id)
+
     async def submit(self, plan_id: str) -> RunResponse:
         return await self._call("submit", plan_id)
 
