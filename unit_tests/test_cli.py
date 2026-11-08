@@ -322,6 +322,32 @@ class TestComputeMetrics:
         assert metrics["mae_p1"] == pytest.approx(0.2, abs=1e-6)
         assert metrics["mae_p2"] == pytest.approx(0.3, abs=1e-6)
 
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64])
+    def test_per_parameter_r2(self, dtype):
+        """Per-parameter R² matches sklearn, including constant targets."""
+        from sklearn.metrics import r2_score
+
+        from wavedl.test import compute_metrics
+
+        y_true = np.array(
+            [[1.0, 2.0, 3.0, 4.0], [3.0, 4.0, 3.0, 4.0], [5.0, 6.0, 3.0, 4.0]],
+            dtype=dtype,
+        )
+        y_pred = y_true.copy()
+        y_pred[:, 1] += np.array([0.5, -1.0, 1.5])
+        y_pred[:, 3] += 1.0
+
+        metrics = compute_metrics(y_true, y_pred)
+        per_parameter_r2 = [metrics[f"r2_p{i}"] for i in range(y_true.shape[1])]
+
+        for i, value in enumerate(per_parameter_r2):
+            assert type(value) is float
+            assert value == pytest.approx(r2_score(y_true[:, i], y_pred[:, i]))
+        assert per_parameter_r2[0] == 1.0
+        assert per_parameter_r2[1] < per_parameter_r2[0]
+        assert per_parameter_r2[2:] == [1.0, 0.0]
+        assert np.mean(per_parameter_r2) == pytest.approx(metrics["r2_score"])
+
     def test_single_sample_handling(self):
         """Test that single sample case is handled gracefully."""
         from wavedl.test import compute_metrics
@@ -333,6 +359,9 @@ class TestComputeMetrics:
 
         assert np.isnan(metrics["r2_score"])
         assert np.isnan(metrics["pearson_corr"])
+        for i in range(y_true.shape[1]):
+            assert type(metrics[f"r2_p{i}"]) is float
+            assert np.isnan(metrics[f"r2_p{i}"])
         assert metrics["mae_avg"] == pytest.approx(0.5)
 
 

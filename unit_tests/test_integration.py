@@ -778,6 +778,10 @@ class TestCLIEndToEnd:
         with open(evaluation_path, encoding="utf-8") as file:
             evaluation = json.load(file)
         assert {"r2_score", "rmse", "mae_avg"} <= evaluation.keys()
+        per_parameter_r2 = [
+            evaluation[f"r2_p{i}"] for i in range(temp_training_data["out_dim"])
+        ]
+        assert np.mean(per_parameter_r2) == pytest.approx(evaluation["r2_score"])
 
     def test_wavedl_train_list_models(self):
         """E2E: wavedl-train --list_models works via subprocess."""

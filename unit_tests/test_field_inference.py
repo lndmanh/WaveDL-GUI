@@ -38,6 +38,28 @@ def test_scalar_map_reporting_and_storage_use_one_channel(tmp_path, capsys):
         np.testing.assert_array_equal(saved["error"], np.ones((2, 1, 3, 4)))
 
 
+@pytest.mark.parametrize("n_samples", [1, 3])
+def test_field_per_channel_r2_pools_samples_and_spatial_positions(n_samples):
+    from sklearn.metrics import r2_score
+
+    target = np.arange(n_samples * 2 * 3 * 4, dtype=np.float64).reshape(
+        n_samples, 2, 3, 4
+    )
+    prediction = target.copy()
+    prediction[:, 1] += np.linspace(-2.0, 3.0, 12).reshape(3, 4)
+
+    metrics = compute_metrics(target, prediction)
+    per_channel_r2 = [metrics[f"r2_p{i}"] for i in range(target.shape[1])]
+
+    for i, value in enumerate(per_channel_r2):
+        expected = r2_score(target[:, i].ravel(), prediction[:, i].ravel())
+        assert type(value) is float
+        assert value == pytest.approx(expected)
+    assert per_channel_r2[0] == 1.0
+    assert per_channel_r2[1] < per_channel_r2[0]
+    assert np.mean(per_channel_r2) == pytest.approx(metrics["r2_score"])
+
+
 def test_scalar_vector_reporting_and_storage(tmp_path, capsys):
     target = np.arange(4, dtype=np.float32)
     metrics = compute_metrics(target, target + 1)
@@ -56,6 +78,7 @@ def test_evaluation_metrics_preserve_large_offset_variation(shape):
     prediction = target[::-1].copy()
     metrics = compute_metrics(target.reshape(shape), prediction.reshape(shape))
     assert metrics["r2_score"] == pytest.approx(-3.0)
+    assert metrics["r2_p0"] == pytest.approx(-3.0)
     assert metrics["pearson_corr"] == pytest.approx(-1.0)
 
 

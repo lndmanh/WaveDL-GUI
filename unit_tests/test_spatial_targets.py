@@ -404,6 +404,7 @@ def test_field_inference_metrics_and_npz_export(tmp_path):
 
     assert prediction.shape == (3, 1, 6, 7)
     assert metrics["mae_avg"] == pytest.approx(0.25)
+    assert metrics["r2_p0"] == pytest.approx(metrics["r2_score"])
     assert "relative_l2" in metrics
     with np.load(output_path) as saved:
         assert saved["target"].shape == (3, 1, 6, 7)
