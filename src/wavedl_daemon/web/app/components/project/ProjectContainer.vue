@@ -1096,7 +1096,12 @@ watch(
         :id="panelId"
         role="tabpanel"
         :aria-labelledby="`${panelId}-tab-${active}`"
-        :class="projectStyles.runBuilderPanel"
+        :class="
+          cn(
+            projectStyles.runBuilderPanel,
+            planSubmitted && active === 'plan' && 'flex flex-1 flex-col',
+          )
+        "
         :data-dragging="dragging"
         novalidate
         @submit.prevent="preview"
