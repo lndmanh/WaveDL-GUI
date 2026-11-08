@@ -148,9 +148,12 @@ function choose(runId: string | null) {
               <Check class="size-4" aria-hidden="true" />
             </ComboboxItemIndicator>
           </ComboboxItem>
-          <p v-if="loading && !runs.length" role="status" class="p-3 text-sm text-muted-foreground">
-            {{ t('results.loadingRuns') }}
-          </p>
+          <Empty v-if="loading && !runs.length" role="status" class="p-3">
+            <EmptyHeader>
+              <EmptyMedia><LoadingSpinner compact size="sm" /></EmptyMedia>
+              <EmptyDescription>{{ t('results.loadingRuns') }}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
           <p v-else-if="!choices.length" role="status" class="p-3 text-sm text-muted-foreground">
             {{ t('results.noMatchingRuns') }}
           </p>

@@ -604,9 +604,12 @@ watch(
               </template>
             </tbody>
           </table>
-          <p v-if="loading && !runs.length" role="status" class="p-6 text-sm text-muted-foreground">
-            {{ t('runs.loadingRuns') }}
-          </p>
+          <Empty v-if="loading && !runs.length" role="status" class="py-8">
+            <EmptyHeader>
+              <EmptyMedia><LoadingSpinner compact /></EmptyMedia>
+              <EmptyDescription>{{ t('runs.loadingRuns') }}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
           <Empty v-else-if="!runs.length" role="status" class="py-8"
             ><EmptyDescription>{{ t('runs.noRuns') }}</EmptyDescription></Empty
           >
