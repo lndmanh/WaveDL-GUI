@@ -84,6 +84,55 @@ it('same-authority refresh retains buffered live events and a new attempt clears
   expect(vi.getTimerCount()).toBe(0);
 });
 
+it('reuses the metric projection on unchanged polls and replaces it for metrics and attempts', async () => {
+  vi.useFakeTimers();
+  let current = view();
+  let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const transport: RunTransport = {
+    getRun: async () => current,
+    cancelRun: async () => view(),
+    openEvents: async (_id, _cursor, signal) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            channel = controller;
+            signal.addEventListener('abort', () => controller.close(), { once: true });
+          },
+        }),
+      ),
+  };
+  const monitor = new RunMonitor(id, transport, 100);
+  const task = monitor.start();
+  await flush();
+  channel?.enqueue(new TextEncoder().encode(frame(1)));
+  await flush();
+  const first = monitor.snapshot().metrics;
+  expect(first).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(200);
+  expect(monitor.snapshot().metrics).toBe(first);
+  channel?.enqueue(new TextEncoder().encode(frame(2)));
+  await flush();
+  const next = monitor.snapshot().metrics;
+  expect(next).not.toBe(first);
+  expect(monitor.snapshot().metrics).toBe(next);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(monitor.snapshot().metrics).toBe(next);
+  current = view({ attempt: 2 });
+  await vi.advanceTimersByTimeAsync(100);
+  const changed = monitor.snapshot().metrics;
+  expect(changed).not.toBe(next);
+  expect(changed).toEqual([]);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(monitor.snapshot().metrics).toBe(changed);
+  channel?.enqueue(new TextEncoder().encode(frame(3, 'metric', 2)));
+  await flush();
+  expect(monitor.snapshot().metrics).not.toBe(changed);
+  expect(monitor.snapshot().metrics.map((record) => record.step)).toEqual([1, 2, 3]);
+  monitor.stop();
+  await task;
+  expect(vi.getTimerCount()).toBe(0);
+});
+
 it('trailing publication stays bounded after wall-clock rollback', async () => {
   vi.useFakeTimers();
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;

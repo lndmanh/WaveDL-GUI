@@ -7,7 +7,7 @@ import {
   type NumericMetrics,
 } from '../../shared/schemas/metric-history';
 import type { ClientErrorKey, MessageParams } from '~~/types/i18n';
-import type { JsonObject } from '~~/types/json';
+import type { Json, JsonObject } from '~~/types/json';
 import type { RunView } from '~~/types/daemon-api';
 import type { RunEvent } from '~~/types/event-stream';
 import type {
@@ -21,10 +21,26 @@ interface StoredMetricRecord extends MetricRecord {
   numeric: NumericMetrics;
 }
 
-function snapshotMetric(record: StoredMetricRecord): MetricRecord {
+function snapshotMetric(record: StoredMetricRecord, frozen = false): MetricRecord {
   const { numeric: _numeric, ...metric } = record;
+  const snapshot = structuredClone(metric);
 
-  return structuredClone(metric);
+  if (frozen) {
+    const pending: Json[] = [snapshot.metrics];
+
+    while (pending.length) {
+      const value = pending.pop();
+
+      if (value !== null && typeof value === 'object') {
+        pending.push(...Object.values(value));
+        Object.freeze(value);
+      }
+    }
+
+    Object.freeze(snapshot);
+  }
+
+  return snapshot;
 }
 
 function fail(clientMessageKey: ClientErrorKey, clientMessageParams?: MessageParams): never {
@@ -201,6 +217,9 @@ export class MetricHistory {
   #bestR2: number | null = null;
   #bestR2Dirty = false;
   #scope: number | null | undefined;
+  #revision = 0;
+  #projectionRevision = -1;
+  #projection: readonly MetricRecord[] = [];
   readonly maxPoints: number;
   constructor(
     readonly runId: string,
@@ -216,7 +235,10 @@ export class MetricHistory {
   }
   setScope(view: RunView): void {
     if (view.run_id !== this.runId) fail('metricScopeBelongsToAnotherRun');
-    this.#scope = view.attempt;
+    if (this.#scope !== view.attempt) {
+      this.#scope = view.attempt;
+      this.#revision++;
+    }
   }
   apply(event: RunEvent): void {
     if (event.run_id !== this.runId || !metricEventScopeSchema.safeParse(event).success)
@@ -268,6 +290,8 @@ export class MetricHistory {
       }
 
       this.#records.push(record);
+      // Includes retirement/replacement of prior active records.
+      this.#revision++;
     }
 
     this.#cursors.set(event.attempt, event.seq);
@@ -275,6 +299,7 @@ export class MetricHistory {
   #advance(attempt: number): void {
     if (attempt <= this.#head) return;
     this.#head = attempt;
+    this.#revision++;
     this.#resumeStep = null;
     this.#latest = null;
     this.#resetRuntimeSummary();
@@ -314,7 +339,18 @@ export class MetricHistory {
   metrics(
     options: { activeOnly?: boolean; attempt?: number; live?: boolean } = {},
   ): MetricRecord[] {
-    return Array.from(this.#selectedRecords(options), snapshotMetric);
+    return Array.from(this.#selectedRecords(options), (record) => snapshotMetric(record));
+  }
+  /** Stable, deeply frozen consumer projection until metric history/scope changes. */
+  liveMetrics(): readonly MetricRecord[] {
+    if (this.#projectionRevision !== this.#revision) {
+      this.#projection = Object.freeze(
+        Array.from(this.#selectedRecords({ live: true }), (record) => snapshotMetric(record, true)),
+      );
+      this.#projectionRevision = this.#revision;
+    }
+
+    return this.#projection;
   }
   summary(): MetricSummary {
     if (this.#scope === null || (this.#scope !== undefined && this.#scope !== this.#head))

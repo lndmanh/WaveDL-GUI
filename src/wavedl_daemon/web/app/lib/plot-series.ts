@@ -3,7 +3,6 @@ import type { RuntimeMetricField } from '../../shared/schemas/metric-history';
 import type { MetricRecord } from '~~/types/metric-history';
 import type { PlotChannel, PlotPoint, PlotSeries } from '~~/types/plot-series';
 
-export const PLOT_CHANNELS = ['loss', 'r2', 'lr'] as const;
 export const MAX_PLOT_RECORDS = 200_000;
 
 const fields: Record<PlotChannel, readonly RuntimeMetricField[]> = {
@@ -11,14 +10,6 @@ const fields: Record<PlotChannel, readonly RuntimeMetricField[]> = {
   r2: ['r2', 'val_r2'],
   lr: ['lr'],
 };
-
-export const PLOT_LABELS = {
-  train_loss: 'Training loss',
-  val_loss: 'Validation loss',
-  r2: 'Training R²',
-  val_r2: 'Validation R²',
-  lr: 'Learning rate',
-} satisfies Record<string, string>;
 
 interface Cell {
   value: number | null;
