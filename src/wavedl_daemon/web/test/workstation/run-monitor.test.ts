@@ -58,7 +58,7 @@ describe('metric payload boundary schemas', () => {
     }).toThrow();
     const extra = first.metrics.extra;
 
-    if (extra === null || typeof extra !== 'object' || Array.isArray(extra))
+    if (!(extra instanceof Object) || Array.isArray(extra))
       throw new Error('Missing nested metrics');
     const nested = extra.nested;
     expect(Object.isFrozen(nested)).toBe(true);
@@ -1077,6 +1077,7 @@ describe('kept-alive experiments list', () => {
         initial === 'empty'
           ? []
           : [run(existingId, initial === 'completed' ? 'completed' : 'running')];
+
       const api = new DaemonApi('http://127.0.0.1:8765', {}, async (input, init) => {
         const url = new URL(String(input));
         const headers = { 'Content-Type': 'application/json' };
@@ -1110,8 +1111,10 @@ describe('kept-alive experiments list', () => {
 
         throw new Error(`Unexpected request: ${url.pathname}`);
       });
+
       api.setToken('test-session');
       const scope = effectScope();
+
       const runs = scope.run(() =>
         useRuns(
           api,

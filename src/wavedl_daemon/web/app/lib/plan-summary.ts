@@ -38,9 +38,15 @@ export function buildPlanSummary(
   fullSettings = false,
 ) {
   function display(value: Json | undefined, name = ''): string {
-    if (fullSettings && value !== undefined && (value === null || typeof value === 'object' || value === ''))
+    if (
+      fullSettings &&
+      value !== undefined &&
+      (value === null || value instanceof Object || value === '')
+    )
       return JSON.stringify(value);
+
     if (value === undefined || value === null) return t('project.none');
+
     if (value === true || value === false) return t(value ? 'builder.on' : 'builder.off');
 
     const number = jsonNumberSchema.safeParse(value);
@@ -67,7 +73,9 @@ export function buildPlanSummary(
   }
 
   function fieldLabel(name: string): string {
-    const keys = Object.hasOwn(trainingFieldMessageKeys, name) ? trainingFieldMessageKeys[name] : undefined;
+    const keys = Object.hasOwn(trainingFieldMessageKeys, name)
+      ? trainingFieldMessageKeys[name]
+      : undefined;
 
     return keys ? t(keys.label) : name;
   }
@@ -256,18 +264,32 @@ export function buildPlanSummary(
 
   // Curated review sections deliberately hide inactive fields. Run history must not:
   // retain every resolved key, including null, empty, inactive and future settings.
-  const presented = new Set(sections.filter((section) => section.id !== 'runtime').flatMap((section) => section.rows.map((row) => row.name)));
+  const presented = new Set(
+    sections
+      .filter((section) => section.id !== 'runtime')
+      .flatMap((section) => section.rows.map((row) => row.name)),
+  );
+
   const remaining = fullSettings
-    ? Object.entries(config).filter(([name]) => !presented.has(name)).map(([name, value]) => ({
-        name,
-        label: fieldLabel(name),
-        value: display(value, name),
-        changed: changed(name, value),
-      }))
+    ? Object.entries(config)
+        .filter(([name]) => !presented.has(name))
+        .map(([name, value]) => ({
+          name,
+          label: fieldLabel(name),
+          value: display(value, name),
+          changed: changed(name, value),
+        }))
     : [];
+
   const completeSections: readonly PlanSection[] = remaining.length
     ? [...sections, { id: 'resolved', title: t('project.resolvedSettings'), rows: remaining }]
     : sections;
 
-  return { manifest, differences, context, sections: completeSections, warnings: preview.warnings ?? [] };
+  return {
+    manifest,
+    differences,
+    context,
+    sections: completeSections,
+    warnings: preview.warnings ?? [],
+  };
 }

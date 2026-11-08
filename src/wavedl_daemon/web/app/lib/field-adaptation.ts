@@ -1,14 +1,17 @@
 import { trainingFieldMetadata } from '../../shared/schemas/training-request';
 import { trainingFieldMessageKeys } from '../i18n/dynamic-keys';
+import type { AcceptableValue } from 'reka-ui';
 import type { Json } from '~~/types/json';
 
 type TrainingControlKind = 'boolean' | 'choice' | 'list' | 'number' | 'text';
+
 type Translate = (key: string) => string;
 
 export function trainingFieldAdapter(name: string, defaultValue?: Json) {
   const option = trainingFieldMetadata.find((item) => item.name === name);
   const keys = trainingFieldMessageKeys[name];
   const initialValue = defaultValue === undefined ? option?.default : defaultValue;
+
   const kind: TrainingControlKind =
     option?.kind === 'boolean'
       ? 'boolean'
@@ -65,6 +68,6 @@ export function nullableNumberValue(value: number | null | undefined): number | 
   return value ?? null;
 }
 
-export function inputChoiceValue(value: unknown): string {
+export function inputChoiceValue(value: AcceptableValue): string {
   return String(value ?? '');
 }

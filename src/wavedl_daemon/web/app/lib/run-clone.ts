@@ -1,6 +1,6 @@
 import { planManifestSchema } from '../../shared/schemas/plan-summary';
 import { projectDraftSchema } from '../../shared/schemas/project-draft';
-import { jsonObjectSchema } from '../../shared/schemas/json';
+import { jsonObjectSchema, jsonStringSchema } from '../../shared/schemas/json';
 import { trainingRequestSchema } from '../../shared/schemas/training-request';
 import { parseTrainingConfig } from './training-import';
 import { trainingCommand } from './training-export';
@@ -24,15 +24,29 @@ export function runClone(plan: PlanView, daemonId: string): PendingRunClone | nu
     return mapped.path;
   }
 
-  const config = Object.fromEntries(Object.entries(review.resolved_config).map(([name, value]) => {
-    if (['data_path', 'resume', 'constraint_file'].includes(name) && typeof value === 'string')
-      return [name, hostPath(value)];
-    if (name === 'import_modules' && Array.isArray(value))
-      return [name, value.map((item) => typeof item === 'string' && item.endsWith('.py') ? hostPath(item) : item)];
+  const config = Object.fromEntries(
+    Object.entries(review.resolved_config).map(([name, value]) => {
+      const path = jsonStringSchema.safeParse(value);
 
-    return [name, value];
-  }));
+      if (['data_path', 'resume', 'constraint_file'].includes(name) && path.success)
+        return [name, hostPath(path.data)];
+
+      if (name === 'import_modules' && Array.isArray(value))
+        return [
+          name,
+          value.map((item) => {
+            const module = jsonStringSchema.safeParse(item);
+
+            return module.success && module.data.endsWith('.py') ? hostPath(module.data) : item;
+          }),
+        ];
+
+      return [name, value];
+    }),
+  );
+
   const imported = parseTrainingConfig(JSON.stringify(config));
+
   const draft = projectDraftSchema.safeParse({
     version: 1,
     daemonId,
@@ -52,7 +66,9 @@ export function runClone(plan: PlanView, daemonId: string): PendingRunClone | nu
     storage_map: mappings,
   });
 
-  return draft.success && !ambiguousPath ? { sourceRunId: plan.run_id, imported, draft: draft.data } : null;
+  return draft.success && !ambiguousPath
+    ? { sourceRunId: plan.run_id, imported, draft: draft.data }
+    : null;
 }
 
 /** Reuse Review's standalone command builder with the stored resolved inputs. */
@@ -66,6 +82,7 @@ export function storedTrainingCommand(plan: PlanView): string | null {
   // Never advertise a command that silently drops a future or unsupported setting.
   if (imported.skipped.some((name) => name !== 'output_dir')) return null;
   const runtime = jsonObjectSchema.parse(manifest.runtime);
+
   const request = trainingRequestSchema.parse({
     backend: plan.preview.target,
     operation: 'train',

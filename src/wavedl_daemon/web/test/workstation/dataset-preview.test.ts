@@ -256,9 +256,7 @@ describe('dataset preview polling', () => {
   });
 
   it('ends a pending job at the overall 20-minute deadline and clears its poll timer', async () => {
-    const { api, selected, requests, session } = await setup(() =>
-      json({ status: 'pending' }, 202),
-    );
+    const { api, selected, requests } = await setup(() => json({ status: 'pending' }, 202));
 
     vi.useFakeTimers();
     const task = api.preview(selected);

@@ -8,15 +8,11 @@ interface RuntimeChoiceField<Name extends string, Value extends string> {
   readonly values: readonly Value[];
 }
 
-export const runtimePythonField: {
-  readonly name: 'runtime.python';
-  readonly label: string;
-  readonly description: string;
-} = {
+export const runtimePythonField = {
   name: 'runtime.python',
   label: runtimeFieldMessageKeys.pythonInterpreter,
   description: runtimeFieldMessageKeys.interpreterDescription,
-};
+} as const;
 
 export const runtimeBackendField: RuntimeChoiceField<'backend', TrainingRequest['backend']> = {
   name: 'backend',

@@ -31,7 +31,7 @@ function snapshotMetric(record: StoredMetricRecord, frozen = false): MetricRecor
     while (pending.length) {
       const value = pending.pop();
 
-      if (value !== null && typeof value === 'object') {
+      if (value instanceof Object) {
         pending.push(...Object.values(value));
         Object.freeze(value);
       }
@@ -235,6 +235,7 @@ export class MetricHistory {
   }
   setScope(view: RunView): void {
     if (view.run_id !== this.runId) fail('metricScopeBelongsToAnotherRun');
+
     if (this.#scope !== view.attempt) {
       this.#scope = view.attempt;
       this.#revision++;

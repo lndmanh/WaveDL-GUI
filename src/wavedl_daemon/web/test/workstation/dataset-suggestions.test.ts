@@ -12,6 +12,7 @@ import type { RunView } from '../../types/daemon-api';
 import { CatalogApi } from '../../app/lib/catalog-api';
 import { locateRequestSchema } from '../../shared/schemas/workstation-controls';
 import { ConnectionSession } from './session-fixture';
+import type { FixtureResponse } from './fixture-schemas';
 
 function run(id: string, path: string | null, created: string | null = null): RunView {
   return {
@@ -99,15 +100,18 @@ async function setupSuggestions(
   const rootResolutions: string[] = [];
   const fileResolutions: string[] = [];
   const controller = new AbortController();
+
   const session = new ConnectionSession({
     origin: 'http://localhost:8765',
     buildId: '1.8.1',
     fetcher: async (input, init) => {
       const url = new URL(String(input));
-      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-        status,
-        headers: { 'content-type': 'application/json' },
-      });
+
+      const json = (body: FixtureResponse, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
 
       if (url.pathname === '/api/health')
         return json({ daemon_id: 'daemon', build_id: '1.8.1', protocol_min: 1, protocol_max: 1 });
@@ -148,6 +152,7 @@ async function setupSuggestions(
       return json({ detail: 'missing' }, 404);
     },
   });
+
   expect(await session.connect('token')).toBe(true);
 
   async function load() {
@@ -176,9 +181,11 @@ test('resolves four newest datasets without requesting another page and shares c
 });
 
 test('caps recent run scanning even when repeated datasets leave room for more suggestions', async () => {
-  const fixture = await setupSuggestions(history(MAX_RECENT_DATASET_RUNS + 5, (index) =>
-    index < MAX_RECENT_DATASET_RUNS ? '/data/repeated.npz' : '/data/older.npz',
-  ));
+  const fixture = await setupSuggestions(
+    history(MAX_RECENT_DATASET_RUNS + 5, (index) =>
+      index < MAX_RECENT_DATASET_RUNS ? '/data/repeated.npz' : '/data/older.npz',
+    ),
+  );
 
   expect((await fixture.load()).map((item) => item.path)).toEqual(['/data/repeated.npz']);
   expect(fixture.pages).toEqual([0, 100, 200]);
@@ -186,12 +193,13 @@ test('caps recent run scanning even when repeated datasets leave room for more s
 });
 
 test('stops at a short page without requesting an empty page', async () => {
-  const fixture = await setupSuggestions(history(105, (index) =>
-    index < 100 ? '/data/newest.npz' : '/data/older.npz',
-  ));
+  const fixture = await setupSuggestions(
+    history(105, (index) => (index < 100 ? '/data/newest.npz' : '/data/older.npz')),
+  );
 
   expect((await fixture.load()).map((item) => item.path)).toEqual([
-    '/data/newest.npz', '/data/older.npz',
+    '/data/newest.npz',
+    '/data/older.npz',
   ]);
   expect(fixture.pages).toEqual([0, 100]);
   expect(fixture.fileResolutions).toEqual(['newest.npz', 'older.npz']);
@@ -199,12 +207,16 @@ test('stops at a short page without requesting an empty page', async () => {
 });
 
 test('deduplicates failed paths across pages and slash styles before resolving older candidates', async () => {
-  const fixture = await setupSuggestions(history(205, (index) => {
-    if (index < 100) return '/data/missing.npz';
-    if (index < 200) return '/data\\missing.npz';
+  const fixture = await setupSuggestions(
+    history(205, (index) => {
+      if (index < 100) return '/data/missing.npz';
 
-    return '/data/valid.npz';
-  }), (path) => path === 'missing.npz');
+      if (index < 200) return '/data\\missing.npz';
+
+      return '/data/valid.npz';
+    }),
+    (path) => path === 'missing.npz',
+  );
 
   expect((await fixture.load()).map((item) => item.path)).toEqual(['/data/valid.npz']);
   expect(fixture.pages).toEqual([0, 100, 200]);
@@ -228,7 +240,10 @@ test('falls back past failed paths and stops requests as soon as four resolve', 
   const suggestions = await fixture.load();
 
   expect(suggestions.map((item) => item.path)).toEqual([
-    '/data/2.npz', '/data/3.npz', '/data/4.npz', '/data/5.npz',
+    '/data/2.npz',
+    '/data/3.npz',
+    '/data/4.npz',
+    '/data/5.npz',
   ]);
   expect(fixture.pages).toEqual([0]);
   expect(fixture.fileResolutions).toEqual(['0.npz', '1.npz', '2.npz', '3.npz', '4.npz', '5.npz']);
@@ -258,16 +273,21 @@ test('does not start suggestion work for an aborted load', async () => {
   const fixture = await setupSuggestions(history(10));
   fixture.controller.abort();
 
-  await expect(loadDatasetSuggestions(fixture.session, ['data'], fixture.controller.signal))
-    .rejects.toThrow();
+  await expect(
+    loadDatasetSuggestions(fixture.session, ['data'], fixture.controller.signal),
+  ).rejects.toThrow();
   expect(fixture.pages).toEqual([]);
   expect(fixture.fileResolutions).toEqual([]);
 });
 
 test('cancels during pagination without requesting another page', async () => {
-  const fixture = await setupSuggestions(history(305, () => '/data/repeated.npz'), () => false, (offset) => {
-    if (offset === 100) fixture.controller.abort();
-  });
+  const fixture = await setupSuggestions(
+    history(305, () => '/data/repeated.npz'),
+    () => false,
+    (offset) => {
+      if (offset === 100) fixture.controller.abort();
+    },
+  );
 
   await expect(fixture.load()).rejects.toThrow();
   expect(fixture.pages).toEqual([0, 100]);
