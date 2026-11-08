@@ -429,13 +429,13 @@ def test_planning_rechecks_checkpoint_eligibility_after_path_resolution(
     count = len(all_plans(environment.plans))
 
     async def run():
-        with BoundedThreadPool(WorkBudget()) as pool:
-            with pytest.raises(
-                UnsupportedPlan, match="checkpoint source cannot supply"
-            ):
-                await environment.service.plan_async(
-                    from_checkpoint(source, tmp_path), "changed-source", pool
-                )
+        with (
+            BoundedThreadPool(WorkBudget()) as pool,
+            pytest.raises(UnsupportedPlan, match="checkpoint source cannot supply"),
+        ):
+            await environment.service.plan_async(
+                from_checkpoint(source, tmp_path), "changed-source", pool
+            )
 
     asyncio.run(run())
     assert calls == [owner, owner]
@@ -876,7 +876,9 @@ def test_state_filtered_list_pages_more_than_1000_plans(environment, monkeypatch
         return view(record, **options)
 
     monkeypatch.setattr(environment.service, "_view", lookup)
-    response = request(environment.app, "GET", "/api/runs?state=pending&limit=1&offset=1")
+    response = request(
+        environment.app, "GET", "/api/runs?state=pending&limit=1&offset=1"
+    )
     assert response.status_code == 200
     assert [run["run_id"] for run in response.json()["runs"]] == [plans[1001].run_id]
     assert calls == [plans[1001].run_id]
