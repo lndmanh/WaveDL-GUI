@@ -23,7 +23,6 @@ const error = shallowRef('');
 const cloneError = shallowRef('');
 const cloning = shallowRef(false);
 const retry = shallowRef(0);
-const detailsId = useId();
 
 watch(
   [
@@ -173,11 +172,9 @@ async function cloneRun() {
 
 <template>
   <div class="@container flex min-w-0 flex-col gap-4">
-    <section class="surface-group min-w-0 overflow-hidden" :aria-labelledby="detailsId">
-      <div class="flex flex-wrap items-center justify-between gap-3 px-5 pt-4">
-        <h3 :id="detailsId" class="text-sm font-semibold">{{ t('project.runDetails') }}</h3>
+    <section class="surface-group min-w-0 overflow-hidden" :aria-label="t('project.runDetails')">
+      <div v-if="canClone" class="flex justify-end px-5 pt-4">
         <Button
-          v-if="canClone"
           type="button"
           variant="outline"
           size="sm"
