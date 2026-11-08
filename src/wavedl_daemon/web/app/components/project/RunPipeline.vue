@@ -2,13 +2,11 @@
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'motion-v';
 import {
-  ArrowRight,
   Check,
   CircleAlert,
   ClipboardCheck,
   Cpu,
   Database,
-  LoaderCircle,
   SlidersHorizontal,
   Sparkles,
 } from '@lucide/vue';
@@ -20,16 +18,12 @@ const props = defineProps<{
   blocks: readonly PipelineBlock[];
   active: ProjectBlock;
   panelId: string;
-  reviewLabel: string;
-  reviewDisabled: boolean;
-  reviewBusy: boolean;
 }>();
 
 defineOptions({ inheritAttrs: false });
 
 const emit = defineEmits<{
   select: [block: ProjectBlock];
-  review: [];
   measure: [bottom: number];
 }>();
 
@@ -52,14 +46,12 @@ const stateLabels: Record<PipelineBlock['state'], string> = {
   pending: 'builder.stepToDo',
 };
 
-const readyCount = computed(() => props.blocks.filter((block) => block.state !== 'pending').length);
-
 function tabId(block: ProjectBlock): string {
   return `${props.panelId}-tab-${block}`;
 }
 
 /**
- * Once the strip sticks to the top of its scroller it condenses to icon, value and the action.
+ * Once the strip sticks to the top of its scroller it condenses to icon and value.
  * The scroller is whichever ancestor scrolls, so listen at the document and keep only those.
  */
 const condensed = shallowRef(false);
@@ -219,15 +211,6 @@ const projectStyles = {
   runPipelineDetail: cn(
     'block overflow-hidden text-ellipsis whitespace-nowrap text-[0.74rem] text-muted-foreground',
   ),
-  runPipelineSide: cn(
-    'flex flex-none flex-col items-stretch justify-center gap-1.5 pl-1.5 @max-[34rem]/pipeline:pl-0',
-  ),
-  runPipelineReview: cn(
-    'h-10 rounded-[0.8rem] px-4 [&_svg]:[transition:transform_200ms_cubic-bezier(0.16,_1,_0.3,_1)]',
-    '[&:hover:not(:disabled)_.run-pipeline-arrow]:translate-x-0.5',
-    'shadow-[inset_0_1px_0_rgb(255_255_255_/_0.2),_0_6px_16px_-6px_color-mix(in_srgb,_var(--primary)_70%,_transparent)]',
-  ),
-  runPipelineCount: cn('block text-center text-[0.72rem] text-muted-foreground tabular-nums'),
 };
 </script>
 <template>
@@ -305,23 +288,6 @@ const projectStyles = {
             </span>
           </span>
         </button>
-      </div>
-      <div :class="projectStyles.runPipelineSide">
-        <Button
-          type="button"
-          :class="projectStyles.runPipelineReview"
-          :disabled="reviewDisabled"
-          @click="emit('review')"
-        >
-          <LoaderCircle v-if="reviewBusy" class="animate-spin" aria-hidden="true" />
-          {{ reviewLabel }}
-          <ArrowRight v-if="!reviewBusy" class="run-pipeline-arrow" aria-hidden="true" />
-        </Button>
-        <span :class="projectStyles.runPipelineFold">
-          <span :class="projectStyles.runPipelineCount">{{
-            t('builder.stepsReady', { ready: readyCount, total: blocks.length })
-          }}</span>
-        </span>
       </div>
     </div>
   </div>
