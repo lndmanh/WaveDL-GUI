@@ -79,8 +79,10 @@ const evaluationFocusTarget = computed(
 const labels = useRunLabels();
 const monitor = computed(() => props.monitor ?? selectedMonitor.value);
 
+const resultRuns = computed(() => runs.value.filter((run) => run.state !== 'planned'));
+
 const selectedRun = computed(
-  () => runs.value.find((run) => run.run_id === props.runId) ?? monitor.value?.run,
+  () => resultRuns.value.find((run) => run.run_id === props.runId) ?? monitor.value?.run,
 );
 
 const runName = computed(() =>
@@ -88,7 +90,7 @@ const runName = computed(() =>
 );
 
 const evaluations = computed(() =>
-  runs.value.filter((run) => run.summary?.source_run_id === props.runId),
+  resultRuns.value.filter((run) => run.summary?.source_run_id === props.runId),
 );
 
 watch(
@@ -232,7 +234,7 @@ watch(hasCvSummary, (available) => {
           </Tooltip>
         </TooltipProvider>
         <ResultsRunSwitcher
-          :runs="runs"
+          :runs="resultRuns"
           :run-id="runId"
           :loading="loading"
           :page="page"
@@ -265,7 +267,8 @@ watch(hasCvSummary, (available) => {
     <div v-if="!runId" :class="styles.list">
       <MotionConfig reduced-motion="user">
         <RunList
-          :runs="runs"
+          :runs="resultRuns"
+          :show-planned-filter="false"
           :loading="loading"
           :page="page"
           :stale-run-ids="staleRunIds"
