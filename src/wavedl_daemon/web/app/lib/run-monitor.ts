@@ -20,6 +20,7 @@ export function canRequestCancellation(
 ): boolean {
   return (
     run !== null &&
+    run.state !== 'planned' &&
     !terminalRun(run) &&
     !run.cancellation_requested &&
     state !== 'sending' &&
@@ -121,6 +122,7 @@ export class RunMonitor {
 
     if (
       prior &&
+      prior.state !== 'planned' &&
       (prior.plan_id !== run.plan_id ||
         prior.request_id !== run.request_id ||
         prior.backend !== run.backend ||
@@ -334,6 +336,14 @@ export class RunMonitor {
         if (needsAuthority) {
           await this.#refresh();
           needsAuthority = false;
+        }
+
+        // Unstarted plans have no event journal or live metrics. Keep authority polling
+        // so edits and starts made by another client still update this detail.
+        if (this.#snapshot.run?.state === 'planned') {
+          this.#publish({ stream: 'stopped' });
+          await this.#pause(this.pollMs);
+          continue;
         }
 
         const parser = new EventStreamParser(
