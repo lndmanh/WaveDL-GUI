@@ -129,7 +129,7 @@
   "edit": "Sửa",
   "fix": "Sửa lỗi",
   "changesFromDefaults": "Thiết lập bạn đã thay đổi",
-  "startAnother": "Bắt đầu lần chạy khác",
+  "startNewRun": "Bắt đầu lần chạy mới",
   "recipeDefaults": "Mặc định WaveDL",
   "recipeDefaultsHelp": "Giá trị có sẵn của CLI huấn luyện.",
   "planPending": "Chưa sẵn sàng",

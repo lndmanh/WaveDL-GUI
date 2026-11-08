@@ -129,7 +129,7 @@
   "edit": "Edit",
   "fix": "Fix",
   "changesFromDefaults": "Settings you changed",
-  "startAnother": "Start another run",
+  "startNewRun": "Start new run",
   "recipeDefaults": "WaveDL defaults",
   "recipeDefaultsHelp": "The training CLI’s built-in values.",
   "planPending": "Not ready",
