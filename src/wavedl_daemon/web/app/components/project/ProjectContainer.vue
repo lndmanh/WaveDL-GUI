@@ -70,6 +70,10 @@ const emit = defineEmits<{
 
 const panelId = useId();
 const importInput = useTemplateRef<HTMLInputElement>('importInput');
+const stepTop = useTemplateRef<HTMLElement>('stepTop');
+const stepHeader = useTemplateRef('stepHeader');
+const pipelineBottom = shallowRef(0);
+const reduceMotion = useReducedMotion();
 
 function daemonId(): string | null {
   return toRaw(props.session).snapshot().health?.daemon_id ?? null;
@@ -712,6 +716,62 @@ const blocks = computed<PipelineBlock[]>(() => [
   },
 ]);
 
+const activeIndex = computed(() => blocks.value.findIndex((block) => block.id === active.value));
+const activeBlock = computed(() => blocks.value[activeIndex.value]);
+const previousBlock = computed(() => blocks.value[activeIndex.value - 1]);
+const nextBlock = computed(() => blocks.value[activeIndex.value + 1]);
+const backDisabled = computed(() => busy.value || !previousBlock.value);
+
+// Attention flags (custom model, shape warnings) inform but don't block; pending steps and
+// validation issues do.
+const stepBlocked = computed(() => {
+  const block = activeBlock.value;
+
+  return !block || block.state === 'pending' || issueCount(block.id) > 0;
+});
+
+const nextDisabled = computed(() => busy.value || !nextBlock.value || stepBlocked.value);
+
+const stepMessages: Record<ProjectBlock, { title: string; description: string }> = {
+  dataset: { title: 'builder.datasetTitle', description: 'builder.datasetDescription' },
+  model: { title: 'builder.modelTitle', description: 'builder.modelDescription' },
+  training: { title: 'builder.trainingTitle', description: 'builder.trainingDescription' },
+  runtime: { title: 'builder.runtimeTitle', description: 'builder.runtimeDescription' },
+  plan: { title: 'builder.planTitle', description: 'builder.planDescription' },
+};
+
+const stepDescription = computed(() =>
+  active.value === 'plan' && planSubmitted.value
+    ? t('project.leaveDoesNotCancel')
+    : t(stepMessages[active.value].description),
+);
+
+const nextHint = computed(() => {
+  const block = activeBlock.value;
+
+  if (!block || !nextBlock.value || !stepBlocked.value || busy.value) return '';
+
+  return t(issueCount(block.id) ? 'project.stepNeedsReview' : 'project.stepIncomplete', {
+    detail: issueCount(block.id)
+      ? t('builder.issueCount', { count: issueCount(block.id) })
+      : block.detail,
+  });
+});
+
+async function navigateStep(direction: 'back' | 'next') {
+  if (direction === 'back' ? backDisabled.value : nextDisabled.value) return;
+  const target = direction === 'back' ? previousBlock.value : nextBlock.value;
+
+  if (!target || offered.value) return;
+  selectBlock(target.id);
+  await nextTick();
+  stepHeader.value?.focusHeading();
+  stepTop.value?.scrollIntoView({
+    block: 'start',
+    behavior: reduceMotion.value ? 'instant' : 'smooth',
+  });
+}
+
 const reviewLabel = computed(() =>
   planSubmitted.value
     ? t('project.viewRun')
@@ -807,7 +867,8 @@ const projectStyles = {
     'opacity-55 [filter:saturate(0.4)] [transition:opacity_400ms_ease,_filter_400ms_ease]',
   ),
   runBuilderPanel: cn(
-    'min-h-96 rounded-[1.5rem] [transition:box-shadow_200ms_ease]',
+    'flex min-h-96 flex-col gap-6 rounded-[1.5rem] [transition:box-shadow_200ms_ease]',
+    '[scroll-margin-top:calc(var(--run-pipeline-bottom,_0px)_+_0.75rem)]',
     "[&[data-dragging='true']]:shadow-[0_0_0_2px_var(--primary)]",
   ),
   runMessage: cn(
@@ -934,6 +995,7 @@ watch(
   <section
     class="run-builder mx-auto flex w-full max-w-6xl flex-col gap-6"
     aria-labelledby="project-title"
+    :style="{ '--run-pipeline-bottom': `${pipelineBottom}px` }"
     @dragenter="dragEnter"
     @dragleave="dragLeave"
     @dragover.prevent
@@ -989,6 +1051,7 @@ watch(
         :class="offered ? projectStyles.runBuilderMuted : ''"
         @select="selectBlock"
         @review="review"
+        @measure="pipelineBottom = $event"
       />
 
       <Transition
@@ -1093,6 +1156,7 @@ watch(
 
       <form
         v-show="!offered"
+        ref="stepTop"
         :id="panelId"
         role="tabpanel"
         :aria-labelledby="`${panelId}-tab-${active}`"
@@ -1106,6 +1170,16 @@ watch(
         novalidate
         @submit.prevent="preview"
       >
+        <StepHeader
+          ref="stepHeader"
+          :title="t(stepMessages[active].title)"
+          :description="stepDescription"
+          :back-disabled="backDisabled"
+          :next-disabled="nextDisabled"
+          :next-hint="nextHint"
+          @back="navigateStep('back')"
+          @next="navigateStep('next')"
+        />
         <DatasetInspector
           v-show="active === 'dataset'"
           :active="active === 'dataset'"
