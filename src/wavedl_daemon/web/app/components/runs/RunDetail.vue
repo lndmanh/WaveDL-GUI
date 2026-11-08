@@ -30,7 +30,7 @@ import { sectionPath } from '../../shell/sections';
 import type { RunView } from '~~/types/daemon-api';
 import type { ShellPanelTabId } from '~~/types/shell';
 import { evaluationResults } from '../../lib/evaluation-results';
-import { canRequestCancellation } from '../../lib/run-monitor';
+import { canRequestCancellation, terminalRun } from '../../lib/run-monitor';
 import { buildPlotSeries, minimumPoint } from '../../lib/plot-series';
 import type { PlotSeries } from '~~/types/plot-series';
 import {
@@ -40,22 +40,12 @@ import {
   runCreatedAt,
   shortRunId,
 } from '../../lib/run-overview';
-import {
-  runBackendMessageKeys,
-  runCancellationMessageKeys,
-  runStreamMessageKeys,
-} from '../../i18n/dynamic-keys';
+import { runBackendMessageKeys, runCancellationMessageKeys } from '../../i18n/dynamic-keys';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 
 const styles = {
   card: cn('@container h-full min-h-0 min-w-0 gap-0 overflow-hidden py-0'),
   header: cn('flex shrink-0 flex-col gap-3 px-4 py-3'),
-  stream: cn(
-    'size-2 shrink-0 rounded-full bg-muted-foreground/40',
-    "[&[data-stream='live']]:bg-success",
-    "[&[data-stream='connecting']]:bg-warning [&[data-stream='reconnecting']]:bg-warning",
-    "[&[data-stream='error']]:bg-destructive",
-  ),
   facts: cn(
     'flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground',
     '[&>li]:inline-flex [&>li]:min-w-0 [&>li]:items-center [&>li]:gap-1.5 [&>li]:wrap-anywhere',
@@ -173,6 +163,18 @@ const metricsUnconfirmed = computed(
     props.snapshot.run?.uncertainty === true || props.snapshot.run?.state === 'supervision_lost',
 );
 
+const waitingForMetrics = computed(() => {
+  const run = props.snapshot.run;
+
+  return (
+    props.snapshot.freshness === 'fresh' &&
+    run !== null &&
+    !terminalRun(run) &&
+    run.state !== 'terminal_unknown' &&
+    !metricsUnconfirmed.value
+  );
+});
+
 const metricSummary = computed(() =>
   metricsUnavailable.value
     ? { progress: null, best: null, latest: null }
@@ -269,8 +271,6 @@ const facts = computed<RunFact[]>(() => {
   return result;
 });
 
-const streamLabel = computed(() => t(runStreamMessageKeys[props.snapshot.stream]));
-
 const percent = computed(() =>
   metricSummary.value.progress
     ? new Intl.NumberFormat(locale.value, { style: 'percent', maximumFractionDigits: 0 }).format(
@@ -305,135 +305,172 @@ const hasEvaluation = computed(
     <Card :class="styles.card" :aria-label="t('runs.selected')">
       <header :class="styles.header">
         <div class="flex flex-wrap items-center gap-2">
-          <div class="flex min-w-[min(100%,10rem)] flex-1 items-center gap-2">
-            <h3
-              ref="title"
-              tabindex="-1"
-              class="min-w-0 truncate text-lg font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              :title="snapshot.run ? labels.title(snapshot.run) : undefined"
+          <div class="flex min-w-[min(100%,14rem)] flex-1 flex-wrap items-center gap-2">
+            <div class="flex min-w-0 max-w-full items-center gap-2">
+              <h3
+                ref="title"
+                tabindex="-1"
+                class="min-w-0 truncate text-lg font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                :title="snapshot.run ? labels.title(snapshot.run) : undefined"
+              >
+                {{ snapshot.run ? labels.title(snapshot.run) : t('runs.loadingRuns') }}
+              </h3>
+              <Badge v-if="snapshot.run" variant="outline" class="shrink-0 text-muted-foreground">
+                <component :is="operationIcons[snapshot.run.operation]" aria-hidden="true" />
+                {{ labels.operation(snapshot.run) }}
+              </Badge>
+            </div>
+            <RunStateChip
+              v-if="snapshot.run"
+              :run="snapshot.run"
+              :stale="snapshot.freshness !== 'fresh'"
+            />
+            <Badge
+              v-if="healthIssues > 0"
+              as="button"
+              type="button"
+              variant="outline"
+              class="cursor-pointer"
+              @click="shellLayout.setActiveTab('health')"
             >
-              {{ snapshot.run ? labels.title(snapshot.run) : t('runs.loadingRuns') }}
-            </h3>
-            <Badge v-if="snapshot.run" variant="outline" class="shrink-0 text-muted-foreground">
-              <component :is="operationIcons[snapshot.run.operation]" aria-hidden="true" />
-              {{ labels.operation(snapshot.run) }}
+              <span class="size-1.5 rounded-full bg-warning" aria-hidden="true" />
+              {{ t('runs.healthWarnings', { count: healthIssues }, healthIssues) }}
             </Badge>
           </div>
-          <span
-            :class="styles.stream"
-            :data-stream="snapshot.stream"
-            :title="t('runs.eventConnection', { status: streamLabel })"
-          >
-            <span class="sr-only">{{ t('runs.eventConnection', { status: streamLabel }) }}</span>
-          </span>
-          <RunStateChip
-            v-if="snapshot.run"
-            :run="snapshot.run"
-            :stale="snapshot.freshness !== 'fresh'"
-          />
-          <Badge
-            v-if="healthIssues > 0"
-            as="button"
-            type="button"
-            variant="outline"
-            class="cursor-pointer"
-            @click="shellLayout.setActiveTab('health')"
-          >
-            <span class="size-1.5 rounded-full bg-warning" aria-hidden="true" />
-            {{ t('runs.healthWarnings', { count: healthIssues }, healthIssues) }}
-          </Badge>
-          <div class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
-            <Button
-              v-if="canEvaluate"
-              variant="outline"
-              size="sm"
-              :disabled="connectionState.status !== 'connected'"
-              @click="evaluateOnTestData"
-              >{{ t('runs.evaluateOnTestData') }}</Button
-            >
-            <Button
-              variant="ghost"
-              size="sm"
-              :aria-label="t('runs.replay')"
-              :title="t('runs.replay')"
-              @click="$emit('replay')"
-              ><RotateCcw aria-hidden="true" /><span class="hidden @min-[48rem]:inline">{{
-                t('runs.replay')
-              }}</span></Button
-            >
-            <Button
-              variant="outline"
-              size="sm"
-              class="text-destructive"
-              :disabled="!canCancel"
-              :aria-label="
-                snapshot.cancellation === 'sending' ? t('runs.requesting') : t('runs.requestCancel')
-              "
-              :title="t('runs.requestCancel')"
-              @click="$emit('cancel')"
-            >
-              <OctagonX aria-hidden="true" /><span class="hidden @min-[48rem]:inline">{{
-                snapshot.cancellation === 'sending' ? t('runs.requesting') : t('runs.requestCancel')
-              }}</span>
-            </Button>
-            <Button
-              v-if="isCanvasExpanded && panelTabs.length > 0"
-              variant="ghost"
-              size="icon"
-              class="size-8"
-              :aria-label="t('shell.openCompanionPanel')"
-              :title="t('shell.openCompanionPanel')"
-              :aria-pressed="isCompanionShowing"
-              aria-controls="shell-companion"
-              @click="shellLayout.togglePanel()"
-            >
-              <PanelRight aria-hidden="true" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-8"
-              :aria-label="t(isCanvasExpanded ? 'runs.collapseDetail' : 'runs.expandDetail')"
-              :title="t(isCanvasExpanded ? 'runs.collapseDetail' : 'runs.expandDetail')"
-              :aria-pressed="isCanvasExpanded"
-              @click="shellLayout.toggleCanvasExpanded()"
-            >
-              <Minimize2 v-if="isCanvasExpanded" aria-hidden="true" />
-              <Maximize2 v-else aria-hidden="true" />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  :aria-label="t('runs.moreActions')"
-                  ><Ellipsis aria-hidden="true"
-                /></Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem v-if="snapshot.run && canCopy" @select="copy(snapshot.run.run_id)"
-                  ><Copy aria-hidden="true" />{{ t('runs.copyRunId') }}</DropdownMenuItem
-                >
-                <DropdownMenuItem
-                  v-if="panelTargets.logs"
-                  data-testid="run-open-logs"
-                  @select="shellLayout.setActiveTab('logs')"
-                  ><ScrollText aria-hidden="true" />{{ t('runs.openLogsPanel') }}</DropdownMenuItem
-                >
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-8 text-muted-foreground"
-              :aria-label="back ? t('runs.back') : t('runs.close')"
-              :title="back ? t('runs.back') : t('runs.close')"
-              @click="$emit('close')"
-            >
-              <component :is="back ? ArrowLeft : X" aria-hidden="true" />
-            </Button>
-          </div>
+          <TooltipProvider>
+            <div class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
+              <div class="flex items-center gap-1">
+                <Tooltip v-if="canEvaluate">
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      :disabled="connectionState.status !== 'connected'"
+                      @click="evaluateOnTestData"
+                    >
+                      <FlaskConical aria-hidden="true" />{{ t('runs.evaluateOnTestData') }}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ t('runs.evaluateOnTestDataHint') }}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8"
+                      :aria-label="t('runs.replay')"
+                      @click="$emit('replay')"
+                      ><RotateCcw aria-hidden="true"
+                    /></Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ t('runs.replay') }}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      class="size-8 text-destructive"
+                      :disabled="!canCancel"
+                      :aria-label="
+                        snapshot.cancellation === 'sending'
+                          ? t('runs.requesting')
+                          : t('runs.requestCancel')
+                      "
+                      @click="$emit('cancel')"
+                      ><OctagonX aria-hidden="true"
+                    /></Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ t('runs.requestCancel') }}</TooltipContent>
+                </Tooltip>
+              </div>
+              <Separator orientation="vertical" class="mx-1 h-5 shrink-0" />
+              <div class="flex items-center gap-1">
+                <Tooltip v-if="isCanvasExpanded && panelTabs.length > 0">
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8"
+                      :aria-label="t('shell.openCompanionPanel')"
+                      :aria-pressed="isCompanionShowing"
+                      aria-controls="shell-companion"
+                      @click="shellLayout.togglePanel()"
+                    >
+                      <PanelRight aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ t('shell.openCompanionPanel') }}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8"
+                      :aria-label="
+                        t(isCanvasExpanded ? 'runs.collapseDetail' : 'runs.expandDetail')
+                      "
+                      :aria-pressed="isCanvasExpanded"
+                      @click="shellLayout.toggleCanvasExpanded()"
+                    >
+                      <Minimize2 v-if="isCanvasExpanded" aria-hidden="true" />
+                      <Maximize2 v-else aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{{
+                    t(isCanvasExpanded ? 'runs.collapseDetail' : 'runs.expandDetail')
+                  }}</TooltipContent>
+                </Tooltip>
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <DropdownMenuTrigger as-child>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-8"
+                          :aria-label="t('runs.moreActions')"
+                          ><Ellipsis aria-hidden="true"
+                        /></Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>{{ t('runs.moreActions') }}</TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      v-if="snapshot.run && canCopy"
+                      @select="copy(snapshot.run.run_id)"
+                      ><Copy aria-hidden="true" />{{ t('runs.copyRunId') }}</DropdownMenuItem
+                    >
+                    <DropdownMenuItem
+                      v-if="panelTargets.logs"
+                      data-testid="run-open-logs"
+                      @select="shellLayout.setActiveTab('logs')"
+                      ><ScrollText aria-hidden="true" />{{
+                        t('runs.openLogsPanel')
+                      }}</DropdownMenuItem
+                    >
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-8 text-muted-foreground"
+                      :aria-label="back ? t('runs.back') : t('runs.close')"
+                      @click="$emit('close')"
+                    >
+                      <component :is="back ? ArrowLeft : X" aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{{ back ? t('runs.back') : t('runs.close') }}</TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </TooltipProvider>
         </div>
         <ul v-if="snapshot.run" :class="styles.facts">
           <li
@@ -564,10 +601,12 @@ const hasEvaluation = computed(
           v-if="panel.id === 'metrics'"
           :summary="metricSummary"
           :unconfirmed="metricsUnconfirmed"
+          :waiting="waitingForMetrics"
         />
         <MetricHealthPanel
           v-else-if="panel.id === 'health'"
           :health="metricSummary.current?.health ?? []"
+          :waiting="waitingForMetrics"
         />
         <RunConfigurationPanel
           v-else-if="panel.id === 'configuration' && snapshot.run"
