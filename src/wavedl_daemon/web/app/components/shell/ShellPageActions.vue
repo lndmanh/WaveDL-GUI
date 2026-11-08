@@ -7,8 +7,7 @@ const navigate = useShellActions();
 const layout = useShellLayout();
 const { state } = useWorkstation();
 
-const { panelTabs, isDockedLayout, isCompanionShowing, isFocusMode, commandPaletteOpen } =
-  layout;
+const { panelTabs, isDockedLayout, isCompanionShowing, isFocusMode, commandPaletteOpen } = layout;
 
 const statusLabel = computed(() => t(connectionStatusKey[state.value.status]));
 </script>

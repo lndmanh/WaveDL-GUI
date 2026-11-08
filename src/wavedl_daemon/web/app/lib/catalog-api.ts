@@ -171,10 +171,13 @@ export class CatalogApi {
     );
   }
   /** Resolve each browse root once for a batch of host-path lookups. */
-  async locations(signal?: AbortSignal, roots?: readonly string[]): Promise<readonly DataSelection[]> {
+  async locations(
+    signal?: AbortSignal,
+    roots?: readonly string[],
+  ): Promise<readonly DataSelection[]> {
     const locations: DataSelection[] = [];
 
-    for (const root of roots ?? await this.roots(signal)) {
+    for (const root of roots ?? (await this.roots(signal))) {
       try {
         locations.push(await this.resolve(root, '', signal));
       } catch (error) {
@@ -198,7 +201,7 @@ export class CatalogApi {
     if (!parsed.success) return null;
     const target = parsed.data.replaceAll('\\', '/');
 
-    const roots = locations?.map((location) => location.root) ?? await this.roots(signal);
+    const roots = locations?.map((location) => location.root) ?? (await this.roots(signal));
 
     for (const root of roots) {
       let base = locations?.find((location) => location.root === root);

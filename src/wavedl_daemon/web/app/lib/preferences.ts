@@ -98,7 +98,9 @@ export function loadAppearance(storage = browserStorage()): AppearancePreference
 
     if (current.success) return current.data.preferences;
 
-    return legacyAppearancePreferencesSchema.parse(legacyAppearanceEnvelope.parse(value).preferences);
+    return legacyAppearancePreferencesSchema.parse(
+      legacyAppearanceEnvelope.parse(value).preferences,
+    );
   } catch {
     return { ...defaultAppearance };
   }

@@ -89,32 +89,35 @@ function keydown(event: KeyboardEvent, entry: BrowseEntry) {
 <template>
   <section class="flex min-w-0 flex-col" :aria-label="title">
     <div :class="cn('flex min-h-11 items-center gap-1 border-b pr-1.5 pl-3', fill && 'shrink-0')">
-      <h3 class="min-w-0 flex-1 truncate py-3 text-xs font-semibold text-muted-foreground" :title="title">
+      <h3
+        class="min-w-0 flex-1 truncate py-3 text-xs font-semibold text-muted-foreground"
+        :title="title"
+      >
         {{ title }}
       </h3>
       <TooltipProvider v-if="copyable">
-      <Tooltip>
-        <TooltipTrigger as-child>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            :disabled="busy"
-            :aria-label="t('datasets.copyFolderPath', { name: title })"
-            @click="emit('copyPath')"
-            ><Check v-if="copyState === 'copied'" class="text-success" aria-hidden="true" /><Copy
-              v-else
-              aria-hidden="true"
-          /></Button>
-        </TooltipTrigger>
-        <TooltipContent>{{
-          copyState === 'copied'
-            ? t('datasets.folderPathCopied')
-            : copyState === 'failed'
-              ? t('datasets.folderPathCopyFailed')
-              : t('datasets.copyFolderPathTip')
-        }}</TooltipContent>
-      </Tooltip>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              :disabled="busy"
+              :aria-label="t('datasets.copyFolderPath', { name: title })"
+              @click="emit('copyPath')"
+              ><Check v-if="copyState === 'copied'" class="text-success" aria-hidden="true" /><Copy
+                v-else
+                aria-hidden="true"
+            /></Button>
+          </TooltipTrigger>
+          <TooltipContent>{{
+            copyState === 'copied'
+              ? t('datasets.folderPathCopied')
+              : copyState === 'failed'
+                ? t('datasets.folderPathCopyFailed')
+                : t('datasets.copyFolderPathTip')
+          }}</TooltipContent>
+        </Tooltip>
       </TooltipProvider>
       <span v-if="copyState" class="sr-only" role="status">{{
         copyState === 'copied' ? t('datasets.folderPathCopied') : t('datasets.folderPathCopyFailed')

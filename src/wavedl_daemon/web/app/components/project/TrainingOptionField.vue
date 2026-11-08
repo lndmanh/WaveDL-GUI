@@ -57,10 +57,7 @@ const defaultText = computed(() => {
           : ''
       "
     >
-      <div
-        v-if="kind !== 'boolean'"
-        class="flex flex-wrap items-center justify-between gap-2"
-      >
+      <div v-if="kind !== 'boolean'" class="flex flex-wrap items-center justify-between gap-2">
         <FieldLabel :for="controlId">{{ label }}</FieldLabel>
         <InfoChip
           v-if="description.length > 80"

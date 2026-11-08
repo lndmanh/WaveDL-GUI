@@ -46,10 +46,24 @@ interface ProjectDraftOptions {
 /** Daemon-scoped draft storage and explicit restore/import handoffs; never owns approval. */
 export function useProjectDraft(options: ProjectDraftOptions) {
   const { values, resetForm, setFieldValue } = options.form;
+
   const {
-    daemonId, defaults, data, model, datasetInspection, active, setup, connected,
-    selectData, selectModel, retireScope, fieldLabel, t, clientMessage,
+    daemonId,
+    defaults,
+    data,
+    model,
+    datasetInspection,
+    active,
+    setup,
+    connected,
+    selectData,
+    selectModel,
+    retireScope,
+    fieldLabel,
+    t,
+    clientMessage,
   } = options;
+
   const offered = shallowRef<ProjectDraft | null>(null);
   const pendingModel = shallowRef<string | null>(null);
   const dragging = shallowRef(false);
@@ -156,6 +170,7 @@ export function useProjectDraft(options: ProjectDraftOptions) {
         const selection = await api.resolve(dataset.root, dataset.relativePath);
 
         if (!isCurrent()) return missing;
+
         if (selection.kind === 'file') selectData(selection, true);
       } catch {
         if (!isCurrent()) return missing;
@@ -189,7 +204,12 @@ export function useProjectDraft(options: ProjectDraftOptions) {
     offered.value = null;
     setup.value = draftSetup(draft);
     resetForm({ values: draftRequest(draft, defaults()) });
-    const missing = await restoreSelections(draft.dataset, draft.model, () => current === restoreEpoch);
+
+    const missing = await restoreSelections(
+      draft.dataset,
+      draft.model,
+      () => current === restoreEpoch,
+    );
 
     if (current !== restoreEpoch) return;
     active.value = !data.value ? 'dataset' : !draft.model ? 'model' : draft.block;
@@ -293,6 +313,7 @@ export function useProjectDraft(options: ProjectDraftOptions) {
         const selection = await new CatalogApi(toRaw(options.session())).locate(imported.dataPath);
 
         if (!isCurrent()) return;
+
         if (selection?.kind === 'file') selectData(selection, true);
         else missing.push(imported.dataPath);
       } catch {
@@ -309,11 +330,16 @@ export function useProjectDraft(options: ProjectDraftOptions) {
 
         if (selection) {
           selectModel(selection, true);
-          setFieldValue('config.pretrained', imported.config.pretrained ?? values.config.pretrained);
+          setFieldValue(
+            'config.pretrained',
+            imported.config.pretrained ?? values.config.pretrained,
+          );
         }
       } else if (options.models.value.length) {
         try {
-          const selection = await new CatalogApi(toRaw(options.session())).selectCustomModel(imported.model);
+          const selection = await new CatalogApi(toRaw(options.session())).selectCustomModel(
+            imported.model,
+          );
 
           if (!isCurrent()) return;
           selectModel(selection, true);
@@ -349,6 +375,7 @@ export function useProjectDraft(options: ProjectDraftOptions) {
 
             try {
               if (before.data) api.assertSelection(before.data);
+
               if (before.model) api.assertSelection(before.model);
             } catch {
               clearNotice();
@@ -464,8 +491,24 @@ export function useProjectDraft(options: ProjectDraftOptions) {
   });
 
   return {
-    offered, pendingModel, dragging, savedAt, notice,
-    announce, clearNotice, offerSaved, retire, cancelRestore, edited, submitted,
-    continueDraft, startFresh, pickedFile, dragEnter, dragLeave, drop, exportNotice,
+    offered,
+    pendingModel,
+    dragging,
+    savedAt,
+    notice,
+    announce,
+    clearNotice,
+    offerSaved,
+    retire,
+    cancelRestore,
+    edited,
+    submitted,
+    continueDraft,
+    startFresh,
+    pickedFile,
+    dragEnter,
+    dragLeave,
+    drop,
+    exportNotice,
   };
 }

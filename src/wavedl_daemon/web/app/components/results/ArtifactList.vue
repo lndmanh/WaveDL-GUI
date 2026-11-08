@@ -45,6 +45,7 @@ const props = defineProps<{
   /** Stretch to the parent's height and scroll inside, like the Experiments run table. */
   fill?: boolean;
 }>();
+
 const emit = defineEmits<{
   download: [artifact: Artifact];
   preview: [artifact: Artifact];
@@ -52,6 +53,7 @@ const emit = defineEmits<{
   evaluate: [checkpoint: string];
   export: [checkpoint: string];
 }>();
+
 const { t, locale } = useI18n({ useScope: 'global' });
 const query = shallowRef('');
 const filter = shallowRef<ArtifactGroupKey | 'all'>('all');
@@ -60,14 +62,17 @@ const pageSize = 50;
 const page = shallowRef(1);
 const viewport = useTemplateRef<HTMLDivElement>('viewport');
 const reducedMotion = useReducedMotion();
+
 const clock = useNow({
   controls: true,
   scheduler: (tick) => useIntervalFn(tick, 60_000, { immediate: false }),
 });
+
 const { isActive } = usePageActive(() => {
   clock.now.value = new Date();
   clock.resume();
 }, clock.pause);
+
 const now = clock.now;
 const skipEntrance = computed(() => reducedMotion.value || !isActive.value);
 let previewTrigger: HTMLElement | null = null;
@@ -78,6 +83,7 @@ const groupDefinitions: readonly { key: ArtifactGroupKey; label: string }[] = [
   { key: 'metrics', label: 'results.groupMetricsLogs' },
   { key: 'other', label: 'results.groupOther' },
 ];
+
 const groupOrder = new Map(groupDefinitions.map((group, index) => [group.key, index]));
 const groupLabelKeys = new Map(groupDefinitions.map((group) => [group.key, group.label]));
 
@@ -183,15 +189,29 @@ const grouped = computed(() => sort.value.column === 'type' && sort.value.direct
 const ordered = computed(() => [...visible.value].sort(compareEntries));
 const pageCount = computed(() => Math.max(1, Math.ceil(visible.value.length / pageSize)));
 
-watch([query, filter, sort], () => {
-  page.value = 1;
-}, { flush: 'sync' });
-watch(pageCount, (count) => {
-  page.value = Math.min(page.value, count);
-}, { flush: 'sync' });
-watch(page, () => {
-  if (viewport.value) viewport.value.scrollTop = 0;
-}, { flush: 'post' });
+watch(
+  [query, filter, sort],
+  () => {
+    page.value = 1;
+  },
+  { flush: 'sync' },
+);
+
+watch(
+  pageCount,
+  (count) => {
+    page.value = Math.min(page.value, count);
+  },
+  { flush: 'sync' },
+);
+
+watch(
+  page,
+  () => {
+    if (viewport.value) viewport.value.scrollTop = 0;
+  },
+  { flush: 'post' },
+);
 
 const rows = computed(() => {
   let previous: ArtifactGroupKey | null = null;
@@ -269,6 +289,7 @@ function preview(artifact: Artifact) {
 function restorePreviewFocus(event: Event) {
   if (!isActive.value) {
     event.preventDefault();
+
     return;
   }
 
@@ -320,7 +341,9 @@ function restorePreviewFocus(event: Event) {
         <TooltipProvider :delay-duration="280">
           <table class="w-full table-fixed border-collapse">
             <caption class="sr-only">
-              {{ t('results.publications') }}
+              {{
+                t('results.publications')
+              }}
             </caption>
             <thead :class="styles.header">
               <tr class="h-8">
@@ -435,7 +458,9 @@ function restorePreviewFocus(event: Event) {
           @click="page = Math.max(1, page - 1)"
           ><ChevronLeft aria-hidden="true"
         /></Button>
-        <span role="status" aria-live="polite" class="tabular-nums">{{ t('runs.page', { page }) }}</span>
+        <span role="status" aria-live="polite" class="tabular-nums">{{
+          t('runs.page', { page })
+        }}</span>
         <Button
           variant="ghost"
           size="icon"

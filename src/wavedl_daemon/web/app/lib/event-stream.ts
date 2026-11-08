@@ -57,8 +57,7 @@ class EventIngress {
   async accept(event: RunEvent): Promise<void> {
     this.signal?.throwIfAborted();
 
-    if (event.run_id !== this.runId)
-      throw DaemonApiError.fromKey('protocol', 'invalidEventScope');
+    if (event.run_id !== this.runId) throw DaemonApiError.fromKey('protocol', 'invalidEventScope');
 
     if (new Date(event.ts).toISOString().slice(0, 19) !== event.ts.slice(0, 19))
       throw DaemonApiError.fromKey('protocol', 'invalidEventTimestamp');
@@ -105,6 +104,7 @@ export class EventStreamParser {
   /** JSON pages already passed transport schema validation; no SSE framing round-trip. */
   async accept(event: RunEvent): Promise<void> {
     this.signal?.throwIfAborted();
+
     // Match the former single data-line bound without synthesizing/decoding a frame.
     if (new TextEncoder().encode(JSON.stringify(event)).byteLength + 6 > MAX_LINE)
       throw DaemonApiError.fromKey('protocol', 'streamLineExceedsLimit');

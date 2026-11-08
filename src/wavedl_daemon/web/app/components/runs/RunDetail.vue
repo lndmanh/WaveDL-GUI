@@ -90,6 +90,7 @@ const panelTargets = shallowReactive<Record<ShellPanelTabId, HTMLElement | null>
   logs: null,
   artifacts: null,
 });
+
 const parkedPanel = shallowRef<HTMLElement | null>(null);
 
 onMounted(() => {
@@ -118,6 +119,7 @@ const lossProjection = computed<{ series: PlotSeries | null; error: string }>(()
     };
   }
 });
+
 const bestLoss = computed(() =>
   lossProjection.value.series ? minimumPoint(lossProjection.value.series, 'val_loss') : null,
 );
@@ -458,7 +460,11 @@ const hasEvaluation = computed(
           v-else-if="panel.id === 'configuration' && snapshot.run"
           :key="snapshot.run.run_id"
           :run="snapshot.run"
-          :active="isActive && isCompanionShowing && shellLayout.resolvedActiveTab.value === 'configuration'"
+          :active="
+            isActive &&
+            isCompanionShowing &&
+            shellLayout.resolvedActiveTab.value === 'configuration'
+          "
         />
         <LogPanel
           v-else-if="panel.id === 'logs'"
@@ -471,7 +477,9 @@ const hasEvaluation = computed(
         <RunArtifactsPanel
           v-else-if="panel.id === 'artifacts' && snapshot.run"
           :run-id="snapshot.run.run_id"
-          :active="isActive && isCompanionShowing && shellLayout.resolvedActiveTab.value === 'artifacts'"
+          :active="
+            isActive && isCompanionShowing && shellLayout.resolvedActiveTab.value === 'artifacts'
+          "
         />
       </div>
     </Teleport>

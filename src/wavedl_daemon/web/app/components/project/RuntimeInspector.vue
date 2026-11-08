@@ -1,15 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { Field as VeeField, useFormContext } from 'vee-validate';
-import {
-  Apple,
-  ChevronRight,
-  Cpu,
-  Gauge,
-  Sparkles,
-  TriangleAlert,
-  Wand,
-} from '@lucide/vue';
+import { Apple, ChevronRight, Cpu, Gauge, Sparkles, TriangleAlert, Wand } from '@lucide/vue';
 import type { TrainingRequest } from '../../../shared/schemas/training-request';
 import type { StorageMapping } from '../../../shared/schemas/storage-mapping';
 import type { HostProfile, RuntimeSetup } from '../../../shared/schemas/host-profile';
@@ -50,12 +42,15 @@ const modeId = `${prefix}-runtime-runtime-mode`;
 
 type Device = TrainingRequest['runtime']['device'];
 
-const devicePresentation: Readonly<Record<Device, { icon: Component; title: string; caption: string }>> = {
+const devicePresentation: Readonly<
+  Record<Device, { icon: Component; title: string; caption: string }>
+> = {
   cpu: { icon: Cpu, title: 'builder.deviceCpu', caption: 'builder.deviceCpuHelp' },
   cuda: { icon: Gauge, title: 'builder.deviceCuda', caption: 'builder.deviceCudaHelp' },
   mps: { icon: Apple, title: 'builder.deviceMps', caption: 'builder.deviceMpsHelp' },
   auto: { icon: Sparkles, title: 'builder.deviceAuto', caption: 'builder.deviceAutoHelp' },
 };
+
 const devices = runtimeDeviceField.cardValues.map((value) => ({
   value,
   ...devicePresentation[value],
@@ -79,6 +74,7 @@ const setups = computed<{ value: RuntimeSetup; label: string }[]>(() => [
 
 /** Without a profile there is nothing to automate: the manual editor is the way forward. */
 const manual = computed(() => props.setup === 'manual' || (!props.profile && !props.detecting));
+
 const deviceDetected = computed<Partial<Record<Device, boolean>>>(() => ({
   cpu: true,
   cuda: !!props.profile?.accelerators?.cuda.length,

@@ -116,6 +116,7 @@ const active = shallowRef<ProjectBlock>('dataset');
 const scope = shallowRef(0);
 
 const { isActive: isClonePageActive } = usePageActive();
+
 const projectDraftState = useProjectDraft({
   session: () => props.session,
   daemonId,
@@ -138,10 +139,22 @@ const projectDraftState = useProjectDraft({
   t,
   clientMessage,
 });
+
 const {
-  offered, pendingModel, dragging, savedAt, notice,
-  announce, clearNotice, continueDraft, startFresh,
-  pickedFile, dragEnter, dragLeave, drop, exportNotice,
+  offered,
+  pendingModel,
+  dragging,
+  savedAt,
+  notice,
+  announce,
+  clearNotice,
+  continueDraft,
+  startFresh,
+  pickedFile,
+  dragEnter,
+  dragLeave,
+  drop,
+  exportNotice,
 } = projectDraftState;
 
 const displayMessage = computed(() =>
@@ -831,6 +844,7 @@ const projectStyles = {
   runNoticeLeaveTo: cn('opacity-0 [transform:translateY(-6px)_scale(0.98)]'),
   runNoticeIcon: cn('size-[1.1rem] flex-none mt-[0.1rem] text-primary'),
 };
+
 // A run clone is a one-shot import, never an old approval or old catalogue selection.
 const runCloneImport = useRunClone();
 
@@ -839,14 +853,16 @@ async function consumeRunClone(value: PendingRunClone) {
   retireScope();
   setup.value = 'manual';
   const fresh = draftRequest(value.draft, defaults());
-  resetForm({ values: {
-    ...fresh,
-    config: {
-      ...fresh.config,
-      data_path: value.imported.dataPath ?? '',
-      model: value.imported.model ?? '',
+  resetForm({
+    values: {
+      ...fresh,
+      config: {
+        ...fresh.config,
+        data_path: value.imported.dataPath ?? '',
+        model: value.imported.model ?? '',
+      },
     },
-  } });
+  });
   active.value = 'plan';
   const api = new CatalogApi(toRaw(props.session));
   const missing: string[] = [];
@@ -862,6 +878,7 @@ async function consumeRunClone(value: PendingRunClone) {
         const selection = await api.locate(value.imported.dataPath, controller.signal);
 
         if (controller.signal.aborted || current !== epoch || cloneScope !== scope.value) return;
+
         if (selection?.kind === 'file') selectData(selection);
         else missing.push(value.imported.dataPath);
       } catch {
@@ -880,6 +897,7 @@ async function consumeRunClone(value: PendingRunClone) {
           : await api.selectCustomModel(value.imported.model, controller.signal);
 
         if (controller.signal.aborted || current !== epoch || cloneScope !== scope.value) return;
+
         if (selection) selectModel(selection);
         else missing.push(value.imported.model);
       } catch {
@@ -892,11 +910,16 @@ async function consumeRunClone(value: PendingRunClone) {
     announce({
       tone: missing.length || value.imported.skipped.length ? 'warning' : 'success',
       title: () => t('project.clonedConfiguration'),
-      detail: () => [
-        t('project.cloneReviewHelp'),
-        missing.length ? t('builder.importMissing', { items: missing.join(', ') }) : '',
-        value.imported.skipped.length ? t('builder.importSkipped', { keys: value.imported.skipped.join(', ') }) : '',
-      ].filter(Boolean).join(' '),
+      detail: () =>
+        [
+          t('project.cloneReviewHelp'),
+          missing.length ? t('builder.importMissing', { items: missing.join(', ') }) : '',
+          value.imported.skipped.length
+            ? t('builder.importSkipped', { keys: value.imported.skipped.join(', ') })
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
     });
     // Normal review validates the new draft and asks the daemon for a fresh plan.
     review();

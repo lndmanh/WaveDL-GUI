@@ -138,6 +138,7 @@ export function createShellLayoutState(
 
   const togglePanel = () => {
     if (panelTabs.value.length === 0) return;
+
     // Asking for the panel while immersed means you want it, not that you want
     // to toggle a preference you cannot currently see.
     if (isFocusMode.value) {

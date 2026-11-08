@@ -183,9 +183,11 @@ describe('browser connection authority', () => {
     });
 
     const owner = session(fetcher);
+
     const stripped = stripBootstrapUrl(
       `${origin}/?bootstrap=secret&token=secret&view=runs#private`,
     );
+
     clean = stripped.url;
     expect(await owner.bootstrapCode(stripped.code, stripped.invalid)).toBe(true);
     expect(owner.snapshot().health).toEqual(health);

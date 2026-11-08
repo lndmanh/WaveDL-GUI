@@ -28,6 +28,7 @@ const styles = {
 };
 
 const { t } = useI18n({ useScope: 'global' });
+
 const props = defineProps<{
   records: readonly MetricRecord[];
   unavailable?: boolean;
@@ -35,6 +36,7 @@ const props = defineProps<{
   lossError: string;
   bestLoss: { step: number; value: number } | null;
 }>();
+
 const channel = shallowRef<PlotChannel>('loss');
 const hiddenFields = shallowRef<readonly RuntimeMetricField[]>([]);
 const zoom = shallowRef<[number, number] | null>(null);

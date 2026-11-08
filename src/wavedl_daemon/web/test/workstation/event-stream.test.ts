@@ -28,9 +28,11 @@ function frame(attempt = 1, seq = 0, overrides: FixtureEventOverrides = {}) {
 describe('attempt aware fetch stream', () => {
   it('shares sparse ordering and deduplication between JSON ingress and SSE decoding', async () => {
     const received: RunEvent[] = [];
+
     const parser = new EventStreamParser(run, INITIAL_CURSOR, (value) => {
       received.push(value);
     });
+
     await parser.accept(runEventSchema.parse(event(1, 3)));
     await parser.push(encoder.encode(frame(1, 3) + frame(1, 19)));
     await parser.accept(runEventSchema.parse(event(1, 4)));
@@ -48,11 +50,13 @@ describe('attempt aware fetch stream', () => {
     async (outcome) => {
       const abort = new AbortController();
       const advance = vi.fn();
+
       const commit = vi.fn(async () => {
         if (outcome === 'failed commit') throw new Error('commit failed');
         await Promise.resolve();
         abort.abort();
       });
+
       const parser = new EventStreamParser(
         run,
         INITIAL_CURSOR,
@@ -61,10 +65,12 @@ describe('attempt aware fetch stream', () => {
         undefined,
         abort.signal,
       );
+
       if (outcome === 'already aborted') abort.abort();
       await expect(parser.accept(runEventSchema.parse(event()))).rejects.toThrow();
       expect(advance).not.toHaveBeenCalled();
       expect(parser.cursor).toEqual(INITIAL_CURSOR);
+
       if (outcome === 'already aborted') expect(commit).not.toHaveBeenCalled();
     },
   );
@@ -310,12 +316,8 @@ describe('attempt aware fetch stream', () => {
     ).rejects.toThrow('live updates is too long');
   });
   it('rejects invalid parser identities before consuming events', () => {
-    expect(
-      () => new EventStreamParser('invalid-run', INITIAL_CURSOR, () => undefined),
-    ).toThrow();
-    expect(
-      () => new EventStreamParser(run, { attempt: 0, seq: 0 }, () => undefined),
-    ).toThrow();
+    expect(() => new EventStreamParser('invalid-run', INITIAL_CURSOR, () => undefined)).toThrow();
+    expect(() => new EventStreamParser(run, { attempt: 0, seq: 0 }, () => undefined)).toThrow();
   });
   it('does not commit or advance a frame after abort', async () => {
     const abort = new AbortController();

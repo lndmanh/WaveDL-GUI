@@ -470,7 +470,16 @@ export class DaemonApi {
     await this.health(signal);
 
     return this.#json(
-      await this.#request(path, 'GET', undefined, signal, false, undefined, false, options.timeoutMs),
+      await this.#request(
+        path,
+        'GET',
+        undefined,
+        signal,
+        false,
+        undefined,
+        false,
+        options.timeoutMs,
+      ),
     );
   }
   /** Artifact bytes only; consumers must bound and recheck before publishing. */

@@ -112,10 +112,12 @@ describe('locating imported dataset paths', () => {
     expect(await api.locate('/srv/data/second.npz', undefined, locations)).toMatchObject({
       relativePath: 'second.npz',
     });
-    expect(fetcher.mock.calls.slice(before)
-      .map(([url]) => new URL(String(url)).pathname)
-      .filter((path) => path !== '/api/health'))
-      .toEqual(['/api/browse/resolve', '/api/browse/resolve']);
+    expect(
+      fetcher.mock.calls
+        .slice(before)
+        .map(([url]) => new URL(String(url)).pathname)
+        .filter((path) => path !== '/api/health'),
+    ).toEqual(['/api/browse/resolve', '/api/browse/resolve']);
     expect(resolved()).toEqual([
       { root: 'data', path: '' },
       { root: 'scratch', path: '' },
@@ -137,8 +139,10 @@ describe('locating imported dataset paths', () => {
 
   it('skips unreadable roots when collecting batch locations', async () => {
     const { api } = await setup({
-      onResolve: (root, path) => root === 'data' && !path ? json({ detail: 'missing' }, 404) : null,
+      onResolve: (root, path) =>
+        root === 'data' && !path ? json({ detail: 'missing' }, 404) : null,
     });
+
     const locations = await api.locations();
 
     expect(locations.map((location) => location.root)).toEqual(['scratch', 'windows']);

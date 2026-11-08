@@ -14,8 +14,10 @@ export function datasetFormat(path: string): string | null {
 
 const SUGGESTION_LIMIT = 4;
 const RUN_PAGE_SIZE = 100;
+
 // Limit optional suggestions to recent history even when runs reuse the same dataset.
 export const MAX_RECENT_DATASET_RUNS = 300;
+
 // Stale paths must not cause an unbounded series of catalog requests.
 export const MAX_FAILED_DATASET_SUGGESTIONS = 8;
 
@@ -35,7 +37,14 @@ export function datasetSuggestions(runs: readonly RunView[]): DatasetSuggestion[
     const previous = groups.get(key);
 
     if (previous) groups.set(key, { ...previous, count: previous.count + 1 });
-    else groups.set(key, { path, name: pathName(path), format, count: 1, lastUsed: runCreatedAt(run) });
+    else
+      groups.set(key, {
+        path,
+        name: pathName(path),
+        format,
+        count: 1,
+        lastUsed: runCreatedAt(run),
+      });
   }
 
   return [...groups.values()];
@@ -60,6 +69,7 @@ export async function loadDatasetSuggestions(
       (api, requestSignal) => api.listRuns({ limit: RUN_PAGE_SIZE, offset, signal: requestSignal }),
       { signal },
     );
+
     signal.throwIfAborted();
 
     for (const suggestion of datasetSuggestions(page)) {

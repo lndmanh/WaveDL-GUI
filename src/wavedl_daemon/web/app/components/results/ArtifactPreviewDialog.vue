@@ -9,11 +9,13 @@ const props = defineProps<{
   imageUrl?: string | null;
   previewPath?: string | null;
 }>();
+
 const emit = defineEmits<{
   download: [artifact: Artifact];
   closePreview: [];
   restoreFocus: [event: Event];
 }>();
+
 const { t } = useI18n({ useScope: 'global' });
 const open = computed(() => Boolean(props.imageUrl && props.previewPath));
 const name = computed(() => pathName(props.previewPath));
@@ -63,7 +65,8 @@ function download() {
           size="icon-sm"
           class="absolute top-3 right-3"
           :aria-label="t('results.closePlot')"
-        ><X aria-hidden="true" /></Button>
+          ><X aria-hidden="true"
+        /></Button>
       </DialogClose>
     </DialogContent>
   </Dialog>

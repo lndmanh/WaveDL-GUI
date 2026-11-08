@@ -118,7 +118,7 @@ const {
   card: () => list.value?.parentElement,
   beforeResizeFrame: measureGutter,
   focus: {
-    initial: () => props.selectedRunId ? { kind: 'detail', runId: props.selectedRunId } : null,
+    initial: () => (props.selectedRunId ? { kind: 'detail', runId: props.selectedRunId } : null),
     settle: settleFocus,
     clear: clearHighlight,
     request: (intent) => {

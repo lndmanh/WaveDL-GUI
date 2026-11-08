@@ -65,7 +65,8 @@ export function useDatasetPreview(
     try {
       const result = await new DatasetPreviewApi(connection).preview(toRaw(selection), {
         allow_pickle:
-          trusted?.revision === connection.snapshot().revision && trusted.files.has(fileKey(selection)),
+          trusted?.revision === connection.snapshot().revision &&
+          trusted.files.has(fileKey(selection)),
         signal: controller.signal,
       });
 
@@ -89,7 +90,8 @@ export function useDatasetPreview(
   function trust() {
     const selection = selected();
 
-    if (!isActive.value || !selection || !available.value || message.value?.kind !== 'pickle') return;
+    if (!isActive.value || !selection || !available.value || message.value?.kind !== 'pickle')
+      return;
     const connection = toRaw(session());
     const revision = connection.snapshot().revision;
     const trusted = trustedFiles.get(connection);
@@ -120,9 +122,13 @@ export function useDatasetPreview(
     { immediate: true },
   );
 
-  watch(isActive, (active) => {
-    if (!active) revoke();
-  }, { flush: 'sync' });
+  watch(
+    isActive,
+    (active) => {
+      if (!active) revoke();
+    },
+    { flush: 'sync' },
+  );
 
   watch([selected, session, isActive], load, { immediate: true });
 

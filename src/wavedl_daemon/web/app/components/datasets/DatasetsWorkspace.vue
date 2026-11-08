@@ -14,9 +14,7 @@ const styles = {
   seam: cn('flex min-h-0 shrink-0 flex-col overflow-hidden'),
 };
 
-type FocusIntent =
-  | { kind: 'detail'; path: string }
-  | { kind: 'browser'; selection: DataSelection };
+type FocusIntent = { kind: 'detail'; path: string } | { kind: 'browser'; selection: DataSelection };
 
 const { t } = useI18n({ useScope: 'global' });
 const props = defineProps<{ session: ConnectionSession }>();
@@ -33,6 +31,7 @@ let unsubscribe: (() => void) | undefined;
 
 const stacked = computed(() => width.value > 0 && width.value < 720);
 const folded = computed(() => selection.value !== null);
+
 const {
   animate,
   cardWidth,
@@ -49,7 +48,7 @@ const {
   folded,
   card: () => browserRegion.value?.parentElement,
   focus: {
-    initial: () => selection.value ? { kind: 'detail', path: selection.value.path } : null,
+    initial: () => (selection.value ? { kind: 'detail', path: selection.value.path } : null),
     settle: settleFocus,
   },
 });

@@ -140,6 +140,7 @@ async function focusColumn(index: number) {
 
 async function focusSelection(selection: DataSelection) {
   const parent = selection.relativePath.split('/').slice(0, -1).join('/');
+
   const index = columns.value.findIndex(
     (column) => column.root === selection.root && column.path === parent,
   );
@@ -147,15 +148,18 @@ async function focusSelection(selection: DataSelection) {
   if (index >= 0) mobileColumn.value = index + 1;
   await nextTick();
   const pane = container.value?.querySelector<HTMLElement>(`[data-column="${index + 1}"]`);
-  const option = Array.from(pane?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []).find(
-    (entry) => entry.dataset.name === pathName(selection.relativePath) && !entry.disabled,
-  );
+
+  const option = Array.from(
+    pane?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [],
+  ).find((entry) => entry.dataset.name === pathName(selection.relativePath) && !entry.disabled);
 
   if (option && index >= 0) {
     option.focus({ preventScroll: true });
     option.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   } else {
-    container.value?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true });
+    container.value
+      ?.querySelector<HTMLInputElement>('input[type="search"]')
+      ?.focus({ preventScroll: true });
   }
 }
 
@@ -212,7 +216,10 @@ function paginate(column: DatasetBrowserColumn, index: number, offset: number) {
 
 const { copy } = useClipboard({ legacy: true });
 const copied = shallowRef<{ key: string; state: 'copied' | 'failed' } | null>(null);
-const { start: resetCopied } = useTimeoutFn(() => (copied.value = null), 1600, { immediate: false });
+
+const { start: resetCopied } = useTimeoutFn(() => (copied.value = null), 1600, {
+  immediate: false,
+});
 
 /** Copies the folder's absolute host path, which only the daemon can resolve. */
 async function copyFolder(column: DatasetBrowserColumn) {
@@ -375,7 +382,9 @@ watch(narrow, (value) => {
       <DatasetBrowserColumn
         v-show="!narrow || mobileColumn === 0"
         data-column="0"
-        :class="cn(styles.column, fill ? 'h-full min-h-0' : 'h-[23rem]', narrow && 'w-full border-r-0')"
+        :class="
+          cn(styles.column, fill ? 'h-full min-h-0' : 'h-[23rem]', narrow && 'w-full border-r-0')
+        "
         :fill="fill"
         :title="t('datasets.locations')"
         :entries="locations"
@@ -389,7 +398,9 @@ watch(narrow, (value) => {
         v-show="!narrow || mobileColumn === index + 1"
         :key="`${column.root}/${column.path}`"
         :data-column="index + 1"
-        :class="cn(styles.column, fill ? 'h-full min-h-0' : 'h-[23rem]', narrow && 'w-full border-r-0')"
+        :class="
+          cn(styles.column, fill ? 'h-full min-h-0' : 'h-[23rem]', narrow && 'w-full border-r-0')
+        "
         :fill="fill"
         :title="column.path ? pathName(column.path) : column.root"
         copyable

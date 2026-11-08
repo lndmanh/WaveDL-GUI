@@ -179,9 +179,7 @@ const projectStyles = {
         <Check aria-hidden="true" />{{ t('builder.automaticLocal') }}
       </li>
       <li :class="projectStyles.automaticStep">
-        <Check aria-hidden="true" />{{
-          t('builder.automaticDevice', { device: acceleratorName })
-        }}
+        <Check aria-hidden="true" />{{ t('builder.automaticDevice', { device: acceleratorName }) }}
       </li>
       <li :class="projectStyles.automaticStep">
         <Check aria-hidden="true" />{{

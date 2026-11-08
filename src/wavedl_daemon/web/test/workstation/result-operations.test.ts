@@ -264,9 +264,11 @@ describe('explicit published inference workflow', () => {
 
       if (!api) throw new Error('Missing connected API');
       let release = () => {};
+
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
+
       const planRequest = api.plan.bind(api);
       vi.spyOn(api, 'plan').mockImplementationOnce(async (...args) => {
         const plan = await planRequest(...args);
@@ -275,9 +277,11 @@ describe('explicit published inference workflow', () => {
         return plan;
       });
       workflow.prepare(draft, data, best);
+
       const preview = expect(workflow.preview()).rejects.toMatchObject({
         clientMessageKey: 'draftChangedPreviewAgain',
       });
+
       await vi.waitFor(() => expect(keys).toHaveLength(1));
 
       if (change === 'invalidate') workflow.invalidate();

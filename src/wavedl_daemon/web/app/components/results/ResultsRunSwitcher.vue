@@ -48,9 +48,11 @@ const labels = useRunLabels();
 const open = shallowRef(false);
 const query = shallowRef('');
 const selected = computed(() => props.runs.find((run) => run.run_id === props.runId));
+
 const title = computed(() =>
   selected.value ? labels.title(selected.value) : shortRunId(props.runId),
 );
+
 const choices = computed(() =>
   props.runs.filter((run) =>
     runMatches(run, query.value, [
@@ -68,9 +70,13 @@ usePageActive(undefined, () => {
 watch(open, () => {
   query.value = '';
 });
-watch(() => props.runId, () => {
-  open.value = false;
-});
+
+watch(
+  () => props.runId,
+  () => {
+    open.value = false;
+  },
+);
 
 function choose(runId: string | null) {
   open.value = false;
@@ -81,11 +87,7 @@ function choose(runId: string | null) {
 <template>
   <ComboboxRoot v-model:open="open" :model-value="runId" ignore-filter class="min-w-0 max-w-full">
     <ComboboxAnchor as-child>
-      <ComboboxTrigger
-        as-child
-        tabindex="0"
-        :aria-label="t('results.switchRun', { name: title })"
-      >
+      <ComboboxTrigger as-child tabindex="0" :aria-label="t('results.switchRun', { name: title })">
         <Button variant="outline" :class="styles.trigger" :title="title">
           <span class="truncate">{{ title }}</span>
           <ChevronsUpDown class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -142,9 +144,7 @@ function choose(runId: string | null) {
                 {{ run.uncertainty ? t('runs.uncertain') : '' }}
               </span>
             </div>
-            <ComboboxItemIndicator
-              class="absolute right-2 flex size-4 items-center justify-center"
-            >
+            <ComboboxItemIndicator class="absolute right-2 flex size-4 items-center justify-center">
               <Check class="size-4" aria-hidden="true" />
             </ComboboxItemIndicator>
           </ComboboxItem>

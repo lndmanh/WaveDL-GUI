@@ -1,15 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { motion } from 'motion-v';
-import {
-  ArrowRight,
-  Check,
-  Circle,
-  Copy,
-  LoaderCircle,
-  Play,
-  RefreshCw,
-} from '@lucide/vue';
+import { ArrowRight, Check, Circle, Copy, LoaderCircle, Play, RefreshCw } from '@lucide/vue';
 import type { ProjectBlock } from '../../../shared/schemas/project-draft';
 import { pathName } from '../../lib/run-overview';
 import type { PlanView, RunView } from '~~/types/daemon-api';

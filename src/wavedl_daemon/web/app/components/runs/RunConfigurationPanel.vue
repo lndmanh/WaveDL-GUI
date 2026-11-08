@@ -26,7 +26,16 @@ const retry = shallowRef(0);
 const detailsId = useId();
 
 watch(
-  [resourceActive, () => props.run.run_id, () => props.run.plan_id, () => props.run.request_id, api, revision, () => state.value.status, retry],
+  [
+    resourceActive,
+    () => props.run.run_id,
+    () => props.run.plan_id,
+    () => props.run.request_id,
+    api,
+    revision,
+    () => state.value.status,
+    retry,
+  ],
   async (_value, _previous, onCleanup) => {
     const controller = new AbortController();
     onCleanup(() => controller.abort());
@@ -45,7 +54,12 @@ watch(
       const result = await client.getRunPlan(run.run_id, controller.signal);
 
       if (controller.signal.aborted || !resourceActive.value) return;
-      if (result.run_id !== run.run_id || result.plan_id !== run.plan_id || result.request_id !== run.request_id)
+
+      if (
+        result.run_id !== run.run_id ||
+        result.plan_id !== run.plan_id ||
+        result.request_id !== run.request_id
+      )
         throw new Error(t('project.configurationMismatch'));
       plan.value = result;
     } catch (failure) {
@@ -65,7 +79,11 @@ const document = computed(() => {
 
   return parsed.success ? parsed.data : null;
 });
-const canClone = computed(() => props.run.operation === 'train' && document.value?.review.operation === 'train');
+
+const canClone = computed(
+  () => props.run.operation === 'train' && document.value?.review.operation === 'train',
+);
+
 const command = computed<PlanCommand | null>(() => {
   if (!plan.value) return null;
 
@@ -77,15 +95,28 @@ const command = computed<PlanCommand | null>(() => {
     return { ok: false, reason: t('project.storedCommandUnavailable') };
   }
 });
+
 const facts = computed(() => {
   const created = props.run.created_at;
   const date = created ? new Date(created) : null;
 
   return [
-    { label: t('project.contextOperation'), value: document.value?.review.operation ? null : labels.operation(props.run) },
-    { label: t('project.contextBackend'), value: plan.value?.preview.target ? null : props.run.backend },
-    { label: t('project.runAttempt'), value: props.run.attempt == null ? t('runs.notAllocated') : String(props.run.attempt) },
-    { label: t('project.runCreated'), value: date && Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value) : created },
+    {
+      label: t('project.contextOperation'),
+      value: document.value?.review.operation ? null : labels.operation(props.run),
+    },
+    {
+      label: t('project.contextBackend'),
+      value: plan.value?.preview.target ? null : props.run.backend,
+    },
+    {
+      label: t('project.runAttempt'),
+      value: props.run.attempt == null ? t('runs.notAllocated') : String(props.run.attempt),
+    },
+    {
+      label: t('project.runCreated'),
+      value: date && Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value) : created,
+    },
     { label: t('project.runSource'), value: props.run.summary?.source_run_id },
   ].filter((fact): fact is { label: string; value: string } => !!fact.value);
 });
@@ -104,6 +135,7 @@ async function cloneRun() {
 
       return;
     }
+
     let landed: string;
 
     if (shellNavigate) landed = await shellNavigate('/new');
@@ -130,7 +162,14 @@ async function cloneRun() {
     <section class="surface-group min-w-0 overflow-hidden" :aria-labelledby="detailsId">
       <div class="flex flex-wrap items-center justify-between gap-3 px-5 pt-4">
         <h3 :id="detailsId" class="text-sm font-semibold">{{ t('project.runDetails') }}</h3>
-        <Button v-if="canClone" type="button" variant="outline" size="sm" :disabled="cloning || state.status !== 'connected'" @click="cloneRun">
+        <Button
+          v-if="canClone"
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="cloning || state.status !== 'connected'"
+          @click="cloneRun"
+        >
           <LoaderCircle v-if="cloning" class="animate-spin" aria-hidden="true" />
           <CopyPlus v-else aria-hidden="true" />{{ t('project.cloneConfiguration') }}
         </Button>
@@ -141,30 +180,54 @@ async function cloneRun() {
           <dd class="mt-1 [overflow-wrap:anywhere]">{{ fact.value }}</dd>
         </div>
       </dl>
-      <div class="mt-4 flex min-w-0 items-center gap-2 border-t px-5 py-2 text-xs text-muted-foreground">
+      <div
+        class="mt-4 flex min-w-0 items-center gap-2 border-t px-5 py-2 text-xs text-muted-foreground"
+      >
         <span class="shrink-0">{{ t('runs.configRunId') }}</span>
         <code class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{ run.run_id }}</code>
-        <Button v-if="canCopy" type="button" variant="ghost" size="icon" class="size-7 shrink-0" :aria-label="t('runs.copyRunId')" @click="copy(run.run_id)">
+        <Button
+          v-if="canCopy"
+          type="button"
+          variant="ghost"
+          size="icon"
+          class="size-7 shrink-0"
+          :aria-label="t('runs.copyRunId')"
+          @click="copy(run.run_id)"
+        >
           <Check v-if="copied" aria-hidden="true" /><Copy v-else aria-hidden="true" />
         </Button>
         <span class="sr-only" aria-live="polite">{{ copied ? t('runs.runIdCopied') : '' }}</span>
       </div>
     </section>
     <Alert v-if="cloneError" variant="destructive" role="alert">
-      <TriangleAlert aria-hidden="true" /><AlertTitle>{{ t('project.cloneUnavailable') }}</AlertTitle>
+      <TriangleAlert aria-hidden="true" /><AlertTitle>{{
+        t('project.cloneUnavailable')
+      }}</AlertTitle>
       <AlertDescription>{{ cloneError }}</AlertDescription>
     </Alert>
-    <div v-if="loading" class="surface-group flex items-center gap-2 p-5 text-sm text-muted-foreground" role="status">
-      <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />{{ t('project.loadingConfiguration') }}
+    <div
+      v-if="loading"
+      class="surface-group flex items-center gap-2 p-5 text-sm text-muted-foreground"
+      role="status"
+    >
+      <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />{{
+        t('project.loadingConfiguration')
+      }}
     </div>
     <Alert v-else-if="error" variant="destructive" role="alert">
-      <TriangleAlert aria-hidden="true" /><AlertTitle>{{ t('project.configurationUnavailable') }}</AlertTitle>
+      <TriangleAlert aria-hidden="true" /><AlertTitle>{{
+        t('project.configurationUnavailable')
+      }}</AlertTitle>
       <AlertDescription class="min-w-0 [overflow-wrap:anywhere]">
         <p>{{ error }}</p>
-        <Button type="button" variant="outline" size="sm" class="mt-3" @click="retry++"><RefreshCw aria-hidden="true" />{{ t('project.retryConfiguration') }}</Button>
+        <Button type="button" variant="outline" size="sm" class="mt-3" @click="retry++"
+          ><RefreshCw aria-hidden="true" />{{ t('project.retryConfiguration') }}</Button
+        >
       </AlertDescription>
     </Alert>
     <PlanPresentation v-else-if="plan" :plan="plan" :command="command" full-settings />
-    <p v-else class="surface-group p-5 text-sm text-muted-foreground" role="status">{{ t('project.configurationOffline') }}</p>
+    <p v-else class="surface-group p-5 text-sm text-muted-foreground" role="status">
+      {{ t('project.configurationOffline') }}
+    </p>
   </div>
 </template>

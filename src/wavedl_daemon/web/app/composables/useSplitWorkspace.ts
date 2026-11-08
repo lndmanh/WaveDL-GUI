@@ -30,36 +30,49 @@ export function useSplitWorkspace<FocusIntent>(options: SplitWorkspaceOptions<Fo
 
   const animate = computed(
     () =>
-      entered.value && toValue(options.active) && !resizing.value &&
-      !toValue(options.stacked) && !reducedMotion.value,
+      entered.value &&
+      toValue(options.active) &&
+      !resizing.value &&
+      !toValue(options.stacked) &&
+      !reducedMotion.value,
   );
+
   const paneWidth = computed(() =>
     toValue(options.stacked)
       ? toValue(options.width)
       : Math.round(Math.max(250, toValue(options.width) * 0.3)),
   );
+
   const cardWidth = computed(() =>
     toValue(options.folded) && !toValue(options.stacked) ? paneWidth.value : toValue(options.width),
   );
+
   const detailWidth = computed(() =>
     toValue(options.expanded) || toValue(options.stacked)
       ? toValue(options.width)
       : Math.max(0, toValue(options.width) - paneWidth.value - 16),
   );
+
   const cardTransition = computed(() => ({
     duration: animate.value ? 0.25 : 0,
     delay: animate.value ? 0.09 : 0,
     ease: [0.22, 1, 0.36, 1],
   }));
+
   const seamTransition = computed(() => ({
     duration: animate.value ? 0.17 : 0,
     delay: animate.value ? 0.17 : 0,
     ease: [0.22, 1, 0.36, 1],
   }));
+
   const seamExit = computed(() => ({
     opacity: [null, 0, 0],
     x: [null, 32, 32],
-    transition: { duration: animate.value ? 0.34 : 0, times: [0, 0.35, 1], ease: [0.22, 1, 0.36, 1] },
+    transition: {
+      duration: animate.value ? 0.34 : 0,
+      times: [0, 0.35, 1],
+      ease: [0.22, 1, 0.36, 1],
+    },
   }));
 
   function clearFocusWork() {

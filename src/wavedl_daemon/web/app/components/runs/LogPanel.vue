@@ -35,17 +35,20 @@ const props = withDefaults(
 );
 
 const tab = shallowRef('output');
-const diagnostics = computed<{ text: string; shortened: boolean; truncated: boolean }>((previous) => {
-  if (!props.active || tab.value !== 'events')
-    return previous ?? { text: '', shortened: false, truncated: false };
-  const events = props.events.map(eventDiagnostic);
 
-  return {
-    text: events.map((event) => event.text).join('\n'),
-    shortened: events.some((event) => event.truncated),
-    truncated: props.truncated,
-  };
-});
+const diagnostics = computed<{ text: string; shortened: boolean; truncated: boolean }>(
+  (previous) => {
+    if (!props.active || tab.value !== 'events')
+      return previous ?? { text: '', shortened: false, truncated: false };
+    const events = props.events.map(eventDiagnostic);
+
+    return {
+      text: events.map((event) => event.text).join('\n'),
+      shortened: events.some((event) => event.truncated),
+      truncated: props.truncated,
+    };
+  },
+);
 </script>
 <template>
   <section

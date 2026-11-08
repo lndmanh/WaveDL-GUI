@@ -48,6 +48,7 @@ export function useRunArtifacts(
       reset();
       let active = true;
       let revision = current.snapshot().revision;
+
       const unsubscribe = current.subscribe((state) => {
         if (!active || current !== session.value) return;
         connected.value = state.status === 'connected';
@@ -124,13 +125,19 @@ export function useRunArtifacts(
     }
   }
 
-  watch(resourceActive, (active) => {
-    if (!active) reset();
-  }, { flush: 'sync' });
+  watch(
+    resourceActive,
+    (active) => {
+      if (!active) reset();
+    },
+    { flush: 'sync' },
+  );
 
   watch(
     [resourceActive, connected, () => toValue(runId), scopeGeneration],
-    () => { void refresh(); },
+    () => {
+      void refresh();
+    },
     { immediate: true },
   );
 

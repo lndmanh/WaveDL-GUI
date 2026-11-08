@@ -19,6 +19,7 @@ const styles = {
 };
 
 const { t, locale } = useI18n({ useScope: 'global' });
+
 const props = defineProps<{
   summary: MetricSummary;
   records: readonly MetricRecord[];

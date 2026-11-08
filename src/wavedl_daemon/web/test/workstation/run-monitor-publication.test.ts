@@ -88,6 +88,7 @@ it('reuses the metric projection on unchanged polls and replaces it for metrics 
   vi.useFakeTimers();
   let current = view();
   let channel: ReadableStreamDefaultController<Uint8Array> | undefined;
+
   const transport: RunTransport = {
     getRun: async () => current,
     cancelRun: async () => view(),
@@ -101,6 +102,7 @@ it('reuses the metric projection on unchanged polls and replaces it for metrics 
         }),
       ),
   };
+
   const monitor = new RunMonitor(id, transport, 100);
   const task = monitor.start();
   await flush();

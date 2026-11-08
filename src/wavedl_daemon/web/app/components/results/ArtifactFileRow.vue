@@ -33,12 +33,14 @@ const props = defineProps<{
   reducedMotion: boolean;
   checkpoint?: string;
 }>();
+
 const emit = defineEmits<{
   download: [artifact: Artifact];
   preview: [artifact: Artifact];
   evaluate: [checkpoint: string];
   export: [checkpoint: string];
 }>();
+
 const { t, locale } = useI18n({ useScope: 'global' });
 const numberLocale = computed(() => (locale.value === 'vi' ? 'vi-VN' : 'en-US'));
 const name = computed(() => pathName(props.artifact.path));
@@ -48,6 +50,7 @@ const modified = computed(() => new Date(props.artifact.modified));
 const exactTime = computed(() => modified.value.toLocaleString(numberLocale.value));
 const size = computed(() => formatBytes(props.artifact.size, numberLocale.value));
 const modifiedTime = computed(() => relativeTime(modified.value, props.now, locale.value));
+
 const icon = computed(() => {
   if (props.group === 'checkpoints') return Package;
 

@@ -172,10 +172,7 @@ const groups = computed(() => {
 const flat = computed(() => groups.value.flatMap((group) => group.entries));
 
 const current = computed(
-  () =>
-    flat.value.find((entry) => entry.key === highlighted.value) ??
-    flat.value[0] ??
-    null,
+  () => flat.value.find((entry) => entry.key === highlighted.value) ?? flat.value[0] ?? null,
 );
 
 watch(
@@ -308,7 +305,9 @@ async function useCustom() {
   customBusy.value = true;
 
   try {
-    const selection = await new CatalogApi(toRaw(props.session)).selectCustomModel(parsed.data.modelId);
+    const selection = await new CatalogApi(toRaw(props.session)).selectCustomModel(
+      parsed.data.modelId,
+    );
 
     if (current !== customEpoch) return;
     emit('custom', selection);

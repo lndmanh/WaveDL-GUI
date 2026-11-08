@@ -820,17 +820,15 @@ describe('daemon transport', () => {
       async () => new Response(body, { headers: { 'Content-Type': 'application/json' } }),
     );
 
-    const pending = expect(
-      api.exchangeBootstrapCode('once'),
-    ).rejects.toThrow('Your access key changed');
+    const pending = expect(api.exchangeBootstrapCode('once')).rejects.toThrow(
+      'Your access key changed',
+    );
 
     // Let the response reader begin before revoking its connection scope.
     await Promise.resolve();
     await Promise.resolve();
     api.clearToken();
-    controller?.enqueue(
-      new TextEncoder().encode(JSON.stringify(grant())),
-    );
+    controller?.enqueue(new TextEncoder().encode(JSON.stringify(grant())));
     controller?.close();
     await pending;
     expect(api.authenticated).toBe(false);
@@ -1177,9 +1175,11 @@ describe('daemon transport', () => {
         spec: { resolved_config: { epochs: 2, additive: true } },
       },
     };
+
     const transport = vi.fn<typeof fetch>(async (url) =>
       json(String(url).endsWith('/health') ? health : stored),
     );
+
     const api = new DaemonApi(origin, {}, transport);
     api.setToken(token);
     const controller = new AbortController();
@@ -1226,6 +1226,7 @@ describe('daemon transport', () => {
     const api = new DaemonApi(origin, {}, async (url) =>
       json(String(url).endsWith('/health') ? health : body),
     );
+
     api.setToken(token);
 
     await expect(api.getRunPlan(matrixId)).rejects.toMatchObject({
@@ -1237,6 +1238,7 @@ describe('daemon transport', () => {
     const api = new DaemonApi(origin, {}, async (url) =>
       String(url).endsWith('/health') ? json(health) : json({ error: 'Not found' }, 404),
     );
+
     api.setToken(token);
 
     await expect(api.getRunPlan(matrixId)).rejects.toMatchObject({ code: 'http', status: 404 });

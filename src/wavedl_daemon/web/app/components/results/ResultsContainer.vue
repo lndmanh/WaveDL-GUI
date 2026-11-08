@@ -49,6 +49,7 @@ const { isActive } = usePageActive(resume, pause);
 const root = useTemplateRef<HTMLElement>('root');
 const { width } = useElementSize(() => (isActive.value ? root.value : null));
 const stacked = computed(() => width.value > 0 && width.value < 720);
+
 const clock = useNow({
   controls: true,
   scheduler: (tick) => useIntervalFn(tick, 30_000, { immediate: false }),
@@ -62,23 +63,43 @@ usePageActive(() => {
 const now = clock.now;
 const tab = shallowRef<string | number>('files');
 const dialogOpen = shallowRef(false);
+
 usePageActive(undefined, () => {
   dialogOpen.value = false;
 });
+
 const dialogMode = shallowRef<'evaluate' | 'export'>('evaluate');
 const selectedCheckpoint = shallowRef<string>();
-const evaluationFocusTarget = computed(() => root.value?.querySelector<HTMLButtonElement>('[data-evaluate-trigger]') ?? null);
+
+const evaluationFocusTarget = computed(
+  () => root.value?.querySelector<HTMLButtonElement>('[data-evaluate-trigger]') ?? null,
+);
+
 const labels = useRunLabels();
 const monitor = computed(() => props.monitor ?? selectedMonitor.value);
-const selectedRun = computed(() => runs.value.find((run) => run.run_id === props.runId) ?? monitor.value?.run);
-const runName = computed(() => selectedRun.value ? labels.title(selectedRun.value) : props.runId ?? '');
-const evaluations = computed(() => runs.value.filter((run) => run.summary?.source_run_id === props.runId));
 
-watch(() => props.runId, (id) => {
-  dialogOpen.value = false;
-  if (id) monitorSelected(id);
-  else closeMonitor();
-}, { immediate: true });
+const selectedRun = computed(
+  () => runs.value.find((run) => run.run_id === props.runId) ?? monitor.value?.run,
+);
+
+const runName = computed(() =>
+  selectedRun.value ? labels.title(selectedRun.value) : (props.runId ?? ''),
+);
+
+const evaluations = computed(() =>
+  runs.value.filter((run) => run.summary?.source_run_id === props.runId),
+);
+
+watch(
+  () => props.runId,
+  (id) => {
+    dialogOpen.value = false;
+
+    if (id) monitorSelected(id);
+    else closeMonitor();
+  },
+  { immediate: true },
+);
 
 function openEvaluation(checkpoint?: string, mode: 'evaluate' | 'export' = 'evaluate') {
   if (!isActive.value) return;
@@ -86,6 +107,7 @@ function openEvaluation(checkpoint?: string, mode: 'evaluate' | 'export' = 'eval
   dialogMode.value = mode;
   dialogOpen.value = true;
 }
+
 // Stay on this run's results: the new evaluation appears in the Evaluations tab, newest first.
 function evaluationStarted() {
   tab.value = 'evaluations';
@@ -109,7 +131,10 @@ const {
   refresh,
   consume,
   clearImage,
-} = useRunArtifacts(() => props.session, () => props.runId);
+} = useRunArtifacts(
+  () => props.session,
+  () => props.runId,
+);
 
 // Cached pages still observe router changes; only the active run may consume this intent.
 watch(
@@ -123,7 +148,8 @@ watch(
       route.path !== `/results/${runId}` ||
       route.query.evaluate !== 'best_checkpoint' ||
       !items.checkpoints.length
-    ) return;
+    )
+      return;
 
     const checkpoint = items.checkpoints.find((item) => item.name === 'best_checkpoint');
     openEvaluation(checkpoint?.name);
@@ -136,13 +162,17 @@ watch(
 
 // The page fills the window like Experiments, so secondary panels live in tabs, not below the table.
 const isEvaluation = computed(() => selectedRun.value?.operation === 'test');
+
 const metricsReady = computed(() => {
   const snapshot = monitor.value;
 
   if (!connected.value || !snapshot?.run || snapshot.run.run_id !== props.runId) return false;
 
-  return snapshot.freshness === 'fresh' && evaluationResults(snapshot.run, snapshot.events) !== null;
+  return (
+    snapshot.freshness === 'fresh' && evaluationResults(snapshot.run, snapshot.events) !== null
+  );
 });
+
 const hasCvSummary = computed(() =>
   inventory.value.files.some((artifact) => artifact.path === 'cv_summary.json'),
 );
@@ -172,11 +202,22 @@ watch(hasCvSummary, (available) => {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger as-child>
-              <span :tabindex="inventory.checkpoints.length ? undefined : 0" class="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <Button data-evaluate-trigger type="button" :disabled="!connected || !inventory.checkpoints.length" @click="openEvaluation()">{{ t('results.evaluate') }}</Button>
+              <span
+                :tabindex="inventory.checkpoints.length ? undefined : 0"
+                class="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Button
+                  data-evaluate-trigger
+                  type="button"
+                  :disabled="!connected || !inventory.checkpoints.length"
+                  @click="openEvaluation()"
+                  >{{ t('results.evaluate') }}</Button
+                >
               </span>
             </TooltipTrigger>
-            <TooltipContent v-if="!inventory.checkpoints.length">{{ t('results.noCheckpoints') }}</TooltipContent>
+            <TooltipContent v-if="!inventory.checkpoints.length">{{
+              t('results.noCheckpoints')
+            }}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
         <ResultsRunSwitcher
@@ -195,7 +236,8 @@ watch(hasCvSummary, (available) => {
           variant="outline"
           :disabled="!runId || busy || !session.api"
           @click="refresh"
-          >{{ busy ? t('results.working') : t('results.refresh') }}</Button>
+          >{{ busy ? t('results.working') : t('results.refresh') }}</Button
+        >
       </div>
     </div>
     <Alert v-if="message" class="shrink-0"
@@ -232,8 +274,15 @@ watch(hasCvSummary, (available) => {
         <TabsList :aria-label="t('results.resultViews')" class="shrink-0">
           <TabsTrigger v-if="isEvaluation" value="metrics">{{ t('results.metrics') }}</TabsTrigger>
           <TabsTrigger value="files">{{ t('results.files') }}</TabsTrigger>
-          <TabsTrigger value="evaluations">{{ t('results.evaluations') }}<Badge variant="secondary" class="ml-1.5 tabular-nums">{{ evaluations.length }}</Badge></TabsTrigger>
-          <TabsTrigger v-if="hasCvSummary" value="cv">{{ t('results.crossValidation') }}</TabsTrigger>
+          <TabsTrigger value="evaluations"
+            >{{ t('results.evaluations')
+            }}<Badge variant="secondary" class="ml-1.5 tabular-nums">{{
+              evaluations.length
+            }}</Badge></TabsTrigger
+          >
+          <TabsTrigger v-if="hasCvSummary" value="cv">{{
+            t('results.crossValidation')
+          }}</TabsTrigger>
         </TabsList>
         <TabsContent v-if="isEvaluation" value="metrics" :class="styles.scrollTab">
           <EvaluationResultsPanel
@@ -263,10 +312,22 @@ watch(hasCvSummary, (available) => {
           />
         </TabsContent>
         <TabsContent v-if="hasCvSummary" value="cv" :class="styles.scrollTab">
-          <CvSummaryPanel v-if="connected" :key="scopeGeneration" :session="session" :artifacts="inventory.files" />
+          <CvSummaryPanel
+            v-if="connected"
+            :key="scopeGeneration"
+            :session="session"
+            :artifacts="inventory.files"
+          />
         </TabsContent>
         <TabsContent value="evaluations" :class="styles.scrollTab">
-          <EvaluationRunList :runs="evaluations" :now="now" :can-evaluate="connected && !!inventory.checkpoints.length" :stale-run-ids="staleRunIds" @select="choose" @evaluate="openEvaluation()" />
+          <EvaluationRunList
+            :runs="evaluations"
+            :now="now"
+            :can-evaluate="connected && !!inventory.checkpoints.length"
+            :stale-run-ids="staleRunIds"
+            @select="choose"
+            @evaluate="openEvaluation()"
+          />
         </TabsContent>
       </Tabs>
       <EvaluateDialog

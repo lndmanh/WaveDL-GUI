@@ -6,6 +6,7 @@ const props = defineProps<{ tab: ShellPanelTabDefinition }>();
 const { t } = useI18n({ useScope: 'global' });
 const target = useTemplateRef<HTMLElement>('target');
 const empty = shallowRef(true);
+
 const emptyLabelKeys: Record<ShellPanelTabId, string> = {
   metrics: 'shell.companionMetricsEmpty',
   health: 'shell.companionHealthEmpty',
@@ -13,6 +14,7 @@ const emptyLabelKeys: Record<ShellPanelTabId, string> = {
   logs: 'shell.companionLogsEmpty',
   artifacts: 'shell.companionArtifactsEmpty',
 };
+
 let observer: MutationObserver | null = null;
 
 function refresh() {
@@ -40,9 +42,7 @@ onScopeDispose(() => observer?.disconnect());
   <Empty v-if="empty" :data-testid="`shell-panel-empty-${props.tab.id}`" class="min-h-48">
     <EmptyHeader>
       <EmptyMedia variant="icon"><component :is="props.tab.icon" aria-hidden="true" /></EmptyMedia>
-      <EmptyDescription>{{
-        t(emptyLabelKeys[props.tab.id])
-      }}</EmptyDescription>
+      <EmptyDescription>{{ t(emptyLabelKeys[props.tab.id]) }}</EmptyDescription>
     </EmptyHeader>
   </Empty>
 </template>

@@ -38,6 +38,7 @@ const { isActive } = usePageActive(resume, () => {
   pause();
   shellLayout.setCanvasExpanded(false);
 });
+
 const root = useTemplateRef<HTMLElement>('root');
 const detail = useTemplateRef('detail');
 const { width } = useElementSize(() => (isActive.value ? root.value : null));

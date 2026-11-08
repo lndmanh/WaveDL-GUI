@@ -27,6 +27,7 @@ async function setup(
   const keys: Array<string | null> = [];
   const bodies: string[] = [];
   const submissions: string[] = [];
+
   const session = new ConnectionSession({
     origin: 'http://localhost:8765',
     buildId: '1.8.1',
@@ -72,6 +73,7 @@ async function setup(
   const catalogue = new CatalogApi(session);
   const data = await catalogue.resolve('data', 'train.npz');
   const model = await catalogue.selectCustomModel('cnn');
+
   const draft = trainingRequestSchema.parse({
     backend: 'local',
     operation: 'train',
@@ -79,6 +81,7 @@ async function setup(
     runtime: { python: '/usr/bin/python3', mode: 'existing', device: 'cpu', environment: {} },
     topology: { num_machines: 1, processes_per_machine: 1, machine_rank: 0 },
   });
+
   const keyFactory = vi.fn(() => `training-key-${keys.length}`);
 
   return {
@@ -159,15 +162,15 @@ describe('training request approval lifecycle', () => {
 
   it('reuses the key when retrying a failed preview of the same request', async () => {
     let attempts = 0;
+
     const { workflow, draft, data, model, keys } = await setup({
       planResponse: () => {
         attempts++;
 
-        return attempts === 1
-          ? json({ error: 'Try again' }, 409)
-          : json({ ...ids, preview: {} });
+        return attempts === 1 ? json({ error: 'Try again' }, 409) : json({ ...ids, preview: {} });
       },
     });
+
     workflow.prepare(draft, data, model);
     await expect(workflow.preview()).rejects.toThrow();
     expect(workflow.approved).toBeNull();
@@ -236,9 +239,11 @@ describe('training request approval lifecycle', () => {
     'rejects a late preview after %s',
     async (change) => {
       let release = () => {};
+
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
+
       const { workflow, draft, data, model, keys } = await setup({
         planResponse: async () => {
           await gate;
@@ -246,10 +251,13 @@ describe('training request approval lifecycle', () => {
           return json({ ...ids, preview: {} });
         },
       });
+
       workflow.prepare(draft, data, model);
+
       const preview = expect(workflow.preview()).rejects.toMatchObject({
         clientMessageKey: 'planningDraftChanged',
       });
+
       await vi.waitFor(() => expect(keys).toHaveLength(1));
 
       if (change === 'invalidate') workflow.invalidate();
@@ -301,9 +309,11 @@ describe('training request approval lifecycle', () => {
 
   it('rejects an in-flight preview across reconnect', async () => {
     let release = () => {};
+
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+
     const { workflow, draft, data, model, session, keys } = await setup({
       planResponse: async () => {
         await gate;
@@ -311,6 +321,7 @@ describe('training request approval lifecycle', () => {
         return json({ ...ids, preview: {} });
       },
     });
+
     workflow.prepare(draft, data, model);
     const preview = expect(workflow.preview()).rejects.toThrow();
     await vi.waitFor(() => expect(keys).toHaveLength(1));
@@ -324,6 +335,7 @@ describe('training request approval lifecycle', () => {
     const { workflow, draft, data, model } = await setup({
       runIdentity: { [field]: '55555555-5555-4555-8555-555555555555' },
     });
+
     workflow.prepare(draft, data, model);
     await workflow.preview();
     await expect(workflow.status()).rejects.toMatchObject({ code: 'identity' });

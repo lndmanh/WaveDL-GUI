@@ -148,6 +148,7 @@ export function relativeTime(
 /** Decimal file sizes, capped at gigabytes, with at most one fractional digit. */
 export function formatBytes(bytes: number, locale: string): string {
   const size = Number.isFinite(bytes) ? Math.max(0, bytes) : 0;
+
   const [unit, divisor]: [string, number] =
     size >= 1_000_000_000
       ? ['gigabyte', 1_000_000_000]

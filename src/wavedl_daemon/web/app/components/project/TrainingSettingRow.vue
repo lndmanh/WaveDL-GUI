@@ -17,10 +17,12 @@ const props = defineProps<{ name: TrainingFieldName; disabled: boolean }>();
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 const defaultValue = trainingDefaults[props.name];
+
 const { option, kind, messages, listValue, textValue, choiceValue } = trainingFieldAdapter(
   props.name,
   defaultValue,
 );
+
 const translated = computed(() => messages(t, ''));
 const idPrefix = useId();
 const controlId = `${idPrefix}-training-${props.name}`;

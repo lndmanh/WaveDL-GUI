@@ -50,6 +50,7 @@ function render(preserveView = false) {
 
   if (width <= 0) {
     retainedScales = savedScales;
+
     return;
   }
 

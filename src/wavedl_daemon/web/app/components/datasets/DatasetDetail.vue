@@ -32,6 +32,7 @@ const styles = {
 const { t } = useI18n({ useScope: 'global' });
 const title = useTemplateRef<HTMLElement>('title');
 const titleId = useId();
+
 const { info, busy, failed } = useDatasetInspection(
   () => props.session,
   () => props.selection,

@@ -74,7 +74,11 @@ const choices = [runtimeBackendField, runtimeModeField, runtimeDeviceField];
         </Select>
         <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
-    <VeeField v-for="item in runtimeTopologyFields" :key="item.name" v-slot="{ field, errors }" :name="item.name"
+    <VeeField
+      v-for="item in runtimeTopologyFields"
+      :key="item.name"
+      v-slot="{ field, errors }"
+      :name="item.name"
       ><Field :data-invalid="!!errors.length"
         ><FieldLabel :for="controlId(item.name)">{{ t(item.label) }}</FieldLabel
         ><Input
