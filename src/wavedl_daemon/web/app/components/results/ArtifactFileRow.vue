@@ -123,7 +123,7 @@ const icon = computed(() => {
     </td>
     <td class="p-0">
       <div
-        :class="cn(styles.cell, 'flex items-center justify-end gap-1 px-1')"
+        :class="cn(styles.cell, 'flex items-center justify-end gap-0.5 px-1')"
         role="group"
         :aria-label="t('results.actions')"
       >
@@ -132,7 +132,7 @@ const icon = computed(() => {
             <Button
               type="button"
               variant="ghost"
-              size="icon-sm"
+              size="icon-xs"
               :disabled="busy"
               :aria-label="t('results.checkpointActions', { path: artifact.path })"
               ><Ellipsis aria-hidden="true"
@@ -157,7 +157,7 @@ const icon = computed(() => {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
+                size="icon-xs"
                 :disabled="busy"
                 :aria-label="t('results.previewFile', { path: artifact.path })"
                 @click="emit('preview', artifact)"
@@ -171,7 +171,7 @@ const icon = computed(() => {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
+                size="icon-xs"
                 :disabled="busy"
                 :aria-label="t('results.downloadFile', { path: artifact.path })"
                 @click="emit('download', artifact)"

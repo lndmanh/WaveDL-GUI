@@ -379,7 +379,7 @@ function restorePreviewFocus(event: Event) {
                     />
                   </button>
                 </th>
-                <th scope="col" class="h-8 w-20 p-0">
+                <th scope="col" class="h-8 w-16 p-0">
                   <span class="sr-only">{{ t('results.actions') }}</span>
                 </th>
               </tr>
