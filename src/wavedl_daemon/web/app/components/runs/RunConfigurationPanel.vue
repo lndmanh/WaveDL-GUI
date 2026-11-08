@@ -6,13 +6,14 @@ import { storedTrainingCommand } from '../../lib/run-clone';
 import type { PlanView, RunView } from '~~/types/daemon-api';
 import type { PlanCommand } from '~~/types/plan-summary';
 
-const props = defineProps<{ run: RunView }>();
+const props = defineProps<{ run: RunView; active: boolean }>();
 const { t, locale } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 const { api, state, revision, reportFailure } = useWorkstation();
 const router = useRouter();
 const shellNavigate = useShellNavigation();
 const { isActive } = usePageActive();
+const resourceActive = computed(() => isActive.value && props.active);
 const clone = useRunClone();
 const labels = useRunLabels();
 const { copy, copied, isSupported: canCopy } = useClipboard({ copiedDuring: 1600 });
@@ -25,7 +26,7 @@ const retry = shallowRef(0);
 const detailsId = useId();
 
 watch(
-  [isActive, () => props.run.run_id, () => props.run.plan_id, () => props.run.request_id, api, revision, () => state.value.status, retry],
+  [resourceActive, () => props.run.run_id, () => props.run.plan_id, () => props.run.request_id, api, revision, () => state.value.status, retry],
   async (_value, _previous, onCleanup) => {
     const controller = new AbortController();
     onCleanup(() => controller.abort());
@@ -37,18 +38,18 @@ watch(
 
     const client = api.value;
 
-    if (!isActive.value || state.value.status !== 'connected' || !client) return;
+    if (!resourceActive.value || state.value.status !== 'connected' || !client) return;
     loading.value = true;
 
     try {
       const result = await client.getRunPlan(run.run_id, controller.signal);
 
-      if (controller.signal.aborted || !isActive.value) return;
+      if (controller.signal.aborted || !resourceActive.value) return;
       if (result.run_id !== run.run_id || result.plan_id !== run.plan_id || result.request_id !== run.request_id)
         throw new Error(t('project.configurationMismatch'));
       plan.value = result;
     } catch (failure) {
-      if (controller.signal.aborted || !isActive.value) return;
+      if (controller.signal.aborted || !resourceActive.value) return;
       error.value = clientMessage(failure instanceof Error ? failure : String(failure));
 
       if (failure instanceof DaemonApiError) reportFailure.value(failure);
@@ -93,7 +94,7 @@ async function cloneRun() {
   const stored = plan.value;
   const daemonId = state.value.health?.daemon_id;
 
-  if (!isActive.value || !stored || !daemonId || !canClone.value || cloning.value) return;
+  if (!resourceActive.value || !stored || !daemonId || !canClone.value || cloning.value) return;
   cloneError.value = '';
   cloning.value = true;
 
