@@ -3,13 +3,9 @@ import { cn } from '@/lib/utils';
 import { Field as VeeField, useFormContext } from 'vee-validate';
 import {
   Apple,
-  Check,
   ChevronRight,
   Cpu,
   Gauge,
-  MemoryStick,
-  Monitor,
-  RefreshCw,
   Sparkles,
   TriangleAlert,
   Wand,
@@ -17,8 +13,16 @@ import {
 import type { TrainingRequest } from '../../../shared/schemas/training-request';
 import type { StorageMapping } from '../../../shared/schemas/storage-mapping';
 import type { HostProfile, RuntimeSetup } from '../../../shared/schemas/host-profile';
-import { gigabytes, hostAccelerator, visibleDevices } from '../../lib/host-runtime';
-import { runtimeValueMessageKeys } from '../../i18n/dynamic-keys';
+import { visibleDevices } from '../../lib/host-runtime';
+import {
+  runtimeBackendField,
+  runtimeDeviceField,
+  runtimeFieldValueLabel,
+  runtimeModeField,
+  runtimePythonField,
+  runtimeTopologyFields,
+} from '../../lib/runtime-fields';
+import { nullableNumberValue } from '../../lib/field-adaptation';
 import type { AcceptableValue } from 'reka-ui';
 import { runtimeDeviceSchema } from '../../../shared/schemas/workstation-controls';
 
@@ -46,25 +50,22 @@ const modeId = `${prefix}-runtime-runtime-mode`;
 
 type Device = TrainingRequest['runtime']['device'];
 
-const devices: readonly { value: Device; icon: Component; title: string; caption: string }[] = [
-  { value: 'cpu', icon: Cpu, title: 'builder.deviceCpu', caption: 'builder.deviceCpuHelp' },
-  { value: 'cuda', icon: Gauge, title: 'builder.deviceCuda', caption: 'builder.deviceCudaHelp' },
-  { value: 'mps', icon: Apple, title: 'builder.deviceMps', caption: 'builder.deviceMpsHelp' },
-  { value: 'auto', icon: Sparkles, title: 'builder.deviceAuto', caption: 'builder.deviceAutoHelp' },
-];
-
-const modes: readonly TrainingRequest['runtime']['mode'][] = [
-  'existing',
-  'selected',
-  'bundled',
-  'container',
-];
+const devicePresentation: Readonly<Record<Device, { icon: Component; title: string; caption: string }>> = {
+  cpu: { icon: Cpu, title: 'builder.deviceCpu', caption: 'builder.deviceCpuHelp' },
+  cuda: { icon: Gauge, title: 'builder.deviceCuda', caption: 'builder.deviceCudaHelp' },
+  mps: { icon: Apple, title: 'builder.deviceMps', caption: 'builder.deviceMpsHelp' },
+  auto: { icon: Sparkles, title: 'builder.deviceAuto', caption: 'builder.deviceAutoHelp' },
+};
+const devices = runtimeDeviceField.cardValues.map((value) => ({
+  value,
+  ...devicePresentation[value],
+}));
 
 // A daemon that reports its backends disables the ones it cannot plan for.
 const backends = computed<
   { value: TrainingRequest['backend']; label: string; disabled: boolean }[]
 >(() =>
-  (['local', 'slurm'] as const).map((value) => ({
+  runtimeBackendField.values.map((value) => ({
     value,
     label: t(value === 'local' ? 'builder.backendLocal' : 'builder.backendSlurm'),
     disabled: !!props.profile && !props.profile.backends.includes(value),
@@ -78,69 +79,6 @@ const setups = computed<{ value: RuntimeSetup; label: string }[]>(() => [
 
 /** Without a profile there is nothing to automate: the manual editor is the way forward. */
 const manual = computed(() => props.setup === 'manual' || (!props.profile && !props.detecting));
-const accelerator = computed(() => (props.profile ? hostAccelerator(props.profile) : 'unknown'));
-
-const acceleratorName = computed(() => {
-  const found = props.profile?.accelerators;
-
-  if (accelerator.value === 'cuda' && found?.cuda[0])
-    return found.cuda.length > 1
-      ? t('builder.gpuCount', { name: found.cuda[0].name, count: found.cuda.length })
-      : found.cuda[0].name;
-
-  if (accelerator.value === 'mps') return t('builder.appleGpu');
-
-  if (accelerator.value === 'cpu') return t('builder.cpuOnly');
-
-  return t('builder.acceleratorUnknown');
-});
-
-const machineFacts = computed(() => {
-  const profile = props.profile;
-
-  if (!profile) return [];
-  const gpu = profile.accelerators?.cuda[0];
-
-  return [
-    {
-      icon: Cpu,
-      label: t('builder.processor'),
-      value: profile.cpu_count ? t('builder.cores', { count: profile.cpu_count }) : '—',
-      detail: profile.arch,
-    },
-    {
-      icon: MemoryStick,
-      label: t('builder.memory'),
-      value: profile.memory_bytes ? gigabytes(profile.memory_bytes) : '—',
-      detail: '',
-    },
-    {
-      icon: accelerator.value === 'mps' ? Apple : Gauge,
-      label: t('builder.accelerator'),
-      value: acceleratorName.value,
-      detail: gpu ? gigabytes(gpu.memory_bytes) : '',
-    },
-    {
-      icon: Sparkles,
-      label: t('builder.pythonShort'),
-      value: profile.python_version,
-      detail: profile.accelerators?.torch
-        ? t('builder.torchVersion', { version: profile.accelerators.torch })
-        : '',
-    },
-  ];
-});
-
-const osName = computed(() => {
-  const os = props.profile?.os;
-
-  return os === 'Darwin' ? 'macOS' : os;
-});
-
-const torchMissing = computed(
-  () => !!props.profile?.accelerators && !props.profile.accelerators.torch,
-);
-
 const deviceDetected = computed<Partial<Record<Device, boolean>>>(() => ({
   cpu: true,
   cuda: !!props.profile?.accelerators?.cuda.length,
@@ -176,51 +114,15 @@ const topologySummary = computed(() =>
   }),
 );
 
-const topologyFields = [
-  { name: 'topology.num_machines', label: 'project.machines', min: 1 },
-  { name: 'topology.processes_per_machine', label: 'project.processesPerMachine', min: 1 },
-  { name: 'topology.machine_rank', label: 'project.machineRank', min: 0 },
-] as const;
-
 const topologyInvalid = computed(() =>
   Object.keys(errors.value).some((path) => path.startsWith('topology')),
 );
-
-function modeLabel(mode: TrainingRequest['runtime']['mode']): string {
-  const key = runtimeValueMessageKeys[mode];
-
-  return key ? t(key) : mode;
-}
 
 function chooseSetup(value: RuntimeSetup) {
   emit('update:setup', value);
 }
 
-function count(value: number | null | undefined): number | null {
-  return value ?? null;
-}
-
 const projectStyles = {
-  machineCard: cn('flex flex-col gap-4 p-[1rem_1.1rem_1.1rem]'),
-  machineCardIcon: cn(
-    'grid size-[2.4rem] flex-none place-items-center rounded-lg text-white',
-    '[background:linear-gradient(160deg,_#5e8bff,_#3a5ccc)] shadow-[inset_0_1px_0_rgb(255_255_255_/_0.25)]',
-    '[&_svg]:size-[1.2rem]',
-  ),
-  machineFacts: cn('grid grid-cols-4 gap-2 [@media(max-width:_40rem)]:grid-cols-2'),
-  machineFact: cn(
-    'min-w-0 py-[0.65rem] px-3 rounded-lg [background:color-mix(in_srgb,_var(--foreground)_4.5%,_transparent)]',
-    '[&_dt]:flex [&_dt]:items-center [&_dt]:gap-[0.3rem] [&_dt]:text-muted-foreground [&_dt]:text-[0.7rem]',
-    '[&_dt_svg]:size-3 [&_dd]:m-[0.2rem_0_0] [&_dd]:overflow-hidden [&_dd]:text-[0.92rem] [&_dd]:font-semibold',
-    '[&_dd]:text-ellipsis [&_dd]:whitespace-nowrap [&_.machine-fact-detail]:m-0',
-    '[&_.machine-fact-detail]:text-muted-foreground [&_.machine-fact-detail]:text-[0.7rem]',
-    '[&_.machine-fact-detail]:font-normal',
-  ),
-  automaticStep: cn(
-    'flex items-start gap-[0.6rem] py-[0.45rem] px-4 text-sm/[inherit] [&_svg]:size-4 [&_svg]:flex-none [&_svg]:mt-[0.15rem]',
-    "[&_svg]:text-success [&_svg]:stroke-[2.5] [&[data-tone='warning']_svg]:text-warning",
-    "[&[data-tone='warning']_svg]:stroke-[2] [&[data-tone='info']_svg]:text-primary",
-  ),
   manualBanner: cn(
     'flex flex-wrap items-center gap-2 p-[0.6rem_0.75rem_0.6rem_1rem] rounded-[0.9rem]',
     '[background:color-mix(in_srgb,_var(--primary)_7%,_transparent)]',
@@ -283,102 +185,12 @@ const projectStyles = {
       />
     </template>
 
-    <!-- This machine, as the daemon sees it. -->
-    <section
-      :class="cn('surface-group', projectStyles.machineCard)"
-      :aria-label="t('builder.thisMachine')"
-      data-testid="host-profile"
-    >
-      <header class="flex items-center gap-3">
-        <span :class="projectStyles.machineCardIcon"><Monitor aria-hidden="true" /></span>
-        <div class="min-w-0 flex-1">
-          <p class="text-xs font-medium text-muted-foreground">{{ t('builder.thisMachine') }}</p>
-          <p v-if="profile" class="truncate text-[1.05rem] font-semibold">
-            {{ profile.hostname || osName }}
-          </p>
-          <p v-else-if="detecting" class="text-[1.05rem] font-semibold">
-            {{ t('builder.detecting') }}
-          </p>
-          <p v-else class="text-[1.05rem] font-semibold">{{ t('builder.detectFailed') }}</p>
-        </div>
-        <span v-if="profile" class="hidden text-xs text-muted-foreground sm:inline">
-          {{ osName }} {{ profile.os_release }}
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          :disabled="detecting"
-          :aria-label="t('builder.detectAgain')"
-          :title="t('builder.detectAgain')"
-          @click="emit('detect')"
-        >
-          <RefreshCw :class="detecting ? 'animate-spin' : ''" aria-hidden="true" />
-        </Button>
-      </header>
-      <dl v-if="profile" :class="projectStyles.machineFacts">
-        <div v-for="fact in machineFacts" :key="fact.label" :class="projectStyles.machineFact">
-          <dt><component :is="fact.icon" aria-hidden="true" />{{ fact.label }}</dt>
-          <dd>{{ fact.value }}</dd>
-          <dd v-if="fact.detail" class="machine-fact-detail">{{ fact.detail }}</dd>
-        </div>
-      </dl>
-      <div v-else-if="detecting" :class="projectStyles.machineFacts" aria-hidden="true">
-        <Skeleton v-for="index in 4" :key="index" class="h-16 rounded-xl" />
-      </div>
-      <p v-else class="text-sm text-muted-foreground">{{ t('builder.detectFailedHelp') }}</p>
-      <p
-        v-if="profile"
-        class="truncate font-mono text-[0.7rem] text-muted-foreground"
-        :title="profile.python"
-      >
-        {{ profile.python }}
-      </p>
-    </section>
-
-    <!-- Automatic: what the run will do, in plain words. -->
-    <section
-      v-if="!manual && profile"
-      class="surface-group overflow-hidden"
-      :aria-label="t('builder.automaticPlan')"
-      data-testid="runtime-automatic"
-    >
-      <p class="flex items-center gap-2 px-4 pt-4 text-[0.92rem] font-semibold">
-        <Wand class="size-4 text-primary" aria-hidden="true" />{{ t('builder.automaticPlan') }}
-      </p>
-      <ul class="flex flex-col py-2">
-        <li :class="projectStyles.automaticStep">
-          <Check aria-hidden="true" />{{ t('builder.automaticLocal') }}
-        </li>
-        <li :class="projectStyles.automaticStep">
-          <Check aria-hidden="true" />{{
-            t('builder.automaticDevice', { device: acceleratorName })
-          }}
-        </li>
-        <li :class="projectStyles.automaticStep">
-          <Check aria-hidden="true" />{{
-            t('builder.automaticPython', { version: profile.python_version })
-          }}
-        </li>
-        <li
-          v-if="(profile.accelerators?.cuda.length ?? 0) > 1"
-          :class="projectStyles.automaticStep"
-          data-tone="info"
-        >
-          <Check aria-hidden="true" />{{
-            t('builder.automaticOneGpu', { count: profile.accelerators?.cuda.length ?? 0 })
-          }}
-        </li>
-        <li v-if="torchMissing" :class="projectStyles.automaticStep" data-tone="warning">
-          <TriangleAlert aria-hidden="true" />{{ t('builder.torchMissing') }}
-        </li>
-      </ul>
-      <p
-        class="border-t border-[color-mix(in_srgb,var(--foreground)_10%,transparent)] px-4 py-3 text-xs text-muted-foreground"
-      >
-        {{ t('builder.automaticHelp') }}
-      </p>
-    </section>
+    <RuntimeHostSummary
+      :profile="profile"
+      :detecting="detecting"
+      :automatic="!manual"
+      @detect="emit('detect')"
+    />
 
     <!-- Manual: every runtime control, starting from the detected values. -->
     <div
@@ -406,18 +218,18 @@ const projectStyles = {
       >
         {{ t('builder.manualWithoutProfile') }}
       </p>
-      <VeeField v-slot="{ field, errors: deviceErrors }" name="runtime.device">
+      <VeeField v-slot="{ field, errors: deviceErrors }" :name="runtimeDeviceField.name">
         <fieldset class="flex flex-col gap-2">
           <legend
             class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
           >
-            {{ t('project.device') }}
+            {{ t(runtimeDeviceField.label) }}
           </legend>
           <RadioGroup
             :model-value="values.runtime.device"
             :disabled="disabled"
             class="grid grid-cols-2 gap-2.5 lg:grid-cols-4"
-            :aria-label="t('project.device')"
+            :aria-label="t(runtimeDeviceField.label)"
             @update:model-value="chooseDevice($event, field.onChange)"
           >
             <label
@@ -463,7 +275,7 @@ const projectStyles = {
       </VeeField>
 
       <div class="surface-group overflow-hidden">
-        <VeeField v-slot="{ field }" name="backend">
+        <VeeField v-slot="{ field }" :name="runtimeBackendField.name">
           <div :class="cn('surface-row runtime-row', projectStyles.runtimeRow)">
             <div class="min-w-0 flex-1">
               <p class="text-[0.9rem] font-medium">{{ t('builder.backend') }}</p>
@@ -472,22 +284,22 @@ const projectStyles = {
             <SegmentedControl
               :model-value="values.backend"
               :options="backends"
-              :label="t('project.configuredBackend')"
+              :label="t(runtimeBackendField.label)"
               :disabled="disabled"
               test-id="runtime-backend"
               @update:model-value="field.onChange"
             />
           </div>
         </VeeField>
-        <VeeField v-slot="{ field, errors: pythonErrors }" name="runtime.python">
+        <VeeField v-slot="{ field, errors: pythonErrors }" :name="runtimePythonField.name">
           <div :class="cn('runtime-row', projectStyles.runtimeRow)">
             <div class="surface-row flex-wrap">
               <div class="min-w-0 flex-1">
                 <label :for="pythonId" class="text-[0.9rem] font-medium">
-                  {{ t('project.pythonInterpreter') }}
+                  {{ t(runtimePythonField.label) }}
                 </label>
                 <p :id="`${pythonId}-description`" class="text-xs text-muted-foreground">
-                  {{ t('project.interpreterHelp') }}
+                  {{ t(runtimePythonField.description) }}
                 </p>
               </div>
               <Input
@@ -523,12 +335,12 @@ const projectStyles = {
             />
           </div>
         </VeeField>
-        <VeeField v-slot="{ field, errors: modeErrors }" name="runtime.mode">
+        <VeeField v-slot="{ field, errors: modeErrors }" :name="runtimeModeField.name">
           <div :class="cn('runtime-row', projectStyles.runtimeRow)">
             <div class="surface-row">
               <div class="min-w-0 flex-1">
                 <label :for="modeId" class="text-[0.9rem] font-medium">
-                  {{ t('project.runtimeMode') }}
+                  {{ t(runtimeModeField.label) }}
                 </label>
                 <p class="text-xs text-muted-foreground">
                   {{ t('project.runtimeUnavailableModes') }}
@@ -545,8 +357,8 @@ const projectStyles = {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem v-for="mode in modes" :key="mode" :value="mode">
-                      {{ modeLabel(mode) }}
+                    <SelectItem v-for="mode in runtimeModeField.values" :key="mode" :value="mode">
+                      {{ runtimeFieldValueLabel(mode, t) }}
                     </SelectItem>
                   </SelectGroup>
                 </SelectContent>
@@ -580,7 +392,7 @@ const projectStyles = {
         <CollapsibleContent class="collapsible-motion">
           <div class="border-t border-[color-mix(in_srgb,var(--foreground)_10%,transparent)]">
             <VeeField
-              v-for="item in topologyFields"
+              v-for="item in runtimeTopologyFields"
               :key="item.name"
               v-slot="{ field, errors: countErrors }"
               :name="item.name"
@@ -595,7 +407,7 @@ const projectStyles = {
                   <NumberField
                     :id="`${prefix}-runtime-${item.name.replace('.', '-')}`"
                     :label="t(item.label)"
-                    :model-value="count(field.value)"
+                    :model-value="nullableNumberValue(field.value)"
                     integer
                     :min="item.min"
                     :disabled="disabled"

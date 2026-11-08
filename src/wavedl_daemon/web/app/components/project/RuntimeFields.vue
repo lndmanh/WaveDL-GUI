@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { Field as VeeField } from 'vee-validate';
 import {
-  runtimeValueMessageKeys,
-  runtimeValues,
-  runtimeFieldMessageKeys,
-} from '../../i18n/dynamic-keys';
+  runtimeBackendField,
+  runtimeDeviceField,
+  runtimeFieldValueLabel,
+  runtimeModeField,
+  runtimePythonField,
+  runtimeTopologyFields,
+} from '../../lib/runtime-fields';
+import { inputNumberValue } from '../../lib/field-adaptation';
 
 const { clientMessage } = useClientMessages();
 const { t } = useI18n({ useScope: 'global' });
@@ -17,46 +21,8 @@ function controlId(name: string): string {
   return `${idPrefix}-runtime-${name.replaceAll('.', '-')}`;
 }
 
-function runtimeValueLabel(value: string): string {
-  const entry = runtimeValues.find((item) => item === value);
-
-  if (!entry) return value;
-  const key = runtimeValueMessageKeys[entry];
-
-  return key ? t(key) : value;
-}
-
-const textFields = [
-  {
-    name: 'runtime.python',
-    label: runtimeFieldMessageKeys.pythonInterpreter,
-    description: runtimeFieldMessageKeys.interpreterDescription,
-  },
-];
-
-const choices = [
-  { name: 'backend', label: runtimeFieldMessageKeys.backend, values: ['local', 'slurm'] },
-  {
-    name: 'runtime.mode',
-    label: runtimeFieldMessageKeys.mode,
-    values: ['existing', 'selected', 'bundled', 'container'],
-  },
-  {
-    name: 'runtime.device',
-    label: runtimeFieldMessageKeys.device,
-    values: ['cpu', 'mps', 'cuda', 'auto'],
-  },
-];
-
-const counts = [
-  { name: 'topology.num_machines', label: runtimeFieldMessageKeys.machines, min: 1 },
-  {
-    name: 'topology.processes_per_machine',
-    label: runtimeFieldMessageKeys.processesPerMachine,
-    min: 1,
-  },
-  { name: 'topology.machine_rank', label: runtimeFieldMessageKeys.machineRank, min: 0 },
-];
+const textFields = [runtimePythonField];
+const choices = [runtimeBackendField, runtimeModeField, runtimeDeviceField];
 </script>
 <template>
   <fieldset class="grid gap-5 sm:grid-cols-2">
@@ -101,14 +67,14 @@ const counts = [
           <SelectContent>
             <SelectGroup>
               <SelectItem v-for="value in item.values" :key="value" :value="value">
-                {{ runtimeValueLabel(value) }}
+                {{ runtimeFieldValueLabel(value, t) }}
               </SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
         <FieldError v-if="errors.length" :errors="errors.map(clientMessage)" /></Field
     ></VeeField>
-    <VeeField v-for="item in counts" :key="item.name" v-slot="{ field, errors }" :name="item.name"
+    <VeeField v-for="item in runtimeTopologyFields" :key="item.name" v-slot="{ field, errors }" :name="item.name"
       ><Field :data-invalid="!!errors.length"
         ><FieldLabel :for="controlId(item.name)">{{ t(item.label) }}</FieldLabel
         ><Input
@@ -119,7 +85,7 @@ const counts = [
           :model-value="field.value"
           :disabled="disabled"
           :aria-invalid="!!errors.length"
-          @update:model-value="field.onChange($event === '' ? Number.NaN : Number($event))"
+          @update:model-value="field.onChange(inputNumberValue($event))"
           @blur="field.onBlur" /><FieldError
           v-if="errors.length"
           :errors="errors.map(clientMessage)" /></Field
