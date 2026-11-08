@@ -5,6 +5,7 @@ import type { DaemonApi, DaemonApiError } from '../../lib/daemon-api';
 import { evaluationResults } from '../../lib/evaluation-results';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
+import type { Artifact } from '~~/types/artifact-client';
 
 const styles = {
   root: cn('flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden'),
@@ -126,14 +127,24 @@ const {
   busy,
   message,
   downloadStatus,
-  imageUrl,
-  previewPath,
   refresh,
   consume,
-  clearImage,
 } = useRunArtifacts(
   () => props.session,
   () => props.runId,
+);
+
+const images = useArtifactImages(() => props.runId);
+const selectedImage = shallowRef<Artifact | null>(null);
+const shownMetrics = new Set<string>();
+const shownFiles = new Set<string>();
+
+watch(
+  [scopeGeneration, isActive],
+  () => {
+    selectedImage.value = null;
+  },
+  { flush: 'sync' },
 );
 
 // Cached pages still observe router changes; only the active run may consume this intent.
@@ -287,9 +298,15 @@ watch(hasCvSummary, (available) => {
         <TabsContent v-if="isEvaluation" value="metrics" :class="styles.scrollTab">
           <EvaluationResultsPanel
             v-if="metricsReady && monitor"
+            :key="runId"
+            :artifacts="inventory.files"
+            :images="images"
+            :animate-entry="!shownMetrics.has(runId)"
             :run="monitor.run"
             :events="monitor.events"
             :freshness="monitor.freshness"
+            @preview="selectedImage = $event"
+            @vue:mounted="shownMetrics.add(runId)"
           />
           <Empty v-else role="status" class="py-10">
             <EmptyHeader>
@@ -300,18 +317,19 @@ watch(hasCvSummary, (available) => {
         </TabsContent>
         <TabsContent value="files" class="flex min-h-0 min-w-0 flex-1 flex-col">
           <ArtifactList
+            :key="runId"
             :artifacts="inventory.files"
             :busy="busy"
-            :image-url="imageUrl"
-            :preview-path="previewPath"
+            :images="images"
+            :animate-entry="!shownFiles.has(runId)"
             :checkpoints="inventory.checkpoints"
             checkpoint-actions
             fill
             @evaluate="openEvaluation($event)"
             @export="openEvaluation($event, 'export')"
             @download="consume"
-            @preview="consume($event, true)"
-            @close-preview="clearImage"
+            @preview="selectedImage = $event"
+            @vue:mounted="shownFiles.add(runId)"
           />
         </TabsContent>
         <TabsContent v-if="hasCvSummary" value="cv" :class="styles.scrollTab">
@@ -333,6 +351,13 @@ watch(hasCvSummary, (available) => {
           />
         </TabsContent>
       </Tabs>
+      <ArtifactLightbox
+        :artifacts="inventory.files"
+        :images="images"
+        :selected="selectedImage"
+        @close="selectedImage = null"
+        @download="consume"
+      />
       <EvaluateDialog
         v-if="connected && isActive"
         :key="`${runId}:${scopeGeneration}`"

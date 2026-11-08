@@ -42,6 +42,7 @@ import {
 } from '../../lib/run-overview';
 import { runBackendMessageKeys, runCancellationMessageKeys } from '../../i18n/dynamic-keys';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
+import type { Artifact } from '~~/types/artifact-client';
 
 const styles = {
   card: cn('@container h-full min-h-0 min-w-0 gap-0 overflow-hidden py-0'),
@@ -77,7 +78,7 @@ interface RunFact {
 
 const { t, locale } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
-const { state: connectionState } = useWorkstation();
+const { state: connectionState, session } = useWorkstation();
 const navigate = useShellNavigation();
 const shellLayout = useShellLayout();
 const { isCanvasExpanded, isCompanionShowing, panelTabs } = shellLayout;
@@ -99,6 +100,36 @@ const props = withDefaults(
     animateEntrance?: boolean;
   }>(),
   { back: false, animateEntrance: true },
+);
+
+const artifactResourcesActive = computed(
+  () =>
+    props.snapshot.run?.operation === 'test' ||
+    (isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'artifacts'),
+);
+
+const runArtifacts = useRunArtifacts(
+  session,
+  () => props.snapshot.run?.run_id ?? null,
+  artifactResourcesActive,
+);
+
+const { inventory: resultInventory, scopeGeneration: artifactScope } = runArtifacts;
+
+const images = useArtifactImages(() =>
+  artifactResourcesActive.value ? (props.snapshot.run?.run_id ?? null) : null,
+);
+
+const selectedImage = shallowRef<Artifact | null>(null);
+
+const shownEvaluations = new Set<string>();
+
+watch(
+  [artifactScope, isActive],
+  () => {
+    selectedImage.value = null;
+  },
+  { flush: 'sync' },
 );
 
 const title = useTemplateRef<HTMLElement>('title');
@@ -560,10 +591,16 @@ const hasEvaluation = computed(
       <Separator />
       <div v-if="snapshot.run?.operation === 'test'" class="min-h-0 flex-1 overflow-y-auto p-4">
         <EvaluationResultsPanel
-          v-if="hasEvaluation"
+          v-if="hasEvaluation && snapshot.run"
+          :key="snapshot.run.run_id"
           :run="snapshot.run"
           :events="snapshot.events"
           :freshness="snapshot.freshness"
+          :artifacts="resultInventory.files"
+          :images="images"
+          :animate-entry="!shownEvaluations.has(snapshot.run.run_id)"
+          @preview="selectedImage = $event"
+          @vue:mounted="shownEvaluations.add(snapshot.run.run_id)"
         />
         <Empty v-else role="status" class="min-h-48">
           <EmptyHeader>
@@ -588,6 +625,13 @@ const hasEvaluation = computed(
       </div>
     </Card>
   </motion.div>
+  <ArtifactLightbox
+    :artifacts="resultInventory.files"
+    :images="images"
+    :selected="selectedImage"
+    @close="selectedImage = null"
+    @download="runArtifacts.consume"
+  />
   <!-- Keep companion content mounted, but park it off-document while this page is cached. -->
   <template v-if="parkedPanel">
     <Teleport
@@ -629,9 +673,12 @@ const hasEvaluation = computed(
         <RunArtifactsPanel
           v-else-if="panel.id === 'artifacts' && snapshot.run"
           :run-id="snapshot.run.run_id"
+          :resources="runArtifacts"
+          :images="images"
           :active="
             isActive && isCompanionShowing && shellLayout.resolvedActiveTab.value === 'artifacts'
           "
+          @preview="selectedImage = $event"
         />
       </div>
     </Teleport>
