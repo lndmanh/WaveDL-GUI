@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { trainingRequestSchema } from './training-request';
 import { inferenceConfigSchema } from './result-request';
-import { WORKSTATION_SECTIONS } from '../../app/lib/shell-test-ids';
+import { WORKSTATION_SECTIONS } from '../constants/workstation-sections';
 
 export const runtimeDeviceSchema = trainingRequestSchema.shape.runtime.shape.device;
 export const resultExportSchema = inferenceConfigSchema.shape.export;
