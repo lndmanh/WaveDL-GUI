@@ -1,5 +1,5 @@
-import { pathName, relativeTime, runCreatedAt } from '../lib/run-overview';
-import { runOperationMessageKeys } from '../i18n/dynamic-keys';
+import { pathName, relativeTime, runCreatedAt, runKindOf } from '../lib/run-overview';
+import { runKindMessageKeys } from '../i18n/dynamic-keys';
 import type { RunView } from '~~/types/daemon-api';
 
 /** One naming rule for a run everywhere it is listed or opened. */
@@ -7,7 +7,7 @@ export function useRunLabels() {
   const { t, locale } = useI18n({ useScope: 'global' });
 
   function operation(run: RunView): string {
-    return t(runOperationMessageKeys[run.operation]);
+    return t(runKindMessageKeys[runKindOf(run)]);
   }
 
   function title(run: RunView): string {

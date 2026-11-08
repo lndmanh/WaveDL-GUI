@@ -2,6 +2,7 @@ import trainingOptions from '../../shared/training-options.json';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 import type { RunState, RunView } from '~~/types/daemon-api';
 import type { RuntimeValue } from '~~/types/i18n';
+import type { RunKind } from '~~/types/run-overview';
 
 export const datasetPreviewTabMessageKeys = {
   input: 'datasets.inputDistribution',
@@ -235,6 +236,15 @@ export function runActivityMessageKeysFor(
   return null;
 }
 
+export const runKindMessageKeys: Readonly<Record<RunKind, string>> = {
+  training: 'runs.kindTraining',
+  evaluation: 'runs.kindEvaluation',
+  'evaluation-plots': 'runs.kindEvaluationPlots',
+  'onnx-export': 'runs.kindOnnxExport',
+  plot: 'runs.kindPlot',
+};
+
+// Plan summaries describe the raw operation, before a RunView is available.
 export const runOperationMessageKeys: Readonly<Record<RunView['operation'], string>> = {
   train: 'runs.operationTrain',
   test: 'runs.operationTest',
