@@ -4,6 +4,7 @@ import { jsonObjectSchema } from '../../shared/schemas/json';
 import { trainingRequestSchema } from '../../shared/schemas/training-request';
 import { parseTrainingConfig } from './training-import';
 import { trainingCommand } from './training-export';
+import { hostPath as mapHostPath } from './host-path';
 import type { PlanView } from '~~/types/daemon-api';
 import type { PendingRunClone } from '~~/types/run-clone';
 
@@ -16,21 +17,11 @@ export function runClone(plan: PlanView, daemonId: string): PendingRunClone | nu
   const mappings = review.storage_map ?? [];
   let ambiguousPath = false;
 
-  // Stored plans contain execution paths; the catalogue selects host-side paths.
-  // Overlapping execution roots can have several host origins: never guess one.
   function hostPath(value: string): string {
-    const candidates = mappings.flatMap(({ execution_root, host_root }) => {
-      const root = execution_root.replace(/[\\/]+$/, '');
+    const mapped = mapHostPath(value, mappings);
+    ambiguousPath ||= mapped.ambiguous;
 
-      if (value !== root && !value.startsWith(`${root}/`) && !value.startsWith(`${root}\\`)) return [];
-
-      return [host_root.replace(/[\\/]+$/, '') + value.slice(root.length)];
-    });
-    const paths = [...new Set(candidates)];
-
-    if (paths.length > 1) ambiguousPath = true;
-
-    return paths.length === 1 ? paths[0] ?? value : value;
+    return mapped.path;
   }
 
   const config = Object.fromEntries(Object.entries(review.resolved_config).map(([name, value]) => {

@@ -62,23 +62,3 @@ export const storageMapSchema = z
     { params: { clientMessageKey: 'storageHostRootsMustBeUnique' } },
   );
 export type StorageMapping = z.infer<typeof storageMappingSchema>;
-
-/** Exactly one forward rewrite, longest host root first. Never guess a reverse. */
-export function mappedStoragePath(value: string, mappings: readonly StorageMapping[]): string {
-  const path = normalizedStoragePath(value);
-  const ordered = [...mappings].sort(
-    (a, b) => normalizedStoragePath(b.host_root).length - normalizedStoragePath(a.host_root).length,
-  );
-  for (const mapping of ordered) {
-    const host = normalizedStoragePath(mapping.host_root);
-    const prefix = host.endsWith('/') ? host : `${host}/`;
-    if (path === host || path.startsWith(prefix)) {
-      const relative = path === host ? '' : path.slice(prefix.length);
-      const execution = normalizedStoragePath(mapping.execution_root);
-      return relative
-        ? `${execution.endsWith('/') ? execution : `${execution}/`}${relative}`
-        : execution;
-    }
-  }
-  return path;
-}
