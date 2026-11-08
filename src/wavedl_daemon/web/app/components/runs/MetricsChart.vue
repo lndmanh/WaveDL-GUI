@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChartLine, Maximize2 } from '@lucide/vue';
+import { Maximize2 } from '@lucide/vue';
 import { CurveType, type FreeBrushConfigInterface } from '@unovis/ts';
 import { VisXYContainer, VisLine, VisAxis, VisFreeBrush, VisPlotline } from '@unovis/vue';
 import { ChartTooltipContent, componentToString, type ChartConfig } from '@/components/ui/chart';
@@ -201,7 +201,7 @@ const tooltip = computed(() => {
           <InfoChip :label="t('runs.lastKnownRuntime')" :text="t('runs.notLive')" uncertain />
         </div>
         <div v-else-if="!projection.series?.pointCount" role="status" :class="styles.state">
-          <ChartLine aria-hidden="true" />
+          <LoadingSpinner compact size="sm" />
           {{
             t('runs.waitingChannel', {
               channel:
