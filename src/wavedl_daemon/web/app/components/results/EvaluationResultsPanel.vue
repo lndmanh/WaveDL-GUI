@@ -1,51 +1,130 @@
 <script setup lang="ts">
+import { Check, Copy } from '@lucide/vue';
+import { MotionConfig, motion } from 'motion-v';
 import { evaluationResults } from '../../lib/evaluation-results';
-import { evaluationMetricMessageKeys } from '../../i18n/dynamic-keys';
+import { finiteMetric, parameterScores } from '../../lib/evaluation-scorecard';
+import { pathName } from '../../lib/run-overview';
+import type { ArtifactImages } from '../../composables/useArtifactImages';
+import type { Artifact } from '~~/types/artifact-client';
 import type { RunView } from '~~/types/daemon-api';
 import type { RunEvent } from '~~/types/event-stream';
 
-const { t } = useI18n({ useScope: 'global' });
-
-const props = defineProps<{
-  run: RunView | null;
-  events: readonly RunEvent[];
-  freshness: 'fresh' | 'stale' | 'unconfirmed';
-}>();
-
-const metrics = computed(() => {
-  if (!props.run || props.freshness !== 'fresh') return null;
-
-  return evaluationResults(props.run, props.events);
-});
-
-const rows = computed(() =>
-  Object.entries(metrics.value ?? {}).map(([name, value]) => ({
-    name,
-    label: metricLabel(name),
-    value: value === null ? t('runs.notAvailable') : JSON.stringify(value),
-  })),
+const props = withDefaults(
+  defineProps<{
+    run: RunView | null;
+    events: readonly RunEvent[];
+    freshness: 'fresh' | 'stale' | 'unconfirmed';
+    artifacts: readonly Artifact[];
+    images: ArtifactImages;
+    animateEntry?: boolean;
+  }>(),
+  { animateEntry: false },
 );
 
-function metricLabel(name: string): string {
-  const key = Object.entries(evaluationMetricMessageKeys).find(([field]) => field === name)?.[1];
+const emit = defineEmits<{ preview: [artifact: Artifact] }>();
+const { t, locale } = useI18n({ useScope: 'global' });
+const { copy, copied, isSupported: canCopy } = useClipboard({ copiedDuring: 1600 });
+const copyFailed = shallowRef(false);
 
-  return key === undefined ? name.replaceAll('_', ' ') : t(key);
+const metrics = computed(() =>
+  props.run && props.freshness === 'fresh' ? evaluationResults(props.run, props.events) : null,
+);
+
+const { context, baseline, comparisonLoading } = useEvaluationContext(
+  () => props.run,
+  () => metrics.value !== null,
+);
+
+const parameters = computed(() =>
+  parameterScores(metrics.value ?? {}, context.value.parameterNames),
+);
+
+const artifacts = computed(() =>
+  props.artifacts.filter((artifact) => artifact.runId === props.run?.run_id),
+);
+
+const facts = computed(() => {
+  const result: string[] = [];
+  const checkpoint = pathName(context.value.checkpoint);
+  const dataset = pathName(context.value.dataset ?? props.run?.summary?.data_path);
+  const samples = finiteMetric(metrics.value?.n_samples ?? metrics.value?.num_samples);
+
+  if (checkpoint) result.push(t('results.scorecard.checkpoint', { name: checkpoint }));
+
+  if (dataset) result.push(t('results.scorecard.dataset', { name: dataset }));
+
+  if (samples !== null && Number.isSafeInteger(samples) && samples >= 0)
+    result.push(
+      t('results.scorecard.samples', {
+        count: new Intl.NumberFormat(locale.value).format(samples),
+      }),
+    );
+
+  return result;
+});
+
+async function copyMetrics() {
+  if (!metrics.value) return;
+  copyFailed.value = false;
+
+  try {
+    await copy(JSON.stringify(metrics.value, null, 2));
+  } catch {
+    copyFailed.value = true;
+  }
 }
 </script>
 
 <template>
-  <section v-if="metrics" class="flex flex-col gap-4" aria-labelledby="evaluation-title">
-    <div>
-      <h3 id="evaluation-title" class="text-lg font-semibold">{{ t('runs.evaluation') }}</h3>
-      <p class="text-sm text-muted-foreground">
-        {{ t('runs.structuredResults', { attempt: run?.attempt ?? '' }) }}
-      </p>
-    </div>
-    <dl class="grid gap-3 sm:grid-cols-2">
-      <div v-for="row in rows" :key="row.name" class="flex flex-col gap-1">
-        <dt class="text-sm text-muted-foreground">{{ row.label }}</dt>
-        <dd class="break-words font-mono text-sm">{{ row.value }}</dd>
+  <section v-if="metrics" class="flex min-w-0 flex-col gap-5" aria-labelledby="evaluation-title">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h3 id="evaluation-title" class="text-lg font-semibold">
+          {{ t('results.scorecard.title') }}
+        </h3>
+        <p v-if="facts.length" class="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {{ facts.join(' · ') }}
+        </p>
       </div>
-    </dl>
+      <Button v-if="canCopy" type="button" variant="outline" size="sm" @click="copyMetrics"
+        ><Check v-if="copied" aria-hidden="true" /><Copy v-else aria-hidden="true" />{{
+          copied ? t('results.scorecard.metricsCopied') : t('results.scorecard.copyMetrics')
+        }}</Button
+      >
+      <span class="sr-only" aria-live="polite">{{
+        copyFailed
+          ? t('results.scorecard.copyFailed')
+          : copied
+            ? t('results.scorecard.metricsCopied')
+            : ''
+      }}</span>
+    </div>
+    <MotionConfig reduced-motion="user">
+      <EvaluationMetricCards
+        :metrics="metrics"
+        :baseline="baseline"
+        :comparison-loading="comparisonLoading"
+        :animate-entry="animateEntry"
+      />
+      <motion.div
+        :initial="animateEntry ? { opacity: 0, y: 6 } : false"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: 0.35, delay: animateEntry ? 0.18 : 0 }"
+      >
+        <EvaluationPlots
+          :artifacts="artifacts"
+          :images="images"
+          :has-parameters="parameters.parameters.length > 0"
+          @preview="emit('preview', $event)"
+        >
+          <EvaluationParameters
+            v-if="parameters.parameters.length"
+            :key="run?.run_id"
+            :parameters="parameters.parameters"
+            :metrics="parameters.metrics"
+          />
+        </EvaluationPlots>
+      </motion.div>
+    </MotionConfig>
   </section>
 </template>
