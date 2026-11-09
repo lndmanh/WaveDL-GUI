@@ -38,6 +38,7 @@ const props = defineProps<{
   run: RunView | null;
   events: readonly RunEvent[];
   unavailable?: boolean;
+  loading?: boolean;
   lossSeries: PlotSeries | null;
   lossError: string;
   bestLoss: { step: number; value: number } | null;
@@ -94,23 +95,36 @@ const hasOtherMetrics = computed(() => {
 
   if (props.lossSeries?.fields.length) return true;
 
-  return buildPlotSeries(props.records, 'r2').fields.length > 0 ||
-    buildPlotSeries(props.records, 'lr').fields.length > 0;
+  return (
+    buildPlotSeries(props.records, 'r2').fields.length > 0 ||
+    buildPlotSeries(props.records, 'lr').fields.length > 0
+  );
 });
 
-const emptyState = computed(() => metricsChartEmptyState(props.run, props.events, hasOtherMetrics.value));
+const emptyState = computed(() =>
+  metricsChartEmptyState(props.run, props.events, hasOtherMetrics.value),
+);
 
-const emptyMessage = computed(() => t(
-  emptyState.value.kind === 'terminal'
-    ? 'runs.metricsNoneRecorded'
-    : emptyState.value.kind === 'missing'
-      ? 'runs.metricsChannelNotReported'
-      : 'runs.waitingChannel',
-  { channel: channelLabel.value },
-));
+const emptyMessage = computed(() =>
+  t(
+    emptyState.value.kind === 'terminal'
+      ? 'runs.metricsNoneRecorded'
+      : emptyState.value.kind === 'missing'
+        ? 'runs.metricsChannelNotReported'
+        : 'runs.waitingChannel',
+    { channel: channelLabel.value },
+  ),
+);
 
 const waitingStage = computed(() => {
-  if (message.value || props.unavailable || hasData.value || emptyState.value.kind !== 'waiting') return null;
+  if (
+    message.value ||
+    props.loading ||
+    props.unavailable ||
+    hasData.value ||
+    emptyState.value.kind !== 'waiting'
+  )
+    return null;
 
   return emptyState.value.stage;
 });
@@ -135,14 +149,20 @@ const handoffSource = computed(() => ({
 
 // Retain the mounted waiting layer only for a live, same-channel arrival of data.
 // Tab changes and KeepAlive activation must never replay a chart entry animation.
-watch(handoffSource, (current, previous) => {
-  const sameChannel = current.runId === previous.runId &&
-    current.attempt === previous.attempt && current.channel === previous.channel;
+watch(
+  handoffSource,
+  (current, previous) => {
+    const sameChannel =
+      current.runId === previous.runId &&
+      current.attempt === previous.attempt &&
+      current.channel === previous.channel;
 
-  if (!sameChannel || !current.active || !current.data) leavingStage.value = null;
-  else if (mounted.value && previous.active && previous.stage !== null && !reducedMotion.value)
-    leavingStage.value = previous.stage;
-}, { flush: 'sync' });
+    if (!sameChannel || !current.active || !current.data) leavingStage.value = null;
+    else if (mounted.value && previous.active && previous.stage !== null && !reducedMotion.value)
+      leavingStage.value = previous.stage;
+  },
+  { flush: 'sync' },
+);
 
 function finishHandoff() {
   if (waitingStage.value === null) leavingStage.value = null;
@@ -272,10 +292,16 @@ const tooltip = computed(() => {
       </div>
       <TabsContent :value="channel" force-mount class="m-0 flex min-h-40 min-w-0 flex-1 flex-col">
         <p v-if="message" role="status" :class="styles.state">{{ message }}</p>
+        <div v-else-if="loading" role="status" class="flex min-h-40 min-w-0 flex-1 flex-col">
+          <span class="sr-only">{{ t('runs.loadingMetrics') }}</span>
+          <Skeleton class="min-h-40 w-full flex-1" aria-hidden="true" />
+        </div>
         <div v-else-if="unavailable" role="status" :class="styles.state">
           <InfoChip :label="t('runs.lastKnownRuntime')" :text="t('runs.notLive')" uncertain />
         </div>
-        <p v-else-if="!hasData && !waitingStage" role="status" :class="styles.state">{{ emptyMessage }}</p>
+        <p v-else-if="!hasData && !waitingStage" role="status" :class="styles.state">
+          {{ emptyMessage }}
+        </p>
         <div v-else class="relative flex min-h-40 min-w-0 flex-1 flex-col">
           <motion.div
             v-if="hasData && isActive"
@@ -284,53 +310,53 @@ const tooltip = computed(() => {
             :animate="{ opacity: 1 }"
             :transition="{ duration: reducedMotion || !leavingStage ? 0 : 0.4 }"
           >
-          <ChartContainer
-            :key="channel"
-            :config="chartConfig"
-            :class="styles.plot"
-            cursor
-            @dblclick="zoom = null"
-          >
-            <VisXYContainer
-              :data="chartData"
-              :x-domain="zoom ?? undefined"
-              :prevent-empty-domain="true"
-              :duration="0"
+            <ChartContainer
+              :key="channel"
+              :config="chartConfig"
+              :class="styles.plot"
+              cursor
+              @dblclick="zoom = null"
             >
-              <VisLine
-                :x="(point: PlotPoint) => point.step"
-                :y="y"
-                :color="colors"
-                :curve-type="CurveType.Linear"
-                :interpolate-missing-data="false"
-              />
-              <VisAxis
-                type="x"
-                :label="t('runs.step')"
-                :grid-line="false"
-                :tick-format="(value: number) => (Number.isInteger(value) ? String(value) : '')"
-              />
-              <VisAxis type="y" />
-              <VisPlotline
-                v-if="best"
-                axis="x"
-                :value="best.step"
-                color="var(--success)"
-                :line-style="[4, 4]"
-                :label-text="t('runs.bestEpoch')"
-                label-color="var(--muted-foreground)"
-              />
-              <VisFreeBrush :on-brush-end="zoomTo" />
-              <ChartTooltip />
-              <ChartCrosshair
-                :x="(point: PlotPoint) => point.step"
-                :y="y"
-                :color="colors"
-                :template="tooltip"
-                :hide-when-far-from-pointer="false"
-              />
-            </VisXYContainer>
-          </ChartContainer>
+              <VisXYContainer
+                :data="chartData"
+                :x-domain="zoom ?? undefined"
+                :prevent-empty-domain="true"
+                :duration="0"
+              >
+                <VisLine
+                  :x="(point: PlotPoint) => point.step"
+                  :y="y"
+                  :color="colors"
+                  :curve-type="CurveType.Linear"
+                  :interpolate-missing-data="false"
+                />
+                <VisAxis
+                  type="x"
+                  :label="t('runs.step')"
+                  :grid-line="false"
+                  :tick-format="(value: number) => (Number.isInteger(value) ? String(value) : '')"
+                />
+                <VisAxis type="y" />
+                <VisPlotline
+                  v-if="best"
+                  axis="x"
+                  :value="best.step"
+                  color="var(--success)"
+                  :line-style="[4, 4]"
+                  :label-text="t('runs.bestEpoch')"
+                  label-color="var(--muted-foreground)"
+                />
+                <VisFreeBrush :on-brush-end="zoomTo" />
+                <ChartTooltip />
+                <ChartCrosshair
+                  :x="(point: PlotPoint) => point.step"
+                  :y="y"
+                  :color="colors"
+                  :template="tooltip"
+                  :hide-when-far-from-pointer="false"
+                />
+              </VisXYContainer>
+            </ChartContainer>
           </motion.div>
           <motion.div
             v-if="displayedStage"
