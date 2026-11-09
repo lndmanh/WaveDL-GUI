@@ -84,6 +84,7 @@ function appearanceChanged(value: AppearancePreferences): void {
 
 async function monitorRun(runId: string): Promise<void> {
   await router.push(sectionPath('experiments', runId));
+  liveRuns.refresh();
 }
 
 const context = {
@@ -99,6 +100,8 @@ const context = {
 };
 
 provideWorkstation(context);
+
+const liveRuns = provideLiveRuns({ api, reportFailure, state, section });
 
 let systemTheme: MediaQueryList | null = null;
 
