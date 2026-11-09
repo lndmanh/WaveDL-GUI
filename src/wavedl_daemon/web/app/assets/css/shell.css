@@ -304,6 +304,22 @@
   gap: 2px;
 }
 
+.shell-sidebar-badge,
+.shell-dock-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  padding: 0 4px;
+  background-color: color-mix(in oklab, var(--success) 15%, var(--card));
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 .shell-sidebar-chevron {
   transition: rotate 180ms var(--ease-standard);
 }
@@ -384,6 +400,19 @@
   width: 0;
   overflow: hidden;
   padding: 0;
+}
+
+.shell-sidebar-content[data-collapsed='true'] .shell-sidebar-badge {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--shell-ground, var(--background));
+}
+
+.shell-sidebar-content[data-collapsed='true'] .shell-sidebar-trailing:has(.shell-sidebar-badge) {
+  overflow: visible;
+  opacity: 1;
 }
 
 .shell-sidebar-content[data-collapsed='true'] .shell-sidebar-group {

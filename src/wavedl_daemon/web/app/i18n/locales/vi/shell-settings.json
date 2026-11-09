@@ -10,6 +10,7 @@
   "collapseSidebar": "Thu gọn thanh bên",
   "expandSidebar": "Mở rộng thanh bên",
   "search": "Tìm kiếm",
+  "liveRunsBadge": "Lượt chạy đang hoạt động: {count}",
   "experiments": "Thí nghiệm",
   "newTrainingRun": "Lượt huấn luyện mới",
   "datasets": "Tập dữ liệu",

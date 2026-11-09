@@ -14,6 +14,7 @@ const shellPreferences = useShellPreferencesStore();
 const reducedMotion = useReducedMotion();
 const router = useRouter();
 const isDesktopNavigation = useMediaQuery('(min-width: 768px)');
+const { countLabel } = useLiveRuns();
 const isMenuOpen = shallowRef(false);
 
 watch(() => router.currentRoute.value.fullPath, closeMenu);
@@ -97,6 +98,7 @@ function openCommand() {
           :key="item.id"
           :item="item"
           :active="isActive(item)"
+          :badge="item.id === 'experiments' ? countLabel : undefined"
           @select="selectItem"
         />
       </div>

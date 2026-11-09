@@ -10,6 +10,7 @@
   "collapseSidebar": "Collapse sidebar",
   "expandSidebar": "Expand sidebar",
   "search": "Search",
+  "liveRunsBadge": "Live runs: {count}",
   "experiments": "Experiments",
   "newTrainingRun": "New training run",
   "datasets": "Datasets",

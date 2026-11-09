@@ -16,6 +16,7 @@ const searchShortcut = primaryShortcut('K');
 const project = SHELL_PRIMARY_NAVIGATION.find((item) => item.id === 'project');
 const workspace = SHELL_PRIMARY_NAVIGATION.filter((item) => item.id !== 'project');
 const utilities = [...SHELL_ACTION_NAVIGATION].reverse();
+const liveBadgeLabel = computed(() => countLabel.value ? t('shell.liveRunsBadge', { count: countLabel.value }) : undefined);
 
 function navigate(section: WorkstationSection): void {
   emit('dismiss');
@@ -88,6 +89,8 @@ function onNavigationKeydown(event: KeyboardEvent): void {
           :label="t(item.labelKey)"
           :active="props.section === item.id"
           :collapsed="props.collapsed"
+          :badge="item.id === 'experiments' ? countLabel : undefined"
+          :badge-label="item.id === 'experiments' ? liveBadgeLabel : undefined"
           @select="navigate(item.id)"
         />
         <ShellSidebarActiveRuns
