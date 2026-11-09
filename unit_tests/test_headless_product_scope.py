@@ -41,6 +41,12 @@ def test_web_validation_keeps_only_daemon_client_logic():
         "plot-series",
         "dataset-suggestions",
         "dataset-preview",
+        "planned-runs",
+        "run-filters",
+        "submitted-run",
+        "evaluation-scorecard",
+        "artifact-images",
+        "artifact-plots",
     }
     assert not list((web / "test/generated").glob("*.test.mjs"))
 
