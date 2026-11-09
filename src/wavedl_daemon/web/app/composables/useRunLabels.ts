@@ -1,5 +1,9 @@
 import { pathName, relativeTime, runCreatedAt, runKindOf } from '../lib/run-overview';
-import { runKindMessageKeys } from '../i18n/dynamic-keys';
+import {
+  runActivityMessageKeysFor,
+  runKindMessageKeys,
+  runStateMessageKeys,
+} from '../i18n/dynamic-keys';
 import type { RunView } from '~~/types/daemon-api';
 
 /** One naming rule for a run everywhere it is listed or opened. */
@@ -32,5 +36,12 @@ export function useRunLabels() {
       .join(' · ');
   }
 
-  return { operation, title, created, meta };
+  function stateLabel(run: RunView): string {
+    const activity = runActivityMessageKeysFor(run);
+    const state = t(runStateMessageKeys[run.state]);
+
+    return activity ? `${state} · ${t(activity.label)}` : state;
+  }
+
+  return { operation, title, created, meta, stateLabel };
 }

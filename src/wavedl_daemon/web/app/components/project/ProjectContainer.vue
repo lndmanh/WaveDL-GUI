@@ -15,8 +15,6 @@ import { automaticRuntime, hostAccelerator, matchesAutomatic } from '../../lib/h
 import type { RuntimeSetup } from '../../../shared/schemas/host-profile';
 import {
   projectBlockMessageKeys,
-  runActivityMessageKeysFor,
-  runStateMessageKeys,
   trainingChoiceLabel,
   trainingFieldMessageKeys,
   trainingPresetMessageKeysFor,
@@ -55,12 +53,7 @@ import type { PendingRunClone } from '~~/types/run-clone';
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 
-function stateLabel(run: RunView): string {
-  const activity = runActivityMessageKeysFor(run);
-  const state = t(runStateMessageKeys[run.state]);
-
-  return activity ? `${state} · ${t(activity.label)}` : state;
-}
+const { stateLabel } = useRunLabels();
 
 const props = defineProps<{ session: ConnectionSession }>();
 
