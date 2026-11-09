@@ -168,6 +168,14 @@ const metricsUnavailable = computed(
   () => props.snapshot.freshness !== 'fresh' || props.snapshot.run?.attempt == null,
 );
 
+// The first authority fetch and event connection are still pending, so missing
+// metrics mean "not loaded yet" rather than "unavailable".
+const metricsLoading = computed(
+  () =>
+    props.snapshot.freshness === 'unconfirmed' ||
+    (props.snapshot.freshness === 'fresh' && props.snapshot.stream === 'connecting'),
+);
+
 const chartRecords = computed(() => (metricsUnavailable.value ? [] : props.snapshot.metrics));
 
 // Share the causal loss projection and its minimum between the strip and chart.
@@ -199,6 +207,8 @@ const metricsUnconfirmed = computed(
 
 const waitingForMetrics = computed(() => {
   const run = props.snapshot.run;
+
+  if (metricsLoading.value) return true;
 
   return (
     props.snapshot.freshness === 'fresh' &&
@@ -625,7 +635,12 @@ const hasEvaluation = computed(
         </Empty>
       </div>
       <div v-else class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <RunStats :summary="metricSummary" :records="chartRecords" :best-loss="bestLoss" />
+        <RunStats
+          :summary="metricSummary"
+          :records="chartRecords"
+          :best-loss="bestLoss"
+          :loading="metricsLoading"
+        />
         <Separator />
         <div class="flex min-h-0 flex-1 flex-col p-4">
           <MetricsChart
@@ -633,6 +648,7 @@ const hasEvaluation = computed(
             :events="snapshot.events"
             :records="chartRecords"
             :unavailable="metricsUnavailable"
+            :loading="metricsLoading"
             :loss-series="lossProjection.series"
             :loss-error="lossProjection.error"
             :best-loss="bestLoss"
