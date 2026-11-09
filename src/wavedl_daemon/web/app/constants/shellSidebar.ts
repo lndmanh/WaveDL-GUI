@@ -5,3 +5,4 @@
 export const SHELL_SIDEBAR_WIDTH = 236;
 export const SHELL_SIDEBAR_COLLAPSED_WIDTH = 60;
 export const SHELL_SIDEBAR_GUTTER = 12;
+export const ACTIVE_RUNS_VISIBLE = 5;

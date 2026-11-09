@@ -2,6 +2,7 @@
 import { Search } from '@lucide/vue';
 import { primaryShortcut } from '../../lib/utils';
 import { SHELL_ACTION_NAVIGATION, SHELL_PRIMARY_NAVIGATION } from '../../shell/sections';
+import ShellSidebarActiveRuns from './ShellSidebarActiveRuns.vue';
 import ShellSidebarHost from './ShellSidebarHost.vue';
 import ShellSidebarItem from './ShellSidebarItem.vue';
 import type { WorkstationSection } from '~~/types/shell';
@@ -10,6 +11,7 @@ import type { ConnectionStatus } from '~~/types/connection-session';
 const props = defineProps<{ section: WorkstationSection; status: ConnectionStatus; collapsed: boolean }>();
 const emit = defineEmits<{ navigate: [section: WorkstationSection]; command: []; dismiss: [] }>();
 const { t } = useI18n({ useScope: 'global' });
+const { countLabel } = useLiveRuns();
 const searchShortcut = primaryShortcut('K');
 const project = SHELL_PRIMARY_NAVIGATION.find((item) => item.id === 'project');
 const workspace = SHELL_PRIMARY_NAVIGATION.filter((item) => item.id !== 'project');
@@ -87,6 +89,12 @@ function onNavigationKeydown(event: KeyboardEvent): void {
           :active="props.section === item.id"
           :collapsed="props.collapsed"
           @select="navigate(item.id)"
+        />
+        <ShellSidebarActiveRuns
+          :collapsed="props.collapsed"
+          :count-display="countLabel ?? '0'"
+          @navigate="navigate"
+          @dismiss="emit('dismiss')"
         />
       </div>
       <div class="shell-sidebar-footer" role="group" :aria-label="t('shell.utilities')">
