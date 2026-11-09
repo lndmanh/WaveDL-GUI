@@ -33,6 +33,7 @@ def test_web_validation_keeps_only_daemon_client_logic():
         "auth-routing",
         "run-monitor",
         "live-runs",
+        "metrics-chart-waiting",
         "run-monitor-publication",
         "result-operations",
         "result-operation-prefill",
