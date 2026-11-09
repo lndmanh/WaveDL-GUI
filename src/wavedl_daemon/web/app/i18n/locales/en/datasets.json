@@ -1,7 +1,5 @@
 {
   "pngRequested": "PNG export requested",
-  "workspaceTitle": "Explore datasets in WaveDL",
-  "workspaceHelp": "Select a file to inspect and visualize its data.",
   "backToBrowser": "Back to dataset browser",
   "closeDetail": "Close dataset details",
   "inspectionFailed": "Couldn’t read the dataset details. You can still try loading its visualization.",

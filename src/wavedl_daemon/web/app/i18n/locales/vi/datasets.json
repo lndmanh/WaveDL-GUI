@@ -1,7 +1,5 @@
 {
   "pngRequested": "Đã yêu cầu xuất PNG",
-  "workspaceTitle": "Khám phá tập dữ liệu trong WaveDL",
-  "workspaceHelp": "Chọn tệp để xem thông tin và trực quan hóa dữ liệu.",
   "backToBrowser": "Quay lại trình duyệt tập dữ liệu",
   "closeDetail": "Đóng thông tin tập dữ liệu",
   "inspectionFailed": "Không thể đọc thông tin tập dữ liệu. Bạn vẫn có thể thử tải phần trực quan hóa.",
