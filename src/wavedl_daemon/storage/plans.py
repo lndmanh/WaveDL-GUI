@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from wavedl_daemon.backends.contracts import Plan
+from wavedl_daemon.runs.lifecycle import LIVE_RUN_STATES
 
 
 if TYPE_CHECKING:
@@ -122,21 +123,28 @@ class PlanStore:
     def page(
         self, *, limit: int, offset: int, state: str | None = None
     ) -> list[PlanRecord]:
+        query, parameters = self._page_query(state)
+        rows = self._connection.execute(query, (*parameters, limit, offset))
+        return [_record(row) for row in rows]
+
+    def _page_query(self, state: str | None) -> tuple[str, list[str | int]]:
         query = _SELECT
         parameters: list[str | int] = []
-        if state is not None:
+        if state == "live":
+            query += (
+                "INNER JOIN run_heads ON plans.run_id = run_heads.run_id "
+                "WHERE run_heads.state IN (?, ?, ?, ?, ?, ?) "
+            )
+            parameters.extend(sorted(item.value for item in LIVE_RUN_STATES))
+        elif state is not None:
             query += "LEFT JOIN run_heads ON plans.run_id = run_heads.run_id "
             if state == "planned":
                 query += "WHERE run_heads.run_id IS NULL "
             else:
                 query += "WHERE run_heads.state = ? "
                 parameters.append(state)
-        rows = self._connection.execute(
-            query
-            + "ORDER BY plans.created_at DESC, plans.plan_id DESC LIMIT ? OFFSET ?",
-            (*parameters, limit, offset),
-        )
-        return [_record(row) for row in rows]
+        query += "ORDER BY plans.created_at DESC, plans.plan_id DESC LIMIT ? OFFSET ?"
+        return query, parameters
 
     def put(
         self, plan: Plan, *, idempotency_key: str, request_payload: Mapping[str, object]

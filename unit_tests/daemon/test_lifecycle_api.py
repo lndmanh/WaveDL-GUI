@@ -876,6 +876,14 @@ def test_live_run_states_match_the_browser_vocabulary():
     }
 
 
+def test_live_filter_uses_the_state_index(environment):
+    query, parameters = environment.plans._page_query("live")
+    plan = environment.plans._connection.execute(
+        "EXPLAIN QUERY PLAN " + query, (*parameters, 100, 0)
+    ).fetchall()
+    assert any("run_heads_by_state" in row["detail"] for row in plan)
+
+
 def test_state_filtered_list_pages_more_than_1000_plans(environment, monkeypatch):
     plans = [
         environment.service.plan(payload(), f"large-page-{index}")
