@@ -52,6 +52,7 @@ import type { PendingRunClone } from '~~/types/run-clone';
 
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+const liveRuns = useLiveRuns();
 
 const { stateLabel } = useRunLabels();
 
@@ -478,6 +479,7 @@ function submit() {
 
   return work('submit', async (signal, isCurrent) => {
     const run = await workflow.submit(signal);
+    liveRuns.refresh();
 
     if (!isCurrent()) return;
     acknowledged.value = run;

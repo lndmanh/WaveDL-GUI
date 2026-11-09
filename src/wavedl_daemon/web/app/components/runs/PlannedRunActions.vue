@@ -8,6 +8,7 @@ const emit = defineEmits<{ changed: [message?: string]; deleted: [] }>();
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
 const { session, state, revision } = useWorkstation();
+const liveRuns = useLiveRuns();
 const { isActive } = usePageActive();
 const router = useRouter();
 const navigate = useShellNavigation();
@@ -74,6 +75,7 @@ async function perform(action: 'start' | 'edit' | 'delete') {
 
         if (action === 'start') {
           await api.submit(stored, signal);
+          liveRuns.refresh();
           binding.unbind(daemonId, run.run_id);
         }
 

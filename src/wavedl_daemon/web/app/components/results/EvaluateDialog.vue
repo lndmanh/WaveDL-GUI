@@ -28,6 +28,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:open': [open: boolean]; runSelected: [runId: string] }>();
 const { t } = useI18n({ useScope: 'global' });
 const { clientMessage } = useClientMessages();
+const liveRuns = useLiveRuns();
 const session = toRaw(props.session);
 const workflow = new ResultOperations(session);
 const source = shallowRef<Checkpoint | null>(null);
@@ -226,6 +227,7 @@ const submit = handleSubmit(
       workflow.prepare(draft, data.value, source.value);
       await workflow.preview(scope.signal);
       const run = await workflow.submit(scope.signal);
+      liveRuns.refresh();
 
       if (current === generation) finish(run.run_id);
     } catch (error) {
