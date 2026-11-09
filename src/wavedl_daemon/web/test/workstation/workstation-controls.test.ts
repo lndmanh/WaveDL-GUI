@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, defineStore, setActivePinia } from 'pinia';
+import { computed, shallowRef } from 'vue';
 import {
+  DEFAULT_SHELL_SIDEBAR,
+  storedShellSidebarSchema,
   locateRequestSchema,
   resultExportSchema,
   runtimeDeviceSchema,
@@ -13,6 +17,193 @@ import {
 } from '../../shared/schemas/training-request';
 import { inferenceConfigSchema } from '../../shared/schemas/result-request';
 import { trainingCommand } from '../../app/lib/training-export';
+import {
+  clearDataPreferences,
+  loadShellDockSlots,
+  loadShellSidebar,
+  PREFERENCES_LIMIT,
+  saveShellDockSlots,
+  saveShellSidebar,
+} from '../../app/lib/preferences';
+import { DEFAULT_SHELL_DOCK_SLOTS } from '../../app/constants/shellDock';
+import type { PreferenceStorage } from '../../types/preferences';
+
+function storage(): PreferenceStorage {
+  const values = new Map<string, string>();
+
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+  };
+}
+
+describe('shell sidebar preferences', () => {
+  it('defaults each sidebar preference independently', () => {
+    const saved = storage();
+
+    expect(DEFAULT_SHELL_SIDEBAR).toEqual({ collapsed: false, activeRunsOpen: true });
+    expect(storedShellSidebarSchema.parse({})).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(storedShellSidebarSchema.parse({ collapsed: true, activeRunsOpen: 'x' })).toEqual({
+      collapsed: true,
+      activeRunsOpen: true,
+    });
+    expect(storedShellSidebarSchema.parse({ collapsed: 'x', activeRunsOpen: false })).toEqual({
+      collapsed: false,
+      activeRunsOpen: false,
+    });
+
+    for (const value of [{}, { collapsed: true, activeRunsOpen: 'x' }]) {
+      saved.setItem('wavedl.shell-sidebar.v1', JSON.stringify(value));
+      expect(loadShellSidebar(saved)).toEqual(storedShellSidebarSchema.parse(value));
+    }
+
+    saved.setItem('wavedl.shell-sidebar.v1', 'null');
+    expect(loadShellSidebar(saved)).toEqual(DEFAULT_SHELL_SIDEBAR);
+  });
+
+  it('persists sidebar preferences independently of the dock and clears both', () => {
+    const saved = storage();
+    const sidebar = { collapsed: true, activeRunsOpen: false };
+
+    expect(loadShellSidebar(saved)).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(saveShellDockSlots(DEFAULT_SHELL_DOCK_SLOTS, saved)).toBe(true);
+    expect(saveShellSidebar(sidebar, saved)).toBe(true);
+    expect(saved.getItem('wavedl.shell-sidebar.v1')).toBe(JSON.stringify(sidebar));
+    expect(loadShellSidebar(saved)).toEqual(sidebar);
+    expect(loadShellDockSlots(saved)).toEqual(DEFAULT_SHELL_DOCK_SLOTS);
+    expect(clearDataPreferences(saved)).toBe(true);
+    expect(saved.getItem('wavedl.shell-sidebar.v1')).toBeNull();
+    expect(saved.getItem('wavedl.shell-dock.v1')).toBeNull();
+    expect(loadShellSidebar(saved)).toEqual(DEFAULT_SHELL_SIDEBAR);
+  });
+
+  it('tolerates invalid, oversized and unavailable sidebar storage', () => {
+    const saved = storage();
+
+    const blocked: PreferenceStorage = {
+      getItem: () => {
+        throw new Error('Storage blocked');
+      },
+      setItem: () => {
+        throw new Error('Storage blocked');
+      },
+      removeItem: () => {
+        throw new Error('Storage blocked');
+      },
+    };
+
+    for (const raw of ['not JSON', 'null', '[]', 'true', '1', '"sidebar"']) {
+      saved.setItem('wavedl.shell-sidebar.v1', raw);
+      expect(loadShellSidebar(saved)).toEqual(DEFAULT_SHELL_SIDEBAR);
+    }
+
+    const raw = JSON.stringify({ collapsed: true, padding: 'é'.repeat(PREFERENCES_LIMIT / 2) });
+    expect(raw.length).toBeLessThan(PREFERENCES_LIMIT);
+    saved.setItem('wavedl.shell-sidebar.v1', raw);
+    expect(loadShellSidebar(saved)).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(loadShellSidebar(blocked)).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(loadShellSidebar(null)).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(saveShellSidebar(DEFAULT_SHELL_SIDEBAR, blocked)).toBe(false);
+    expect(saveShellSidebar(DEFAULT_SHELL_SIDEBAR, null)).toBe(false);
+  });
+});
+
+describe('shell sidebar preference store', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.stubGlobal('defineStore', defineStore);
+    vi.stubGlobal('shallowRef', shallowRef);
+    vi.stubGlobal('computed', computed);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('saves manual changes, resets both preferences and reloads after clearing', async () => {
+    const saved = storage();
+    vi.stubGlobal('window', { localStorage: saved });
+    const { useShellPreferencesStore } = await import('../../app/stores/shellPreferenceStore');
+    const preferences = useShellPreferencesStore();
+
+    expect(preferences.sidebar).toEqual(DEFAULT_SHELL_SIDEBAR);
+    preferences.toggleSidebarCollapsed();
+    preferences.setActiveRunsOpen(false);
+    expect(preferences.sidebar).toEqual({ collapsed: true, activeRunsOpen: false });
+    expect(loadShellSidebar(saved)).toEqual(preferences.sidebar);
+    expect(preferences.saveFailed).toBe(false);
+    preferences.toggleSidebarCollapsed();
+    expect(preferences.sidebar).toEqual({ collapsed: false, activeRunsOpen: false });
+    preferences.updateSlots(['results', 'project', 'datasets', 'experiments', 'settings']);
+    expect(preferences.sidebar.collapsed).toBe(false);
+    preferences.reset();
+    expect(preferences.dockSlots).toEqual(DEFAULT_SHELL_DOCK_SLOTS);
+    expect(loadShellDockSlots(saved)).toEqual(DEFAULT_SHELL_DOCK_SLOTS);
+    expect(preferences.sidebar).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(loadShellSidebar(saved)).toEqual(DEFAULT_SHELL_SIDEBAR);
+
+    saveShellSidebar({ collapsed: true, activeRunsOpen: false }, saved);
+    preferences.reload();
+    expect(preferences.sidebar).toEqual({ collapsed: true, activeRunsOpen: false });
+    clearDataPreferences(saved);
+    preferences.reload();
+    expect(preferences.sidebar).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(preferences.dockSlots).toEqual(DEFAULT_SHELL_DOCK_SLOTS);
+    expect(preferences.saveFailed).toBe(false);
+  });
+
+  it.each(['wavedl.shell-dock.v1', 'wavedl.shell-sidebar.v1'])(
+    'reports a reset failure when only %s is blocked',
+    async (blockedKey) => {
+      const saved = storage();
+
+      const partial: PreferenceStorage = {
+        ...saved,
+        setItem: (key, value) => {
+          if (key === blockedKey) throw new Error('Storage blocked');
+          saved.setItem(key, value);
+        },
+      };
+
+      vi.stubGlobal('window', { localStorage: partial });
+      const { useShellPreferencesStore } = await import('../../app/stores/shellPreferenceStore');
+      const preferences = useShellPreferencesStore();
+
+      preferences.reset();
+      expect(preferences.saveFailed).toBe(true);
+      expect(preferences.sidebar).toEqual(DEFAULT_SHELL_SIDEBAR);
+      expect(preferences.dockSlots).toEqual(DEFAULT_SHELL_DOCK_SLOTS);
+    },
+  );
+
+  it('keeps manual changes in memory when saving fails and clears the error on reload', async () => {
+    vi.stubGlobal('window', {
+      get localStorage() {
+        throw new Error('Storage blocked');
+      },
+    });
+    const { useShellPreferencesStore } = await import('../../app/stores/shellPreferenceStore');
+    const preferences = useShellPreferencesStore();
+
+    preferences.toggleSidebarCollapsed();
+    expect(preferences.sidebar).toEqual({ collapsed: true, activeRunsOpen: true });
+    expect(preferences.saveFailed).toBe(true);
+    preferences.setActiveRunsOpen(false);
+    expect(preferences.sidebar).toEqual({ collapsed: true, activeRunsOpen: false });
+    expect(preferences.saveFailed).toBe(true);
+    preferences.reset();
+    expect(preferences.sidebar).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(preferences.saveFailed).toBe(true);
+    preferences.reload();
+    expect(preferences.sidebar).toEqual(DEFAULT_SHELL_SIDEBAR);
+    expect(preferences.saveFailed).toBe(false);
+  });
+});
 
 describe('workstation control boundaries', () => {
   it('accepts declared select values without coercing other emit values', () => {

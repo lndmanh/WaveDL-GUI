@@ -17,3 +17,15 @@ export const storedDockSlotsSchema = z
   .length(5);
 
 export type StoredDockSlots = z.output<typeof storedDockSlotsSchema>;
+
+export const storedShellSidebarSchema = z.object({
+  collapsed: z.boolean().catch(false),
+  activeRunsOpen: z.boolean().catch(true),
+});
+
+export type StoredShellSidebar = z.output<typeof storedShellSidebarSchema>;
+
+export const DEFAULT_SHELL_SIDEBAR: StoredShellSidebar = {
+  collapsed: false,
+  activeRunsOpen: true,
+};

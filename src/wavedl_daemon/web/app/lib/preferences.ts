@@ -8,6 +8,11 @@ import {
   trainingEnvelope,
   keepSignedInSchema,
 } from '../../shared/schemas/preferences';
+import {
+  DEFAULT_SHELL_SIDEBAR,
+  storedShellSidebarSchema,
+  type StoredShellSidebar,
+} from '../../shared/schemas/workstation-controls';
 import { parseJson } from './daemon-api';
 import { resolveShellDockSlots } from '../constants/shellDock';
 import {
@@ -53,6 +58,7 @@ export function browserStorage(): PreferenceStorage | null {
 const appearanceKey = 'wavedl.appearance.v1';
 const keepSignedInKey = 'wavedl.keep-signed-in.v1';
 const shellDockKey = 'wavedl.shell-dock.v1';
+const shellSidebarKey = 'wavedl.shell-sidebar.v1';
 const artifactFileViewKey = 'wavedl.results.file-view.v1';
 
 export function loadArtifactFileView(storage = browserStorage()): ArtifactFileView {
@@ -88,6 +94,28 @@ export function saveShellDockSlots(value: ShellDockSlots, storage = browserStora
   try {
     if (!storage) return false;
     storage.setItem(shellDockKey, boundedText(JSON.stringify(resolveShellDockSlots(value))));
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadShellSidebar(storage = browserStorage()): StoredShellSidebar {
+  try {
+    const raw = storage?.getItem(shellSidebarKey);
+
+    return storedShellSidebarSchema.parse(raw ? parseJson(boundedText(raw)) : null);
+  } catch {
+    return { ...DEFAULT_SHELL_SIDEBAR };
+  }
+}
+
+export function saveShellSidebar(value: StoredShellSidebar, storage = browserStorage()): boolean {
+  try {
+    if (!storage) return false;
+    const parsed = storedShellSidebarSchema.parse(value);
+    storage.setItem(shellSidebarKey, boundedText(JSON.stringify(parsed)));
 
     return true;
   } catch {
@@ -213,6 +241,7 @@ export function clearDataPreferences(storage = browserStorage()): boolean {
     if (!storage) return false;
     storage.removeItem(keepSignedInKey);
     storage.removeItem(shellDockKey);
+    storage.removeItem(shellSidebarKey);
 
     return true;
   } catch {
