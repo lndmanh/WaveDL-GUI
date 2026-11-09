@@ -7,10 +7,7 @@ import type { DataSelection } from '~~/types/catalog-api';
 const styles = {
   root: cn('flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden'),
   stage: cn('relative flex min-h-0 min-w-0 flex-1 flex-nowrap overflow-hidden'),
-  browser: cn(
-    'flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-border/60 bg-surface',
-    'shadow-[0_1px_2px_rgb(0_0_0_/_0.04)]',
-  ),
+  browser: cn('flex min-h-0 shrink-0 flex-col overflow-hidden'),
   seam: cn('flex min-h-0 shrink-0 flex-col overflow-hidden'),
 };
 
@@ -148,11 +145,12 @@ onBeforeUnmount(() => unsubscribe?.());
 </script>
 
 <template>
-  <section :class="styles.root" :data-stacked="stacked" @keydown="onEscape">
-    <header class="shrink-0">
-      <h1 class="text-lg font-semibold tracking-tight">{{ t('datasets.workspaceTitle') }}</h1>
-      <p class="text-sm text-muted-foreground">{{ t('datasets.workspaceHelp') }}</p>
-    </header>
+  <section
+    :class="styles.root"
+    :aria-label="t('shell.datasets')"
+    :data-stacked="stacked"
+    @keydown="onEscape"
+  >
     <MotionConfig reduced-motion="user">
       <div ref="stage" :class="styles.stage">
         <motion.div
@@ -163,7 +161,7 @@ onBeforeUnmount(() => unsubscribe?.());
           :transition="cardTransition"
           @animation-complete="onCardAnimationComplete"
         >
-          <div ref="browserRegion" class="flex min-h-0 min-w-0 flex-1 flex-col p-3">
+          <div ref="browserRegion" class="flex min-h-0 min-w-0 flex-1 flex-col">
             <DatasetPathPicker
               ref="picker"
               :session="session"
