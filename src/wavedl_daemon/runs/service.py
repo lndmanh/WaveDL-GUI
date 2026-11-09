@@ -717,6 +717,7 @@ class RunService:
             raise ValueError("Invalid page bounds")
         if state is not None and state not in {
             "planned",
+            "live",
             *(item.value for item in RunState),
         }:
             raise ValueError("Invalid state filter")

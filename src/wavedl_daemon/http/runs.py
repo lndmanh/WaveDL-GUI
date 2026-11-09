@@ -27,8 +27,8 @@ from wavedl_daemon.http.schemas.runs import (
     PlanRequest,
     PlanView,
     RunList,
+    RunListFilter,
     RunResponse,
-    RunStateFilter,
     SubmitRequest,
 )
 from wavedl_daemon.storage.ownership import DispatchRequired
@@ -123,7 +123,7 @@ def lifecycle_routes(service: AsyncRunService) -> list[APIRoute]:
         response: Response,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
         offset: Annotated[int, Query(ge=0, le=10000)] = 0,
-        state: RunStateFilter | None = None,
+        state: RunListFilter | None = None,
     ):
         """List runs newest first, filtering by state before pagination."""
         result = await _call(service.list, limit, offset, state)

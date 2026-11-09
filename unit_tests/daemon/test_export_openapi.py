@@ -102,6 +102,33 @@ def test_openapi_documents_run_lifecycle():
     assert "servers" not in spec
 
 
+def test_live_filter_is_query_only_in_openapi():
+    spec = exporter().build_openapi()
+    response_states = set(
+        spec["components"]["schemas"]["RunResponse"]["properties"]["state"]["enum"]
+    )
+    assert response_states == {
+        "planned",
+        "pending",
+        "submission_unknown",
+        "submitted",
+        "queued",
+        "held",
+        "running",
+        "stopping",
+        "completed",
+        "failed",
+        "cancelled",
+        "terminal_unknown",
+        "observation_unavailable",
+        "supervision_lost",
+    }
+    parameters = spec["paths"]["/api/runs"]["get"]["parameters"]
+    state_parameter = next(item for item in parameters if item["name"] == "state")
+    query_states = set(state_parameter["schema"]["anyOf"][0]["enum"])
+    assert query_states == response_states | {"live"}
+
+
 def test_offline_service_raises_if_called():
     service = exporter()._InertRunService()
     for name in ("plan", "submit", "cancel", "get", "list"):

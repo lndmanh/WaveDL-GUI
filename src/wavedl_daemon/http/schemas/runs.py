@@ -14,6 +14,7 @@ from wavedl_daemon.runs.lifecycle import RunState
 
 
 RunStateFilter = Literal["planned", *(state.value for state in RunState)]
+RunListFilter = Literal[RunStateFilter, "live"]
 
 
 class RuntimeRequest(WireModel):

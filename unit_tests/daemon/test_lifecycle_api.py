@@ -23,7 +23,19 @@ from wavedl_daemon.execution.pool import BoundedThreadPool
 from wavedl_daemon.http.app import create_app
 from wavedl_daemon.http.runs import lifecycle_routes
 from wavedl_daemon.runs.controller import RunController
-from wavedl_daemon.runs.model import Metric, RunId
+from wavedl_daemon.runs.model import (
+    CancelRequested,
+    Exited,
+    LocalHandle,
+    Metric,
+    ObservationLost,
+    Observed,
+    Outcome,
+    Phase,
+    RunId,
+    Submitted,
+    Submitting,
+)
 from wavedl_daemon.runs.service import RunProgress, RunService, _run_progress
 from wavedl_daemon.storage.database import open_database
 from wavedl_daemon.storage.ownership import acquire_dispatch_lock
@@ -874,6 +886,64 @@ def test_live_run_states_match_the_browser_vocabulary():
         "running",
         "stopping",
     }
+
+
+def test_live_filter_returns_only_live_runs_newest_first(environment):
+    app = environment.app
+    runs = {}
+    for state in (
+        "running",
+        "queued",
+        "pending",
+        "submitted",
+        "held",
+        "stopping",
+        "completed",
+        "failed",
+        "supervision_lost",
+        "submission_unknown",
+        "observation_unavailable",
+        "planned",
+    ):
+        plan = environment.service.plan(payload(), f"live-{state}")
+        runs[state] = plan.run_id
+        if state == "planned":
+            continue
+        environment.service.submit(plan.plan_id)
+        if state == "pending":
+            continue
+        events = [Submitting()]
+        if state != "submission_unknown":
+            events.append(Submitted(LocalHandle(1234, f"live-{state}")))
+            if state in {"queued", "held", "running", "stopping"}:
+                phase = Phase.RUNNING if state == "stopping" else Phase(state)
+                events.append(Observed(phase, phase.value.upper(), None))
+            if state == "stopping":
+                events.append(CancelRequested())
+            if state == "observation_unavailable":
+                events.append(ObservationLost("scheduler unavailable"))
+            if state in {"completed", "failed", "supervision_lost"}:
+                outcome = (
+                    Outcome.LOST if state == "supervision_lost" else Outcome(state)
+                )
+                events.append(Exited(outcome, state != "supervision_lost"))
+        environment.log.append(RunId(plan.run_id), events, expect=Expect())
+        assert environment.service.get(plan.run_id).state == state
+
+    response = request(app, "GET", "/api/runs?state=live")
+    assert response.status_code == 200, response.text
+    expected = ["stopping", "held", "submitted", "pending", "queued", "running"]
+    assert [run["state"] for run in response.json()["runs"]] == expected
+    assert [run["run_id"] for run in response.json()["runs"]] == [
+        runs[state] for state in expected
+    ]
+    paged = request(app, "GET", "/api/runs?state=live&limit=1&offset=5")
+    assert paged.status_code == 200, paged.text
+    assert [run["run_id"] for run in paged.json()["runs"]] == [runs["running"]]
+    empty = request(app, "GET", "/api/runs?state=live&offset=6")
+    assert empty.status_code == 200
+    assert empty.json()["runs"] == []
+    assert request(app, "GET", "/api/runs?state=bogus").status_code == 400
 
 
 def test_live_filter_uses_the_state_index(environment):
