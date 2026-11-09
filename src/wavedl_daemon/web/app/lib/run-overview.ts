@@ -208,7 +208,7 @@ function startOfDay(date: Date): number {
 }
 
 /**
- * Live runs first, then calendar buckets newest-first. The daemon pages oldest-first, so
+ * Live runs first, then calendar buckets newest-first. The daemon pages newest-first, so
  * undated runs keep their reversed page order inside "earlier".
  */
 export function groupRuns(runs: readonly RunView[], now: Date): RunGroup[] {
