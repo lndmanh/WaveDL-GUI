@@ -4,7 +4,6 @@ import type { ShellNavigationDescriptor } from '~~/types/shell';
 const props = defineProps<{
   item: ShellNavigationDescriptor;
   active?: boolean;
-  appearance?: 'dock' | 'menu';
 }>();
 
 const emit = defineEmits<{ select: [item: ShellNavigationDescriptor] }>();
@@ -15,7 +14,7 @@ const { t } = useI18n({ useScope: 'global' });
   <Button
     type="button"
     variant="ghost"
-    :class="['shell-dock-action', `shell-dock-action--${props.appearance ?? 'dock'}`]"
+    class="shell-dock-action shell-dock-action--dock"
     :data-active="props.active ? '' : undefined"
     :data-testid="`nav-${props.item.id}`"
     :aria-current="props.active ? 'page' : undefined"
