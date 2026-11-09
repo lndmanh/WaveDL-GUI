@@ -311,12 +311,7 @@ watch(hasCvSummary, (available) => {
             @preview="selectedImage = $event"
             @vue:mounted="shownMetrics.add(runId)"
           />
-          <Empty v-else role="status" class="py-10">
-            <EmptyHeader>
-              <EmptyMedia><LoadingSpinner compact /></EmptyMedia>
-              <EmptyDescription>{{ t('results.metricsPending') }}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <EvaluationResultsSkeleton v-else />
         </TabsContent>
         <TabsContent value="files" class="flex min-h-0 min-w-0 flex-1 flex-col">
           <ArtifactList
