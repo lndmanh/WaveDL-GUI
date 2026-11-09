@@ -1,6 +1,10 @@
 {
   "skipToWorkspace": "Chuyển đến không gian làm việc",
   "sections": "Các mục",
+  "workspace": "Không gian làm việc",
+  "collapseSidebar": "Thu gọn thanh bên",
+  "expandSidebar": "Mở rộng thanh bên",
+  "search": "Tìm kiếm",
   "experiments": "Thí nghiệm",
   "newTrainingRun": "Lượt huấn luyện mới",
   "datasets": "Tập dữ liệu",

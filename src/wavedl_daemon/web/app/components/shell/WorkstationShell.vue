@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { motion } from 'motion-v';
-import { SHELL_RAIL_WIDTH, SHELL_RAIL_GUTTER } from '../../constants/shellRail';
+import {
+  SHELL_SIDEBAR_WIDTH,
+  SHELL_SIDEBAR_COLLAPSED_WIDTH,
+  SHELL_SIDEBAR_GUTTER,
+} from '../../constants/shellSidebar';
+import ShellSidebar from './ShellSidebar.vue';
 import {
   sectionPath,
   SHELL_ACTION_NAVIGATION,
@@ -23,7 +28,15 @@ const layout = useShellLayout();
 const navigateTo = useShellNavigation();
 const { isRailVisible, isCompanionShowing, panelWidth, commandPaletteOpen: paletteOpen } = layout;
 const reducedMotion = useReducedMotion();
+const preferences = useShellPreferencesStore();
+
+const sidebarWidth = computed(() =>
+  (preferences.sidebar.collapsed ? SHELL_SIDEBAR_COLLAPSED_WIDTH : SHELL_SIDEBAR_WIDTH) +
+  SHELL_SIDEBAR_GUTTER,
+);
+
 const isDesktop = useMediaQuery('(min-width: 1024px)');
+const isSidebarViewport = useMediaQuery('(min-width: 768px)');
 
 watch(isDesktop, layout.setDockedLayout, { immediate: true });
 
@@ -70,6 +83,23 @@ function navigate(section: WorkstationSection) {
 }
 
 function shortcut(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+    if (!isRailVisible.value || !isSidebarViewport.value) return;
+
+    if (event.defaultPrevented || event.isComposing) return;
+
+    if (
+      event.target instanceof Element &&
+      event.target.closest('input, textarea, select, [contenteditable]')
+    )
+      return;
+
+    event.preventDefault();
+    preferences.toggleSidebarCollapsed();
+
+    return;
+  }
+
   if (event.key === 'Escape') {
     if (event.defaultPrevented) return;
 
@@ -109,14 +139,14 @@ useEventListener('keydown', shortcut);
         <AnimatePresence>
           <motion.div
             v-if="isRailVisible"
-            class="hidden h-full shrink-0 overflow-visible md:block"
+            class="hidden h-full min-w-0 shrink-0 overflow-visible md:block"
             :initial="{ opacity: 0, width: 0 }"
-            :animate="{ opacity: 1, width: SHELL_RAIL_WIDTH + SHELL_RAIL_GUTTER }"
+            :animate="{ opacity: 1, width: sidebarWidth }"
             :exit="{ opacity: 0, width: 0 }"
             :transition="{ duration: reducedMotion ? 0 : 0.26, ease: [0.16, 1, 0.3, 1] }"
           >
             <div class="h-full pr-3">
-              <ShellRail
+              <ShellSidebar
                 :section="section"
                 :status="status"
                 @navigate="navigate"

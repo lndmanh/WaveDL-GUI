@@ -1,6 +1,10 @@
 {
   "skipToWorkspace": "Skip to workspace",
   "sections": "Sections",
+  "workspace": "Workspace",
+  "collapseSidebar": "Collapse sidebar",
+  "expandSidebar": "Expand sidebar",
+  "search": "Search",
   "experiments": "Experiments",
   "newTrainingRun": "New training run",
   "datasets": "Datasets",
