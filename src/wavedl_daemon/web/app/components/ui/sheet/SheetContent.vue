@@ -17,6 +17,7 @@ import { SHEET_SIDE_KEY, type SheetSide } from './keys'
 interface SheetContentProps extends DialogContentProps {
   class?: HTMLAttributes['class']
   side?: SheetSide
+  closeLabel?: string
 }
 
 defineOptions({
@@ -25,12 +26,13 @@ defineOptions({
 
 const props = withDefaults(defineProps<SheetContentProps>(), {
   side: 'right',
+  closeLabel: 'Close',
 })
 const emits = defineEmits<DialogContentEmits>()
 
 provide(SHEET_SIDE_KEY, props.side)
 
-const delegatedProps = reactiveOmit(props, 'class', 'side')
+const delegatedProps = reactiveOmit(props, 'class', 'side', 'closeLabel')
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 
@@ -64,7 +66,7 @@ const hasTopInset = computed(() => props.side === 'right' || props.side === 'lef
         )"
       >
         <X class="size-4" />
-        <span class="sr-only">Close</span>
+        <span class="sr-only">{{ props.closeLabel }}</span>
       </DialogClose>
     </DialogContent>
   </DialogPortal>
