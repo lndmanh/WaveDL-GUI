@@ -862,6 +862,20 @@ def test_list_pages_plans_and_filters_before_offset(environment):
     assert third["run_id"] not in [run["run_id"] for run in paged]
 
 
+def test_live_run_states_match_the_browser_vocabulary():
+    from wavedl_daemon.runs.lifecycle import LIVE_RUN_STATES
+
+    assert isinstance(LIVE_RUN_STATES, frozenset)
+    assert {state.value for state in LIVE_RUN_STATES} == {
+        "pending",
+        "submitted",
+        "queued",
+        "held",
+        "running",
+        "stopping",
+    }
+
+
 def test_state_filtered_list_pages_more_than_1000_plans(environment, monkeypatch):
     plans = [
         environment.service.plan(payload(), f"large-page-{index}")

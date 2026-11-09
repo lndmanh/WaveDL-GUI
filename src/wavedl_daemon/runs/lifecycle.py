@@ -232,6 +232,19 @@ class RunState(StrEnum):
     SUPERVISION_LOST = "supervision_lost"
 
 
+# Keep web/app/lib/run-overview.ts LIVE_STATES in sync.
+LIVE_RUN_STATES: frozenset[RunState] = frozenset(
+    {
+        RunState.PENDING,
+        RunState.SUBMITTED,
+        RunState.QUEUED,
+        RunState.HELD,
+        RunState.RUNNING,
+        RunState.STOPPING,
+    }
+)
+
+
 @dataclass(frozen=True)
 class RunStatus:
     state: RunState

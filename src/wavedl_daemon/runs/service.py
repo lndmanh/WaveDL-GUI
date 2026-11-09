@@ -31,7 +31,14 @@ from wavedl_daemon.backends.contracts import (
 )
 from wavedl_daemon.runs import training_options
 from wavedl_daemon.runs.artifacts import CHECKPOINT_NAME
-from wavedl_daemon.runs.lifecycle import Ended, Live, RunRef, RunState, status
+from wavedl_daemon.runs.lifecycle import (
+    LIVE_RUN_STATES,
+    Ended,
+    Live,
+    RunRef,
+    RunState,
+    status,
+)
 from wavedl_daemon.runs.model import (
     AttemptOpened,
     BackendKind,
@@ -680,12 +687,7 @@ class RunService:
 
     def _with_progress(self, view: RunResponse) -> RunResponse:
         if view.attempt is None or view.state not in {
-            "pending",
-            "submitted",
-            "queued",
-            "held",
-            "running",
-            "stopping",
+            state.value for state in LIVE_RUN_STATES
         }:
             return view
         metric = self.log.latest_epoch_metric(RunId(view.run_id), view.attempt)
