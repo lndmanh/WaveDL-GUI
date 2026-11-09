@@ -22,7 +22,7 @@ import type {
   Health,
   SessionGrant,
   IdentityPins,
-  RunState,
+  RunListFilter,
   RunView,
   PlanView,
   OutputChunk,
@@ -498,7 +498,7 @@ export class DaemonApi {
     }
   }
   async listRuns(
-    options: { limit?: number; offset?: number; state?: RunState; signal?: AbortSignal } = {},
+    options: { limit?: number; offset?: number; state?: RunListFilter; signal?: AbortSignal } = {},
   ): Promise<RunView[]> {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;

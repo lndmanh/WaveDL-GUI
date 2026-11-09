@@ -22,6 +22,8 @@ export interface IdentityPins {
 
 export type RunState = (typeof RUN_STATES)[number];
 
+export type RunListFilter = RunState | 'live';
+
 export interface RunProgress {
   epoch: number;
   totalEpochs: number;
