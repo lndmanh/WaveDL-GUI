@@ -56,6 +56,7 @@
   "collapseDetail": "Thu gọn chi tiết lượt chạy",
   "refresh": "Làm mới",
   "loadingRuns": "Đang tải lượt chạy…",
+  "loadingMetrics": "Đang tải chỉ số…",
   "noRuns": "Không có lượt chạy trên trang này.",
   "listSnapshot": "Cập nhật {time}. Trang có lượt chạy đang hoạt động sẽ làm mới mỗi 10 giây khi bạn đang xem.",
   "previous": "Trước",

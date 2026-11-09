@@ -56,6 +56,7 @@
   "collapseDetail": "Collapse run detail",
   "refresh": "Refresh",
   "loadingRuns": "Loading runs…",
+  "loadingMetrics": "Loading metrics…",
   "noRuns": "No runs on this page.",
   "listSnapshot": "Updated {time}. Pages with active runs refresh every 10 seconds while you’re viewing them.",
   "previous": "Previous",
