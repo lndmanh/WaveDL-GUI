@@ -24,6 +24,7 @@ const props = defineProps<{
   summary: MetricSummary;
   records: readonly MetricRecord[];
   bestLoss: { step: number; value: number } | null;
+  loading?: boolean;
 }>();
 
 const channels: readonly { name: StatChannel; risingIsBetter: boolean | null }[] = [
@@ -125,10 +126,14 @@ const stats = computed(() => {
 });
 </script>
 <template>
-  <dl :class="styles.strip">
+  <dl :class="styles.strip" :aria-busy="loading || undefined">
     <div v-for="stat in stats" :key="stat.label" :class="styles.stat">
       <dt :title="stat.label">{{ stat.label }}</dt>
-      <dd class="mt-1 flex h-12 flex-wrap content-start items-baseline gap-x-2 gap-y-0.5">
+      <dd v-if="loading" class="mt-1 h-12 pt-1">
+        <span class="sr-only">{{ t('runs.loadingMetrics') }}</span>
+        <Skeleton class="h-5 w-16 max-w-full" aria-hidden="true" />
+      </dd>
+      <dd v-else class="mt-1 flex h-12 flex-wrap content-start items-baseline gap-x-2 gap-y-0.5">
         <span
           class="truncate text-lg font-semibold tracking-tight tabular-nums"
           :title="stat.value == null ? undefined : String(stat.value)"
