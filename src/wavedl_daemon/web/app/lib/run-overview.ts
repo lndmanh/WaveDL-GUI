@@ -140,6 +140,10 @@ export function runFilterCounts(runs: readonly RunView[], now: Date): RunFilterC
   };
 }
 
+export function isLiveRun(run: RunView): boolean {
+  return LIVE_STATES.has(run.state);
+}
+
 export function runFilterOf(run: RunView): Exclude<RunFilter, 'all'> | null {
   if (run.state === 'planned') return 'planned';
 

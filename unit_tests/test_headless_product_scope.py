@@ -32,6 +32,7 @@ def test_web_validation_keeps_only_daemon_client_logic():
         "session-resume",
         "auth-routing",
         "run-monitor",
+        "live-runs",
         "run-monitor-publication",
         "result-operations",
         "result-operation-prefill",
