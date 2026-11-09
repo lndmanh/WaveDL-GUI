@@ -102,6 +102,8 @@ const shownColumns = computed(() =>
 
 const styles = {
   browser: cn('flex min-w-0 overflow-x-auto rounded-xl border bg-surface'),
+  // The full-page browser is the workspace card, matching the experiments run list.
+  card: cn('rounded-[1.25rem] border-border/60 shadow-[0_1px_2px_rgb(0_0_0_/_0.04)]'),
   column: cn('w-52 shrink-0 border-r'),
   suggestion: cn(
     'flex min-w-0 flex-col gap-3 rounded-xl border p-3.5 text-left transition-colors',
@@ -296,7 +298,7 @@ watch(narrow, (value) => {
 <template>
   <section
     ref="container"
-    :class="cn('flex min-w-0 flex-col gap-4', fill && 'h-full min-h-0 flex-1')"
+    :class="cn('flex min-w-0 flex-col', fill ? 'h-full min-h-0 flex-1 gap-3' : 'gap-4')"
     :aria-label="label"
   >
     <div :class="cn('flex items-center gap-2', fill && 'shrink-0')">
@@ -378,7 +380,7 @@ watch(narrow, (value) => {
         >{{ t('datasets.useFolder') }}</Button
       >
     </div>
-    <div :class="cn(styles.browser, fill && 'min-h-0 flex-1')">
+    <div :class="cn(styles.browser, fill && [styles.card, 'min-h-0 flex-1'])">
       <DatasetBrowserColumn
         v-show="!narrow || mobileColumn === 0"
         data-column="0"
