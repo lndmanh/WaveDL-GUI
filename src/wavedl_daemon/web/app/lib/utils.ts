@@ -7,3 +7,12 @@ import { twMerge } from 'tailwind-merge';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+export function primaryShortcut(key: string) {
+  const apple = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+
+  return {
+    hint: apple ? `⌘${key}` : `Ctrl+${key}`,
+    ariaKeyshortcuts: `${apple ? 'Meta' : 'Control'}+${key}`,
+  };
+}
