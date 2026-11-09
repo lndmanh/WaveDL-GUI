@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { Maximize2 } from '@lucide/vue';
+import { motion, useReducedMotion } from 'motion-v';
+import { metricsChartEmptyState, type MetricsWaitingStage } from '@/lib/metrics-chart-waiting';
+import type { RunView } from '~~/types/daemon-api';
+import type { RunEvent } from '~~/types/event-stream';
 import { CurveType, type FreeBrushConfigInterface } from '@unovis/ts';
 import { VisXYContainer, VisLine, VisAxis, VisFreeBrush, VisPlotline } from '@unovis/vue';
 import { ChartTooltipContent, componentToString, type ChartConfig } from '@/components/ui/chart';
@@ -31,6 +35,8 @@ const { t } = useI18n({ useScope: 'global' });
 
 const props = defineProps<{
   records: readonly MetricRecord[];
+  run: RunView | null;
+  events: readonly RunEvent[];
   unavailable?: boolean;
   lossSeries: PlotSeries | null;
   lossError: string;
@@ -72,6 +78,75 @@ const message = computed(() => {
 });
 
 const fields = computed(() => projection.value.series?.fields ?? []);
+const reducedMotion = useReducedMotion();
+const hasData = computed(() => fields.value.length > 0);
+
+const channelLabel = computed(() =>
+  channel.value === 'lr'
+    ? t('runs.learningRateLower')
+    : channel.value === 'loss'
+      ? t('runs.lossLower')
+      : t('runs.r2Lower'),
+);
+
+const hasOtherMetrics = computed(() => {
+  if (hasData.value || message.value || props.unavailable) return false;
+
+  if (props.lossSeries?.fields.length) return true;
+
+  return buildPlotSeries(props.records, 'r2').fields.length > 0 ||
+    buildPlotSeries(props.records, 'lr').fields.length > 0;
+});
+
+const emptyState = computed(() => metricsChartEmptyState(props.run, props.events, hasOtherMetrics.value));
+
+const emptyMessage = computed(() => t(
+  emptyState.value.kind === 'terminal'
+    ? 'runs.metricsNoneRecorded'
+    : emptyState.value.kind === 'missing'
+      ? 'runs.metricsChannelNotReported'
+      : 'runs.waitingChannel',
+  { channel: channelLabel.value },
+));
+
+const waitingStage = computed(() => {
+  if (message.value || props.unavailable || hasData.value || emptyState.value.kind !== 'waiting') return null;
+
+  return emptyState.value.stage;
+});
+
+const leavingStage = shallowRef<MetricsWaitingStage | null>(null);
+const mounted = shallowRef(false);
+
+onMounted(() => {
+  mounted.value = true;
+});
+
+const displayedStage = computed(() => waitingStage.value ?? leavingStage.value);
+
+const handoffSource = computed(() => ({
+  runId: props.run?.run_id,
+  attempt: props.run?.attempt,
+  channel: channel.value,
+  active: isActive.value,
+  stage: waitingStage.value,
+  data: !message.value && !props.unavailable && hasData.value,
+}));
+
+// Retain the mounted waiting layer only for a live, same-channel arrival of data.
+// Tab changes and KeepAlive activation must never replay a chart entry animation.
+watch(handoffSource, (current, previous) => {
+  const sameChannel = current.runId === previous.runId &&
+    current.attempt === previous.attempt && current.channel === previous.channel;
+
+  if (!sameChannel || !current.active || !current.data) leavingStage.value = null;
+  else if (mounted.value && previous.active && previous.stage !== null && !reducedMotion.value)
+    leavingStage.value = previous.stage;
+}, { flush: 'sync' });
+
+function finishHandoff() {
+  if (waitingStage.value === null) leavingStage.value = null;
+}
 
 const visibleFields = computed(() => {
   const visible = fields.value.filter((field) => !hiddenFields.value.includes(field));
@@ -200,20 +275,15 @@ const tooltip = computed(() => {
         <div v-else-if="unavailable" role="status" :class="styles.state">
           <InfoChip :label="t('runs.lastKnownRuntime')" :text="t('runs.notLive')" uncertain />
         </div>
-        <div v-else-if="!projection.series?.pointCount" role="status" :class="styles.state">
-          <LoadingSpinner compact size="sm" />
-          {{
-            t('runs.waitingChannel', {
-              channel:
-                channel === 'lr'
-                  ? t('runs.learningRateLower')
-                  : channel === 'loss'
-                    ? t('runs.lossLower')
-                    : t('runs.r2Lower'),
-            })
-          }}
-        </div>
-        <div v-else-if="isActive" class="relative min-h-40 min-w-0 flex-1">
+        <p v-else-if="!hasData && !waitingStage" role="status" :class="styles.state">{{ emptyMessage }}</p>
+        <div v-else class="relative flex min-h-40 min-w-0 flex-1 flex-col">
+          <motion.div
+            v-if="hasData && isActive"
+            class="absolute inset-0"
+            :initial="leavingStage ? { opacity: 0 } : false"
+            :animate="{ opacity: 1 }"
+            :transition="{ duration: reducedMotion || !leavingStage ? 0 : 0.4 }"
+          >
           <ChartContainer
             :key="channel"
             :config="chartConfig"
@@ -261,6 +331,22 @@ const tooltip = computed(() => {
               />
             </VisXYContainer>
           </ChartContainer>
+          </motion.div>
+          <motion.div
+            v-if="displayedStage"
+            class="relative flex min-h-40 flex-1"
+            :initial="false"
+            :animate="{ opacity: waitingStage ? 1 : 0 }"
+            :transition="{ duration: reducedMotion || !leavingStage ? 0 : 0.4 }"
+            :aria-hidden="!waitingStage || undefined"
+            @animation-complete="finishHandoff"
+          >
+            <MetricsChartWaiting
+              :stage="displayedStage"
+              :channel-label="channelLabel"
+              :visible="waitingStage !== null"
+            />
+          </motion.div>
         </div>
       </TabsContent>
     </Tabs>

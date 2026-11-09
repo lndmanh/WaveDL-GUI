@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import './theme.css';
 @custom-variant dark (&:is(.dark *));
+@custom-variant reduce-transparency (@media (prefers-reduced-transparency: reduce));
 @source '../..';
 
 @theme inline {
@@ -233,4 +234,8 @@ button:disabled {
 @keyframes spinner-shimmer {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
+}
+@keyframes metrics-waiting-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
 }
