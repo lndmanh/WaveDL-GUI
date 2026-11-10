@@ -39,7 +39,12 @@ const delta = computed(() => {
   return r2.value - baseline;
 });
 const deltaText = computed(() => delta.value === null ? '' : `${delta.value < 0 ? '−' : '+'}${Math.abs(delta.value).toFixed(3)}`);
-const deltaLabel = computed(() => delta.value === null ? '' : t('results.r2Change', { change: deltaText.value }));
+const deltaLabel = computed(() => {
+  if (delta.value === null) return '';
+  const direction = delta.value > 0 ? 'results.r2Better' : delta.value < 0 ? 'results.r2Worse' : 'results.r2Unchanged';
+
+  return `${t('results.r2Change', { change: deltaText.value })} · ${t(direction)}`;
+});
 const progress = computed(() => props.run.progress ? new Intl.NumberFormat(locale.value, { style: 'percent', maximumFractionDigits: 0 }).format(props.run.progress.fraction) : null);
 
 function selectCell(event: MouseEvent) {
@@ -100,7 +105,7 @@ function selectCell(event: MouseEvent) {
     <td class="w-32 p-0">
       <div :class="cn(listRowStyles.cell, 'flex flex-col items-end justify-center text-[0.7rem] text-muted-foreground tabular-nums', stale && 'opacity-60')">
         <span v-if="r2 !== null" class="whitespace-nowrap">R² {{ r2.toFixed(3) }}
-          <span v-if="delta !== null" :class="delta > 0 ? 'text-success' : delta < 0 ? 'text-destructive' : ''" :aria-label="deltaLabel" :title="deltaLabel">{{ deltaText }}</span>
+          <span v-if="delta !== null" :class="delta > 0 ? 'text-success' : delta < 0 ? 'text-destructive' : ''" :title="deltaLabel"><span aria-hidden="true">{{ deltaText }}</span><span class="sr-only">{{ deltaLabel }}</span></span>
         </span>
         <span v-else-if="run.state === 'running'" role="status">{{ progress ?? t('runs.running') }}</span>
         <time :datetime="created?.toISOString()" :title="created?.toLocaleString(locale)">{{ age }}</time>

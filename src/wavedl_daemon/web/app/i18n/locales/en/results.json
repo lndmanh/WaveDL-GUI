@@ -174,5 +174,8 @@
   "compareLimit": "Compare 2–8 completed tests.",
   "r2Change": "R² change against training validation: {change}",
   "testPlots": "Plots",
-  "testSettings": "Settings"
+  "testSettings": "Settings",
+  "r2Better": "Better than training validation",
+  "r2Worse": "Worse than training validation",
+  "r2Unchanged": "Same as training validation"
 }

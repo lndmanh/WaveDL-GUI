@@ -387,7 +387,7 @@ const hasCvSummary = computed(() =>
         </TabsContent>
         <TabsContent v-if="isTraining" value="tests" class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
           <Alert v-if="testsMessage" variant="warning" role="status"><AlertDescription>{{ clientMessage(testsMessage) }}</AlertDescription></Alert>
-          <TestsWorkspace
+          <TrainingRunTests
             :api="api"
             :session="session"
             :source-run-id="runId"
