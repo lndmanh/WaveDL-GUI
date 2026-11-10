@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw } from '@lucide/vue';
-import { createRunFilters, pathName, runMatchesFilters } from '../../lib/run-overview';
+import { createRunFilters, pathName, RUN_KINDS, runMatchesFilters } from '../../lib/run-overview';
 import { isCompareEligible, parentTitle, testLocation } from '../../lib/test-runs';
 import type { DaemonApi, DaemonApiError } from '../../lib/daemon-api';
 
@@ -17,6 +17,7 @@ const selection = shallowRef<string[]>([]);
 const trainingRun = shallowRef('all');
 const dataset = shallowRef('all');
 const filters = ref(createRunFilters());
+const testKinds = RUN_KINDS.filter((kind) => kind !== 'training');
 const clock = useNow({
   controls: true,
   scheduler: (tick) => useIntervalFn(tick, 30_000, { immediate: false }),
@@ -109,7 +110,7 @@ function compare() {
             <SelectItem v-for="name in datasets" :key="name" :value="`dataset:${name}`">{{ name }}</SelectItem>
           </SelectContent>
         </Select>
-        <RunFilterPopover v-model="filters" :runs="runs" :now="now" :show-planned="false" status-only :label="t('results.filterStatus')" />
+        <RunFilterPopover v-model="filters" :runs="runs" :now="now" :show-planned="false" :allowed-kinds="testKinds" status-and-kind-only :label="t('results.filterStatus')" />
       </template>
     </TestList>
     <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2">

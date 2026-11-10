@@ -8,13 +8,14 @@ import {
   runFilterCounts,
 } from '../../lib/run-overview';
 import type { RunView } from '~~/types/daemon-api';
-import type { RunCreatedFilter, RunFilterState, RunStateGroup } from '~~/types/run-overview';
+import type { RunCreatedFilter, RunFilterState, RunKind, RunStateGroup } from '~~/types/run-overview';
 
 const props = defineProps<{
   runs: readonly RunView[];
   now: Date;
   showPlanned?: boolean;
-  statusOnly?: boolean;
+  statusAndKindOnly?: boolean;
+  allowedKinds?: readonly RunKind[];
   label?: string;
 }>();
 
@@ -31,7 +32,7 @@ const activeCount = computed(() => activeRunFilterCount(filters.value));
 const counts = computed(() => runFilterCounts(props.runs, props.now));
 
 const kinds = computed(() =>
-  RUN_KINDS.map((value) => ({
+  (props.allowedKinds ?? RUN_KINDS).map((value) => ({
     value,
     label: t(runKindMessageKeys[value]),
     count: counts.value.kinds[value],
@@ -121,7 +122,6 @@ function chooseCreated(value: string) {
       <div class="min-h-0 overflow-y-auto overscroll-contain p-4">
         <FieldGroup class="gap-5">
           <RunFilterGroup
-            v-if="!statusOnly"
             :label="t('runs.filterKind')"
             :options="kinds"
             :selected="filters.kinds"
@@ -134,7 +134,7 @@ function chooseCreated(value: string) {
             @toggle="filters = { ...filters, states: toggleValue(filters.states, $event) }"
           />
           <RunFilterGroup
-            v-if="!statusOnly"
+            v-if="!statusAndKindOnly"
             :label="t('runs.columnModel')"
             :options="models"
             :selected="filters.models"
@@ -142,14 +142,14 @@ function chooseCreated(value: string) {
             @toggle="filters = { ...filters, models: toggleValue(filters.models, $event) }"
           />
           <RunFilterGroup
-            v-if="!statusOnly"
+            v-if="!statusAndKindOnly"
             :label="t('runs.columnDataset')"
             :options="datasets"
             :selected="filters.datasets"
             searchable
             @toggle="filters = { ...filters, datasets: toggleValue(filters.datasets, $event) }"
           />
-          <FieldSet v-if="!statusOnly">
+          <FieldSet v-if="!statusAndKindOnly">
             <FieldLegend variant="label">{{ t('runs.columnCreated') }}</FieldLegend>
             <RadioGroup
               :model-value="filters.created"
