@@ -124,8 +124,21 @@ class RunSummaryView(WireModel):
     epochs: int | None
     cv: int | None
     source_run_id: str | None
+    checkpoint: str | None
+    source_name: str | None
+    source_model: str | None
     plot: bool
     export: str | None
+
+
+class RunEvaluationView(WireModel):
+    """Published headline metrics for a completed test attempt."""
+
+    r2_score: float | None
+    rmse: float | None
+    mae_avg: float | None
+    pearson_corr: float | None
+    relative_l2: float | None
 
 
 class RunResponse(WireModel):
@@ -146,6 +159,7 @@ class RunResponse(WireModel):
     summary: RunSummaryView | None
     progress: RunProgressView | None
     activity: Literal["starting", "training", "finalizing"] | None
+    evaluation: RunEvaluationView | None
 
 
 class RunList(WireModel):

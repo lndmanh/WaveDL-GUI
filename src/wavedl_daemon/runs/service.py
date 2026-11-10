@@ -121,6 +121,7 @@ class RunResponse:
     summary: dict | None = None
     progress: RunProgress | None = None
     activity: Literal["starting", "training", "finalizing"] | None = None
+    evaluation: dict[str, float | None] | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -143,18 +144,19 @@ def _run_progress(
     return RunProgress(epoch, total)
 
 
-def _run_summary(plan: Plan) -> dict:
+def _run_summary(plan: Plan, source: Plan | None) -> dict:
     """Identify a run for people: the approved inputs, never live state."""
     config = plan.spec.resolved_config
 
-    def text(name: str) -> str | None:
-        value = config.get(name)
+    def text(name: str, selected: Plan = plan) -> str | None:
+        value = selected.spec.resolved_config.get(name)
         return value if type(value) is str and value else None
 
     def count(name: str, minimum: int) -> int | None:
         value = config.get(name)
         return value if type(value) is int and value >= minimum else None
 
+    checkpoint_source = plan.spec.checkpoint_source
     return {
         "name": text("run_name"),
         "model": text("model"),
@@ -163,11 +165,14 @@ def _run_summary(plan: Plan) -> dict:
         "cv": count("cv", 2),
         "plot": config.get("plot") is True,
         "export": text("export"),
-        "source_run_id": (
-            None
-            if plan.spec.checkpoint_source is None
-            else plan.spec.checkpoint_source.run_id
-        ),
+        "source_run_id": None
+        if checkpoint_source is None
+        else checkpoint_source.run_id,
+        "checkpoint": None
+        if checkpoint_source is None
+        else checkpoint_source.checkpoint,
+        "source_name": None if source is None else text("run_name", source),
+        "source_model": None if source is None else text("model", source),
     }
 
 
@@ -658,9 +663,24 @@ class RunService:
         return self._owned(run_id).plan.spec.paths
 
     def _view(
-        self, record: PlanRecord, *, include_progress: bool = True
+        self,
+        record: PlanRecord,
+        *,
+        include_progress: bool = True,
+        source_plans: dict[str, Plan | None] | None = None,
     ) -> RunResponse:
         plan = record.plan
+        source = None
+        if plan.spec.checkpoint_source is not None:
+            source_run_id = plan.spec.checkpoint_source.run_id
+            if source_plans is None:
+                source_plans = {}
+            if source_run_id not in source_plans:
+                source_record = self.plans.by_run(source_run_id)
+                source_plans[source_run_id] = (
+                    None if source_record is None else source_record.plan
+                )
+            source = source_plans[source_run_id]
         head = self.log.head(RunId(record.run_id))
         if head is None:
             state, uncertainty, evidence = "planned", False, None
@@ -681,8 +701,9 @@ class RunService:
             head is not None and head.cancel_requested,
             evidence,
             record.created_at,
-            _run_summary(plan),
+            _run_summary(plan, source),
         )
+        view = self._with_evaluation(view)
         return self._with_progress(view) if include_progress else view
 
     def _with_progress(self, view: RunResponse) -> RunResponse:
@@ -702,6 +723,30 @@ class RunService:
                 activity = "starting" if metric is None else "training"
         return replace(
             view, progress=_run_progress(metric, approved_epochs), activity=activity
+        )
+
+    def _with_evaluation(self, view: RunResponse) -> RunResponse:
+        if (
+            view.operation != "test"
+            or view.state != "completed"
+            or view.attempt is None
+        ):
+            return view
+        evaluation = self.log.latest_evaluation(RunId(view.run_id), view.attempt)
+        if evaluation is None:
+            return view
+        return replace(
+            view,
+            evaluation={
+                name: evaluation.metrics.get(name)
+                for name in (
+                    "r2_score",
+                    "rmse",
+                    "mae_avg",
+                    "pearson_corr",
+                    "relative_l2",
+                )
+            },
         )
 
     def list(
@@ -726,8 +771,9 @@ class RunService:
             *(item.value for item in RunState),
         }:
             raise ValueError("Invalid state filter")
+        source_plans: dict[str, Plan | None] = {}
         return [
-            self._view(record)
+            self._view(record, source_plans=source_plans)
             for record in self.plans.page(
                 limit=limit,
                 offset=offset,
