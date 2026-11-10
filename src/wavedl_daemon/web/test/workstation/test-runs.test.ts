@@ -5,6 +5,7 @@ import {
   isTestRun,
   parentTitle,
   testLocation,
+  trainingTestsQuery,
 } from '../../app/lib/test-runs';
 import { shouldPollRuns } from '../../app/lib/run-overview';
 import type { RunView } from '../../types/daemon-api';
@@ -126,6 +127,20 @@ describe('testLocation', () => {
     'routes $label',
     ({ overrides, expected }) => expect(testLocation(run(overrides))).toBe(expected),
   );
+});
+
+describe('trainingTestsQuery', () => {
+  it('returns to Tests for stale links without an explicit tab', () => {
+    expect(trainingTestsQuery({ test: id })).toEqual({ tab: 'tests' });
+  });
+
+  it('removes the selected test, overrides another tab and preserves unrelated query fields', () => {
+    const query = { test: id, tab: 'files', filter: ['one', 'two'], empty: null };
+
+    expect(trainingTestsQuery(query)).toEqual({ tab: 'tests', filter: ['one', 'two'], empty: null });
+    expect(query.test).toBe(id);
+    expect(query.tab).toBe('files');
+  });
 });
 
 describe('shouldPollRuns', () => {

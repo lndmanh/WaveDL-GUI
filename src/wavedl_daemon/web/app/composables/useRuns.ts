@@ -2,6 +2,7 @@ import type { MaybeRefOrGetter } from 'vue';
 import { clientError } from '../i18n/client-messages';
 import { DaemonApi, DaemonApiError } from '../lib/daemon-api';
 import { RunMonitor } from '../lib/run-monitor';
+import { runMonitorTransport } from '../lib/run-monitor-transport';
 import { shouldPollRuns } from '../lib/run-overview';
 import type { ClientMessage } from '~~/types/i18n';
 import type { RunOperation, RunView } from '~~/types/daemon-api';
@@ -112,20 +113,7 @@ export function useRuns(
   function select(runId: string): void {
     unsubscribe?.();
     monitor?.stop();
-    const daemonId = api.daemonId;
-    monitor = new RunMonitor(
-      runId,
-      {
-        getRun: (id, signal) =>
-          api.getRun(id, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
-        openEvents: (id, cursor, signal) => api.openEvents(id, cursor, signal, daemonId),
-        getEventPage: (id, cursor, signal) => api.getEventPage(id, cursor, signal, daemonId),
-        cancelRun: (id, signal) =>
-          api.cancelRun(id, AbortSignal.any([signal, AbortSignal.timeout(15000)])),
-      },
-      2000,
-      reportFailure,
-    );
+    monitor = new RunMonitor(runId, runMonitorTransport(api), 2000, reportFailure);
     unsubscribe = monitor.subscribe((snapshot) => {
       const previous = selected.value;
       selected.value = snapshot;

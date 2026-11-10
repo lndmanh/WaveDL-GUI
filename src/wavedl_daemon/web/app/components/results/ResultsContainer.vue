@@ -5,6 +5,7 @@ import { DaemonApiError } from '../../lib/daemon-api';
 import type { DaemonApi } from '../../lib/daemon-api';
 import type { RunView } from '~~/types/daemon-api';
 import { evaluationResults } from '../../lib/evaluation-results';
+import { trainingTestsQuery } from '../../lib/test-runs';
 import { trainingBaseline } from '../../lib/evaluation-scorecard';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
@@ -171,7 +172,8 @@ function openEvaluation(checkpoint?: string, mode: 'evaluate' | 'export' = 'eval
 
 // Submission adds a row, never opens it or selects it for comparison.
 function evaluationStarted() {
-  tab.value = 'tests';
+  const route = router.currentRoute.value;
+  void router.replace({ path: route.path, query: trainingTestsQuery(route.query), hash: route.hash });
   void refreshTests(0);
 }
 

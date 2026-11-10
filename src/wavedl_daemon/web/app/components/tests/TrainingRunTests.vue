@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, RefreshCw } from '@lucide/vue';
 import { DaemonApiError, isUuid } from '../../lib/daemon-api';
-import { isCompareEligible, isTestRun } from '../../lib/test-runs';
+import { isCompareEligible, isTestRun, trainingTestsQuery } from '../../lib/test-runs';
 import type { DaemonApi } from '../../lib/daemon-api';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { TrainingBaseline } from '../../lib/evaluation-scorecard';
@@ -39,17 +39,14 @@ const validationError = shallowRef<Error | null>(null);
 const retry = shallowRef(0);
 const back = computed(() => {
   const route = router.currentRoute.value;
-  const query = { ...route.query };
-  query.tab = 'tests';
-  delete query.test;
+  const query = trainingTestsQuery(route.query);
 
   return { label: `${props.sourceName} › ${t('results.tests')}`, to: router.resolve({ path: route.path, query, hash: route.hash }).href };
 });
 
 function removeInvalidTest() {
   const route = router.currentRoute.value;
-  const query = { ...route.query };
-  delete query.test;
+  const query = trainingTestsQuery(route.query);
   void router.replace({ path: route.path, query, hash: route.hash });
 }
 

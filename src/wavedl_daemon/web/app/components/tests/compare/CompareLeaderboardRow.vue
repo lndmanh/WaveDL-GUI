@@ -5,7 +5,7 @@ import { finiteMetric } from '../../../lib/evaluation-scorecard';
 import { axisPosition, compareNumber } from '../../../lib/test-compare';
 import type { HeadlineMetric } from '../../../lib/test-compare';
 import { pathName } from '../../../lib/run-overview';
-import { parentTitle } from '../../../lib/test-runs';
+import { checkpointLabel, parentTitle } from '../../../lib/test-runs';
 import { cn } from '../../../lib/utils';
 const props = defineProps<{
   entry: ComparedTest;
@@ -18,6 +18,14 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ hover: [id: string | null]; jump: [id: string] }>();
 const { t } = useI18n({ useScope: 'global' });
+const detailLabel = computed(() => {
+  const checkpoint = checkpointLabel(props.entry.run?.summary?.checkpoint);
+
+  return [
+    pathName(props.entry.run?.summary?.data_path) || t('results.unknownDataset'),
+    checkpoint ? t(checkpoint.key, checkpoint.params ?? {}) : null,
+  ].filter(Boolean).join(' · ');
+});
 const cells = computed(() => props.axes.map((axis) => {
   const value = finiteMetric(props.entry.metrics?.[axis.metric]);
   const point = value === null ? null : axisPosition(value, axis.domain, axis.metric);
@@ -31,7 +39,7 @@ const styles = { row: cn('lb-grid relative w-full cursor-pointer gap-3 rounded-l
   <button type="button" :class="styles.row" @click="emit('jump', entry.id)" @mouseenter="emit('hover', entry.id)" @mouseleave="emit('hover', null)" @focus="emit('hover', entry.id)" @blur="emit('hover', null)">
     <motion.span class="pointer-events-none absolute inset-0 rounded-lg" :initial="false" :animate="{ backgroundColor: highlighted ? 'color-mix(in oklab, var(--primary) 9%, transparent)' : 'color-mix(in oklab, var(--primary) 0%, transparent)' }" :transition="{ duration: 0.18 }" />
     <span class="relative text-xs font-semibold text-muted-foreground tabular-nums">{{ rank }}</span>
-    <span class="relative flex min-w-0 items-center gap-2"><span class="size-2.5 shrink-0 rounded-full" :style="{ background: color }" aria-hidden="true" /><span class="min-w-0"><span class="block truncate text-[13px] font-semibold">{{ entry.run ? parentTitle(entry.run) ?? entry.id : entry.id }}</span><span class="block truncate text-[11px] text-muted-foreground">{{ pathName(entry.run?.summary?.data_path) || t('results.unknownDataset') }}<span v-if="entry.id === referenceId" :aria-label="t('results.compare.reference')"> · ★</span></span></span></span>
+    <span class="relative flex min-w-0 items-center gap-2"><span class="size-2.5 shrink-0 rounded-full" :style="{ background: color }" aria-hidden="true" /><span class="min-w-0"><span class="block truncate text-[13px] font-semibold">{{ entry.run ? parentTitle(entry.run) ?? entry.id : entry.id }}</span><span class="block truncate text-[11px] text-muted-foreground" :title="detailLabel">{{ detailLabel }}<span v-if="entry.id === referenceId" :aria-label="t('results.compare.reference')"> · ★</span></span></span></span>
     <span v-for="cell in cells" :key="cell.metric" :class="[styles.cell, { 'mobile-selected': cell.metric === mobileMetric }]">
       <span class="relative h-5" :title="`${cell.label}: ${compareNumber(cell.value)}`" aria-hidden="true">
         <span class="absolute inset-x-0 top-1/2 h-px bg-border" />

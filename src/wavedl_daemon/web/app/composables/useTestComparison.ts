@@ -44,7 +44,7 @@ export function useTestComparison(api: DaemonApi, ids: MaybeRefOrGetter<string[]
       const entry: ComparedTest = { id, run: null, metrics: null, parameters: [], plots: [], error: null };
 
       try {
-        entry.run = await api.getRun(id, controller.signal);
+        entry.run = await api.getRun(id, AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]));
         if (!isCompareEligible(entry.run)) return null;
         entry.metrics = entry.run.evaluation ?? null;
       } catch (error) {
@@ -56,7 +56,7 @@ export function useTestComparison(api: DaemonApi, ids: MaybeRefOrGetter<string[]
 
       let names: string[] = [];
       try {
-        const plan = await api.getRunPlan(id, controller.signal);
+        const plan = await api.getRunPlan(id, AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]));
         names = evaluationPlanContext(plan.preview.spec).parameterNames;
       } catch {
         if (!controller.signal.aborted) entry.error = 'results.compare.detailsFailed';
@@ -68,7 +68,7 @@ export function useTestComparison(api: DaemonApi, ids: MaybeRefOrGetter<string[]
         let complete = false;
 
         for (let index = 0; index < 256; index++) {
-          const page = await api.getEventPage(id, cursor, controller.signal, state.value.health?.daemon_id);
+          const page = await api.getEventPage(id, cursor, AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]), state.value.health?.daemon_id);
           metrics = evaluationResults(entry.run, page.events) ?? metrics;
           cursor = page.next_cursor;
           if (!page.more) { complete = true; break; }

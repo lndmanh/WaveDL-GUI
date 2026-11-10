@@ -97,7 +97,7 @@ function selectCell(event: MouseEvent) {
           </span>
           <span class="sr-only">{{ state }}</span>
         </button>
-        <Badge v-if="kind !== 'evaluation'" variant="secondary" class="max-w-24 truncate text-[0.65rem]" :title="t(runKindMessageKeys[kind])">{{ t(runKindMessageKeys[kind]) }}</Badge>
+        <Badge v-if="kind === 'onnx-export' || kind === 'plot'" variant="secondary" class="max-w-24 truncate text-[0.65rem]" :title="t(runKindMessageKeys[kind])">{{ t(runKindMessageKeys[kind]) }}</Badge>
       </div>
     </td>
     <td v-if="showTrainingRun" class="hidden w-1/4 p-0 sm:table-cell">

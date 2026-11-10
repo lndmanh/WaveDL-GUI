@@ -77,6 +77,7 @@
   "metrics": "Chỉ số",
   "crossValidation": "Kiểm định chéo",
   "metricsPending": "Chỉ số sẽ hiển thị ở đây khi quá trình đánh giá hoàn tất.",
+  "metricsNotProduced": "Lượt đánh giá này không tạo ra chỉ số nào.",
   "unknownDataset": "Không có thông tin bộ dữ liệu",
   "noCheckpoints": "Lượt chạy này chưa lưu điểm kiểm tra nào",
   "checkpointActions": "Thao tác với {path}",

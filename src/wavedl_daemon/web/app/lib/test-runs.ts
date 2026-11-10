@@ -1,3 +1,4 @@
+import type { LocationQuery, LocationQueryRaw } from 'vue-router';
 import { checkpointNameSchema } from '../../shared/schemas/artifacts';
 import type { RunView } from '~~/types/daemon-api';
 
@@ -33,6 +34,13 @@ export function isCompareEligible(run: RunView): boolean {
     !run.uncertainty &&
     run.evaluation != null
   );
+}
+
+export function trainingTestsQuery(query: LocationQuery): LocationQueryRaw {
+  const corrected: LocationQueryRaw = { ...query, tab: 'tests' };
+  delete corrected.test;
+
+  return corrected;
 }
 
 export function testLocation(run: RunView): string {
