@@ -91,24 +91,30 @@ function selectCell(event: MouseEvent) {
           @keydown.up="emit('move', $event, -1)"
         >
           <span class="w-full truncate">{{ dataset }}</span>
-          <span v-if="checkpoint" class="w-full truncate text-[0.7rem] font-normal text-muted-foreground">{{ t(checkpoint.key, checkpoint.params ?? {}) }}</span>
+          <span v-if="checkpoint || (showTrainingRun && parentTitle(run))" class="w-full truncate text-[0.7rem] font-normal text-muted-foreground">
+            <template v-if="checkpoint">{{ t(checkpoint.key, checkpoint.params ?? {}) }}</template>
+            <span v-if="showTrainingRun && parentTitle(run)" class="sm:hidden" :title="parentTitle(run) ?? undefined">{{ checkpoint ? ' · ' : '' }}{{ parentTitle(run) }}</span>
+          </span>
           <span class="sr-only">{{ state }}</span>
         </button>
         <Badge v-if="kind !== 'evaluation'" variant="secondary" class="max-w-24 truncate text-[0.65rem]" :title="t(runKindMessageKeys[kind])">{{ t(runKindMessageKeys[kind]) }}</Badge>
       </div>
     </td>
-    <td v-if="showTrainingRun" class="w-1/4 p-0">
+    <td v-if="showTrainingRun" class="hidden w-1/4 p-0 sm:table-cell">
       <div :class="cn(listRowStyles.cell, 'flex items-center text-muted-foreground')">
         <span class="truncate" :title="parentTitle(run) ?? undefined">{{ parentTitle(run) ?? '–' }}</span>
       </div>
     </td>
-    <td class="w-32 p-0">
+    <td class="p-0" :class="showTrainingRun ? 'w-40' : 'w-32'">
       <div :class="cn(listRowStyles.cell, 'flex flex-col items-end justify-center text-[0.7rem] text-muted-foreground tabular-nums', stale && 'opacity-60')">
         <span v-if="r2 !== null" class="whitespace-nowrap">R² {{ r2.toFixed(3) }}
           <span v-if="delta !== null" :class="delta > 0 ? 'text-success' : delta < 0 ? 'text-destructive' : ''" :title="deltaLabel"><span aria-hidden="true">{{ deltaText }}</span><span class="sr-only">{{ deltaLabel }}</span></span>
         </span>
         <span v-else-if="run.state === 'running'" role="status">{{ progress ?? t('runs.running') }}</span>
-        <time :datetime="created?.toISOString()" :title="created?.toLocaleString(locale)">{{ age }}</time>
+        <span class="whitespace-nowrap">
+          <span v-if="showTrainingRun && run.evaluation?.rmse != null">RMSE {{ run.evaluation.rmse.toFixed(3) }} · </span>
+          <time :datetime="created?.toISOString()" :title="created?.toLocaleString(locale)">{{ age }}</time>
+        </span>
       </div>
     </td>
   </tr>

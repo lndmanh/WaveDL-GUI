@@ -1,4 +1,9 @@
 {
+  "testsPageTitle": "Tests",
+  "filterTrainingRun": "Training run",
+  "filterDataset": "Dataset",
+  "filterStatus": "Status",
+  "noTestsYet": "No tests yet.",
   "evaluateTitle": "Test {name}",
   "evaluateDescription": "Measure how this model performs on new data.",
   "exportTitle": "Export {name} to ONNX",

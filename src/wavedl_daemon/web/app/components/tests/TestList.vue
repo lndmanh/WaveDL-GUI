@@ -12,6 +12,7 @@ const props = defineProps<{
   selectedId: string | null;
   selection: readonly string[];
   showTrainingRun?: boolean;
+  emptyMessage?: string;
   baseline?: TrainingBaseline | null;
   staleRunIds: ReadonlySet<string>;
 }>();
@@ -62,11 +63,21 @@ function move(event: KeyboardEvent, step: -1 | 1) {
         <span class="sr-only">{{ t('results.searchTests') }}</span>
         <Input v-model="query" type="search" class="pl-9" :placeholder="t('results.searchTests')" @keydown.down="enterList" />
       </label>
+      <slot name="filters" />
       <Button type="button" variant="outline" :disabled="!canCompare" @click="emit('compare')">{{ t('results.compareCount', { count: selection.length }) }}</Button>
     </header>
     <div class="min-h-0 overflow-y-auto overscroll-contain rounded-xl border bg-surface" :aria-busy="loading">
       <TooltipProvider>
         <table v-if="visible.length" ref="list" class="w-full table-fixed border-collapse" :aria-label="t('results.tests')">
+          <thead v-if="showTrainingRun" class="border-b text-[0.7rem] text-muted-foreground">
+            <tr>
+              <th scope="col" class="w-9"><span class="sr-only">{{ t('results.compareCount', { count: selection.length }) }}</span></th>
+              <th scope="col" class="w-6"><span class="sr-only">{{ t('runs.columnState') }}</span></th>
+              <th scope="col" class="px-2 py-2 text-left font-medium">{{ t('results.tests') }}</th>
+              <th scope="col" class="hidden w-1/4 px-2 py-2 text-left font-medium sm:table-cell">{{ t('results.filterTrainingRun') }}</th>
+              <th scope="col" class="w-40 px-2 py-2 text-right font-medium">R² · RMSE · {{ t('runs.columnCreated') }}</th>
+            </tr>
+          </thead>
           <tbody>
             <TestListRow
               v-for="run in visible"
@@ -85,7 +96,7 @@ function move(event: KeyboardEvent, step: -1 | 1) {
           </tbody>
         </table>
         <Empty v-else role="status" class="py-10">
-          <EmptyDescription>{{ loading ? t('results.loadingRuns') : runs.length ? t('runs.noMatches') : t('results.noTests') }}</EmptyDescription>
+          <EmptyDescription>{{ loading ? t('results.loadingRuns') : runs.length ? t('runs.noMatches') : emptyMessage ?? t('results.noTests') }}</EmptyDescription>
         </Empty>
       </TooltipProvider>
     </div>

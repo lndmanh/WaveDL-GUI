@@ -1,4 +1,9 @@
 {
+  "testsPageTitle": "Kiểm tra",
+  "filterTrainingRun": "Lượt huấn luyện",
+  "filterDataset": "Bộ dữ liệu",
+  "filterStatus": "Trạng thái",
+  "noTestsYet": "Chưa có lượt kiểm tra nào.",
   "evaluateTitle": "Đánh giá {name}",
   "evaluateDescription": "Đo hiệu quả của mô hình trên dữ liệu mới.",
   "exportTitle": "Xuất {name} sang ONNX",
