@@ -321,18 +321,25 @@ async function useCustom() {
 
 const projectStyles = {
   modelToolbar: cn('flex flex-wrap items-center gap-2'),
+  // Fill the viewport below the sticky pipeline, leaving room for the step header, toolbar and
+  // sticky step nav. The step scrolls into place before the pipeline condenses, so the offset
+  // is sized for that first position and the browser clears the nav. The list is size-contained
+  // so the detail pane, not the list, sets the row height; the list scrolls within that height.
   modelBrowser: cn(
-    'grid grid-cols-[minmax(15rem,_19rem)_minmax(0,_1fr)] min-h-136 overflow-hidden',
-    '[@media(max-width:_48rem)]:grid-cols-1',
+    'grid grid-cols-[minmax(15rem,_19rem)_minmax(0,_1fr)] overflow-hidden',
+    'min-h-[max(24rem,_calc(100dvh_-_var(--run-pipeline-bottom,_0px)_-_22.5rem))]',
+    '[@media(max-width:_48rem)]:grid-cols-1 [@media(max-width:_48rem)]:min-h-0',
   ),
   modelBrowserList: cn(
-    'flex min-h-0 flex-col [border-right:0.5px_solid_color-mix(in_srgb,_var(--foreground)_12%,_transparent)]',
+    'flex min-h-0 flex-col [contain:size] [@media(max-width:_48rem)]:[contain:none]',
+    '[border-right:0.5px_solid_color-mix(in_srgb,_var(--foreground)_12%,_transparent)]',
     '[background:color-mix(in_srgb,_var(--foreground)_2%,_transparent)] [@media(max-width:_48rem)]:[border-right:0]',
     '[@media(max-width:_48rem)]:[border-bottom:0.5px_solid_color-mix(in_srgb,_var(--foreground)_12%,_transparent)]',
   ),
   modelBrowserScroll: cn(
-    'flex-1 max-h-136 overflow-y-auto p-[0.4rem_0.5rem_0.75rem] outline-none',
-    '[&:focus-visible]:shadow-[inset_0_0_0_2px_var(--primary)] [@media(max-width:_48rem)]:max-h-72',
+    'flex-1 min-h-0 overflow-y-auto p-[0.4rem_0.5rem_0.75rem] outline-none',
+    '[&:focus-visible]:shadow-[inset_0_0_0_2px_var(--primary)]',
+    '[@media(max-width:_48rem)]:max-h-[clamp(16rem,_55dvh,_36rem)]',
   ),
   modelBrowserHeading: cn(
     'sticky top-[-0.4rem] z-1 p-[0.75rem_0.6rem_0.3rem] text-muted-foreground text-[0.68rem] font-[650] tracking-[0.06em]',
