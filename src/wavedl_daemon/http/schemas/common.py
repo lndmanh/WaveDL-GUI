@@ -26,14 +26,17 @@ class WireModel(BaseModel):
     )
 
 
-def exact_query(*allowed: str) -> Callable[[Request], None]:
-    """Reject unknown and repeated query keys before route execution."""
+def exact_query(
+    *allowed: str, repeatable: tuple[str, ...] = ()
+) -> Callable[[Request], None]:
+    """Reject unknown query keys and repeats unless explicitly allowed."""
     allowed_keys = frozenset(allowed)
+    repeatable_keys = frozenset(repeatable)
 
     def validate_query(request: Request) -> None:
         query = request.query_params
         if set(query) - allowed_keys or any(
-            len(query.getlist(key)) != 1 for key in query
+            len(query.getlist(key)) != 1 for key in query if key not in repeatable_keys
         ):
             raise HTTPException(400)
 

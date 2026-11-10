@@ -705,7 +705,12 @@ class RunService:
         )
 
     def list(
-        self, limit: int = 50, offset: int = 0, state: str | None = None
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        state: str | None = None,
+        operations: tuple[str, ...] = (),
+        source_run_id: str | None = None,
     ) -> list[RunResponse]:
         self._guard()
         if (
@@ -723,5 +728,11 @@ class RunService:
             raise ValueError("Invalid state filter")
         return [
             self._view(record)
-            for record in self.plans.page(limit=limit, offset=offset, state=state)
+            for record in self.plans.page(
+                limit=limit,
+                offset=offset,
+                state=state,
+                operations=operations,
+                source_run_id=source_run_id,
+            )
         ]

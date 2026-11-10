@@ -28,7 +28,9 @@ from wavedl_daemon.http.schemas.runs import (
     PlanView,
     RunList,
     RunListFilter,
+    RunOperationFilter,
     RunResponse,
+    RunSourceFilter,
     SubmitRequest,
 )
 from wavedl_daemon.storage.ownership import DispatchRequired
@@ -124,9 +126,13 @@ def lifecycle_routes(service: AsyncRunService) -> list[APIRoute]:
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
         offset: Annotated[int, Query(ge=0, le=10000)] = 0,
         state: RunListFilter | None = None,
+        operation: Annotated[list[RunOperationFilter] | None, Query()] = None,
+        source_run_id: Annotated[RunSourceFilter | None, Query()] = None,
     ):
-        """List runs newest first, filtering by state before pagination."""
-        result = await _call(service.list, limit, offset, state)
+        """List runs newest first, applying filters before pagination."""
+        result = await _call(
+            service.list, limit, offset, state, tuple(operation or ()), source_run_id
+        )
         response.headers.update(NO_STORE)
         return {"runs": [item.to_dict() for item in result]}
 
@@ -157,7 +163,18 @@ def lifecycle_routes(service: AsyncRunService) -> list[APIRoute]:
         responses=API_ERRORS,
         methods=["GET", "HEAD"],
         response_model=RunList,
-        dependencies=[Depends(exact_query("limit", "offset", "state"))],
+        dependencies=[
+            Depends(
+                exact_query(
+                    "limit",
+                    "offset",
+                    "state",
+                    "operation",
+                    "source_run_id",
+                    repeatable=("operation",),
+                )
+            )
+        ],
     )
     router.add_api_route(
         "/api/runs/{run_id}/cancel",

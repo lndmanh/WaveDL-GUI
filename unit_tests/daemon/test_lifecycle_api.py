@@ -874,6 +874,158 @@ def test_list_pages_plans_and_filters_before_offset(environment):
     assert third["run_id"] not in [run["run_id"] for run in paged]
 
 
+def test_list_filters_by_operation_before_pagination(environment, tmp_path):
+    app = environment.app
+    source = ended_train_run(environment, "source")
+    checkpoint = (
+        environment.service.settings.run_root / source / "output" / "best_checkpoint"
+    )
+    checkpoint.mkdir(parents=True)
+    older_test = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="older-test",
+    )
+    assert older_test.status_code == 200, older_test.text
+    second_train = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="second-train"
+    )
+    assert second_train.status_code == 200, second_train.text
+    newer_test = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="newer-test",
+    )
+    assert newer_test.status_code == 200, newer_test.text
+    third_train = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="third-train"
+    )
+    assert third_train.status_code == 200, third_train.text
+
+    response = request(app, "GET", "/api/runs?operation=test&limit=1&offset=1")
+    assert response.status_code == 200, response.text
+    assert [run["run_id"] for run in response.json()["runs"]] == [
+        older_test.json()["run_id"]
+    ]
+
+    training = request(app, "GET", "/api/runs?operation=train")
+    assert training.status_code == 200, training.text
+    assert [run["run_id"] for run in training.json()["runs"]] == [
+        third_train.json()["run_id"],
+        second_train.json()["run_id"],
+        source,
+    ]
+    assert all(run["operation"] == "train" for run in training.json()["runs"])
+
+
+def test_list_accepts_repeated_operation(environment, tmp_path):
+    app = environment.app
+    source = ended_train_run(environment, "source")
+    checkpoint = (
+        environment.service.settings.run_root / source / "output" / "best_checkpoint"
+    )
+    checkpoint.mkdir(parents=True)
+    test = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="test",
+    )
+    assert test.status_code == 200, test.text
+    plot = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path, operation="plot"),
+        key="plot",
+    )
+    assert plot.status_code == 200, plot.text
+
+    response = request(app, "GET", "/api/runs?operation=test&operation=plot")
+    assert response.status_code == 200, response.text
+    assert [run["run_id"] for run in response.json()["runs"]] == [
+        plot.json()["run_id"],
+        test.json()["run_id"],
+    ]
+    assert [run["operation"] for run in response.json()["runs"]] == ["plot", "test"]
+
+
+def test_list_filters_by_source_run_id(environment, tmp_path):
+    app = environment.app
+    source_a = ended_train_run(environment, "source-a")
+    source_b = ended_train_run(environment, "source-b")
+    for source in (source_a, source_b):
+        checkpoint = (
+            environment.service.settings.run_root
+            / source
+            / "output"
+            / "best_checkpoint"
+        )
+        checkpoint.mkdir(parents=True)
+    test_a = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source_a, tmp_path),
+        key="test-a",
+    )
+    assert test_a.status_code == 200, test_a.text
+    run_a = test_a.json()["run_id"]
+    submitted = request(
+        app, "POST", "/api/runs", body={"plan_id": test_a.json()["plan_id"]}
+    )
+    assert submitted.status_code == 202, submitted.text
+    tick_until(environment, run_a, lambda view: view.state == "running")
+    environment.supervisor.launches[-1].finish(0)
+    tick_until(environment, run_a, lambda view: view.state == "completed")
+    test_b = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source_b, tmp_path),
+        key="test-b",
+    )
+    assert test_b.status_code == 200, test_b.text
+
+    for query, expected in (
+        (f"source_run_id={source_a}", [run_a]),
+        (f"source_run_id={source_a}&state=completed", [run_a]),
+        (f"source_run_id={source_a}&state=planned", []),
+        (f"source_run_id={source_b}&state=completed", []),
+        (
+            f"source_run_id={source_a}&operation=test&operation=plot&state=completed",
+            [run_a],
+        ),
+        (f"source_run_id={source_a}&operation=train", []),
+        (f"source_run_id={source_a}&limit=1&offset=1", []),
+    ):
+        response = request(app, "GET", f"/api/runs?{query}")
+        assert response.status_code == 200, response.text
+        assert [run["run_id"] for run in response.json()["runs"]] == expected
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "operation=evaluate",
+        "operation=test&operation=evaluate",
+        "source_run_id=not-a-uuid",
+        "source_run_id=AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+        "source_run_id=00000000000000000000000000000000",
+        "source_run_id=00000000-0000-0000-0000-000000000000%0A",
+    ],
+)
+def test_list_rejects_unknown_operation(environment, query):
+    response = request(environment.app, "GET", f"/api/runs?{query}")
+    assert response.status_code == 400
+    assert response.json() == {"error": "Bad request"}
+
+
 def test_live_run_states_match_the_browser_vocabulary():
     from wavedl_daemon.runs.lifecycle import LIVE_RUN_STATES
 
@@ -1281,9 +1433,16 @@ def test_runs_queries_reject_unknown_and_repeated_keys(environment):
         request(app, "GET", "/api/runs?page=1"),
         request(app, "GET", "/api/runs?offset=0&offset=1"),
         request(app, "GET", "/api/runs?state=bogus"),
+        request(app, "GET", "/api/runs?state=planned&state=completed"),
+        request(
+            app,
+            "GET",
+            "/api/runs?source_run_id=00000000-0000-0000-0000-000000000000"
+            "&source_run_id=11111111-1111-1111-1111-111111111111",
+        ),
     ]
 
-    assert [response.status_code for response in responses] == [400] * 4
+    assert [response.status_code for response in responses] == [400] * 6
     assert all(response.json() == {"error": "Bad request"} for response in responses)
 
 
@@ -1318,11 +1477,17 @@ def test_lifecycle_get_routes_support_head(environment):
     run_id = planned.json()["run_id"]
 
     list_response = request(app, "HEAD", "/api/runs")
+    filtered_response = request(
+        app, "HEAD", f"/api/runs?operation=test&operation=plot&source_run_id={run_id}"
+    )
     run_response = request(app, "HEAD", f"/api/runs/{run_id}")
     plan_response = request(app, "HEAD", f"/api/runs/{run_id}/plan")
 
     assert list_response.status_code == 200
     assert list_response.content == b""
+    assert filtered_response.status_code == 200
+    assert filtered_response.content == b""
+    assert filtered_response.headers["cache-control"] == "no-store"
     assert run_response.status_code == 200
     assert run_response.content == b""
     assert plan_response.status_code == 200

@@ -15,6 +15,15 @@ from wavedl_daemon.runs.lifecycle import RunState
 
 RunStateFilter = Literal["planned", *(state.value for state in RunState)]
 RunListFilter = Literal[RunStateFilter, "live"]
+RunOperationFilter = Literal["train", "test", "plot"]
+RunSourceFilter = Annotated[
+    str,
+    Field(
+        min_length=36,
+        max_length=36,
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    ),
+]
 
 
 class RuntimeRequest(WireModel):
