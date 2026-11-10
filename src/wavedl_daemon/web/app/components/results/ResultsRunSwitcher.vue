@@ -131,6 +131,9 @@ function choose(runId: string | null) {
             <div class="flex min-w-0 flex-1 flex-col gap-1">
               <span class="truncate" :title="labels.title(run)">{{ labels.title(run) }}</span>
               <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <Badge variant="secondary" class="text-muted-foreground">{{
+                  labels.operation(run)
+                }}</Badge>
                 <span inert>
                   <RunStateChip :run="run" :stale="staleRunIds.has(run.run_id)" compact />
                 </span>

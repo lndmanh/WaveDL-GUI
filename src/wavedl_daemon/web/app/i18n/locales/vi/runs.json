@@ -19,6 +19,7 @@
   "shortDiagnostics": "Thông báo rút gọn",
   "operationTrain": "Huấn luyện",
   "operationTest": "Đánh giá",
+  "testOf": "Đánh giá · {name}",
   "operationPlot": "Vẽ biểu đồ",
   "kindTraining": "Huấn luyện",
   "kindEvaluation": "Đánh giá",

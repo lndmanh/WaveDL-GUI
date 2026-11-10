@@ -4,6 +4,7 @@ import type { DaemonApiError } from '../app/lib/daemon-api';
 import type { ConnectionSession } from '../app/lib/connection-session';
 import type { AppearancePreferences } from './preferences';
 import type { ConnectionStatus } from './connection-session';
+import type { RunView } from './daemon-api';
 
 export type WorkstationConnection = ReturnType<typeof useDaemonConnection>;
 
@@ -16,7 +17,7 @@ export interface WorkstationContext {
   revision: ComputedRef<number>;
   appearance: ShallowRef<AppearancePreferences>;
   appearanceChanged(value: AppearancePreferences): void;
-  monitorRun(runId: string): Promise<void>;
+  monitorRun(run: RunView): Promise<void>;
 }
 
 export interface WorkstationAuthState {

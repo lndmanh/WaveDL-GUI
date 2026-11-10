@@ -33,7 +33,7 @@ const {
   close,
   pause,
   resume,
-} = useRuns(props.api, (error) => emit('connectionError', error), true);
+} = useRuns(props.api, (error) => emit('connectionError', error), true, { operation: ['train'] });
 
 const { isActive } = usePageActive(resume, () => {
   pause();

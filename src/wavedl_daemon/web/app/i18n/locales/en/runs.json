@@ -19,6 +19,7 @@
   "shortDiagnostics": "Shortened messages",
   "operationTrain": "Train",
   "operationTest": "Test",
+  "testOf": "Test · {name}",
   "operationPlot": "Plot",
   "kindTraining": "Training",
   "kindEvaluation": "Evaluation",

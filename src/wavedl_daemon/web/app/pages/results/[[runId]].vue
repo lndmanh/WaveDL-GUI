@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { DaemonApiError } from '../../lib/daemon-api';
+import { isTestRun, testLocation } from '../../lib/test-runs';
 
 defineOptions({ name: 'WorkstationResultsPage' });
 
 // The kept-alive root: descendants that mount while hidden inherit its state.
-usePageActive();
+const { isActive } = usePageActive();
 
 definePageMeta({
   key: 'results',
@@ -18,15 +19,22 @@ const { state, api, session, reportFailure } = useWorkstation();
 const { runId, select, unknown } = useRunRoute('results');
 
 watch(
-  [runId, api, () => state.value.revision, () => state.value.health?.daemon_id],
-  async ([id, client], _prior, onCleanup) => {
-    if (!id || !client) return;
+  [runId, api, isActive, () => state.value.revision, () => state.value.health?.daemon_id],
+  async ([id, client, active], _prior, onCleanup) => {
+    if (!id || !client || !active) return;
     const controller = new AbortController();
     onCleanup(() => controller.abort());
     const failure = reportFailure.value;
 
     try {
-      await client.getRun(id, AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]));
+      const run = await client.getRun(
+        id,
+        AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+      );
+
+      if (!controller.signal.aborted && isActive.value && isTestRun(run)) {
+        await navigateTo(testLocation(run), { replace: true });
+      }
     } catch (error) {
       if (controller.signal.aborted) return;
 

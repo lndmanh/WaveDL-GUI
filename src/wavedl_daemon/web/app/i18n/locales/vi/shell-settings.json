@@ -15,6 +15,7 @@
   "newTrainingRun": "Lượt huấn luyện mới",
   "datasets": "Tập dữ liệu",
   "results": "Kết quả",
+  "tests": "Đánh giá",
   "connection": "Kết nối",
   "settings": "Cài đặt",
   "executionBelongsToTheDaemon": "Nhập khóa truy cập để bắt đầu.",

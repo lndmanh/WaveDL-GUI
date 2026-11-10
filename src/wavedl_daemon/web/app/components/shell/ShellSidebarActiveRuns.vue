@@ -2,6 +2,8 @@
 import { Activity, ArrowRight, ChevronRight } from '@lucide/vue';
 import { AnimatePresence, motion } from 'motion-v';
 import { ACTIVE_RUNS_VISIBLE } from '../../constants/shellSidebar';
+import { isTestRun, parentTitle } from '../../lib/test-runs';
+import type { RunView } from '~~/types/daemon-api';
 import ShellSidebarItem from './ShellSidebarItem.vue';
 import type { WorkstationSection } from '~~/types/shell';
 
@@ -19,7 +21,9 @@ const transition = computed(() => ({ duration: reducedMotion.value ? 0 : 0.2 }))
 
 const visibleRuns = computed(() =>
   runs.value.slice(0, ACTIVE_RUNS_VISIBLE).map((run) => {
-    const label = labels.title(run);
+    const label = isTestRun(run)
+      ? t('runs.testOf', { name: parentTitle(run) ?? labels.title(run) })
+      : labels.title(run);
 
     const detail = run.progress
       ? t('runs.epoch', { epoch: run.progress.epoch, total: run.progress.totalEpochs })
@@ -31,9 +35,9 @@ const visibleRuns = computed(() =>
   }),
 );
 
-function selectRun(runId: string): void {
+function selectRun(run: RunView): void {
   emit('dismiss');
-  monitorRun(runId);
+  void monitorRun(run);
 }
 </script>
 
@@ -78,7 +82,7 @@ function selectRun(runId: string): void {
                   variant="ghost"
                   class="shell-sidebar-row shell-sidebar-run"
                   :aria-label="item.tooltip"
-                  @click="selectRun(item.run.run_id)"
+                  @click="selectRun(item.run)"
                 >
                   <span class="shell-sidebar-icon" aria-hidden="true">
                     <svg class="shell-sidebar-run-ring size-5" viewBox="0 0 24 24">

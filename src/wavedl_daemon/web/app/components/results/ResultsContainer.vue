@@ -44,8 +44,20 @@ const {
   refresh: refreshRuns,
   pause,
   resume,
-} = useRuns(props.api, (error) => emit('connectionError', error), true);
+} = useRuns(props.api, (error) => emit('connectionError', error), true, { operation: ['train'] });
 
+const {
+  runs: evaluationRuns,
+  staleRunIds: staleEvaluationIds,
+  refresh: refreshEvaluations,
+  pause: pauseEvaluations,
+  resume: resumeEvaluations,
+} = useRuns(props.api, (error) => emit('connectionError', error), true, {
+  operation: ['test', 'plot'],
+  sourceRunId: () => props.runId,
+});
+
+usePageActive(resumeEvaluations, pauseEvaluations);
 const { isActive } = usePageActive(resume, pause);
 const root = useTemplateRef<HTMLElement>('root');
 const { width } = useElementSize(() => (isActive.value ? root.value : null));
@@ -90,7 +102,9 @@ const runName = computed(() =>
 );
 
 const evaluations = computed(() =>
-  resultRuns.value.filter((run) => run.summary?.source_run_id === props.runId),
+  evaluationRuns.value.filter(
+    (run) => run.state !== 'planned' && run.summary?.source_run_id === props.runId,
+  ),
 );
 
 watch(
@@ -114,7 +128,7 @@ function openEvaluation(checkpoint?: string, mode: 'evaluate' | 'export' = 'eval
 // Stay on this run's results: the new evaluation appears in the Evaluations tab, newest first.
 function evaluationStarted() {
   tab.value = 'evaluations';
-  void refreshRuns(0);
+  void refreshEvaluations(0);
 }
 
 function choose(runId: string | null) {
@@ -343,7 +357,7 @@ watch(hasCvSummary, (available) => {
             :runs="evaluations"
             :now="now"
             :can-evaluate="connected && !!inventory.checkpoints.length"
-            :stale-run-ids="staleRunIds"
+            :stale-run-ids="staleEvaluationIds"
             @select="choose"
             @evaluate="openEvaluation()"
           />

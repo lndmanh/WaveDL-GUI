@@ -10,7 +10,7 @@ import { isUuid } from '../../shared/schemas/daemon-api';
  *   siblings of the canvas. Park teleported content when usePageActive() is inactive.
  * - Connection and Settings are pages.
  */
-import { FileChartColumn, Layers, Database, Plus, Cable, Settings2 } from '@lucide/vue';
+import { FileChartColumn, FlaskConical, Layers, Database, Plus, Cable, Settings2 } from '@lucide/vue';
 import { WORKSTATION_SECTIONS } from '../lib/shell-test-ids';
 import type {
   PrimaryWorkstationSection,
@@ -43,6 +43,12 @@ export const SHELL_PRIMARY_NAVIGATION: readonly ShellNavigationDescriptor<Primar
       labelKey: 'shell.results',
       icon: FileChartColumn,
       path: '/results',
+    },
+    {
+      id: WORKSTATION_SECTIONS.tests,
+      labelKey: 'shell.tests',
+      icon: FlaskConical,
+      path: '/tests',
     },
   ];
 
