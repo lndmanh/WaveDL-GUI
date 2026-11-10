@@ -12,8 +12,8 @@ const styles = {
     '[&_.log-text]:min-h-0',
   ),
   tabs: cn('flex min-h-0 flex-1 flex-col gap-3'),
-  tabList: cn('h-auto w-fit max-w-full shrink-0 flex-wrap'),
-  tabTrigger: cn('min-w-0 whitespace-normal'),
+  tabList: cn('shrink-0'),
+  tabTrigger: cn('h-auto flex-1 whitespace-normal'),
   content: cn('flex min-h-0 flex-1 flex-col gap-3 data-[state=inactive]:hidden'),
   text: cn(
     'log-text whitespace-pre-wrap wrap-anywhere max-h-104 overflow-auto',

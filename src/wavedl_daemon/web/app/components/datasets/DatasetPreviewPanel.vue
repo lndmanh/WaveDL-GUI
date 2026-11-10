@@ -156,8 +156,8 @@ const matrices = computed(
         />
       </div>
       <Tabs :model-value="activeTab" @update:model-value="selectTab">
-        <TabsList class="flex h-auto flex-wrap" :aria-label="t('datasets.previewView')">
-          <TabsTrigger v-for="[key, label] in tabs" :key="key" :value="key">{{
+        <TabsList class="flex" :aria-label="t('datasets.previewView')">
+          <TabsTrigger v-for="[key, label] in tabs" :key="key" :value="key" class="h-auto min-w-auto flex-1">{{
             t(label)
           }}</TabsTrigger>
         </TabsList>

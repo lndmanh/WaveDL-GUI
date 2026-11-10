@@ -28,7 +28,7 @@ const layoutGroupId = useId()
       data-slot="tabs-list"
       v-bind="{ ...delegatedProps, ...$attrs }"
       :class="cn(
-        'bg-muted text-muted-foreground relative inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]',
+        'bg-muted text-muted-foreground relative inline-flex h-auto min-h-9 w-fit max-w-full flex-wrap items-center justify-center rounded-lg p-[3px]',
         props.class,
       )"
     >
