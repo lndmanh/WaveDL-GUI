@@ -1,8 +1,14 @@
 import { isUuid } from '../../shared/schemas/daemon-api';
 import { sectionPath } from '../shell/sections';
+import { isTestRun, testLocation } from '../lib/test-runs';
+import type { MaybeRefOrGetter } from 'vue';
+import type { RunView } from '~~/types/daemon-api';
 
 /** Route params are the only selection authority; corrections never add history. */
-export function useRunRoute(section: 'experiments' | 'results') {
+export function useRunRoute(
+  section: 'experiments' | 'results',
+  isPageActive: MaybeRefOrGetter<boolean>,
+) {
   const router = useRouter();
   const root = sectionPath(section);
 
@@ -40,5 +46,17 @@ export function useRunRoute(section: 'experiments' | 'results') {
     if (active.value && runId.value === id) void router.replace(root);
   }
 
-  return { runId, select, unknown };
+  function redirectTest(run: RunView): void {
+    if (
+      !active.value ||
+      !toValue(isPageActive) ||
+      runId.value !== run.run_id ||
+      !isTestRun(run)
+    )
+      return;
+
+    void navigateTo(testLocation(run), { replace: true });
+  }
+
+  return { runId, select, unknown, redirectTest };
 }

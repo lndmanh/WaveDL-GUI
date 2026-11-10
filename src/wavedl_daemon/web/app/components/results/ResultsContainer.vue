@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { CircleAlert } from '@lucide/vue';
-import type { DaemonApi, DaemonApiError } from '../../lib/daemon-api';
+import { DaemonApiError } from '../../lib/daemon-api';
+import type { DaemonApi } from '../../lib/daemon-api';
+import type { RunView } from '~~/types/daemon-api';
 import { evaluationResults } from '../../lib/evaluation-results';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
@@ -29,6 +31,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [runId: string | null];
   connectionError: [error: DaemonApiError];
+  runLoaded: [run: RunView];
+  unknownRun: [runId: string];
 }>();
 
 const {
@@ -116,6 +120,22 @@ watch(
     else closeMonitor();
   },
   { immediate: true },
+);
+
+watch([() => monitor.value?.run, isActive], ([run, active]) => {
+  if (active && run && run.run_id === props.runId) emit('runLoaded', run);
+});
+
+watch(
+  () => selectedMonitor.value?.message,
+  (error) => {
+    if (error instanceof DaemonApiError && error.code === 'http' && error.status === 404) {
+      const id = props.runId;
+      closeMonitor();
+
+      if (id) emit('unknownRun', id);
+    }
+  },
 );
 
 function openEvaluation(checkpoint?: string, mode: 'evaluate' | 'export' = 'evaluate') {
