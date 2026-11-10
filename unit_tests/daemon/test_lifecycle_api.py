@@ -351,6 +351,193 @@ def test_a_test_reads_an_ended_runs_checkpoint_in_place(environment, tmp_path):
     assert len(environment.supervisor.launches) == 1
 
 
+def test_test_run_summary_names_checkpoint_and_source(environment, tmp_path):
+    app = environment.app
+    body = payload()
+    body["config"]["run_name"] = "resnet-lr3"
+    planned = request(app, "POST", "/api/runs/plan", body=body, key="source").json()
+    source = planned["run_id"]
+    request(app, "POST", "/api/runs", body={"plan_id": planned["plan_id"]})
+    tick_until(environment, source, lambda view: view.state == "running")
+    environment.supervisor.launches[-1].finish(0)
+    tick_until(environment, source, lambda view: view.state == "completed")
+    checkpoint = environment.service.layout(source).output / "best_checkpoint"
+    checkpoint.mkdir(parents=True)
+    planned_test = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="test",
+    ).json()
+    view = request(app, "GET", f"/api/runs/{planned_test['run_id']}").json()
+    assert view["summary"]["checkpoint"] == "best_checkpoint"
+    assert view["summary"]["source_name"] == "resnet-lr3"
+    source_config = environment.plans.by_run(source).plan.spec.resolved_config
+    assert view["summary"]["source_model"] == source_config["model"]
+    train = request(app, "GET", f"/api/runs/{source}").json()
+    for field in ("checkpoint", "source_name", "source_model"):
+        assert train["summary"][field] is None
+
+
+def test_test_run_summary_tolerates_missing_source_plan(
+    environment, tmp_path, monkeypatch
+):
+    source = ended_train_run(environment, "source")
+    (environment.service.layout(source).output / "best_checkpoint").mkdir(parents=True)
+    planned = request(
+        environment.app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="test",
+    ).json()
+    by_run = environment.plans.by_run
+
+    def lookup(run_id):
+        return None if run_id == source else by_run(run_id)
+
+    monkeypatch.setattr(environment.plans, "by_run", lookup)
+    view = request(environment.app, "GET", f"/api/runs/{planned['run_id']}").json()
+    assert view["summary"]["source_run_id"] == source
+    assert view["summary"]["checkpoint"] == "best_checkpoint"
+    assert view["summary"]["source_name"] is None
+    assert view["summary"]["source_model"] is None
+
+
+def test_completed_test_run_view_reports_evaluation_headline(environment, tmp_path):
+    app = environment.app
+    source = ended_train_run(environment, "source")
+    (environment.service.layout(source).output / "best_checkpoint").mkdir(parents=True)
+    planned = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="test",
+    ).json()
+    run_id = planned["run_id"]
+    assert request(app, "GET", f"/api/runs/{run_id}").json()["evaluation"] is None
+    request(app, "POST", "/api/runs", body={"plan_id": planned["plan_id"]})
+    view = tick_until(environment, run_id, lambda view: view.state == "running")
+    assert request(app, "GET", f"/api/runs/{run_id}").json()["evaluation"] is None
+    environment.service.layout(run_id).evaluation(view.attempt).write_text(
+        json.dumps(
+            {
+                "r2_score": 0.981,
+                "rmse": 0.042,
+                "mae_avg": 0.031,
+                "pearson_corr": 0.99,
+                "r2_p0": 0.99,
+            }
+        )
+    )
+    environment.supervisor.launches[-1].finish(0)
+    tick_until(environment, run_id, lambda view: view.state == "completed")
+    expected = {
+        "r2_score": 0.981,
+        "rmse": 0.042,
+        "mae_avg": 0.031,
+        "pearson_corr": 0.99,
+        "relative_l2": None,
+    }
+    assert request(app, "GET", f"/api/runs/{run_id}").json()["evaluation"] == expected
+    listed = request(app, "GET", "/api/runs").json()["runs"]
+    assert (
+        next(run for run in listed if run["run_id"] == run_id)["evaluation"] == expected
+    )
+    assert next(run for run in listed if run["run_id"] == source)["evaluation"] is None
+
+
+def test_filtered_evaluation_queries_only_the_returned_completed_test_page(
+    environment, tmp_path, monkeypatch
+):
+    app = environment.app
+    source = ended_train_run(environment, "source")
+    (environment.service.layout(source).output / "best_checkpoint").mkdir(parents=True)
+    tests = []
+    for index in range(5):
+        planned = request(
+            app,
+            "POST",
+            "/api/runs/plan",
+            body=from_checkpoint(source, tmp_path),
+            key=f"test-{index}",
+        ).json()
+        tests.append(planned["run_id"])
+        request(app, "POST", "/api/runs", body={"plan_id": planned["plan_id"]})
+        tick_until(environment, tests[-1], lambda view: view.state == "running")
+        if index < 3:
+            environment.supervisor.launches[-1].finish(0)
+            tick_until(environment, tests[-1], lambda view: view.state == "completed")
+        elif index == 4:
+            environment.supervisor.launches[-1].finish(1)
+            tick_until(environment, tests[-1], lambda view: view.state == "failed")
+    calls = []
+    latest = environment.log.latest_evaluation
+
+    def lookup(run_id, attempt):
+        calls.append((run_id, attempt))
+        return latest(run_id, attempt)
+
+    monkeypatch.setattr(environment.log, "latest_evaluation", lookup)
+    response = request(
+        app, "GET", "/api/runs?operation=test&state=completed&limit=1&offset=1"
+    )
+    assert response.status_code == 200
+    assert [run["run_id"] for run in response.json()["runs"]] == [tests[1]]
+    assert response.json()["runs"][0]["evaluation"] is None
+    assert calls == [(tests[1], 1)]
+    calls.clear()
+    response = request(app, "GET", "/api/runs?state=running")
+    assert [run["run_id"] for run in response.json()["runs"]] == [tests[3]]
+    assert response.json()["runs"][0]["evaluation"] is None
+    assert calls == []
+    response = request(app, "GET", "/api/runs?state=failed")
+    assert [run["run_id"] for run in response.json()["runs"]] == [tests[4]]
+    assert response.json()["runs"][0]["evaluation"] is None
+    assert calls == []
+    response = request(app, "GET", "/api/runs?operation=train")
+    assert [run["run_id"] for run in response.json()["runs"]] == [source]
+    assert calls == []
+
+
+def test_list_looks_up_each_distinct_source_plan_once(
+    environment, tmp_path, monkeypatch
+):
+    app = environment.app
+    sources = [ended_train_run(environment, f"source-{index}") for index in range(2)]
+    for source in sources:
+        (environment.service.layout(source).output / "best_checkpoint").mkdir(
+            parents=True
+        )
+        for index in range(3):
+            response = request(
+                app,
+                "POST",
+                "/api/runs/plan",
+                body=from_checkpoint(source, tmp_path),
+                key=f"test-{source}-{index}",
+            )
+            assert response.status_code == 200, response.text
+    calls = []
+    by_run = environment.plans.by_run
+
+    def lookup(run_id):
+        calls.append(run_id)
+        return by_run(run_id)
+
+    monkeypatch.setattr(environment.plans, "by_run", lookup)
+    response = request(app, "GET", "/api/runs")
+    assert response.status_code == 200
+    assert len(response.json()["runs"]) == 8
+    assert sorted(calls) == sorted(sources)
+    calls.clear()
+    response = request(app, "GET", "/api/runs?operation=train")
+    assert len(response.json()["runs"]) == 2
+    assert calls == []
+
+
 def test_a_slurm_test_gets_the_checkpoint_through_the_storage_map(
     environment, tmp_path
 ):
@@ -874,6 +1061,158 @@ def test_list_pages_plans_and_filters_before_offset(environment):
     assert third["run_id"] not in [run["run_id"] for run in paged]
 
 
+def test_list_filters_by_operation_before_pagination(environment, tmp_path):
+    app = environment.app
+    source = ended_train_run(environment, "source")
+    checkpoint = (
+        environment.service.settings.run_root / source / "output" / "best_checkpoint"
+    )
+    checkpoint.mkdir(parents=True)
+    older_test = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="older-test",
+    )
+    assert older_test.status_code == 200, older_test.text
+    second_train = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="second-train"
+    )
+    assert second_train.status_code == 200, second_train.text
+    newer_test = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="newer-test",
+    )
+    assert newer_test.status_code == 200, newer_test.text
+    third_train = request(
+        app, "POST", "/api/runs/plan", body=payload(), key="third-train"
+    )
+    assert third_train.status_code == 200, third_train.text
+
+    response = request(app, "GET", "/api/runs?operation=test&limit=1&offset=1")
+    assert response.status_code == 200, response.text
+    assert [run["run_id"] for run in response.json()["runs"]] == [
+        older_test.json()["run_id"]
+    ]
+
+    training = request(app, "GET", "/api/runs?operation=train")
+    assert training.status_code == 200, training.text
+    assert [run["run_id"] for run in training.json()["runs"]] == [
+        third_train.json()["run_id"],
+        second_train.json()["run_id"],
+        source,
+    ]
+    assert all(run["operation"] == "train" for run in training.json()["runs"])
+
+
+def test_list_accepts_repeated_operation(environment, tmp_path):
+    app = environment.app
+    source = ended_train_run(environment, "source")
+    checkpoint = (
+        environment.service.settings.run_root / source / "output" / "best_checkpoint"
+    )
+    checkpoint.mkdir(parents=True)
+    test = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path),
+        key="test",
+    )
+    assert test.status_code == 200, test.text
+    plot = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source, tmp_path, operation="plot"),
+        key="plot",
+    )
+    assert plot.status_code == 200, plot.text
+
+    response = request(app, "GET", "/api/runs?operation=test&operation=plot")
+    assert response.status_code == 200, response.text
+    assert [run["run_id"] for run in response.json()["runs"]] == [
+        plot.json()["run_id"],
+        test.json()["run_id"],
+    ]
+    assert [run["operation"] for run in response.json()["runs"]] == ["plot", "test"]
+
+
+def test_list_filters_by_source_run_id(environment, tmp_path):
+    app = environment.app
+    source_a = ended_train_run(environment, "source-a")
+    source_b = ended_train_run(environment, "source-b")
+    for source in (source_a, source_b):
+        checkpoint = (
+            environment.service.settings.run_root
+            / source
+            / "output"
+            / "best_checkpoint"
+        )
+        checkpoint.mkdir(parents=True)
+    test_a = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source_a, tmp_path),
+        key="test-a",
+    )
+    assert test_a.status_code == 200, test_a.text
+    run_a = test_a.json()["run_id"]
+    submitted = request(
+        app, "POST", "/api/runs", body={"plan_id": test_a.json()["plan_id"]}
+    )
+    assert submitted.status_code == 202, submitted.text
+    tick_until(environment, run_a, lambda view: view.state == "running")
+    environment.supervisor.launches[-1].finish(0)
+    tick_until(environment, run_a, lambda view: view.state == "completed")
+    test_b = request(
+        app,
+        "POST",
+        "/api/runs/plan",
+        body=from_checkpoint(source_b, tmp_path),
+        key="test-b",
+    )
+    assert test_b.status_code == 200, test_b.text
+
+    for query, expected in (
+        (f"source_run_id={source_a}", [run_a]),
+        (f"source_run_id={source_a}&state=completed", [run_a]),
+        (f"source_run_id={source_a}&state=planned", []),
+        (f"source_run_id={source_b}&state=completed", []),
+        (
+            f"source_run_id={source_a}&operation=test&operation=plot&state=completed",
+            [run_a],
+        ),
+        (f"source_run_id={source_a}&operation=train", []),
+        (f"source_run_id={source_a}&limit=1&offset=1", []),
+    ):
+        response = request(app, "GET", f"/api/runs?{query}")
+        assert response.status_code == 200, response.text
+        assert [run["run_id"] for run in response.json()["runs"]] == expected
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "operation=evaluate",
+        "operation=test&operation=evaluate",
+        "source_run_id=not-a-uuid",
+        "source_run_id=AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+        "source_run_id=00000000000000000000000000000000",
+        "source_run_id=00000000-0000-0000-0000-000000000000%0A",
+    ],
+)
+def test_list_rejects_unknown_operation(environment, query):
+    response = request(environment.app, "GET", f"/api/runs?{query}")
+    assert response.status_code == 400
+    assert response.json() == {"error": "Bad request"}
+
+
 def test_live_run_states_match_the_browser_vocabulary():
     from wavedl_daemon.runs.lifecycle import LIVE_RUN_STATES
 
@@ -1157,6 +1496,9 @@ def test_runs_carry_creation_time_and_approved_inputs(environment):
         "epochs",
         "cv",
         "source_run_id",
+        "checkpoint",
+        "source_name",
+        "source_model",
         "plot",
         "export",
     }
@@ -1281,9 +1623,16 @@ def test_runs_queries_reject_unknown_and_repeated_keys(environment):
         request(app, "GET", "/api/runs?page=1"),
         request(app, "GET", "/api/runs?offset=0&offset=1"),
         request(app, "GET", "/api/runs?state=bogus"),
+        request(app, "GET", "/api/runs?state=planned&state=completed"),
+        request(
+            app,
+            "GET",
+            "/api/runs?source_run_id=00000000-0000-0000-0000-000000000000"
+            "&source_run_id=11111111-1111-1111-1111-111111111111",
+        ),
     ]
 
-    assert [response.status_code for response in responses] == [400] * 4
+    assert [response.status_code for response in responses] == [400] * 6
     assert all(response.json() == {"error": "Bad request"} for response in responses)
 
 
@@ -1318,11 +1667,17 @@ def test_lifecycle_get_routes_support_head(environment):
     run_id = planned.json()["run_id"]
 
     list_response = request(app, "HEAD", "/api/runs")
+    filtered_response = request(
+        app, "HEAD", f"/api/runs?operation=test&operation=plot&source_run_id={run_id}"
+    )
     run_response = request(app, "HEAD", f"/api/runs/{run_id}")
     plan_response = request(app, "HEAD", f"/api/runs/{run_id}/plan")
 
     assert list_response.status_code == 200
     assert list_response.content == b""
+    assert filtered_response.status_code == 200
+    assert filtered_response.content == b""
+    assert filtered_response.headers["cache-control"] == "no-store"
     assert run_response.status_code == 200
     assert run_response.content == b""
     assert plan_response.status_code == 200
@@ -1438,6 +1793,9 @@ def test_run_wire_contract_has_no_placeholder_defaults():
         assert "default" not in plan["properties"][field]
     run = RunResponse.model_json_schema()
     assert set(run["required"]) == set(run["properties"])
+    evaluation = run["$defs"]["RunEvaluationView"]
+    assert set(evaluation["required"]) == set(evaluation["properties"])
+    assert all("default" not in field for field in evaluation["properties"].values())
 
 
 def test_response_models_preserve_populated_evidence_bodies(environment):

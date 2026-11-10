@@ -360,6 +360,33 @@ def test_latest_epoch_metric_selects_sequence_and_excludes_evaluation(log):
     assert log.latest_epoch_metric(RUN, 2) is None
 
 
+def test_latest_evaluation_is_scoped_to_run_and_attempt(log):
+    run = RunRef(
+        RUN, PlanId("plan-test"), BackendKind.SLURM, Operation.TEST, Path("/runs/test")
+    )
+    head = start(log, run)
+    assert log.latest_evaluation(RUN, 1) is None
+    latest = Evaluation({"r2_score": 0.981})
+    head = log.append(
+        RUN,
+        [Evaluation({"r2_score": 0.9}), latest, Metric(2, {"rmse": 1.0}, 40)],
+        expect=Expect(revision=head.revision),
+    )
+    assert log.latest_evaluation(RUN, 1) == latest
+    assert log.latest_evaluation(RunId("other-run"), 1) is None
+    assert log.latest_evaluation(RUN, 2) is None
+    head = log.append(
+        RUN,
+        [Exited(Outcome.REQUEUED, False), AttemptOpened("requeue", 1)],
+        expect=Expect(revision=head.revision),
+    )
+    assert log.latest_evaluation(RUN, head.attempt) is None
+    second = Evaluation({"rmse": 0.042})
+    log.append(RUN, [second], expect=Expect(offset=(2, 0)))
+    assert log.latest_evaluation(RUN, 2) == second
+    assert log.latest_evaluation(RUN, 1) == latest
+
+
 def test_latest_epoch_metric_does_not_reuse_the_previous_attempt(log):
     head = start(log)
     first = Metric(8, {"total_epochs": 10}, 20)

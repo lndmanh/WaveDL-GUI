@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { CircleAlert } from '@lucide/vue';
-import type { DaemonApi, DaemonApiError } from '../../lib/daemon-api';
+import { DaemonApiError } from '../../lib/daemon-api';
+import type { DaemonApi } from '../../lib/daemon-api';
+import type { RunView } from '~~/types/daemon-api';
 import { evaluationResults } from '../../lib/evaluation-results';
+import { trainingTestsQuery } from '../../lib/test-runs';
+import { trainingBaseline } from '../../lib/evaluation-scorecard';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 import type { Artifact } from '~~/types/artifact-client';
@@ -29,6 +33,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [runId: string | null];
   connectionError: [error: DaemonApiError];
+  runLoaded: [run: RunView];
+  unknownRun: [runId: string];
 }>();
 
 const {
@@ -44,7 +50,7 @@ const {
   refresh: refreshRuns,
   pause,
   resume,
-} = useRuns(props.api, (error) => emit('connectionError', error), true);
+} = useRuns(props.api, (error) => emit('connectionError', error), true, { operation: ['train'] });
 
 const { isActive } = usePageActive(resume, pause);
 const root = useTemplateRef<HTMLElement>('root');
@@ -62,7 +68,27 @@ usePageActive(() => {
 }, clock.pause);
 
 const now = clock.now;
-const tab = shallowRef<string | number>('files');
+const tab = computed<string | number>({
+  get() {
+    const query = router.currentRoute.value.query;
+
+    if (isTraining.value && (query.test || query.tab === 'tests')) return 'tests';
+
+    if (query.tab === 'cv' && hasCvSummary.value) return 'cv';
+
+    if (isEvaluation.value && query.tab !== 'files') return 'metrics';
+
+    return 'files';
+  },
+  set(value) {
+    if (!isActive.value) return;
+    const route = router.currentRoute.value;
+    const query = { ...route.query };
+    query.tab = String(value);
+    delete query.test;
+    void router.push({ path: route.path, query, hash: route.hash });
+  },
+});
 const dialogOpen = shallowRef(false);
 
 usePageActive(undefined, () => {
@@ -89,9 +115,26 @@ const runName = computed(() =>
   selectedRun.value ? labels.title(selectedRun.value) : (props.runId ?? ''),
 );
 
-const evaluations = computed(() =>
-  resultRuns.value.filter((run) => run.summary?.source_run_id === props.runId),
-);
+const {
+  runs: testRuns,
+  loading: testsLoading,
+  page: testsPage,
+  staleRunIds: staleTestIds,
+  message: testsMessage,
+  refresh: refreshTests,
+} = useTestRuns(props.api, (error) => emit('connectionError', error), {
+  sourceRunId: () => selectedRun.value?.operation === 'train' ? props.runId : null,
+});
+
+const tests = computed(() => testRuns.value.filter((run) => run.state !== 'planned'));
+const isTraining = computed(() => selectedRun.value?.operation === 'train');
+const baseline = computed(() => {
+  const snapshot = monitor.value;
+
+  return snapshot?.run?.run_id === props.runId && snapshot.freshness === 'fresh'
+    ? trainingBaseline(snapshot.metrics)
+    : null;
+});
 
 watch(
   () => props.runId,
@@ -104,6 +147,22 @@ watch(
   { immediate: true },
 );
 
+watch([() => monitor.value?.run, isActive], ([run, active]) => {
+  if (active && run && run.run_id === props.runId) emit('runLoaded', run);
+});
+
+watch(
+  () => selectedMonitor.value?.message,
+  (error) => {
+    if (error instanceof DaemonApiError && error.code === 'http' && error.status === 404) {
+      const id = props.runId;
+      closeMonitor();
+
+      if (id) emit('unknownRun', id);
+    }
+  },
+);
+
 function openEvaluation(checkpoint?: string, mode: 'evaluate' | 'export' = 'evaluate') {
   if (!isActive.value) return;
   selectedCheckpoint.value = checkpoint;
@@ -111,10 +170,11 @@ function openEvaluation(checkpoint?: string, mode: 'evaluate' | 'export' = 'eval
   dialogOpen.value = true;
 }
 
-// Stay on this run's results: the new evaluation appears in the Evaluations tab, newest first.
+// Submission adds a row, never opens it or selects it for comparison.
 function evaluationStarted() {
-  tab.value = 'evaluations';
-  void refreshRuns(0);
+  const route = router.currentRoute.value;
+  void router.replace({ path: route.path, query: trainingTestsQuery(route.query), hash: route.hash });
+  void refreshTests(0);
 }
 
 function choose(runId: string | null) {
@@ -160,6 +220,7 @@ watch(
       !runId ||
       route.path !== `/results/${runId}` ||
       route.query.evaluate !== 'best_checkpoint' ||
+      selectedRun.value?.operation !== 'train' ||
       !items.checkpoints.length
     )
       return;
@@ -189,18 +250,6 @@ const metricsReady = computed(() => {
 const hasCvSummary = computed(() =>
   inventory.value.files.some((artifact) => artifact.path === 'cv_summary.json'),
 );
-
-watch(
-  [() => props.runId, isEvaluation],
-  ([, evaluation]) => {
-    tab.value = evaluation ? 'metrics' : 'files';
-  },
-  { immediate: true },
-);
-
-watch(hasCvSummary, (available) => {
-  if (!available && tab.value === 'cv') tab.value = 'files';
-});
 </script>
 <template>
   <section ref="root" :class="styles.root" aria-labelledby="results-title">
@@ -212,7 +261,7 @@ watch(hasCvSummary, (available) => {
         <InfoChip :label="t('results.exactIdentity')" :text="t('results.resultsHelp')" />
       </div>
       <div v-if="runId" :class="styles.actions">
-        <TooltipProvider>
+        <TooltipProvider v-if="isTraining">
           <Tooltip>
             <TooltipTrigger as-child>
               <span
@@ -224,7 +273,7 @@ watch(hasCvSummary, (available) => {
                   type="button"
                   :disabled="!connected || !inventory.checkpoints.length"
                   @click="openEvaluation()"
-                  >{{ t('results.evaluate') }}</Button
+                  >{{ t('results.testAction') }}</Button
                 >
               </span>
             </TooltipTrigger>
@@ -288,10 +337,10 @@ watch(hasCvSummary, (available) => {
         <TabsList :aria-label="t('results.resultViews')" class="shrink-0">
           <TabsTrigger v-if="isEvaluation" value="metrics">{{ t('results.metrics') }}</TabsTrigger>
           <TabsTrigger value="files">{{ t('results.files') }}</TabsTrigger>
-          <TabsTrigger value="evaluations"
-            >{{ t('results.evaluations')
+          <TabsTrigger v-if="isTraining" value="tests"
+            >{{ t('results.tests')
             }}<Badge variant="secondary" class="ml-1.5 tabular-nums">{{
-              evaluations.length
+              tests.length
             }}</Badge></TabsTrigger
           >
           <TabsTrigger v-if="hasCvSummary" value="cv">{{
@@ -321,7 +370,7 @@ watch(hasCvSummary, (available) => {
             :images="images"
             :animate-entry="!shownFiles.has(runId)"
             :checkpoints="inventory.checkpoints"
-            checkpoint-actions
+            :checkpoint-actions="isTraining"
             fill
             @evaluate="openEvaluation($event)"
             @export="openEvaluation($event, 'export')"
@@ -338,14 +387,20 @@ watch(hasCvSummary, (available) => {
             :artifacts="inventory.files"
           />
         </TabsContent>
-        <TabsContent value="evaluations" :class="styles.scrollTab">
-          <EvaluationRunList
-            :runs="evaluations"
+        <TabsContent v-if="isTraining" value="tests" class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          <Alert v-if="testsMessage" variant="warning" role="status"><AlertDescription>{{ clientMessage(testsMessage) }}</AlertDescription></Alert>
+          <TrainingRunTests
+            :api="api"
+            :session="session"
+            :source-run-id="runId"
+            :source-name="runName"
+            :runs="tests"
+            :loading="testsLoading"
+            :page="testsPage"
+            :stale-run-ids="staleTestIds"
             :now="now"
-            :can-evaluate="connected && !!inventory.checkpoints.length"
-            :stale-run-ids="staleRunIds"
-            @select="choose"
-            @evaluate="openEvaluation()"
+            :baseline="baseline"
+            @refresh="refreshTests"
           />
         </TabsContent>
       </Tabs>
@@ -357,7 +412,7 @@ watch(hasCvSummary, (available) => {
         @download="consume"
       />
       <EvaluateDialog
-        v-if="connected && isActive"
+        v-if="connected && isActive && isTraining"
         :key="`${runId}:${scopeGeneration}`"
         v-model:open="dialogOpen"
         :session="session"

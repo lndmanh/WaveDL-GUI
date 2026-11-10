@@ -154,6 +154,11 @@ export function runFilterOf(run: RunView): Exclude<RunFilter, 'all'> | null {
   return run.state === 'completed' ? 'completed' : null;
 }
 
+export function shouldPollRuns(runs: readonly RunView[]): boolean {
+  // A just-submitted run can be temporarily unobservable before its worker publishes evidence.
+  return runs.some((run) => runFilterOf(run) === 'live' || (run.state !== 'planned' && run.uncertainty));
+}
+
 export function runCounts(runs: readonly RunView[]): Record<RunFilter, number> {
   const counts: Record<RunFilter, number> = {
     all: runs.length,

@@ -303,9 +303,14 @@ class AsyncRunService:
         return await self._call("get_plan", run_id)
 
     async def list(
-        self, limit: int = 50, offset: int = 0, state: str | None = None
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        state: str | None = None,
+        operations: tuple[str, ...] = (),
+        source_run_id: str | None = None,
     ) -> list[RunResponse]:
-        return await self._call("list", limit, offset, state)
+        return await self._call("list", limit, offset, state, operations, source_run_id)
 
     async def layout(self, run_id: str) -> RunPaths:
         return await self._call("layout", run_id)

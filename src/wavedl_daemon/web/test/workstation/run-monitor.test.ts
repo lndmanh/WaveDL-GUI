@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { computed, effectScope, onScopeDispose, shallowRef, watch } from 'vue';
+import { computed, effectScope, nextTick, onScopeDispose, shallowRef, toValue, watch } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import { useRuns } from '../../app/composables/useRuns';
 import { canRequestCancellation, eventDiagnostic, RunMonitor } from '../../app/lib/run-monitor';
@@ -1062,6 +1062,7 @@ describe('kept-alive experiments list', () => {
     vi.stubGlobal('computed', computed);
     vi.stubGlobal('shallowRef', shallowRef);
     vi.stubGlobal('watch', watch);
+    vi.stubGlobal('toValue', toValue);
     vi.stubGlobal('onScopeDispose', onScopeDispose);
     vi.stubGlobal('useIntervalFn', useIntervalFn);
   });
@@ -1069,6 +1070,77 @@ describe('kept-alive experiments list', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
+
+  it.each(['ref', 'getter'])(
+    'preserves filters and resets pagination when the source %s changes',
+    async (sourceKind) => {
+      const queries: string[] = [];
+      const api = new DaemonApi('http://127.0.0.1:8765', {}, async (input) => {
+        const url = new URL(String(input));
+        const body =
+          url.pathname === '/api/health'
+            ? { daemon_id: 'daemon-one', build_id: 'build-one', protocol_min: 1, protocol_max: 1 }
+            : { runs: [] };
+
+        if (url.pathname === '/api/runs') queries.push(url.search);
+
+        return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+      });
+      api.setToken('test-session');
+      const source = shallowRef<string | null>(existingId);
+      const scope = effectScope();
+      const runs = scope.run(() =>
+        useRuns(
+          api,
+          (error) => {
+            throw error;
+          },
+          true,
+          {
+            operation: ['test', 'plot'],
+            sourceRunId: sourceKind === 'ref' ? source : () => source.value,
+          },
+        ),
+      );
+
+      if (!runs) throw new Error('Missing runs scope');
+
+      try {
+        expect(queries).toEqual([]);
+        runs.resume();
+        await vi.waitFor(() => expect(runs.loading.value).toBe(false));
+        expect(queries).toEqual([
+          `?limit=50&offset=0&operation=test&operation=plot&source_run_id=${existingId}`,
+        ]);
+        await runs.refresh(50);
+        expect(runs.page.value).toBe(50);
+        expect(queries.at(-1)).toBe(
+          `?limit=50&offset=50&operation=test&operation=plot&source_run_id=${existingId}`,
+        );
+
+        source.value = submittedId;
+        await nextTick();
+        await vi.waitFor(() => expect(runs.loading.value).toBe(false));
+        expect(runs.page.value).toBe(0);
+        expect(queries.at(-1)).toBe(
+          `?limit=50&offset=0&operation=test&operation=plot&source_run_id=${submittedId}`,
+        );
+
+        await runs.refresh(50);
+        runs.pause();
+        const count = queries.length;
+        source.value = null;
+        await nextTick();
+        expect(runs.page.value).toBe(0);
+        expect(queries).toHaveLength(count);
+        runs.resume();
+        await vi.waitFor(() => expect(runs.loading.value).toBe(false));
+        expect(queries.at(-1)).toBe('?limit=50&offset=0&operation=test&operation=plot');
+      } finally {
+        scope.stop();
+      }
+    },
+  );
 
   it.each(['empty', 'completed', 'running'])(
     'loads a submitted run on return to a recently refreshed %s list',

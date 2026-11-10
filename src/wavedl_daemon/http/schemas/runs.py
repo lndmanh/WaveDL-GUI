@@ -15,6 +15,15 @@ from wavedl_daemon.runs.lifecycle import RunState
 
 RunStateFilter = Literal["planned", *(state.value for state in RunState)]
 RunListFilter = Literal[RunStateFilter, "live"]
+RunOperationFilter = Literal["train", "test", "plot"]
+RunSourceFilter = Annotated[
+    str,
+    Field(
+        min_length=36,
+        max_length=36,
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    ),
+]
 
 
 class RuntimeRequest(WireModel):
@@ -115,8 +124,21 @@ class RunSummaryView(WireModel):
     epochs: int | None
     cv: int | None
     source_run_id: str | None
+    checkpoint: str | None
+    source_name: str | None
+    source_model: str | None
     plot: bool
     export: str | None
+
+
+class RunEvaluationView(WireModel):
+    """Published headline metrics for a completed test attempt."""
+
+    r2_score: float | None
+    rmse: float | None
+    mae_avg: float | None
+    pearson_corr: float | None
+    relative_l2: float | None
 
 
 class RunResponse(WireModel):
@@ -137,6 +159,7 @@ class RunResponse(WireModel):
     summary: RunSummaryView | None
     progress: RunProgressView | None
     activity: Literal["starting", "training", "finalizing"] | None
+    evaluation: RunEvaluationView | None
 
 
 class RunList(WireModel):

@@ -556,6 +556,27 @@ describe('malformed response diagnostic compatibility matrix', () => {
 });
 
 describe('run list filters', () => {
+  it('repeats operation filters and sends the source run identity', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      json(new URL(String(url)).pathname === '/api/health' ? health : { runs: [] }),
+    );
+    const api = new DaemonApi(origin, {}, fetcher);
+    api.setToken(token);
+
+    await expect(
+      api.listRuns({ operation: ['test', 'plot'], sourceRunId: matrixId }),
+    ).resolves.toEqual([]);
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(
+      `${origin}/api/runs?limit=50&offset=0&operation=test&operation=plot&source_run_id=${matrixId}`,
+    );
+    await api.listRuns({ operation: 'train', state: 'completed', offset: 50 });
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(
+      `${origin}/api/runs?limit=50&offset=50&state=completed&operation=train`,
+    );
+    await api.listRuns();
+    expect(String(fetcher.mock.lastCall?.[0])).toBe(`${origin}/api/runs?limit=50&offset=0`);
+  });
+
   it('lists live runs with the live state filter', async () => {
     const body = { ...matrixRun, progress: { epoch: 34, total_epochs: 100 } };
 
@@ -571,6 +592,76 @@ describe('run list filters', () => {
     expect(String(fetcher.mock.lastCall?.[0])).toBe(
       `${origin}/api/runs?limit=100&offset=0&state=live`,
     );
+  });
+});
+
+describe.each(['get', 'list'])('test run summary through %s', (method) => {
+  const summary = {
+    name: null,
+    model: null,
+    data_path: 'test.csv',
+    epochs: null,
+    cv: null,
+    source_run_id: matrixId,
+  };
+  const evaluation = {
+    r2_score: 0.95,
+    rmse: 0.1,
+    mae_avg: 0.08,
+    pearson_corr: null,
+    relative_l2: 0.2,
+  };
+
+  it.each([
+    { label: 'older daemon', fields: { summary } },
+    {
+      label: 'settled test',
+      fields: {
+        summary: {
+          ...summary,
+          checkpoint: 'best_checkpoint',
+          source_name: 'Training run',
+          source_model: 'MLP',
+        },
+        evaluation,
+      },
+    },
+    {
+      label: 'null headline and source fields',
+      fields: {
+        summary: { ...summary, checkpoint: null, source_name: null, source_model: null },
+        evaluation: null,
+      },
+    },
+  ])('preserves $label fields', async ({ fields }) => {
+    const body = { ...matrixRun, operation: 'test', state: 'completed', ...fields };
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
+    );
+    api.setToken(token);
+
+    const run = method === 'list' ? (await api.listRuns())[0] : await api.getRun(matrixId);
+    expect(run).toEqual({ ...body, progress: null });
+  });
+
+  it.each([
+    {},
+    { ...evaluation, r2_score: '0.95' },
+    { ...evaluation, rmse: false },
+    { ...evaluation, mae_avg: [] },
+    { ...evaluation, pearson_corr: {} },
+    { ...evaluation, relative_l2: '0.2' },
+  ])('rejects malformed evaluation headlines %j', async (headline) => {
+    const body = { ...matrixRun, evaluation: headline };
+    const api = new DaemonApi(origin, {}, async (url) =>
+      json(String(url).endsWith('/health') ? health : method === 'list' ? { runs: [body] } : body),
+    );
+    api.setToken(token);
+
+    await expect(method === 'list' ? api.listRuns() : api.getRun(matrixId)).rejects.toMatchObject({
+      code: 'response',
+      clientMessageKey: 'invalidRunResponse',
+    });
   });
 });
 

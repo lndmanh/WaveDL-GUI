@@ -121,28 +121,51 @@ class PlanStore:
         )
 
     def page(
-        self, *, limit: int, offset: int, state: str | None = None
+        self,
+        *,
+        limit: int,
+        offset: int,
+        state: str | None = None,
+        operations: tuple[str, ...] = (),
+        source_run_id: str | None = None,
     ) -> list[PlanRecord]:
-        query, parameters = self._page_query(state)
+        query, parameters = self._page_query(state, operations, source_run_id)
         rows = self._connection.execute(query, (*parameters, limit, offset))
         return [_record(row) for row in rows]
 
-    def _page_query(self, state: str | None) -> tuple[str, list[str | int]]:
+    def _page_query(
+        self,
+        state: str | None,
+        operations: tuple[str, ...] = (),
+        source_run_id: str | None = None,
+    ) -> tuple[str, list[str | int]]:
         query = _SELECT
         parameters: list[str | int] = []
+        clauses: list[str] = []
         if state == "live":
-            query += (
-                "INNER JOIN run_heads ON plans.run_id = run_heads.run_id "
-                "WHERE run_heads.state IN (?, ?, ?, ?, ?, ?) "
-            )
+            query += "INNER JOIN run_heads ON plans.run_id = run_heads.run_id "
+            clauses.append("run_heads.state IN (?, ?, ?, ?, ?, ?)")
             parameters.extend(sorted(item.value for item in LIVE_RUN_STATES))
         elif state is not None:
             query += "LEFT JOIN run_heads ON plans.run_id = run_heads.run_id "
             if state == "planned":
-                query += "WHERE run_heads.run_id IS NULL "
+                clauses.append("run_heads.run_id IS NULL")
             else:
-                query += "WHERE run_heads.state = ? "
+                clauses.append("run_heads.state = ?")
                 parameters.append(state)
+        if operations:
+            placeholders = ", ".join("?" for _ in operations)
+            clauses.append(
+                f"json_extract(plans.plan_json, '$.spec.operation') IN ({placeholders})"
+            )
+            parameters.extend(operations)
+        if source_run_id is not None:
+            clauses.append(
+                "json_extract(plans.plan_json, '$.spec.checkpoint_source.run_id') = ?"
+            )
+            parameters.append(source_run_id)
+        if clauses:
+            query += "WHERE " + " AND ".join(clauses) + " "
         query += "ORDER BY plans.created_at DESC, plans.plan_id DESC LIMIT ? OFFSET ?"
         return query, parameters
 

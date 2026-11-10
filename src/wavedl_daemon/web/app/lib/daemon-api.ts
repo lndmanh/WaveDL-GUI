@@ -23,6 +23,7 @@ import type {
   SessionGrant,
   IdentityPins,
   RunListFilter,
+  RunOperation,
   RunView,
   PlanView,
   OutputChunk,
@@ -498,7 +499,14 @@ export class DaemonApi {
     }
   }
   async listRuns(
-    options: { limit?: number; offset?: number; state?: RunListFilter; signal?: AbortSignal } = {},
+    options: {
+      limit?: number;
+      offset?: number;
+      state?: RunListFilter;
+      operation?: RunOperation | readonly RunOperation[];
+      sourceRunId?: string;
+      signal?: AbortSignal;
+    } = {},
   ): Promise<RunView[]> {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;
@@ -516,6 +524,12 @@ export class DaemonApi {
     const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
 
     if (options.state) query.set('state', options.state);
+
+    const operations = typeof options.operation === 'string' ? [options.operation] : options.operation;
+
+    for (const operation of operations ?? []) query.append('operation', operation);
+
+    if (options.sourceRunId !== undefined) query.set('source_run_id', options.sourceRunId);
     const value = await this.read(`/api/runs?${query}`, options.signal);
     const result = runListSchema.safeParse(value);
 

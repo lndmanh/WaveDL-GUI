@@ -49,6 +49,8 @@ def test_web_validation_keeps_only_daemon_client_logic():
         "evaluation-scorecard",
         "artifact-images",
         "artifact-plots",
+        "test-runs",
+        "test-compare",
     }
     assert not list((web / "test/generated").glob("*.test.mjs"))
 

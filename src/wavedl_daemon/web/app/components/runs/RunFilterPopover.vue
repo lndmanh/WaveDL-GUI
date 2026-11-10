@@ -8,12 +8,15 @@ import {
   runFilterCounts,
 } from '../../lib/run-overview';
 import type { RunView } from '~~/types/daemon-api';
-import type { RunCreatedFilter, RunFilterState, RunStateGroup } from '~~/types/run-overview';
+import type { RunCreatedFilter, RunFilterState, RunKind, RunStateGroup } from '~~/types/run-overview';
 
 const props = defineProps<{
   runs: readonly RunView[];
   now: Date;
   showPlanned?: boolean;
+  statusAndKindOnly?: boolean;
+  allowedKinds?: readonly RunKind[];
+  label?: string;
 }>();
 
 const filters = defineModel<RunFilterState>({ required: true });
@@ -29,7 +32,7 @@ const activeCount = computed(() => activeRunFilterCount(filters.value));
 const counts = computed(() => runFilterCounts(props.runs, props.now));
 
 const kinds = computed(() =>
-  RUN_KINDS.map((value) => ({
+  (props.allowedKinds ?? RUN_KINDS).map((value) => ({
     value,
     label: t(runKindMessageKeys[value]),
     count: counts.value.kinds[value],
@@ -87,10 +90,10 @@ function chooseCreated(value: string) {
         variant="outline"
         size="sm"
         class="h-9 shrink-0"
-        :aria-label="t('runs.filterActive', { count: activeCount })"
+        :aria-label="label ? `${label}: ${activeCount}` : t('runs.filterActive', { count: activeCount })"
       >
         <ListFilter aria-hidden="true" />
-        {{ t('runs.filter') }}
+        {{ label ?? t('runs.filter') }}
         <Badge v-if="activeCount" variant="secondary" class="tabular-nums" aria-hidden="true">{{
           activeCount
         }}</Badge>
@@ -100,11 +103,11 @@ function chooseCreated(value: string) {
       align="end"
       side="bottom"
       :collision-padding="16"
-      :aria-label="t('runs.filterRuns')"
+      :aria-label="label ?? t('runs.filterRuns')"
       class="flex max-h-[min(80dvh,var(--reka-popover-content-available-height))] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0"
     >
       <div class="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
-        <span class="text-sm font-medium">{{ t('runs.filterRuns') }}</span>
+        <span class="text-sm font-medium">{{ label ?? t('runs.filterRuns') }}</span>
         <Button
           type="button"
           variant="ghost"
@@ -131,6 +134,7 @@ function chooseCreated(value: string) {
             @toggle="filters = { ...filters, states: toggleValue(filters.states, $event) }"
           />
           <RunFilterGroup
+            v-if="!statusAndKindOnly"
             :label="t('runs.columnModel')"
             :options="models"
             :selected="filters.models"
@@ -138,13 +142,14 @@ function chooseCreated(value: string) {
             @toggle="filters = { ...filters, models: toggleValue(filters.models, $event) }"
           />
           <RunFilterGroup
+            v-if="!statusAndKindOnly"
             :label="t('runs.columnDataset')"
             :options="datasets"
             :selected="filters.datasets"
             searchable
             @toggle="filters = { ...filters, datasets: toggleValue(filters.datasets, $event) }"
           />
-          <FieldSet>
+          <FieldSet v-if="!statusAndKindOnly">
             <FieldLegend variant="label">{{ t('runs.columnCreated') }}</FieldLegend>
             <RadioGroup
               :model-value="filters.created"

@@ -4,6 +4,8 @@ import { CLIENT_BUILD_ID } from '../lib/build-identity';
 import type { DaemonApiError } from '../lib/daemon-api';
 import { applyAppearance, loadAppearance } from '../lib/preferences';
 import { authRedirect } from '../lib/auth-routing';
+import { isTestRun, testLocation } from '../lib/test-runs';
+import type { RunView } from '~~/types/daemon-api';
 import { navigationPath, runIdForPath, sectionForPath, sectionPath } from '../shell/sections';
 import { connectionStatusKey } from '../constants/shellConnection';
 import type { AppearancePreferences } from '~~/types/preferences';
@@ -82,8 +84,8 @@ function appearanceChanged(value: AppearancePreferences): void {
   refreshAppearance();
 }
 
-async function monitorRun(runId: string): Promise<void> {
-  await router.push(sectionPath('experiments', runId));
+async function monitorRun(run: RunView): Promise<void> {
+  await router.push(isTestRun(run) ? testLocation(run) : sectionPath('experiments', run.run_id));
   liveRuns.refresh();
 }
 

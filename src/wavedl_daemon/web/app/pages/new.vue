@@ -16,7 +16,7 @@ usePageActive();
 const { api, session, monitorRun } = useWorkstation();
 
 function submitted(run: RunView): void {
-  void monitorRun(run.run_id);
+  void monitorRun(run);
 }
 </script>
 

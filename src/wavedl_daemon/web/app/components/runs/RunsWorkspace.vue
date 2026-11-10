@@ -2,6 +2,7 @@
 import { cn } from '@/lib/utils';
 import { CircleAlert } from '@lucide/vue';
 import { DaemonApi, DaemonApiError } from '../../lib/daemon-api';
+import type { RunView } from '~~/types/daemon-api';
 
 const styles = {
   runsWorkspace: cn('flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden'),
@@ -15,6 +16,7 @@ const emit = defineEmits<{
   connectionError: [error: DaemonApiError];
   select: [runId: string | null];
   unknownRun: [runId: string];
+  runLoaded: [run: RunView];
   planned: [value: boolean];
 }>();
 
@@ -33,7 +35,7 @@ const {
   close,
   pause,
   resume,
-} = useRuns(props.api, (error) => emit('connectionError', error), true);
+} = useRuns(props.api, (error) => emit('connectionError', error), true, { operation: ['train'] });
 
 const { isActive } = usePageActive(resume, () => {
   pause();
@@ -146,6 +148,10 @@ watch(
   },
   { immediate: true },
 );
+
+watch([() => selected.value?.run, isActive], ([run, active]) => {
+  if (active && run && run.run_id === props.runId) emit('runLoaded', run);
+});
 
 watch(
   () => selected.value?.message,

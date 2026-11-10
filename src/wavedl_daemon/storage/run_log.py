@@ -32,6 +32,7 @@ from wavedl_daemon.runs.lifecycle import (
 )
 from wavedl_daemon.runs.model import (
     BackendKind,
+    Evaluation,
     Exited,
     Metric,
     Operation,
@@ -272,6 +273,21 @@ class RunLog:
             "metric", json.loads(row["payload_json"]), row["source_end"]
         )
         return event if isinstance(event, Metric) else None
+
+    def latest_evaluation(self, run_id: RunId, attempt: int) -> Evaluation | None:
+        row = self._connection.execute(
+            "SELECT payload_json, source_end FROM run_events "
+            "WHERE run_id = ? AND attempt = ? AND type = 'metric' "
+            "AND json_extract(payload_json, '$.name') = 'evaluation' "
+            "ORDER BY seq DESC LIMIT 1",
+            (run_id, attempt),
+        ).fetchone()
+        if row is None:
+            return None
+        event = parse_event(
+            "metric", json.loads(row["payload_json"]), row["source_end"]
+        )
+        return event if isinstance(event, Evaluation) else None
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:

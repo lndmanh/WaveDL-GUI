@@ -29,7 +29,6 @@ import { SHELL_PANEL_TABS, shellPanelTabTargetId } from '../../shell/constants';
 import { sectionPath } from '../../shell/sections';
 import type { RunView } from '~~/types/daemon-api';
 import type { ShellPanelTabId } from '~~/types/shell';
-import { evaluationResults } from '../../lib/evaluation-results';
 import { canRequestCancellation, terminalRun } from '../../lib/run-monitor';
 import { buildPlotSeries, minimumPoint } from '../../lib/plot-series';
 import type { PlotSeries } from '~~/types/plot-series';
@@ -105,8 +104,7 @@ const props = withDefaults(
 const artifactResourcesActive = computed(
   () =>
     props.snapshot.run?.state !== 'planned' &&
-    (props.snapshot.run?.operation === 'test' ||
-      (isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'artifacts')),
+    isCompanionShowing.value && shellLayout.resolvedActiveTab.value === 'artifacts',
 );
 
 const runArtifacts = useRunArtifacts(
@@ -122,8 +120,6 @@ const images = useArtifactImages(() =>
 );
 
 const selectedImage = shallowRef<Artifact | null>(null);
-
-const shownEvaluations = new Set<string>();
 
 watch(
   [artifactScope, isActive],
@@ -328,13 +324,6 @@ const elapsed = computed(() => metricSummary.value.current?.elapsedSeconds ?? nu
 // Last-known evidence must not read as a live countdown.
 const remaining = computed(() =>
   metricsUnconfirmed.value ? null : remainingSeconds(metricSummary.value.progress, elapsed.value),
-);
-
-const hasEvaluation = computed(
-  () =>
-    props.snapshot.run !== null &&
-    props.snapshot.freshness === 'fresh' &&
-    evaluationResults(props.snapshot.run, props.snapshot.events) !== null,
 );
 </script>
 <template>
@@ -609,30 +598,6 @@ const hasEvaluation = computed(
           @deleted="$emit('deleted')"
         />
         <RunConfigurationPanel :key="snapshot.run.run_id" :run="snapshot.run" :active="isActive" />
-      </div>
-      <div
-        v-else-if="snapshot.run?.operation === 'test'"
-        class="min-h-0 flex-1 overflow-y-auto p-4"
-      >
-        <EvaluationResultsPanel
-          v-if="hasEvaluation && snapshot.run"
-          :key="snapshot.run.run_id"
-          :run="snapshot.run"
-          :events="snapshot.events"
-          :freshness="snapshot.freshness"
-          :artifacts="resultInventory.files"
-          :images="images"
-          :animate-entry="!shownEvaluations.has(snapshot.run.run_id)"
-          @preview="selectedImage = $event"
-          @vue:mounted="shownEvaluations.add(snapshot.run.run_id)"
-        />
-        <Empty v-else role="status" class="min-h-48">
-          <EmptyHeader>
-            <EmptyMedia><LoadingSpinner compact /></EmptyMedia>
-            <EmptyTitle>{{ t('runs.evaluation') }}</EmptyTitle>
-            <EmptyDescription>{{ t('runs.waitingEvaluation') }}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
       </div>
       <div v-else class="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <RunStats

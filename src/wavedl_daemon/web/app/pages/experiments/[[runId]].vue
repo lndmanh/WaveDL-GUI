@@ -4,7 +4,7 @@ import { SHELL_PANEL_TABS } from '../../shell/constants';
 defineOptions({ name: 'WorkstationExperimentsPage' });
 
 // The kept-alive root: descendants that mount while hidden inherit its state.
-usePageActive();
+const { isActive } = usePageActive();
 
 definePageMeta({
   key: 'experiments',
@@ -15,7 +15,7 @@ definePageMeta({
 });
 
 const { state, api, reportFailure } = useWorkstation();
-const { runId, select, unknown } = useRunRoute('experiments');
+const { runId, select, unknown, redirectTest } = useRunRoute('experiments', isActive);
 const planned = shallowRef(false);
 </script>
 
@@ -30,6 +30,7 @@ const planned = shallowRef(false);
       :api="api"
       :run-id="runId"
       @connection-error="reportFailure"
+      @run-loaded="redirectTest"
       @select="select"
       @unknown-run="unknown"
       @planned="planned = $event"

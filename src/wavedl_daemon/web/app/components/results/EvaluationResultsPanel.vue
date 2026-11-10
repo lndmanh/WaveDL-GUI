@@ -4,6 +4,7 @@ import { MotionConfig, motion } from 'motion-v';
 import { evaluationResults } from '../../lib/evaluation-results';
 import { finiteMetric, parameterScores } from '../../lib/evaluation-scorecard';
 import { pathName } from '../../lib/run-overview';
+import { checkpointLabel } from '../../lib/test-runs';
 import type { ArtifactImages } from '../../composables/useArtifactImages';
 import type { Artifact } from '~~/types/artifact-client';
 import type { RunView } from '~~/types/daemon-api';
@@ -51,7 +52,10 @@ const facts = computed(() => {
   const dataset = pathName(context.value.dataset ?? props.run?.summary?.data_path);
   const samples = finiteMetric(metrics.value?.n_samples ?? metrics.value?.num_samples);
 
-  if (checkpoint) result.push(t('results.scorecard.checkpoint', { name: checkpoint }));
+  if (checkpoint) {
+    const label = checkpointLabel(checkpoint);
+    result.push(t('results.scorecard.checkpoint', { name: label ? t(label.key, label.params ?? {}) : checkpoint }));
+  }
 
   if (dataset) result.push(t('results.scorecard.dataset', { name: dataset }));
 

@@ -267,6 +267,7 @@ def test_http_async_adapter_awaits_typed_result_and_maps_deadline_503(tmp_path):
         "summary": None,
         "progress": None,
         "activity": None,
+        "evaluation": None,
     }
 
     plan_reply = {
