@@ -4,6 +4,7 @@ import type {
   sessionGrantSchema,
   RUN_STATES,
   runViewSchema,
+  runEvaluationSchema,
   planSchema,
   outputChunkSchema,
 } from '../shared/schemas/daemon-api';
@@ -23,6 +24,10 @@ export interface IdentityPins {
 export type RunState = (typeof RUN_STATES)[number];
 
 export type RunListFilter = RunState | 'live';
+
+export type RunOperation = z.output<typeof runViewSchema>['operation'];
+
+export type RunEvaluation = z.output<typeof runEvaluationSchema>;
 
 export interface RunProgress {
   epoch: number;

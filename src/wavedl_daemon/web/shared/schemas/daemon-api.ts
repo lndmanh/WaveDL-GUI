@@ -45,6 +45,14 @@ const runProgressSchema = z.object({
   total_epochs: positive,
 });
 
+export const runEvaluationSchema = z.object({
+  r2_score: z.number().nullable(),
+  rmse: z.number().nullable(),
+  mae_avg: z.number().nullable(),
+  pearson_corr: z.number().nullable(),
+  relative_l2: z.number().nullable(),
+});
+
 export const runViewSchema = z.object({
   plan_id: uuid,
   run_id: uuid,
@@ -59,6 +67,7 @@ export const runViewSchema = z.object({
   evidence: jsonObjectSchema.nullable(),
   progress: runProgressSchema.nullable().optional(),
   activity: z.enum(['starting', 'training', 'finalizing']).nullable().optional(),
+  evaluation: runEvaluationSchema.nullable().optional(),
   // Older daemons omit these; a run is still valid without a human identity.
   created_at: z.iso.datetime({ offset: true }).nullable().optional(),
   summary: z
@@ -69,6 +78,9 @@ export const runViewSchema = z.object({
       epochs: positive.nullable(),
       cv: positive.nullable(),
       source_run_id: uuid.nullable(),
+      checkpoint: z.string().nullable().optional(),
+      source_name: z.string().nullable().optional(),
+      source_model: z.string().nullable().optional(),
       plot: z.boolean().optional(),
       export: z.string().nullable().optional(),
     })

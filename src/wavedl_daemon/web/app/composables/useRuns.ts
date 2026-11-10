@@ -1,9 +1,10 @@
+import type { MaybeRefOrGetter } from 'vue';
 import { clientError } from '../i18n/client-messages';
 import { DaemonApi, DaemonApiError } from '../lib/daemon-api';
 import { RunMonitor } from '../lib/run-monitor';
 import { runFilterOf } from '../lib/run-overview';
 import type { ClientMessage } from '~~/types/i18n';
-import type { RunView } from '~~/types/daemon-api';
+import type { RunOperation, RunView } from '~~/types/daemon-api';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
 
 const LIST_REFRESH_INTERVAL = 10_000;
@@ -12,6 +13,10 @@ export function useRuns(
   api: DaemonApi,
   reportFailure: (error: DaemonApiError) => void,
   initiallyPaused = false,
+  filter: {
+    operation?: readonly RunOperation[];
+    sourceRunId?: MaybeRefOrGetter<string | null>;
+  } = {},
 ) {
   const runs = shallowRef<readonly RunView[]>([]);
   const selected = shallowRef<RunMonitorSnapshot | null>(null);
@@ -42,6 +47,14 @@ export function useRuns(
   }
 
   watch(hasLiveRuns, syncRefreshTimer);
+  watch(
+    () => toValue(filter.sourceRunId) ?? null,
+    () => {
+      page.value = 0;
+
+      if (!paused && !disposed) void refresh(0);
+    },
+  );
 
   async function refresh(offset = page.value): Promise<void> {
     listAbort?.abort();
@@ -51,9 +64,12 @@ export function useRuns(
     const detailAtStart = detailRevision;
 
     try {
+      const sourceRunId = toValue(filter.sourceRunId);
       const result = await api.listRuns({
         limit: 50,
         offset,
+        ...(filter.operation ? { operation: filter.operation } : {}),
+        ...(sourceRunId != null ? { sourceRunId } : {}),
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
       });
 
