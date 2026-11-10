@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { ComparedTest } from '../../../composables/useTestComparison';
 import { finiteMetric } from '../../../lib/evaluation-scorecard';
-import { axisDomain, bestValue, compareNumber, headlineMetrics, lowerIsBetter, rankByMetric, seriesColor } from '../../../lib/test-compare';
-const props = defineProps<{ entries: ComparedTest[]; reference: ComparedTest | null; ids: string[]; hoveredId: string | null }>();
+import { axisDomain, bestValue, compareNumber, headlineMetrics, lowerIsBetter, rankByMetric } from '../../../lib/test-compare';
+const props = defineProps<{ entries: ComparedTest[]; reference: ComparedTest | null; colors: ReadonlyMap<string, string>; hoveredId: string | null }>();
 const emit = defineEmits<{ hover: [id: string | null]; jump: [id: string] }>();
 const { t } = useI18n({ useScope: 'global' });
 const mobileMetric = ref('r2_score');
@@ -30,7 +30,7 @@ const ranked = computed(() => rankByMetric(props.entries.map((entry) => ({ id: e
       <div v-for="axis in axes" :key="axis.metric" class="lb-metric pr-[57px]" :class="{ 'mobile-selected': axis.metric === mobileMetric }"><div class="flex items-center justify-between gap-1 tabular-nums"><span class="text-[10.5px] text-muted-foreground">{{ compareNumber(axis.left) }}</span><span class="text-sm font-bold tracking-wide text-primary">{{ axis.label }}</span><span class="text-[10.5px] text-muted-foreground">{{ compareNumber(axis.right) }}</span></div></div>
     </div>
     <div class="max-h-[288px] overflow-y-auto overscroll-contain px-1 py-1 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]" tabindex="0" :aria-label="t('results.compare.ranking')">
-      <CompareLeaderboardRow v-for="(entry, index) in ranked" :key="entry.id" :entry="entry" :rank="index + 1" :color="seriesColor(ids.indexOf(entry.id))" :reference-id="reference?.id ?? null" :highlighted="hoveredId === entry.id" :mobile-metric="mobileMetric" :axes="axes" @hover="emit('hover', $event)" @jump="emit('jump', $event)" />
+      <CompareLeaderboardRow v-for="(entry, index) in ranked" :key="entry.id" :entry="entry" :rank="index + 1" :color="colors.get(entry.id) ?? 'transparent'" :reference-id="reference?.id ?? null" :highlighted="hoveredId === entry.id" :mobile-metric="mobileMetric" :axes="axes" @hover="emit('hover', $event)" @jump="emit('jump', $event)" />
     </div>
     <footer class="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t px-4 py-3 text-[11px] text-muted-foreground"><span class="inline-flex items-center gap-1.5"><span class="h-3 border-l border-dashed border-primary/60" aria-hidden="true" />{{ t('results.compare.reference') }}</span><span>{{ t('results.compare.betterRight') }}</span><span>{{ t('results.compare.gapLegend') }}</span><span>{{ t('results.compare.jumpLegend') }}</span></footer>
   </section>

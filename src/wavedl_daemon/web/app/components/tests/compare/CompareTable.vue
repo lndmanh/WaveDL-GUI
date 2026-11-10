@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { ComparedTest } from '../../../composables/useTestComparison';
 import { finiteMetric } from '../../../lib/evaluation-scorecard';
-import { bestValue, compareNumber, headlineMetrics, parameterRows, seriesColor } from '../../../lib/test-compare';
+import { bestValue, compareNumber, headlineMetrics, parameterRows } from '../../../lib/test-compare';
 import { parentTitle } from '../../../lib/test-runs';
 import { pathName } from '../../../lib/run-overview';
 import { cn } from '../../../lib/utils';
 
-const props = defineProps<{ entries: ComparedTest[]; ids: string[]; referenceId: string | null }>();
+const props = defineProps<{ entries: ComparedTest[]; colors: ReadonlyMap<string, string>; referenceId: string | null }>();
 const { t } = useI18n({ useScope: 'global' });
 const rows = computed(() => [
   ...headlineMetrics.map(({ metric, label }) => {
@@ -34,7 +34,7 @@ const styles = {
           <th scope="col" :class="styles.header">{{ t('results.compare.metric') }}</th>
           <th v-for="entry in entries" :key="entry.id" scope="col" :class="styles.header">
             <span class="flex items-center gap-2">
-              <span class="size-2.5 shrink-0 rounded-full" :style="{ background: seriesColor(ids.indexOf(entry.id)) }" aria-hidden="true" />
+              <span class="size-2.5 shrink-0 rounded-full" :style="{ background: colors.get(entry.id) ?? 'transparent' }" aria-hidden="true" />
               <span class="text-foreground">{{ entry.run ? parentTitle(entry.run) ?? entry.id : entry.id }}</span>
             </span>
             <span class="mt-1 block max-w-64 truncate text-xs font-normal" :title="pathName(entry.run?.summary?.data_path)">{{ pathName(entry.run?.summary?.data_path) }}</span>

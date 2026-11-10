@@ -73,6 +73,31 @@ export function bestValue(values: readonly (number | null)[], metric: HeadlineMe
   return finite.length ? (lowerIsBetter(metric) ? Math.min(...finite) : Math.max(...finite)) : null;
 }
 
+/** Retain live tests' 1–8 slots before allocating the lowest free slots to additions. */
+export function assignSeriesSlots(ids: readonly string[], previous: ReadonlyMap<string, number> = new Map()): Map<string, number> {
+  const selected = [...new Set(ids)].slice(0, 8);
+  const slots = new Map<string, number>();
+  const used = new Set<number>();
+
+  for (const id of selected) {
+    const slot = previous.get(id);
+    if (slot !== undefined && Number.isInteger(slot) && slot >= 1 && slot <= 8 && !used.has(slot)) {
+      slots.set(id, slot);
+      used.add(slot);
+    }
+  }
+  for (const id of selected) {
+    if (slots.has(id)) continue;
+    const slot = Array.from({ length: 8 }, (_, index) => index + 1).find((candidate) => !used.has(candidate));
+    if (slot !== undefined) {
+      slots.set(id, slot);
+      used.add(slot);
+    }
+  }
+
+  return slots;
+}
+
 export function seriesColor(index: number): string {
   return `var(--chart-${index + 1})`;
 }
@@ -93,5 +118,5 @@ export function parameterRows(scores: readonly ParameterScores[][]): { name: str
 }
 
 export function compareNumber(value: number | null): string {
-  return value === null ? '—' : value.toFixed(3);
+  return value === null ? '—' : value.toFixed(3).replace('-', '−');
 }

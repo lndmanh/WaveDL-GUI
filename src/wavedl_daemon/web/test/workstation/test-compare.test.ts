@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { axisDomain, axisPosition, bestValue, metricChange, parameterRows, parseCompareQuery, rankByMetric, seriesColor } from '../../app/lib/test-compare';
+import { assignSeriesSlots, axisDomain, axisPosition, bestValue, compareNumber, metricChange, parameterRows, parseCompareQuery, rankByMetric, seriesColor } from '../../app/lib/test-compare';
 
 const ids = Array.from({ length: 10 }, (_, index) => `00000000-0000-0000-0000-${String(index).padStart(12, '0')}`);
 
@@ -13,6 +13,32 @@ describe('compare query', () => {
     expect(parseCompareQuery(ids.slice(0, 2).join(','), 'bad').ref).toBe(ids[0]);
     expect(parseCompareQuery(undefined, undefined)).toEqual({ ids: [], ref: null, dropped: 0 });
   });
+});
+
+describe('series slots', () => {
+  it('assigns initial slots in URL order', () => {
+    expect([...assignSeriesSlots(['c', 'a', 'b'])]).toEqual([['c', 1], ['a', 2], ['b', 3]]);
+  });
+  it('preserves every remaining slot after removal', () => {
+    const initial = assignSeriesSlots(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+    const remaining = assignSeriesSlots(['a', 'c', 'd', 'e', 'f', 'g', 'h'], initial);
+    expect([...remaining]).toEqual([['a', 1], ['c', 3], ['d', 4], ['e', 5], ['f', 6], ['g', 7], ['h', 8]]);
+    expect(initial.get('b')).toBe(2);
+  });
+  it('fills the lowest free slot without repainting survivors or following rank', () => {
+    const initial = assignSeriesSlots(['a', 'b', 'c', 'd']);
+    const remaining = assignSeriesSlots(['d', 'b'], initial);
+    const added = assignSeriesSlots(['d', 'b', 'new', 'other'], remaining);
+    expect([...added]).toEqual([['d', 4], ['b', 2], ['new', 1], ['other', 3]]);
+  });
+});
+
+it('formats negative numbers with a typographic minus and retains missing values', () => {
+  expect(compareNumber(-0.035)).toBe('−0.035');
+  expect(compareNumber(-12.3456)).toBe('−12.346');
+  expect(compareNumber(0.981)).toBe('0.981');
+  expect(compareNumber(0)).toBe('0.000');
+  expect(compareNumber(null)).toBe('—');
 });
 
 describe('metric changes', () => {

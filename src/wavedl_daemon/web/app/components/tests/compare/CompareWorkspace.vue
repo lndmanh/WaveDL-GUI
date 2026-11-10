@@ -3,7 +3,7 @@ import { CircleAlert, GitCompareArrows } from '@lucide/vue';
 import { MotionConfig } from 'motion-v';
 import type { DaemonApi } from '../../../lib/daemon-api';
 import { finiteMetric } from '../../../lib/evaluation-scorecard';
-import { parameterRows, parseCompareQuery, rankByMetric, seriesColor } from '../../../lib/test-compare';
+import { assignSeriesSlots, parameterRows, parseCompareQuery, rankByMetric, seriesColor } from '../../../lib/test-compare';
 import type { HeadlineMetric } from '../../../lib/test-compare';
 import { parentTitle } from '../../../lib/test-runs';
 import { pathName } from '../../../lib/run-overview';
@@ -14,6 +14,9 @@ const router = useRouter();
 const { t } = useI18n({ useScope: 'global' });
 const query = computed(() => parseCompareQuery(route.query.ids, route.query.ref));
 const ids = computed(() => query.value.ids);
+const slots = shallowRef(new Map<string, number>());
+watch(ids, (selected) => { slots.value = assignSeriesSlots(selected, slots.value); }, { immediate: true, flush: 'sync' });
+const colors = computed(() => new Map([...slots.value].map(([id, slot]) => [id, seriesColor(slot - 1)])));
 const { entries, invalidIds, loading, refresh } = useTestComparison(props.api, ids);
 const dropped = ref(0);
 const sort = ref<HeadlineMetric>('r2_score');
@@ -30,7 +33,7 @@ const cards = computed(() => [...ranked.value].sort((left, right) => Number(righ
 const parameters = computed(() => parameterRows(cards.value.map((entry) => entry.parameters)));
 const styles = {
   root: cn('comparison-container flex min-w-0 flex-col gap-4 pb-4'),
-  scroller: cn('compare-scroller grid auto-cols-[minmax(300px,1fr)] grid-flow-col items-stretch gap-3.5 overflow-x-auto overscroll-x-contain snap-x snap-mandatory p-0.5 pb-3'),
+  scroller: cn('compare-scroller grid auto-cols-[minmax(300px,1fr)] grid-flow-col items-stretch gap-x-3.5 gap-y-0 overflow-x-auto overscroll-x-contain snap-x snap-mandatory p-0.5 pb-3'),
 };
 function replace(nextIds: string[], referenceId: string | null = query.value.ref) {
   const next = parseCompareQuery(nextIds.join(','), referenceId);
@@ -62,14 +65,14 @@ function jump(id: string) {
       <div v-if="loading && !entries.length" class="grid gap-3" aria-busy="true"><span class="sr-only">{{ t('results.compare.loading') }}</span><Skeleton class="h-48 w-full rounded-2xl" /><Skeleton class="h-80 w-full rounded-2xl" /></div>
       <div v-else-if="visible.length < 2" class="flex min-h-72 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed p-6 text-center"><GitCompareArrows class="size-8 text-muted-foreground" aria-hidden="true" /><h2 class="text-lg font-semibold">{{ t('results.compare.needTwo') }}</h2><Button as-child variant="outline"><NuxtLink to="/tests">{{ t('results.testsPageTitle') }}</NuxtLink></Button></div>
       <template v-else>
-        <CompareLeaderboard :entries="visible" :ids="ids" :reference="reference" :hovered-id="hoveredId" @hover="hoveredId = $event" @jump="jump" />
+        <CompareLeaderboard :entries="visible" :colors="colors" :reference="reference" :hovered-id="hoveredId" @hover="hoveredId = $event" @jump="jump" />
         <TabsContent value="cards">
           <div :class="styles.scroller" tabindex="0" :aria-label="t('results.compare.cardsAndPlots')">
-            <CompareCard v-for="(entry, index) in cards" :key="entry.id" :entry="entry" :reference="reference" :color="seriesColor(ids.indexOf(entry.id))" :highlighted="hoveredId === entry.id" :parameters="parameters.map((row) => ({ name: row.name, value: row.values[index] ?? null }))" @hover="hoveredId = $event" @reference="replace(ids, $event)" @remove="replace(ids.filter((id) => id !== $event))" />
+            <CompareCard v-for="(entry, index) in cards" :key="entry.id" :entry="entry" :reference="reference" :color="colors.get(entry.id) ?? 'transparent'" :highlighted="hoveredId === entry.id" :parameters="parameters.map((row) => ({ name: row.name, value: row.values[index] ?? null }))" @hover="hoveredId = $event" @reference="replace(ids, $event)" @remove="replace(ids.filter((id) => id !== $event))" />
           </div>
           <p class="mt-1 text-xs text-muted-foreground">{{ t('results.compare.scrollHint') }}</p>
         </TabsContent>
-        <TabsContent value="table"><CompareTable :entries="ranked" :ids="ids" :reference-id="query.ref" /></TabsContent>
+        <TabsContent value="table"><CompareTable :entries="ranked" :colors="colors" :reference-id="query.ref" /></TabsContent>
       </template>
     </Tabs>
   </MotionConfig>
@@ -77,6 +80,8 @@ function jump(id: string) {
 
 <style scoped>
 .comparison-container { container: comparison / inline-size; }
+/* Shared section tracks keep cards aligned even when a change or optional detail is absent. */
+.compare-scroller { grid-template-rows: auto auto auto 1fr; }
 @container comparison (min-width: 640px) {
   .compare-scroller { scroll-padding-left: 316px; }
   .compare-scroller > .is-reference { position: sticky; left: 0; z-index: 10; scroll-snap-align: none; box-shadow: var(--tw-ring-shadow, 0 0 transparent), 10px 0 18px -12px color-mix(in oklab, var(--foreground) 30%, transparent); }
