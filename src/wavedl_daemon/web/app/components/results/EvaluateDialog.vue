@@ -10,6 +10,7 @@ import {
   type ResultPrefillWarning,
 } from '../../lib/result-operation-prefill';
 import { pathName } from '../../lib/run-overview';
+import { checkpointLabel } from '../../lib/test-runs';
 import type { ConnectionSession } from '../../lib/connection-session';
 import type { Checkpoint } from '~~/types/artifact-client';
 import type { DataSelection } from '~~/types/catalog-api';
@@ -62,13 +63,9 @@ const { values, handleSubmit, resetForm, setFieldValue } = useForm({
 });
 
 function sourceLabel(item: Checkpoint): string {
-  if (item.name === 'best_checkpoint') return t('results.versionBest');
+  const label = checkpointLabel(item.name);
 
-  if (item.name === 'interrupted_checkpoint') return t('results.versionInterrupted');
-
-  return t('results.versionEpoch', {
-    epoch: item.name.match(/^epoch_([0-9]+)_checkpoint$/)?.[1] ?? '',
-  });
+  return label ? t(label.key, label.params ?? {}) : item.name;
 }
 
 const versions = computed(() =>

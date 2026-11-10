@@ -2,7 +2,7 @@ import type { MaybeRefOrGetter } from 'vue';
 import { clientError } from '../i18n/client-messages';
 import { DaemonApi, DaemonApiError } from '../lib/daemon-api';
 import { RunMonitor } from '../lib/run-monitor';
-import { runFilterOf } from '../lib/run-overview';
+import { shouldPollRuns } from '../lib/run-overview';
 import type { ClientMessage } from '~~/types/i18n';
 import type { RunOperation, RunView } from '~~/types/daemon-api';
 import type { RunMonitorSnapshot } from '~~/types/run-monitor';
@@ -16,6 +16,7 @@ export function useRuns(
   filter: {
     operation?: readonly RunOperation[];
     sourceRunId?: MaybeRefOrGetter<string | null>;
+    enabled?: MaybeRefOrGetter<boolean>;
   } = {},
 ) {
   const runs = shallowRef<readonly RunView[]>([]);
@@ -31,7 +32,7 @@ export function useRuns(
   let unsubscribe: (() => void) | null = null;
   let disposed = false;
   let paused = initiallyPaused;
-  const hasLiveRuns = computed(() => runs.value.some((run) => runFilterOf(run) === 'live'));
+  const hasLiveRuns = computed(() => shouldPollRuns(runs.value));
 
   const listRefresh = useIntervalFn(
     () => {
@@ -48,16 +49,26 @@ export function useRuns(
 
   watch(hasLiveRuns, syncRefreshTimer);
   watch(
-    () => toValue(filter.sourceRunId) ?? null,
+    [() => toValue(filter.sourceRunId) ?? null, () => toValue(filter.enabled) ?? true],
     () => {
+      listAbort?.abort();
+      runs.value = [];
+      staleRunIds.value = new Set();
+      lastRefreshed.value = null;
+      message.value = '';
+      loading.value = false;
       page.value = 0;
 
       if (!paused && !disposed) void refresh(0);
     },
+    { flush: 'sync' },
   );
 
   async function refresh(offset = page.value): Promise<void> {
     listAbort?.abort();
+
+    if (toValue(filter.enabled) === false || paused || disposed) return;
+
     const controller = new AbortController();
     listAbort = controller;
     loading.value = true;

@@ -23,7 +23,7 @@ export const listRowStyles = {
     'flex items-center [&_.run-state-chip]:whitespace-nowrap [&_.run-state-chip]:flex-nowrap',
     '[&_.run-state-chip]:max-h-7 [&_.run-state-chip]:overflow-hidden',
   ),
-  title: cn('run-row min-w-0 truncate text-left font-semibold tracking-[-0.01em] outline-none'),
+  title: cn('min-w-0 truncate text-left font-semibold tracking-[-0.01em] outline-none'),
   trailing: cn(
     'inline-flex shrink-0 items-center gap-1.5 text-[0.7rem] text-muted-foreground tabular-nums',
   ),

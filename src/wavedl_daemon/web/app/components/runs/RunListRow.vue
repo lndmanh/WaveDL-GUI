@@ -82,7 +82,7 @@ function selectCell(event: MouseEvent) {
       <div :class="cn(listRowStyles.cell, 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2')">
         <button
           type="button"
-          :class="listRowStyles.title"
+          :class="cn(listRowStyles.title, 'run-row')"
           :data-run-id="run.run_id"
           :aria-current="current ? 'true' : undefined"
           :title="labels.title(run)"

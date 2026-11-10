@@ -6,6 +6,7 @@ import {
   parentTitle,
   testLocation,
 } from '../../app/lib/test-runs';
+import { shouldPollRuns } from '../../app/lib/run-overview';
 import type { RunView } from '../../types/daemon-api';
 
 const id = '11111111-1111-1111-1111-111111111111';
@@ -125,4 +126,19 @@ describe('testLocation', () => {
     'routes $label',
     ({ overrides, expected }) => expect(testLocation(run(overrides))).toBe(expected),
   );
+});
+
+describe('shouldPollRuns', () => {
+  it('continues refreshing an unselected test while its initial observation is unresolved', () => {
+    expect(shouldPollRuns([run({ state: 'observation_unavailable', uncertainty: true })])).toBe(true);
+    expect(shouldPollRuns([run({ state: 'terminal_unknown', uncertainty: true })])).toBe(true);
+  });
+
+  it('polls live rows but stops after all rows settle', () => {
+    expect(shouldPollRuns([run({ state: 'running' }), run()])).toBe(true);
+    expect(shouldPollRuns([run(), run({ state: 'failed' }), run({ state: 'cancelled' })])).toBe(false);
+    expect(shouldPollRuns([run({ state: 'completed', uncertainty: true })])).toBe(true);
+    expect(shouldPollRuns([run({ state: 'planned', uncertainty: true })])).toBe(false);
+    expect(shouldPollRuns([])).toBe(false);
+  });
 });
